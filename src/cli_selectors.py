@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, Generic, Iterable, Sequence, TypeVar
+from typing import Any, Callable, Generic, Iterable, Sequence, TypeVar
 
 
 T = TypeVar("T")
@@ -21,7 +23,8 @@ class SelectOption(Generic[T]):
     shortcut_key: str | None = None
 
 
-def _load_questionary():
+def _load_questionary() -> Any:
+    """Dynamically load questionary library if available."""
     try:
         import questionary
     except ImportError:
@@ -63,7 +66,8 @@ def _with_shortcuts(options: Sequence[SelectOption[T]]) -> list[SelectOption[T]]
     return updated
 
 
-def _load_questionary_select_dependencies():
+def _load_questionary_select_dependencies() -> SimpleNamespace:
+    """Load questionary prompt dependencies into a SimpleNamespace container."""
     from prompt_toolkit.application import Application
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.keys import Keys
@@ -88,12 +92,13 @@ def _load_questionary_select_dependencies():
 
 
 def _build_questionary_prompt(
-    questionary,
+    questionary: Any,
     message: str,
-    choices,
+    choices: Any,
     *,
-    default_value,
-):
+    default_value: Any,
+) -> Any:
+    """Construct an interactive questionary Question prompt instance."""
     deps = _load_questionary_select_dependencies()
     control = deps.InquirerControl(
         choices,
@@ -107,7 +112,7 @@ def _build_questionary_prompt(
         initial_choice=default_value,
     )
 
-    def get_prompt_tokens():
+    def get_prompt_tokens() -> list[tuple[str, str]]:
         tokens = [
             ("class:qmark", deps.DEFAULT_QUESTION_PREFIX),
             ("class:question", f" {message} "),
@@ -129,26 +134,26 @@ def _build_questionary_prompt(
 
     @bindings.add(deps.Keys.ControlQ, eager=True)
     @bindings.add(deps.Keys.ControlC, eager=True)
-    def abort(event):
+    def abort(event: Any) -> None:
         event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
 
     for index, choice in enumerate(control.choices):
         if isinstance(choice, deps.Separator) or choice.shortcut_key is None or choice.disabled:
             continue
 
-        def register_binding(bound_index, shortcut_key):
+        def register_binding(bound_index: int, shortcut_key: str) -> None:
             @bindings.add(shortcut_key, eager=True)
-            def select_choice(event):
+            def select_choice(event: Any) -> None:
                 control.pointed_at = bound_index
 
         register_binding(index, choice.shortcut_key)
 
-    def move_cursor_down(event):
+    def move_cursor_down(event: Any) -> None:
         control.select_next()
         while not control.is_selection_valid():
             control.select_next()
 
-    def move_cursor_up(event):
+    def move_cursor_up(event: Any) -> None:
         control.select_previous()
         while not control.is_selection_valid():
             control.select_previous()
@@ -162,12 +167,12 @@ def _build_questionary_prompt(
 
     @bindings.add(" ", eager=True)
     @bindings.add(deps.Keys.ControlM, eager=True)
-    def set_answer(event):
+    def set_answer(event: Any) -> None:
         control.is_answered = True
         event.app.exit(result=control.get_pointed_at().value)
 
     @bindings.add(deps.Keys.Any)
-    def other(event):
+    def other(event: Any) -> None:
         """Disallow inserting other text."""
 
     style = deps.merge_styles_default(
@@ -365,6 +370,10 @@ def confirm(message: str, *, default: bool = False) -> bool | None:
         print("Invalid confirmation. Please try again.")
 
 
+def _default_child_title(path: Path, _selectable: bool) -> str:
+    return path.name
+
+
 def select_directory_tree(
     root_path: str | Path,
     *,
@@ -381,7 +390,7 @@ def select_directory_tree(
         raise NotADirectoryError(f"Not a directory: {root}")
 
     if get_child_title is None:
-        get_child_title = lambda path, selectable: path.name
+        get_child_title = _default_child_title
 
     @lru_cache(maxsize=None)
     def has_selectable_descendant(directory: Path) -> bool:
@@ -445,13 +454,104 @@ def select_directory_tree(
 
 
 def _iter_directory_children(directory: Path) -> list[Path]:
-    return sorted(
-        (child for child in directory.iterdir() if child.is_dir()),
-        key=lambda path: path.name.lower(),
-    )
+    children = [child for child in directory.iterdir() if child.is_dir()]
+
+    date_children: list[tuple[tuple[int, int, int], Path]] = []
+    other_children: list[Path] = []
+
+    for child in children:
+        match = re.match(r"^(\d{2})-(\d{2})-(\d{4})$", child.name)
+        if match:
+            day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
+            date_children.append(((year, month, day), child))
+        else:
+            other_children.append(child)
+
+    if date_children:
+        date_children.sort(key=lambda item: item[0], reverse=True)
+        sorted_dates = [child for _, child in date_children]
+        other_children.sort(key=lambda path: path.name.lower())
+        return sorted_dates + other_children
+
+    return sorted(children, key=lambda path: path.name.lower())
 
 
 def _relative_parts(root: Path, current: Path) -> tuple[str, ...]:
     if current == root:
         return ()
     return current.relative_to(root).parts
+
+
+def is_pahang_date_folder(path: Path) -> bool:
+    """Return True if path is a daily inspection date folder formatted DD-MM-YYYY."""
+    return bool(path.is_dir() and re.match(r"^\d{2}-\d{2}-\d{4}$", path.name))
+
+
+def select_pahang_date_folder(
+    root_dir: Path | str | None = None,
+    environment: object | None = None,
+    title: str = "Select Pahang Inspection Date Folder",
+) -> Path | None:
+    """Select a 3-tier Pahang date folder (<STATION>/<MONTH>/<DD-MM-YYYY>/) interactively.
+
+    Supports both Active Project Context (via `environment`) and Standalone Utility Context (via `root_dir`).
+    """
+    base_dir: Path | None = None
+    if environment is not None and hasattr(environment, "storage"):
+        base_dir = environment.storage.get_testsheet_dir()
+    elif root_dir is not None:
+        base_dir = Path(root_dir)
+
+    if base_dir is None or not base_dir.exists():
+        if environment is not None and hasattr(environment, "get_base_path"):
+            base_dir = environment.get_base_path() / "TESTSHEET"
+        if base_dir is None or not base_dir.exists():
+            return prompt_directory_path("Enter Pahang date folder path: ")
+
+    return select_directory_tree(
+        root_path=base_dir,
+        title=title,
+        is_selectable=is_pahang_date_folder,
+        get_child_title=lambda p, selectable: f"[DATE] {p.name}" if selectable else p.name,
+        get_confirmation_lines=lambda p: [f"Selected Pahang Date Folder: {p}"],
+    )
+
+
+def prompt_directory_path(
+    message: str = "Enter directory path: ",
+    default: Path | str | None = None,
+    must_exist: bool = True,
+) -> Path | None:
+    """Prompt the operator for a directory path input with validation."""
+    prompt = message
+    if default is not None:
+        prompt += f" [{default}]: "
+    else:
+        prompt += ": "
+
+    while True:
+        try:
+            raw = input(prompt).strip().strip('"')
+        except KeyboardInterrupt:
+            print()
+            return None
+
+        if not raw:
+            if default is not None:
+                raw_path = Path(default)
+                if not must_exist or raw_path.exists():
+                    return raw_path
+            print("Path selection required.")
+            continue
+
+        entered_path = Path(raw)
+        if must_exist and not entered_path.exists():
+            print(f"Directory not found: {entered_path}. Please enter a valid path.")
+            continue
+
+        if must_exist and not entered_path.is_dir():
+            print(f"Path is not a directory: {entered_path}. Please try again.")
+            continue
+
+        return entered_path
+

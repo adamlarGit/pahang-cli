@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.populate_total_pe_workflow import PopulateTotalPeWorkflow
+from src.raw_material_workflow import RawMaterialWorkflow
 from src.workflows.models import (
     PopulateTotalPeRequest,
     PopulateTotalPeResult,
@@ -29,14 +31,16 @@ class WorkflowService:
     ) -> PopulateTotalPeResult:
         if request.progress_sink:
             request.progress_sink("Executing Populate TOTAL PE workflow...")
-        return PopulateTotalPeResult(new_rows_added=0)
+        workflow = PopulateTotalPeWorkflow()
+        return workflow.execute(environment, request)
 
     def run_raw_material(
         self, environment: ProjectEnvironment, request: RawMaterialRequest
     ) -> RawMaterialResult:
         if request.progress_sink:
             request.progress_sink(f"Executing Raw Material workflow on {request.output_path}...")
-        return RawMaterialResult(substations_count=0)
+        workflow = RawMaterialWorkflow()
+        return workflow.execute(environment, request)
 
     def run_update_qr02_cba(
         self, environment: ProjectEnvironment, request: UpdateQr02CbaRequest

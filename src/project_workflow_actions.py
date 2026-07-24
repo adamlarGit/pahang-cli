@@ -67,8 +67,6 @@ class PopulateTotalPeAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for populating TOTAL PE from testsheets."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
-        folders = [p.name for p in environment.storage.list_testsheet_folders()]
-
         options = [
             cli_selectors.SelectOption("Auto (process new/unprocessed dates only)", "auto"),
             cli_selectors.SelectOption("All (re-process all folders checking existing PEs)", "all"),
@@ -81,15 +79,13 @@ class PopulateTotalPeAction(ProjectWorkflowAction):
             return None
 
         if mode_str == "select":
-            folder_options = [cli_selectors.SelectOption(f, f) for f in folders]
-            folder_options.append(cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"))
-            selected_folder = cli_selectors.select_one("Select folder to process", folder_options)
-            if selected_folder in ("__cancel__", None):
+            selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
+            if selected_path is None:
                 print("Processing cancelled.")
                 return None
             request = PopulateTotalPeRequest(
                 mode=PopulateMode.SPECIFIC_FOLDERS,
-                target_folder_names=(selected_folder,),
+                target_folder_names=(selected_path.name,),
                 progress_sink=_cli_progress_sink,
             )
         elif mode_str == "all":
@@ -113,34 +109,28 @@ class RawMaterialAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for raw material creation & sorting."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
-        raw_mat_dir = environment.get_raw_material_dir()
-        date_folders = [p for p in raw_mat_dir.iterdir() if p.is_dir()] if raw_mat_dir.exists() else []
-
-        target_dir = None
-        if date_folders:
-            options = [cli_selectors.SelectOption(f.name, f) for f in date_folders]
-            options.append(cli_selectors.SelectOption("Enter path manually", "manual"))
-            options.append(cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"))
-
-            selected = cli_selectors.select_one("Select RAW MATERIAL Date Folder to Process", options)
-            if selected in ("__cancel__", None):
-                print("Operation cancelled.")
-                return None
-            if selected != "manual" and isinstance(selected, Path):
-                target_dir = selected
-
-        if target_dir is None:
-            default_dir = raw_mat_dir
-            raw_path = input(f"Enter target RAW MATERIAL directory path [{default_dir}]: ").strip().strip('"')
-            target_dir = Path(raw_path) if raw_path else default_dir
+        selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
+        if selected_path is None:
+            selected_path = cli_selectors.prompt_directory_path(
+                "Enter target RAW MATERIAL / TESTSHEET directory path",
+                default=environment.get_testsheet_dir(),
+                must_exist=False,
+            )
+        if selected_path is None:
+            print("Operation cancelled.")
+            return None
 
         request = RawMaterialRequest(
-            output_path=target_dir,
+            output_path=selected_path,
             progress_sink=_cli_progress_sink,
         )
         service = WorkflowService()
         result = service.run_raw_material(environment, request)
         print(f"Processed substations count: {result.substations_count}")
+        if result.warnings:
+            print(f"Warnings ({len(result.warnings)}):")
+            for w in result.warnings:
+                print(f"  - {w}")
         return result
 
 
