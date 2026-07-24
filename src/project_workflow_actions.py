@@ -138,8 +138,6 @@ class UpdateQr02CbaAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for updating QR02 CBA sheets."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
-        folders = [p.name for p in environment.storage.list_testsheet_folders()]
-
         options = [
             cli_selectors.SelectOption("Auto (process new/unprocessed only)", "auto"),
             cli_selectors.SelectOption("All (re-process everything)", "all"),
@@ -152,30 +150,37 @@ class UpdateQr02CbaAction(ProjectWorkflowAction):
             return None
 
         if mode_str == "select":
-            folder_options = [cli_selectors.SelectOption(f, f) for f in folders]
-            folder_options.append(cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"))
-            selected_folder = cli_selectors.select_one("Select folder to process", folder_options)
-            if selected_folder in ("__cancel__", None):
+            selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
+            if selected_path is None:
                 print("Processing cancelled.")
                 return None
             request = UpdateQr02CbaRequest(
-                target_package_names=(selected_folder,),
+                mode=PopulateMode.SPECIFIC_FOLDERS,
+                target_package_names=(selected_path.name, str(selected_path)),
                 progress_sink=_cli_progress_sink,
             )
         elif mode_str == "all":
             request = UpdateQr02CbaRequest(
-                target_package_names=tuple(folders),
+                mode=PopulateMode.ALL,
                 progress_sink=_cli_progress_sink,
             )
         else:
             request = UpdateQr02CbaRequest(
-                target_package_names=(),
+                mode=PopulateMode.AUTO,
                 progress_sink=_cli_progress_sink,
             )
 
         service = WorkflowService()
         result = service.run_update_qr02_cba(environment, request)
         print(f"Records updated: {result.records_updated}")
+        if result.warnings:
+            print(f"Warnings ({len(result.warnings)}):")
+            for w in result.warnings:
+                print(f"  - {w}")
+        if result.errors:
+            print(f"Errors ({len(result.errors)}):")
+            for e in result.errors:
+                print(f"  - {e}")
         return result
 
 

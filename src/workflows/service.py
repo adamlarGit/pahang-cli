@@ -47,7 +47,8 @@ class WorkflowService:
     ) -> UpdateQr02CbaResult:
         if request.progress_sink:
             request.progress_sink("Executing Update QR02 CBA workflow...")
-        return UpdateQr02CbaResult(records_updated=0)
+        from src.update_qr02_cba_workflow import run_update_qr02_cba
+        return run_update_qr02_cba(environment, request)
 
     def run_quick_report(
         self, environment: ProjectEnvironment, request: QuickReportRequest
