@@ -107,6 +107,10 @@ class WorkspaceStorage(ABC):
         """Ensure a directory and its parents exist and return as Path."""
 
     @abstractmethod
+    def get_engr_cba_path(self, station: str, year: str) -> Path:
+        """Return the ENGR CBA workbook path for a specific station and year."""
+
+    @abstractmethod
     def resolve_template_path(self, key: str) -> Path:
         """Resolve and validate existence of a template path by key."""
 
@@ -212,6 +216,20 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         p = Path(path)
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    def get_engr_cba_path(self, station: str, year: str) -> Path:
+        """Resolve per-station ENGR CBA workbook path.
+
+        Pattern: PYTHON/ENGR FROM DRIVE/ENGR-750-36-CBA-{STATION_CODE}-{YEAR}.xlsx
+        """
+        station_upper = station.strip().upper()
+        if station_upper not in config.ENGR_STATION_CODES:
+            raise ValueError(
+                f"Unknown station '{station}'. "
+                f"Valid stations: {', '.join(sorted(config.ENGR_STATION_CODES.keys()))}"
+            )
+        code = config.ENGR_STATION_CODES[station_upper]
+        return self.get_engr_folder() / f"ENGR-750-36-CBA-{code}-{year}.xlsx"
 
     def resolve_template_path(self, key: str) -> Path:
         p = self.get_template(key)

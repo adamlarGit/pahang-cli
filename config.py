@@ -55,6 +55,24 @@ SEED_FILES: dict[str, str] = {
 }
 
 # ─── File Patterns ───
+# ─── Station-to-ENGR Code Mapping (for per-station ENGR workbook resolution) ───
+ENGR_STATION_CODES: dict[str, str] = {
+    "MARAN": "MRN",
+    "KUANTAN": "KTN",
+    "JENGKA": "JEN",
+    "MUADZAM SHAH": "BMS",
+    "BENTONG": "BTG",
+    "GEBENG": "GBG",
+    "ROMPIN": "ROM",
+    "TEMERLOH": "TML",
+    "PEKAN": "PEK",
+    "TRIANG": "TRI",
+    "KUALA LIPIS": "KLS",
+    "CAMERON HIGHLAND": "CHL",
+    "RAUB": "RAU",
+    "JERANTUT": "JRT",
+}
+
 ENGR_FILE_PATTERN: str = r"PYTHON\ENGR FROM DRIVE\ENGR-*.xlsx"
 
 # ─── Project-specific Constants ───
