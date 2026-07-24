@@ -41,13 +41,22 @@ Every finding in the review report **MUST** be prefixed with a severity tag:
 Prompt the review subagent(s) with:
 
 - The exact diff command and commit list.
-- The path to the spec file(s) and standard baseline.
+- The path to the spec file(s) and standard baseline. **If the caller provides exact spec file paths, use those directly — do NOT search `.issues/`, `docs/`, or temp directories.**
 - **The Brief**:
   - Classify every finding explicitly as `[CRITICAL]`, `[MAJOR]`, or `[NITPICK]`.
   - Scope the Spec review strictly to the requested feature/tickets, ignoring unmentioned scaffold stubs.
   - Keep report under 400 words.
 
-### 5. Aggregate & Summary
+### 5. Targeted Re-Review Mode
+
+When invoked as a **round 2 re-review** (the caller indicates this is a follow-up review after fixes):
+
+1. **Scope to changed files only.** Do NOT re-read the full diff from the fixed point. Instead, review only the files that were modified during the fix round.
+2. **Re-check only the original CRITICAL items** from round 1 (provided by the caller). Verify each was addressed.
+3. **Do NOT raise new NITPICK findings** on unchanged code. Only flag new CRITICALs if the fix introduced a regression.
+4. Keep the re-review report under 200 words.
+
+### 6. Aggregate & Summary
 
 Present findings under `## Standards` and `## Spec` headings.
 
