@@ -39,6 +39,14 @@ def test_local_excel_qr02_repository_cba_path(tmp_workspace: LocalWorkspaceStora
     assert repo._get_cba_path() == expected_path
 
 
+def test_missing_cba_file_raises_file_not_found(tmp_path: Path) -> None:
+    cba_path = tmp_path / "non_existent.xlsx"
+    tx = LocalExcelQr02Transaction(cba_path)
+    with pytest.raises(FileNotFoundError):
+        with tx:
+            pass
+
+
 def test_exact_fl_matching(tmp_path: Path) -> None:
     cba_path = tmp_path / "test_cba.xlsx"
 

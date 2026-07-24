@@ -70,6 +70,7 @@ class RawMaterialResult:
 class UpdateQr02CbaRequest:
     """Request model for updating QR02 CBA sheet."""
 
+    mode: PopulateMode = PopulateMode.AUTO
     target_package_names: Sequence[str] = ()
     progress_sink: ProgressSink | None = None
 
@@ -79,6 +80,9 @@ class UpdateQr02CbaResult:
     """Result model for updating QR02 CBA sheet."""
 
     records_updated: int = 0
+    processed_folders: Sequence[str] = ()
+    warnings: Sequence[str] = ()
+    errors: Sequence[str] = ()
 
 
 @dataclass(frozen=True)

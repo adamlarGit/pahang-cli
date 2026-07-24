@@ -100,10 +100,9 @@ class LocalExcelQr02Transaction(Qr02Transaction):
         self._max_row = 0
 
     def __enter__(self) -> LocalExcelQr02Transaction:
-        if self.cba_path.exists():
-            self.wb = openpyxl.load_workbook(self.cba_path)
-        else:
-            self.wb = openpyxl.Workbook()
+        if not self.cba_path.exists():
+            raise FileNotFoundError(f"ENGR CBA workbook file not found at '{self.cba_path}'")
+        self.wb = openpyxl.load_workbook(self.cba_path)
 
         if "QR02 CBA" in self.wb.sheetnames:
             self.ws = self.wb["QR02 CBA"]
