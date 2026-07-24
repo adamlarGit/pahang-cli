@@ -63,7 +63,12 @@ class Qr02Transaction(ABC):
         ...
 
     @abstractmethod
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool | None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any | None,
+    ) -> bool | None:
         ...
 
     @abstractmethod
@@ -92,8 +97,6 @@ class LocalExcelQr02Transaction(Qr02Transaction):
         self.wb: openpyxl.Workbook | None = None
         self.ws: Worksheet | None = None
         self.fl_to_row: dict[str, int] = {}
-        self.erms_name_to_row: dict[str, int] = {}
-        self.fuzzy_name_to_row: dict[str, int] = {}
         self._max_row = 0
 
     def __enter__(self) -> LocalExcelQr02Transaction:
@@ -115,7 +118,12 @@ class LocalExcelQr02Transaction(Qr02Transaction):
         self._build_index()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> bool | None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any | None,
+    ) -> bool | None:
         try:
             if exc_type is None and self.ws is not None:
                 self._sanitize_ghost_formatting(self.ws)
@@ -145,6 +153,7 @@ class LocalExcelQr02Transaction(Qr02Transaction):
         """Purge ghost cells/rows/columns beyond real data bounds."""
         max_r, max_c = self._get_real_dimensions(ws)
         if max_r == 0 and max_c == 0:
+            ws._cells.clear()
             return
         ghost_keys = [
             (r, c)
@@ -173,8 +182,6 @@ class LocalExcelQr02Transaction(Qr02Transaction):
 
     def _build_index(self) -> None:
         self.fl_to_row.clear()
-        self.erms_name_to_row.clear()
-        self.fuzzy_name_to_row.clear()
 
         if self.ws is None:
             return
@@ -193,17 +200,6 @@ class LocalExcelQr02Transaction(Qr02Transaction):
             if fl_norm and fl_norm not in self.fl_to_row:
                 self.fl_to_row[fl_norm] = r
 
-            if val_j is not None:
-                raw_name = str(val_j).strip()
-                if raw_name:
-                    name_upper = raw_name.upper()
-                    if name_upper not in self.erms_name_to_row:
-                        self.erms_name_to_row[name_upper] = r
-
-                    fuzzy_key = _fuzzy_normalize_name(raw_name)
-                    if fuzzy_key and fuzzy_key not in self.fuzzy_name_to_row:
-                        self.fuzzy_name_to_row[fuzzy_key] = r
-
     def upsert_qr02_cba_records(self, records: Sequence[Any]) -> int:
         if self.ws is None:
             raise RuntimeError("Transaction is not active. Must be used as context manager.")
@@ -221,16 +217,10 @@ class LocalExcelQr02Transaction(Qr02Transaction):
                     default="",
                 )
             ).strip()
-            name_upper = rec_name.upper() if rec_name else ""
-            fuzzy_key = _fuzzy_normalize_name(rec_name) if rec_name else ""
 
             target_row: int | None = None
             if rec_fl and rec_fl in self.fl_to_row:
                 target_row = self.fl_to_row[rec_fl]
-            elif name_upper and name_upper in self.erms_name_to_row:
-                target_row = self.erms_name_to_row[name_upper]
-            elif fuzzy_key and fuzzy_key in self.fuzzy_name_to_row:
-                target_row = self.fuzzy_name_to_row[fuzzy_key]
             else:
                 if self._max_row == 0:
                     # Write header row at row 1 if sheet is empty
@@ -288,13 +278,9 @@ class LocalExcelQr02Transaction(Qr02Transaction):
             # Col P (16): Vendor = "EET"
             self.ws.cell(row=target_row, column=16, value="EET")
 
-            # Update indices for subsequent records in the transaction
+            # Update index for subsequent records in the transaction
             if rec_fl:
                 self.fl_to_row[rec_fl] = target_row
-            if name_upper:
-                self.erms_name_to_row[name_upper] = target_row
-            if fuzzy_key:
-                self.fuzzy_name_to_row[fuzzy_key] = target_row
 
             updated_count += 1
 

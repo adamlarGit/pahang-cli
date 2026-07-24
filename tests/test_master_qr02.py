@@ -81,7 +81,7 @@ def test_exact_fl_matching(tmp_path: Path) -> None:
     wb_read.close()
 
 
-def test_exact_name_matching(tmp_path: Path) -> None:
+def test_unmatched_fl_appends_new_row(tmp_path: Path) -> None:
     cba_path = tmp_path / "test_cba.xlsx"
 
     wb = openpyxl.Workbook()
@@ -89,14 +89,14 @@ def test_exact_name_matching(tmp_path: Path) -> None:
     ws.title = "QR02 CBA"
     ws.cell(row=1, column=9, value="FL")
     ws.cell(row=1, column=10, value="NAME")
-    ws.cell(row=2, column=9, value="")  # Empty FL
+    ws.cell(row=2, column=9, value="75001234")
     ws.cell(row=2, column=10, value="PE SSU CHEROH")
     wb.save(cba_path)
     wb.close()
 
     rec = TestsheetData(
         pe_number=1,
-        substation_name="PE SSU CHEROH",
+        substation_name="PE UNMATCHED",
         fl_erms="75009999",
         gps_coordinate="3.82, 101.81",
         substation_type="PE",
@@ -107,40 +107,12 @@ def test_exact_name_matching(tmp_path: Path) -> None:
 
     wb_read = openpyxl.load_workbook(cba_path)
     ws_read = wb_read["QR02 CBA"]
-    # Verify FL was populated in row 2
-    assert ws_read.cell(row=2, column=9).value == "75009999"
-    assert ws_read.cell(row=2, column=12).value == "3.82, 101.81"
-    wb_read.close()
-
-
-def test_fuzzy_name_matching(tmp_path: Path) -> None:
-    cba_path = tmp_path / "test_cba.xlsx"
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "QR02 CBA"
-    ws.cell(row=1, column=9, value="FL")
-    ws.cell(row=1, column=10, value="NAME")
-    ws.cell(row=2, column=9, value="")
-    ws.cell(row=2, column=10, value="CHEROH 2")
-    wb.save(cba_path)
-    wb.close()
-
-    rec = TestsheetData(
-        pe_number=2,
-        substation_name="PE SSU CHEROH NO. 2",
-        gps_coordinate="3.85, 101.85",
-        building_type="OUTDOOR",
-    )
-
-    with LocalExcelQr02Transaction(cba_path) as tx:
-        tx.upsert_qr02_cba_records([rec])
-
-    wb_read = openpyxl.load_workbook(cba_path)
-    ws_read = wb_read["QR02 CBA"]
-    # Row 2 should match via fuzzy matching
-    assert ws_read.cell(row=2, column=12).value == "3.85, 101.85"
-    assert ws_read.cell(row=2, column=14).value == "OUTDOOR"
+    # Row 2 remains intact
+    assert ws_read.cell(row=2, column=9).value == "75001234"
+    # Row 3 is appended for unmatched FL
+    assert ws_read.cell(row=3, column=9).value == "75009999"
+    assert ws_read.cell(row=3, column=10).value == "PE UNMATCHED"
+    assert ws_read.cell(row=3, column=12).value == "3.82, 101.81"
     wb_read.close()
 
 
