@@ -22,17 +22,15 @@ Implement the Update QR02 CBA workflow for Pahang CLI: extract substation metada
 ## Decisions so far
 
 - [Data Flow Direction](file:///.issues/013-update-qr02-cba-workflow-map.md) — Testsheet data feeds into per-station ENGR QR02 CBA sheets; FL (ERMS) is lookup key only (not written); only GPS, Type, Building Type, Cycle 1 date, and Vendor (`"EET"`) are written.
-- [Station ENGR Code Mapping](file:///.issues/013-update-qr02-cba-workflow-map.md) — 14 stations mapped: MRN, KTN, JEN, BMS, BTG, GBG, ROM, TML, PEK, TRI, KLS, CHL, RAU, JRT. Filename year derived from `ProjectMetadata.year`.
-- [Testsheet Folder Scanning](file:///.issues/013-update-qr02-cba-workflow-map.md) — Reuse `SubstationTestsheetRepository.discover_packages()`, group by station, one ENGR transaction per station group.
-- [TestsheetExtractor Rewrite](file:///.issues/013-update-qr02-cba-workflow-map.md) — Replace generic keyword scanning with Johor's fixed-cell approach (`PCE Testsheet` W5/C5/P4, `PCE VI` C7/C8/N1/row 9). Expand `TestsheetData` model. Keep RAW DATA photo range extraction.
-- [Master Repository Module](file:///.issues/013-update-qr02-cba-workflow-map.md) — Create `src/master/qr02.py` following Johor's `Qr02Repository`/`LocalExcelQr02Transaction` architecture with per-station ENGR resolution.
-- [ENGR Filename Year](file:///.issues/013-update-qr02-cba-workflow-map.md) — Derived from `ProjectMetadata.year`, not hardcoded.
-- [History Tracking Key](file:///.issues/013-update-qr02-cba-workflow-map.md) — Keyed by `<STATION>/<MONTH>/<DD-MM-YYYY>` in `PYTHON/processed_folders.json`.
+- [Station ENGR Code Mapping](file:///.issues/014-station-engr-code-mapping.md) — 14 stations mapped: MRN, KTN, JEN, BMS, BTG, GBG, ROM, TML, PEK, TRI, KLS, CHL, RAU, JRT. Filename year derived from `ProjectMetadata.year`.
+- [TestsheetExtractor Rewrite](file:///.issues/015-rewrite-testsheet-extractor.md) — Fixed-cell extraction for `PCE Testsheet` (W5/C5/P4) and `PCE VI` (C7/C8/N1/row 9).
+- [Master Repository Module](file:///.issues/016-master-qr02-repository.md) — `src/master/qr02.py` with `LocalExcelQr02Repository`, exact FL matching, fallback append, atomic saves, and ghost cell cleanup.
+- [Workflow Orchestrator](file:///.issues/017-update-qr02-cba-workflow.md) — `src/update_qr02_cba_workflow.py` with AUTO, ALL, and SPECIFIC mode filtering and history tracking in `processed_folders.json`.
+- [Service & CLI Wiring](file:///.issues/018-wire-service-and-cli-adapter.md) — `WorkflowService.run_update_qr02_cba` and `UpdateQr02CbaAction` with 3-tier date folder navigation.
 
 ## Not yet specified
 
-- Pahang-specific `warn_missing_fields()` audit (which fields are essential for Pahang vs Johor's equipment-heavy checks).
-- Row matching edge cases when ENGR file has no pre-populated FL for a substation (append vs skip policy).
+- None (Map fully resolved).
 
 ## Out of scope
 
