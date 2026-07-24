@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+from datetime import datetime
+
+
 @dataclass(frozen=True)
 class PhotoRange:
     """Numerical bounds (start and end photo numbers) for raw photo matching."""
@@ -53,6 +56,13 @@ class TestsheetData:
     type_code: str = "PE"
     wo_number: str = ""
     photo_ranges: RawPhotoRanges = RawPhotoRanges()
+    fl_erms: str = ""
+    substation_name_erms: str = ""
+    substation_name_site: str = ""
+    gps_coordinate: str = ""
+    substation_type: str = ""
+    building_type: str | None = None
+    cycle_1: datetime | None = None
 
 
 @dataclass(frozen=True)

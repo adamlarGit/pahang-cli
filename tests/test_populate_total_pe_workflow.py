@@ -37,16 +37,11 @@ def test_populate_total_pe_workflow_creates_and_updates_rows(mock_env: ProjectEn
     (date_dir / "UNSORTED RAW DATA").mkdir()
 
     wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "RAW DATA"
-    ws.cell(1, 1, "PE NO")
-    ws.cell(1, 2, 1)
-    ws.cell(2, 1, "SUBSTATION NAME")
-    ws.cell(2, 2, "SSU CHEROH")
-    ws.cell(3, 1, "FL NUMBER")
-    ws.cell(3, 2, "CRAU-S001")
-    ws.cell(4, 1, "DATE")
-    ws.cell(4, 2, "01-05-2026")
+    ws_pce = wb.active
+    ws_pce.title = "PCE Testsheet"
+    ws_pce["W5"] = "CRAU-S001"
+    ws_pce["C5"] = "SSU CHEROH"
+    ws_pce["P4"] = "01-05-2026"
     wb.save(date_dir / "001. SSU CHEROH.xlsx")
     wb.close()
 
