@@ -93,6 +93,17 @@ class ProjectEnvironment:
     def get_whatsapp_template(self) -> Path:
         return self.get_template("whatsapp_template")
 
+    def get_whatsapp_report_resources(self) -> WhatsAppReportResources:
+        from src.whatsapp.models import WhatsAppReportResources
+
+        return WhatsAppReportResources(
+            quick_report_dir=self.get_quick_report_dir(),
+            save_dir=self.get_whatsapp_dir(),
+            template_path=self.get_whatsapp_template(),
+            total_pe_path=self.get_total_pe_path(),
+            station_mapping=self.get_station_mapping(),
+        )
+
     def get_vi_front_page_template(self) -> Path:
         return self.get_template("vi_front_page")
 

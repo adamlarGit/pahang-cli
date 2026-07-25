@@ -251,29 +251,22 @@ class WhatsAppReportAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for generating WhatsApp reports."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
-        folders = [p.name for p in environment.storage.list_quick_report_folders()]
+        from src.whatsapp_report_workflow import select_quick_report_batch
 
-        if not folders:
-            print("No date folders found in QUICK REPORT directory.")
-            return None
-
-        folder_options = [cli_selectors.SelectOption(f, f) for f in folders]
-        folder_options.append(cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"))
-
-        selected_folder = cli_selectors.select_one("Select Quick Report Date Folder", folder_options)
-        if selected_folder in ("__cancel__", None):
+        selected_batch = select_quick_report_batch(environment.get_quick_report_dir())
+        if selected_batch is None:
             print("Operation cancelled.")
             return None
 
-        report_dir = environment.get_quick_report_dir() / selected_folder
-
         request = WhatsAppReportRequest(
-            report_dir=report_dir,
+            report_dir=selected_batch,
             progress_sink=_cli_progress_sink,
         )
         service = WorkflowService()
         result = service.run_whatsapp(environment, request)
         print(f"Substations processed: {result.substations_count}")
+        if result.output_path:
+            print(f"WhatsApp report generated: {result.output_path}")
         return result
 
 

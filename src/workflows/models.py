@@ -117,3 +117,4 @@ class WhatsAppReportResult:
     """Result model for WhatsApp report generation workflow."""
 
     substations_count: int = 0
+    output_path: Path | None = None

@@ -62,4 +62,18 @@ class WorkflowService:
     ) -> WhatsAppReportResult:
         if request.progress_sink:
             request.progress_sink("Executing WhatsApp Report generation...")
-        return WhatsAppReportResult(substations_count=0)
+        from src.whatsapp import generate_whatsapp_report
+        from src.whatsapp_report_workflow import run_generate_whatsapp_report
+
+        if request.report_dir is not None:
+            summary = generate_whatsapp_report(environment, request.report_dir)
+        else:
+            summary = run_generate_whatsapp_report(environment)
+
+        if summary is None:
+            return WhatsAppReportResult(substations_count=0)
+
+        return WhatsAppReportResult(
+            substations_count=summary.substations_count,
+            output_path=summary.output_path,
+        )
