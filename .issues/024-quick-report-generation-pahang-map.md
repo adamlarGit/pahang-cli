@@ -20,8 +20,15 @@ Implement and verify the end-to-end Quick Report Generation engine in `pahang-cl
 ## Decisions so far
 
 - [Quick Report Composer Architecture and Template Engine](file:///.issues/025-quick-report-composer-architecture.md) — Specified 6-module structure (`__init__.py`, `composer.py`, `cbm_family.py`, `cbm_render.py`, `visual_render.py`, `utils.py`), 7-part docx assembly sequence with mandatory Sticker Page, canonical suffix `(IR+US+TEV+VI)`, and date-omitting output filename `{pe_number:03d}. {name_erms}{suffix}.docx`.
+- [Digital Testsheet Data Extraction and Context Mapping Schema](file:///.issues/026-digital-testsheet-data-extraction-schema.md) — Digital Testsheet set as single source of truth without QR02 fallback; front page date `DD MMM YYYY` vs CBM page date `DD/MM/YYYY`; time `HH:MM AM/PM`; 1-to-1 IR/US/TEV pairing with integer `dB` formatting without space; decoupled detail provider strategy.
+- [Substation Condition Template Auto-Detection Rules](file:///.issues/027-substation-condition-template-auto-detection.md) — Specified Single-Page 3-Pair Template Chunking Engine (`MASTER_SUBSTATION_CONDITION_PAGE.docx` + `docxtpl` + `docxcompose`); no shaded fills; solid borders for active slots & nil borders for unused slot 3 on final chunk; full equipment names (`SWITCHGEAR`, `TRANSFORMER`); `_resolve_switchgear_label` seam with TODO stub; canonical 2-column pair sequence `(Overview, Signboard)`, `(SWITCHGEAR, Nameplate)`, `(TRANSFORMER, Nameplate)`, `(FEEDER PILLAR, Nameplate)`, `(BATTERY CHARGER, Nameplate)`, `(RTU, Nameplate)`, `(EFI, SF6)`, `(Fire Ext, Expiry)`, `(TX Oil Level)`.
+- [Photo Retrieval, Aspect Ratio Resizing, and Fallback Placeholders](file:///.issues/028-photo-retrieval-resizing-and-placeholders.md) — Specified Option A stem-matching interface stubs for DG, IR, US, and TEV with explicit TODO markers for future map implementation; DG photo fallback set to `""` (empty string).
+- [Quick Report CLI Action and Service Wiring](file:///.issues/029-quick-report-cli-service-wiring.md) — Specified 2-option CLI menu (`Select Date Folder`, `Manual FL Input`); auto-selected `MASTER_SUBSTATION_CONDITION.docx`; per-station `try...except` exception isolation for resilient batch processing mirroring Johor reference (`quick_report_workflow.py`).
+
+
 
 ## Not yet specified
+
 
 - Batch generation error recovery and partial failure reporting across multi-station runs.
 - PDF export or conversion options (if required in future scope).

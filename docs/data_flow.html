@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pahang CLI - Data Flow Architecture Specification</title>
+  <meta name="description" content="Detailed visual data flow documentation for populate_total_pe_workflow.py and raw_material_workflow.py in Pahang CLI.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b0f19;
+      --bg-card: rgba(18, 24, 38, 0.75);
+      --bg-card-hover: rgba(28, 36, 56, 0.85);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(99, 102, 241, 0.4);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dim: #6b7280;
+      
+      --accent-primary: #6366f1;
+      --accent-secondary: #06b6d4;
+      --accent-success: #10b981;
+      --accent-warning: #f59e0b;
+      --accent-danger: #ef4444;
+
+      --gradient-pe: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+      --gradient-rm: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+      --gradient-card: linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0) 100%);
+      --glow-pe: 0 0 25px rgba(99, 102, 241, 0.25);
+      --glow-rm: 0 0 25px rgba(6, 182, 212, 0.25);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 0;
+      margin: 0;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.12) 0%, transparent 40%);
+      background-attachment: fixed;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(11, 15, 25, 0.85);
+      backdrop-filter: blur(16px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 1.25rem 2rem;
+    }
+
+    .header-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      background: var(--gradient-pe);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.2rem;
+      color: white;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .brand-text h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-text p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .nav-tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      gap: 4px;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+    }
+
+    .tab-btn.active[data-tab="pe"] {
+      background: var(--gradient-pe);
+      color: white;
+      box-shadow: var(--glow-pe);
+    }
+
+    .tab-btn.active[data-tab="rm"] {
+      background: var(--gradient-rm);
+      color: white;
+      box-shadow: var(--glow-rm);
+    }
+
+    .tab-btn.active[data-tab="overview"] {
+      background: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
+    /* Container */
+    main {
+      max-width: 1400px;
+      margin: 2rem auto;
+      padding: 0 2rem 4rem 2rem;
+    }
+
+    /* Section Styling */
+    .view-section {
+      display: none;
+      animation: fadeIn 0.4s ease-in-out forwards;
+    }
+
+    .view-section.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Hero Banner */
+    .hero-banner {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2.5rem;
+      position: relative;
+      overflow: hidden;
+      backdrop-filter: blur(12px);
+    }
+
+    .hero-banner::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+    }
+
+    .pe-theme::before { background: var(--gradient-pe); }
+    .rm-theme::before { background: var(--gradient-rm); }
+    .overview-theme::before { background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%); }
+
+    .hero-title {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .file-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-color);
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      color: var(--accent-secondary);
+    }
+
+    .hero-desc {
+      color: var(--text-muted);
+      max-width: 900px;
+      font-size: 0.95rem;
+    }
+
+    /* Architecture Grid */
+    .architecture-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 1.5rem;
+      backdrop-filter: blur(8px);
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-highlight);
+    }
+
+    .metric-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .metric-value {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .metric-desc {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+    }
+
+    /* Flow Chart Pipeline */
+    .pipeline-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .flow-pipeline {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      position: relative;
+    }
+
+    .flow-step {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 1.5rem;
+      position: relative;
+    }
+
+    .step-badge-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .step-number {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 2px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      z-index: 2;
+      transition: all 0.3s ease;
+    }
+
+    .flow-step:hover .step-number {
+      border-color: var(--accent-primary);
+      color: white;
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+    }
+
+    .step-connector {
+      width: 2px;
+      flex-grow: 1;
+      background: var(--border-color);
+      margin-top: 8px;
+    }
+
+    .flow-step:last-child .step-connector {
+      display: none;
+    }
+
+    .step-content-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.5rem;
+      backdrop-filter: blur(12px);
+      transition: all 0.25s ease;
+    }
+
+    .step-content-card:hover {
+      border-color: var(--border-highlight);
+      background: var(--bg-card-hover);
+    }
+
+    .step-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .step-name {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .code-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .step-details-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-top: 1rem;
+    }
+
+    .detail-box {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+
+    .detail-box-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .title-input { color: var(--accent-secondary); }
+    .title-process { color: var(--accent-primary); }
+    .title-output { color: var(--accent-success); }
+    .title-error { color: var(--accent-warning); }
+
+    .detail-list {
+      list-style: none;
+      font-size: 0.875rem;
+      color: var(--text-muted);
+    }
+
+    .detail-list li {
+      margin-bottom: 0.4rem;
+      position: relative;
+      padding-left: 1.2rem;
+    }
+
+    .detail-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0.4rem;
+      color: var(--text-dim);
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.825rem;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      color: #e2e8f0;
+    }
+
+    /* Diagram visual boxes */
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 2rem;
+      margin-bottom: 2.5rem;
+      overflow-x: auto;
+    }
+
+    .flow-diagram-svg {
+      width: 100%;
+      min-width: 800px;
+      height: auto;
+    }
+
+    /* Comparison / Relationship table */
+    .data-table-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 2.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.04);
+      padding: 1rem 1.25rem;
+      font-weight: 700;
+      color: var(--text-main);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    td {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-muted);
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border-color);
+      padding: 2rem;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      margin-top: 4rem;
+    }
+
+    .path-callout {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 12px;
+      padding: 1rem 1.5rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .path-info h4 {
+      color: var(--accent-success);
+      font-size: 0.95rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .path-info p {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: #a7f3d0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-blue { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .badge-purple { background: rgba(168, 85, 247, 0.2); color: #e9d5ff; border: 1px solid rgba(168, 85, 247, 0.3); }
+    .badge-green { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-orange { background: rgba(245, 158, 11, 0.2); color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.3); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-logo">P</div>
+        <div class="brand-text">
+          <h1>Pahang CLI Data Flow Spec</h1>
+          <p>Workflow Architecture & Data Pipeline Analysis</p>
+        </div>
+      </div>
+      <div class="nav-tabs">
+        <button class="tab-btn active" data-tab="pe" onclick="switchTab('pe')">
+          ⚡ Populate TOTAL PE
+        </button>
+        <button class="tab-btn" data-tab="rm" onclick="switchTab('rm')">
+          📁 Raw Material Workflow
+        </button>
+        <button class="tab-btn" data-tab="overview" onclick="switchTab('overview')">
+          🔄 End-to-End Pipeline
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Path Banner -->
+    <div class="path-callout">
+      <div class="path-info">
+        <h4>DOCUMENTATION LOCATION</h4>
+        <p>C:\Users\ADAM\Desktop\pahang-cli\docs\data_flow.html</p>
+      </div>
+      <span class="badge badge-green">Generated Successfully</span>
+    </div>
+
+    <!-- SECTION 1: POPULATE TOTAL PE WORKFLOW -->
+    <section id="pe" class="view-section active">
+      <div class="hero-banner pe-theme">
+        <div class="hero-title">
+          <span>Populate TOTAL PE Workflow</span>
+          <span class="file-tag">src/populate_total_pe_workflow.py</span>
+        </div>
+        <div class="hero-desc">
+          Scans testsheet packages across input storage, parses substation test data, and upserts PE metadata into <code>TOTAL PE.xlsx</code> (Worksheet: <code>DataCycle1</code>). Serves as the primary metadata index for Pahang CLI.
+        </div>
+      </div>
+
+      <!-- Architecture Metrics -->
+      <div class="architecture-grid">
+        <div class="metric-card">
+          <div class="metric-title">Primary Entry Point</div>
+          <div class="metric-value">
+            <code>PopulateTotalPeWorkflow.execute()</code>
+          </div>
+          <div class="metric-desc">Accepts <code>ProjectEnvironment</code> and <code>PopulateTotalPeRequest</code></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Data Storage Destination</div>
+          <div class="metric-value">
+            <code>TOTAL PE.xlsx</code>
+          </div>
+          <div class="metric-desc">Worksheet: <code>DataCycle1</code> | Cols: PE NO, FL NUMBER, SUBSTATION NAME, DATE, TYPE, WO, SCOPE</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Execution Modes</div>
+          <div class="metric-value">
+            <span class="badge badge-blue">AUTO</span>
+            <span class="badge badge-purple">SPECIFIC_FOLDERS</span>
+          </div>
+          <div class="metric-desc">AUTO mode deduplicates against existing records; SPECIFIC_FOLDERS filters by package targets.</div>
+        </div>
+      </div>
+
+      <!-- Visual Flow Diagram -->
+      <h3 class="pipeline-title">📊 Visual Data Flow Diagram</h3>
+      <div class="diagram-container">
+        <svg class="flow-diagram-svg" viewBox="0 0 1100 320" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="peGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#6366f1"/>
+              <stop offset="100%" stop-color="#a855f7"/>
+            </linearGradient>
+            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#6366f1" />
+            </marker>
+          </defs>
+
+          <!-- Node 1: Input Storage -->
+          <g transform="translate(30, 110)">
+            <rect width="180" height="90" rx="12" fill="#1e293b" stroke="#334155" stroke-width="2"/>
+            <text x="90" y="35" text-anchor="middle" fill="#94a3b8" font-size="11" font-weight="700">INPUT SOURCE</text>
+            <text x="90" y="58" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="600">Testsheet Storage</text>
+            <text x="90" y="75" text-anchor="middle" fill="#64748b" font-size="11">testsheet_dir/</text>
+          </g>
+
+          <line x1="210" y1="155" x2="260" y2="155" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Node 2: Repository Discovery -->
+          <g transform="translate(260, 110)">
+            <rect width="180" height="90" rx="12" fill="#1e293b" stroke="#6366f1" stroke-width="2"/>
+            <text x="90" y="35" text-anchor="middle" fill="#a5b4fc" font-size="11" font-weight="700">DISCOVERY & PARSING</text>
+            <text x="90" y="58" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="600">Substation Repository</text>
+            <text x="90" y="75" text-anchor="middle" fill="#64748b" font-size="11">discover_packages()</text>
+          </g>
+
+          <line x1="440" y1="155" x2="490" y2="155" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Node 3: Filter & Deduplication -->
+          <g transform="translate(490, 110)">
+            <rect width="180" height="90" rx="12" fill="#1e293b" stroke="#a855f7" stroke-width="2"/>
+            <text x="90" y="35" text-anchor="middle" fill="#d8b4fe" font-size="11" font-weight="700">FILTER & MATCH</text>
+            <text x="90" y="58" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="600">Deduplication Gate</text>
+            <text x="90" y="75" text-anchor="middle" fill="#64748b" font-size="11">normalize_date_str()</text>
+          </g>
+
+          <line x1="670" y1="155" x2="720" y2="155" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Node 4: Excel Upsert Engine -->
+          <g transform="translate(720, 110)">
+            <rect width="180" height="90" rx="12" fill="#1e293b" stroke="#10b981" stroke-width="2"/>
+            <text x="90" y="35" text-anchor="middle" fill="#6ee7b7" font-size="11" font-weight="700">DATA PERSISTENCE</text>
+            <text x="90" y="58" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="600">openpyxl Upsert</text>
+            <text x="90" y="75" text-anchor="middle" fill="#64748b" font-size="11">Update vs Append</text>
+          </g>
+
+          <line x1="900" y1="155" x2="950" y2="155" stroke="#6366f1" stroke-width="2" marker-end="url(#arrow)"/>
+
+          <!-- Node 5: Output Storage -->
+          <g transform="translate(950, 110)">
+            <rect width="120" height="90" rx="12" fill="url(#peGlow)"/>
+            <text x="60" y="45" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="800">TARGET</text>
+            <text x="60" y="65" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="600">TOTAL PE</text>
+            <text x="60" y="80" text-anchor="middle" fill="#e0e7ff" font-size="10">.xlsx</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Pipeline Step Breakdown -->
+      <h3 class="pipeline-title">📌 Step-by-Step Data Flow Analysis</h3>
+      <div class="flow-pipeline">
+
+        <!-- Step 1 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">1</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Input Request & Package Discovery</div>
+              <span class="code-badge">Lines 36–46</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Receives environment configuration and request parameters. Uses <code>SubstationTestsheetRepository</code> to scan the testsheet directory and discover package folders.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 Inputs</div>
+                <ul class="detail-list">
+                  <li><code>environment.storage.get_testsheet_dir()</code></li>
+                  <li><code>PopulateTotalPeRequest.mode</code></li>
+                  <li><code>PopulateTotalPeRequest.target_folder_names</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Processing</div>
+                <ul class="detail-list">
+                  <li>Discovers package folders containing Excel testsheets</li>
+                  <li>Extracts package metadata (PE number, date string, test sheet path)</li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-output">📤 Outputs</div>
+                <ul class="detail-list">
+                  <li>List of <code>SubstationTestsheetPackage</code> objects</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">2</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Filtering & Existing Record Indexing</div>
+              <span class="code-badge">Lines 47–86</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Applies requested filter mode. In <code>AUTO</code> mode, reads <code>TOTAL PE.xlsx</code> to index existing <code>(PE/Substation, Date)</code> pairs and filters out packages already processed.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 Input Data</div>
+                <ul class="detail-list">
+                  <li>Discovered packages list</li>
+                  <li>Existing <code>TOTAL PE.xlsx</code> (if present)</li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Key Normalization & Matching</div>
+                <ul class="detail-list">
+                  <li>Normalizes date format via <code>normalize_date_str()</code> (e.g. <code>01/05/2026</code> &rarr; <code>01-05-2026</code>)</li>
+                  <li>Generates key variants: <code>(str(pe), date)</code>, <code>(f"{pe:03d}", date)</code>, <code>(SUB_NAME, date)</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-output">📤 Output Filter</div>
+                <ul class="detail-list">
+                  <li>Filtered list of pending/new packages to process</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">3</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Workbook Provisioning & Header Initialization</div>
+              <span class="code-badge">Lines 93–105</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Ensures target directory exists. Creates a new <code>TOTAL PE.xlsx</code> with standard headers if absent, or opens existing file and accesses sheet <code>DataCycle1</code>.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 Storage Path</div>
+                <ul class="detail-list">
+                  <li><code>environment.storage.get_total_pe_path()</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Workbook Setup</div>
+                <ul class="detail-list">
+                  <li>If missing: creates <code>DataCycle1</code> sheet</li>
+                  <li>Appends header: <code>["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"]</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-output">📤 Prepared Worksheet</div>
+                <ul class="detail-list">
+                  <li>Active <code>openpyxl.Worksheet</code> object ready for writing</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">4</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Data Extraction & Upsert Logic</div>
+              <span class="code-badge">Lines 109–173</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Indexes existing row numbers by key tuple. For each package, extracts test sheet fields (PE NO, FL Number, Substation Name, Date, Type Code, WO Number) and either updates existing row or appends new row.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 Extracted Fields</div>
+                <ul class="detail-list">
+                  <li><code>pe_number</code>, <code>fl_number</code>, <code>substation_name</code></li>
+                  <li><code>date_str</code>, <code>type_code</code>, <code>wo_number</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Multi-Key Lookup Strategy</div>
+                <ul class="detail-list">
+                  <li>Lookup priority: Exact PE &rarr; Norm Date PE &rarr; Padded 3-digit PE &rarr; Substation Name</li>
+                  <li>If match: updates existing row cells</li>
+                  <li>If no match: appends row <code>[pe_no, fl_num, sub_name, dt_str, type_c, wo, ""]</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-output">📤 Result Counters</div>
+                <ul class="detail-list">
+                  <li><code>new_count</code> (incremented on row append)</li>
+                  <li><code>updated_count</code> (incremented on cell update)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">5</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Persistence & Result Return</div>
+              <span class="code-badge">Lines 174–183</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Saves modified workbook back to disk, notifies progress sink, and returns summary object.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-output">💾 Disk Save</div>
+                <ul class="detail-list">
+                  <li><code>wb.save(total_pe_path)</code></li>
+                  <li>Closes workbook stream</li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-output">📤 Return Structure</div>
+                <ul class="detail-list">
+                  <li><code>PopulateTotalPeResult(new_rows_added=new_count)</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- SECTION 2: RAW MATERIAL WORKFLOW -->
+    <section id="rm" class="view-section">
+      <div class="hero-banner rm-theme">
+        <div class="hero-title">
+          <span>Raw Material Workflow</span>
+          <span class="file-tag">src/raw_material_workflow.py</span>
+        </div>
+        <div class="hero-desc">
+          Enforces strict TOTAL PE alignment and folder prerequisites, provisions standard directory structures for raw materials, parses photo range bounds from test sheets, and automatically sorts raw photos into technology folders (IR, DG, US+TEV).
+        </div>
+      </div>
+
+      <!-- Architecture Metrics -->
+      <div class="architecture-grid">
+        <div class="metric-card">
+          <div class="metric-title">Primary Entry Point</div>
+          <div class="metric-value">
+            <code>RawMaterialWorkflow.execute()</code>
+          </div>
+          <div class="metric-desc">Accepts <code>ProjectEnvironment</code> and <code>RawMaterialRequest</code></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Strict Pre-Checks</div>
+          <div class="metric-value">
+            <span class="badge badge-orange">TOTAL PE Check</span>
+            <span class="badge badge-blue">UNSORTED Gate</span>
+          </div>
+          <div class="metric-desc">Fails fast if TOTAL PE missing/empty or package missing UNSORTED RAW DATA folder.</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Folder Structure Provisioned</div>
+          <div class="metric-value">
+            <code>RAW DATA/{IR,DG,US+TEV}</code>
+          </div>
+          <div class="metric-desc">Hierarchy: <code>RAW_MATERIAL/Station/Month/Date/PE/RAW DATA/</code></div>
+        </div>
+      </div>
+
+      <!-- Visual Flow Diagram -->
+      <h3 class="pipeline-title">📊 Visual Data Flow Diagram</h3>
+      <div class="diagram-container">
+        <svg class="flow-diagram-svg" viewBox="0 0 1100 320" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="rmGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#06b6d4"/>
+              <stop offset="100%" stop-color="#3b82f6"/>
+            </linearGradient>
+            <marker id="arrowRm" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
+            </marker>
+          </defs>
+
+          <!-- Node 1: Pre-check TOTAL PE -->
+          <g transform="translate(20, 110)">
+            <rect width="170" height="90" rx="12" fill="#1e293b" stroke="#f59e0b" stroke-width="2"/>
+            <text x="85" y="35" text-anchor="middle" fill="#fde68a" font-size="11" font-weight="700">PRE-CHECK GATE</text>
+            <text x="85" y="58" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="600">TOTAL PE Validation</text>
+            <text x="85" y="75" text-anchor="middle" fill="#64748b" font-size="11">DataCycle1 & Alignment</text>
+          </g>
+
+          <line x1="190" y1="155" x2="235" y2="155" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrowRm)"/>
+
+          <!-- Node 2: Input Verification -->
+          <g transform="translate(235, 110)">
+            <rect width="170" height="90" rx="12" fill="#1e293b" stroke="#ef4444" stroke-width="2"/>
+            <text x="85" y="35" text-anchor="middle" fill="#fca5a5" font-size="11" font-weight="700">FOLDER GATE</text>
+            <text x="85" y="58" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="600">Unsorted Data Check</text>
+            <text x="85" y="75" text-anchor="middle" fill="#64748b" font-size="11">UNSORTED RAW DATA/</text>
+          </g>
+
+          <line x1="405" y1="155" x2="450" y2="155" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrowRm)"/>
+
+          <!-- Node 3: Provision Directories -->
+          <g transform="translate(450, 110)">
+            <rect width="170" height="90" rx="12" fill="#1e293b" stroke="#06b6d4" stroke-width="2"/>
+            <text x="85" y="35" text-anchor="middle" fill="#67e8f9" font-size="11" font-weight="700">PROVISIONING</text>
+            <text x="85" y="58" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="600">Folder Structure</text>
+            <text x="85" y="75" text-anchor="middle" fill="#64748b" font-size="11">IR, DG, US+TEV dirs</text>
+          </g>
+
+          <line x1="620" y1="155" x2="665" y2="155" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrowRm)"/>
+
+          <!-- Node 4: Photo Extraction & Sort -->
+          <g transform="translate(665, 110)">
+            <rect width="180" height="90" rx="12" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+            <text x="90" y="35" text-anchor="middle" fill="#93c5fd" font-size="11" font-weight="700">PHOTO SORTING</text>
+            <text x="90" y="58" text-anchor="middle" fill="#f8fafc" font-size="13" font-weight="600">Range & Prefix Filter</text>
+            <text x="90" y="75" text-anchor="middle" fill="#64748b" font-size="11">FLIR vs IMG_ Bounds</text>
+          </g>
+
+          <line x1="845" y1="155" x2="890" y2="155" stroke="#06b6d4" stroke-width="2" marker-end="url(#arrowRm)"/>
+
+          <!-- Node 5: Raw Material Root -->
+          <g transform="translate(890, 110)">
+            <rect width="180" height="90" rx="12" fill="url(#rmGlow)"/>
+            <text x="90" y="42" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="800">DESTINATION</text>
+            <text x="90" y="62" text-anchor="middle" fill="#ffffff" font-size="12" font-weight="600">RAW_MATERIAL</text>
+            <text x="90" y="78" text-anchor="middle" fill="#e0f2fe" font-size="10">Sorted Photos & Dirs</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Pipeline Step Breakdown -->
+      <h3 class="pipeline-title">📌 Step-by-Step Data Flow Analysis</h3>
+      <div class="flow-pipeline">
+
+        <!-- Step 1 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">1</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">TOTAL PE.xlsx Pre-Check & Validation</div>
+              <span class="code-badge">Lines 56–76</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Validates that <code>TOTAL PE.xlsx</code> exists and contains records in <code>DataCycle1</code> sheet. Prevents raw material processing if TOTAL PE workflow hasn't been executed.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 File Dependency</div>
+                <ul class="detail-list">
+                  <li><code>environment.storage.get_total_pe_path()</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Pre-Check Logic</div>
+                <ul class="detail-list">
+                  <li>Checks file existence</li>
+                  <li>Loads workbook in read-only mode, checks <code>max_row &gt;= 2</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-error">🚨 Exception Trigger</div>
+                <ul class="detail-list">
+                  <li>Raises <code>RuntimeError</code> with explicit user instructions if file/sheet missing or empty</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">2</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Input Package & UNSORTED RAW DATA Verification</div>
+              <span class="code-badge">Lines 78–102</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Discovers target packages and verifies that every single discovered package contains an <code>UNSORTED RAW DATA</code> folder with raw photo files provided by field engineers.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 Target Directory</div>
+                <ul class="detail-list">
+                  <li><code>request.target_dir</code> or fallback <code>get_testsheet_dir()</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Verification Gate</div>
+                <ul class="detail-list">
+                  <li>Checks <code>pkg.unsorted_raw_data_dir.exists()</code> for each package</li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-error">🚨 Error Handling</div>
+                <ul class="detail-list">
+                  <li>Raises <code>RuntimeError</code> if any package lacks <code>UNSORTED RAW DATA/</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">3</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Strict TOTAL PE Alignment Pre-Check</div>
+              <span class="code-badge">Lines 104–146</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Loads <code>TOTAL PE.xlsx</code> records and ensures ALL discovered packages have a matching record in TOTAL PE before proceeding.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 Matching Keys</div>
+                <ul class="detail-list">
+                  <li>Discovered packages metadata vs <code>TOTAL PE.xlsx</code> entries</li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Match Rules</div>
+                <ul class="detail-list">
+                  <li>Matches PE number, padded PE (<code>005</code>), normalized date, or Substation Name</li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-error">🚨 Alignment Gate</div>
+                <ul class="detail-list">
+                  <li>Raises <code>RuntimeError</code> listing unmatched packages if alignment fails</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">4</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Directory Provisioning & Path Construction</div>
+              <span class="code-badge">Lines 155–171</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Constructs standardized nested directory hierarchy under raw material root folder for each substation package.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 Root Directory</div>
+                <ul class="detail-list">
+                  <li><code>environment.storage.get_raw_material_dir()</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Path Hierarchy Built</div>
+                <ul class="detail-list">
+                  <li><code>&lt;raw_material_root&gt;/&lt;station&gt;/&lt;month&gt;/&lt;date_str&gt;/&lt;00PE_NUM&gt;/RAW DATA/</code></li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-output">📤 Subfolders Created</div>
+                <ul class="detail-list">
+                  <li><code>RAW DATA/IR/</code></li>
+                  <li><code>RAW DATA/DG/</code></li>
+                  <li><code>RAW DATA/US+TEV/</code></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 5 -->
+        <div class="flow-step">
+          <div class="step-badge-col">
+            <div class="step-number">5</div>
+            <div class="step-connector"></div>
+          </div>
+          <div class="step-content-card">
+            <div class="step-header">
+              <div class="step-name">Testsheet Photo Range Extraction & Photo Sorting</div>
+              <span class="code-badge">Lines 172–245, 246–311</span>
+            </div>
+            <p style="font-size:0.9rem; color:var(--text-muted);">
+              Extracts photo range numbers (e.g. IR FLIR range, DG IMG range) via <code>TestsheetExtractor</code>. Scans unsorted raw photos, extracts numbers, checks range bounds, and copies matching photos to target directories.
+            </p>
+            <div class="step-details-grid">
+              <div class="detail-box">
+                <div class="detail-box-title title-input">📥 Data Extracted & Files Scanned</div>
+                <ul class="detail-list">
+                  <li><code>photo_ranges.ir</code> & <code>photo_ranges.dg</code> from test sheet</li>
+                  <li>Files matching <code>.jpg</code>, <code>.jpeg</code>, <code>.png</code> in unsorted folder</li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-process">⚙️ Sorting Algorithm (<code>_sort_photos_for_tech</code>)</div>
+                <ul class="detail-list">
+                  <li>Matches filename prefix (<code>FLIR</code> for IR, <code>IMG_</code> for DG)</li>
+                  <li>Extracts sequence integer via regex <code>_extract_photo_number()</code></li>
+                  <li>Validates <code>min_val &lt;= num &lt;= max_val</code></li>
+                  <li>Copies file using <code>shutil.copy2()</code></li>
+                  <li>Tracks missing photo numbers in range</li>
+                </ul>
+              </div>
+              <div class="detail-box">
+                <div class="detail-box-title title-output">📤 Returns & Diagnostics</div>
+                <ul class="detail-list">
+                  <li>Copies sorted photos into <code>IR/</code> and <code>DG/</code></li>
+                  <li>Returns <code>RawMaterialResult</code> with summary & missing photo warnings</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- SECTION 3: OVERVIEW & INTER-WORKFLOW PIPELINE -->
+    <section id="overview" class="view-section">
+      <div class="hero-banner overview-theme">
+        <div class="hero-title">
+          <span>End-to-End Pahang CLI Data Pipeline</span>
+        </div>
+        <div class="hero-desc">
+          How <code>populate_total_pe_workflow.py</code> and <code>raw_material_workflow.py</code> interconnect to form a reliable, validated data processing pipeline for substation testing packages.
+        </div>
+      </div>
+
+      <!-- Overview Table -->
+      <h3 class="pipeline-title">⚖️ Workflow Comparison & Sequential Dependency</h3>
+      <div class="data-table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Dimension</th>
+              <th>1. Populate TOTAL PE Workflow</th>
+              <th>2. Raw Material Workflow</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Source File</strong></td>
+              <td><code>src/populate_total_pe_workflow.py</code></td>
+              <td><code>src/raw_material_workflow.py</code></td>
+            </tr>
+            <tr>
+              <td><strong>Execution Order</strong></td>
+              <td><span class="badge badge-purple">Step 1 (First)</span></td>
+              <td><span class="badge badge-blue">Step 2 (Second - Depends on Step 1)</span></td>
+            </tr>
+            <tr>
+              <td><strong>Primary Goal</strong></td>
+              <td>Index package metadata into master Excel summary.</td>
+              <td>Provision folders and sort raw photo files into technology subdirs.</td>
+            </tr>
+            <tr>
+              <td><strong>Inputs</strong></td>
+              <td>Testsheet package directories, Excel test sheets.</td>
+              <td>Testsheet packages, <code>UNSORTED RAW DATA/</code> photos, <code>TOTAL PE.xlsx</code>.</td>
+            </tr>
+            <tr>
+              <td><strong>Outputs</strong></td>
+              <td><code>TOTAL PE.xlsx</code> (Sheet: <code>DataCycle1</code>)</td>
+              <td>Structured <code>RAW_MATERIAL/.../RAW DATA/{IR,DG,US+TEV}</code> folders & sorted photos.</td>
+            </tr>
+            <tr>
+              <td><strong>Validation Mode</strong></td>
+              <td>Deduplicates against existing Excel records.</td>
+              <td>Strict pre-check: halts if TOTAL PE missing or package unindexed.</td>
+            </tr>
+            <tr>
+              <td><strong>Key Helper Class</strong></td>
+              <td><code>SubstationTestsheetRepository</code></td>
+              <td><code>SubstationTestsheetRepository</code> & <code>TestsheetExtractor</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Integrated Flow Diagram -->
+      <h3 class="pipeline-title">🔁 Sequential Execution & Dependency Flow</h3>
+      <div class="diagram-container">
+        <svg class="flow-diagram-svg" viewBox="0 0 1100 280" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrowGen" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+            </marker>
+          </defs>
+
+          <!-- Stage 1 -->
+          <g transform="translate(30, 80)">
+            <rect width="280" height="120" rx="14" fill="#1e293b" stroke="#6366f1" stroke-width="2"/>
+            <text x="140" y="35" text-anchor="middle" fill="#a5b4fc" font-size="12" font-weight="700">STAGE 1: INDEXING</text>
+            <text x="140" y="60" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="600">Populate TOTAL PE Workflow</text>
+            <text x="140" y="85" text-anchor="middle" fill="#94a3b8" font-size="11">Scans Testsheets & Updates Excel</text>
+          </g>
+
+          <line x1="310" y1="140" x2="410" y2="140" stroke="#10b981" stroke-width="3" marker-end="url(#arrowGen)"/>
+
+          <!-- Artifact: TOTAL PE.xlsx -->
+          <g transform="translate(410, 85)">
+            <rect width="240" height="110" rx="14" fill="#0f172a" stroke="#10b981" stroke-width="2"/>
+            <text x="120" y="35" text-anchor="middle" fill="#6ee7b7" font-size="12" font-weight="700">SHARED ARTIFACT</text>
+            <text x="120" y="60" text-anchor="middle" fill="#ffffff" font-size="15" font-weight="700">TOTAL PE.xlsx</text>
+            <text x="120" y="82" text-anchor="middle" fill="#94a3b8" font-size="11">DataCycle1 Master Index</text>
+          </g>
+
+          <line x1="650" y1="140" x2="750" y2="140" stroke="#10b981" stroke-width="3" marker-end="url(#arrowGen)"/>
+
+          <!-- Stage 2 -->
+          <g transform="translate(750, 80)">
+            <rect width="310" height="120" rx="14" fill="#1e293b" stroke="#06b6d4" stroke-width="2"/>
+            <text x="155" y="35" text-anchor="middle" fill="#67e8f9" font-size="12" font-weight="700">STAGE 2: SORTING & PROVISIONING</text>
+            <text x="155" y="60" text-anchor="middle" fill="#ffffff" font-size="14" font-weight="600">Raw Material Workflow</text>
+            <text x="155" y="85" text-anchor="middle" fill="#94a3b8" font-size="11">Validates Alignment & Sorts Photos</text>
+          </g>
+        </svg>
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer>
+    <p>Pahang CLI Architectural Specification Documentation &bull; Generated for <code>src/populate_total_pe_workflow.py</code> & <code>src/raw_material_workflow.py</code></p>
+  </footer>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.getAttribute('data-tab') === tabId) {
+          btn.classList.add('active');
+        }
+      });
+
+      document.querySelectorAll('.view-section').forEach(sec => {
+        sec.classList.remove('active');
+      });
+
+      const activeSection = document.getElementById(tabId);
+      if (activeSection) {
+        activeSection.classList.add('active');
+      }
+    }
+  </script>
+</body>
+</html>

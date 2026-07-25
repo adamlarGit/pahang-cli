@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.populate_total_pe_workflow import PopulateTotalPeWorkflow
-from src.raw_material_workflow import RawMaterialWorkflow
 from src.workflows.models import (
     PopulateTotalPeRequest,
     PopulateTotalPeResult,
@@ -18,6 +16,8 @@ from src.workflows.models import (
     WhatsAppReportRequest,
     WhatsAppReportResult,
 )
+from src.workflows.populate_total_pe import PopulateTotalPeWorkflow
+from src.workflows.raw_material import RawMaterialWorkflow
 
 if TYPE_CHECKING:
     from src.project.environment import ProjectEnvironment
@@ -47,7 +47,7 @@ class WorkflowService:
     ) -> UpdateQr02CbaResult:
         if request.progress_sink:
             request.progress_sink("Executing Update QR02 CBA workflow...")
-        from src.update_qr02_cba_workflow import run_update_qr02_cba
+        from src.workflows.update_qr02_cba import run_update_qr02_cba
         return run_update_qr02_cba(environment, request)
 
     def run_quick_report(
@@ -63,7 +63,7 @@ class WorkflowService:
         if request.progress_sink:
             request.progress_sink("Executing WhatsApp Report generation...")
         from src.whatsapp import generate_whatsapp_report
-        from src.whatsapp_report_workflow import run_generate_whatsapp_report
+        from src.workflows.whatsapp import run_generate_whatsapp_report
 
         if request.report_dir is not None:
             summary = generate_whatsapp_report(environment, request.report_dir)

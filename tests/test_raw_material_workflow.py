@@ -6,11 +6,11 @@ from pathlib import Path
 import openpyxl
 import pytest
 
-from src.populate_total_pe_workflow import PopulateTotalPeWorkflow
+from src.workflows.populate_total_pe import PopulateTotalPeWorkflow
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
-from src.raw_material_workflow import RawMaterialWorkflow
+from src.workflows.raw_material import RawMaterialWorkflow
 from src.workflows.models import PopulateMode, PopulateTotalPeRequest, RawMaterialRequest
 
 

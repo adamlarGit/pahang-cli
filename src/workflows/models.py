@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 if TYPE_CHECKING:
-    from src.raw_material_workflow import AutomatedRawMaterialSummary
+    from src.workflows.raw_material import AutomatedRawMaterialSummary
 
 ProgressSink = Callable[..., None]
 

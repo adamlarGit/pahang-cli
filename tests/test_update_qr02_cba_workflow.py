@@ -11,8 +11,8 @@ from src.master.qr02 import FakeQr02Repository, Qr02Repository
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
-from src.update_qr02_cba_workflow import UpdateQr02CbaWorkflow, run_update_qr02_cba
 from src.workflows.models import PopulateMode, UpdateQr02CbaRequest, UpdateQr02CbaResult
+from src.workflows.update_qr02_cba import UpdateQr02CbaWorkflow, run_update_qr02_cba
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def test_auto_mode_filtering_with_history(mock_env: ProjectEnvironment, tmp_path
     # Setup history marking RAUB folder as processed
     python_dir = mock_env.storage.get_python_dir()
     python_dir.mkdir(parents=True, exist_ok=True)
-    history_file = python_dir / "processed_folders.json"
+    history_file = python_dir / "qr02_processed_folders.json"
 
     history_data = {
         "RAUB/01. MAY/01-05-2026": {
@@ -118,7 +118,7 @@ def test_all_mode_reprocesses_history(mock_env: ProjectEnvironment, tmp_path: Pa
     # History exists for RAUB
     python_dir = mock_env.storage.get_python_dir()
     python_dir.mkdir(parents=True, exist_ok=True)
-    history_file = python_dir / "processed_folders.json"
+    history_file = python_dir / "qr02_processed_folders.json"
     with history_file.open("w", encoding="utf-8") as f:
         json.dump({"RAUB/01. MAY/01-05-2026": {"last_processed": "old"}}, f)
 
@@ -178,7 +178,7 @@ def test_history_persistence(mock_env: ProjectEnvironment, tmp_path: Path) -> No
     assert result.records_updated == 1
     assert "RAUB/01. MAY/01-05-2026" in result.processed_folders
 
-    history_file = mock_env.storage.get_python_dir() / "processed_folders.json"
+    history_file = mock_env.storage.get_python_dir() / "qr02_processed_folders.json"
     assert history_file.exists()
 
     with history_file.open("r", encoding="utf-8") as f:

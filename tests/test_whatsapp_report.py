@@ -22,7 +22,7 @@ from src.whatsapp import (
     is_selectable_quick_report_batch,
     list_qualifying_batch_pdfs,
 )
-from src.whatsapp_report_workflow import (
+from src.workflows.whatsapp import (
     run_generate_whatsapp_report,
     select_quick_report_batch,
 )

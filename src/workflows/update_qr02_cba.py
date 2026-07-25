@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable, Sequence
-from datetime import datetime
-import json
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +13,7 @@ from src.project.storage import WorkspaceStorage
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import SubstationTestsheetPackage, TestsheetData
 from src.testsheet.repository import SubstationTestsheetRepository
+from src.workflows.history import ProcessingHistoryStore, format_package_history_key
 from src.workflows.models import (
     PopulateMode,
     UpdateQr02CbaRequest,
@@ -24,9 +23,7 @@ from src.workflows.models import (
 
 def get_package_key(pkg: SubstationTestsheetPackage) -> str:
     """Format package history key: <STATION>/<MONTH>/<DD-MM-YYYY>."""
-    date_str = pkg.date_str or (pkg.data.date_str if pkg.data else "")
-    parts = [p for p in (pkg.station, pkg.month, date_str) if p]
-    return "/".join(parts)
+    return format_package_history_key(pkg)
 
 
 def _matches_target(pkg: SubstationTestsheetPackage, key: str, target: str) -> bool:
@@ -72,21 +69,14 @@ class UpdateQr02CbaWorkflow:
     ) -> UpdateQr02CbaResult:
         testsheet_dir = environment.storage.get_testsheet_dir()
         python_dir = environment.storage.get_python_dir()
-        history_file = python_dir / "processed_folders.json"
+        history_file = python_dir / "qr02_processed_folders.json"
+        history_store = ProcessingHistoryStore(history_file)
 
         if request.progress_sink:
             request.progress_sink(f"Scanning testsheet packages in {testsheet_dir}...")
 
         packages = self.testsheet_repository.discover_packages(testsheet_dir)
-
-        # Read processing history from PYTHON/processed_folders.json
-        history: dict[str, Any] = {}
-        if history_file.exists():
-            try:
-                with history_file.open("r", encoding="utf-8") as f:
-                    history = json.load(f)
-            except Exception:
-                history = {}
+        history = history_store.load()
 
         # Determine processing mode
         is_all_mode = (
@@ -181,26 +171,8 @@ class UpdateQr02CbaWorkflow:
 
             processed_packages.extend(station_processed_pkgs)
 
-        # Update processed_folders.json
-        newly_processed_keys: list[str] = []
-        if processed_packages:
-            files_per_key: dict[str, int] = defaultdict(int)
-            for pkg in processed_packages:
-                key = get_package_key(pkg)
-                if key:
-                    files_per_key[key] += 1
-
-            now_iso = datetime.now().isoformat()
-            for key, count in files_per_key.items():
-                history[key] = {
-                    "last_processed": now_iso,
-                    "files_scanned": count,
-                }
-                newly_processed_keys.append(key)
-
-            python_dir.mkdir(parents=True, exist_ok=True)
-            with history_file.open("w", encoding="utf-8") as f:
-                json.dump(history, f, indent=2)
+        # Update history store
+        newly_processed_keys = history_store.record_processed_packages(processed_packages)
 
         if request.progress_sink:
             request.progress_sink(
@@ -209,7 +181,7 @@ class UpdateQr02CbaWorkflow:
 
         return UpdateQr02CbaResult(
             records_updated=total_records_updated,
-            processed_folders=sorted(list(set(newly_processed_keys))),
+            processed_folders=tuple(newly_processed_keys),
             warnings=warnings,
             errors=errors,
         )

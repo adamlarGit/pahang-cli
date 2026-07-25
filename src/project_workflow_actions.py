@@ -251,7 +251,7 @@ class WhatsAppReportAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for generating WhatsApp reports."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
-        from src.whatsapp_report_workflow import select_quick_report_batch
+        from src.workflows.whatsapp import select_quick_report_batch
 
         selected_batch = select_quick_report_batch(environment.get_quick_report_dir())
         if selected_batch is None:
