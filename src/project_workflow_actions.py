@@ -199,7 +199,7 @@ class QuickReportAction(ProjectWorkflowAction):
             return None
 
         request = None
-        default_cond_template = environment.get_sub_cond_dir() / "1. ID 1 TX 1 FP VI.docx"
+        default_cond_template = environment.get_sub_cond_dir() / "MASTER_SUBSTATION_CONDITION.docx"
 
         if mode_str == "manual":
             print('Enter comma-separated Functional Locations.')
@@ -233,6 +233,18 @@ class QuickReportAction(ProjectWorkflowAction):
         service = WorkflowService()
         result = service.run_quick_report(environment, request)
         print(f"Reports generated: {result.reports_generated}")
+        if result.generated_paths:
+            print("Generated paths:")
+            for p in result.generated_paths:
+                print(f"  - {p}")
+        if result.warnings:
+            print(f"Warnings ({len(result.warnings)}):")
+            for w in result.warnings:
+                print(f"  - {w}")
+        if result.errors:
+            print(f"Errors ({len(result.errors)}):")
+            for e in result.errors:
+                print(f"  - {e}")
         return result
 
 

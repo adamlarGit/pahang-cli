@@ -55,7 +55,9 @@ class WorkflowService:
     ) -> QuickReportResult:
         if request.progress_sink:
             request.progress_sink("Executing Quick Report generation...")
-        return QuickReportResult(reports_generated=0)
+        from src.quick_report import QuickReportComposer
+        composer = QuickReportComposer()
+        return composer.compose(environment, request)
 
     def run_whatsapp(
         self, environment: ProjectEnvironment, request: WhatsAppReportRequest

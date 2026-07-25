@@ -101,6 +101,9 @@ class QuickReportResult:
     """Result model for Quick Report generation workflow."""
 
     reports_generated: int = 0
+    generated_paths: Sequence[Path] = ()
+    warnings: Sequence[str] = ()
+    errors: Sequence[str] = ()
 
 
 @dataclass(frozen=True)
