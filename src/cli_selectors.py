@@ -1,10 +1,8 @@
-"""Interactive CLI selector helpers for Pahang CLI."""
+"""Interactive CLI selector helpers."""
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,12 +22,14 @@ class SelectOption(Generic[T]):
 
 
 def _load_questionary() -> Any:
-    """Dynamically load questionary library if available."""
     try:
         import questionary
     except ImportError:
         return None
     return questionary
+
+
+import re
 
 
 def _with_shortcuts(options: Sequence[SelectOption[T]]) -> list[SelectOption[T]]:
@@ -39,25 +39,36 @@ def _with_shortcuts(options: Sequence[SelectOption[T]]) -> list[SelectOption[T]]
         for option in options
         if option.shortcut_key is not None
     }
-    next_digit = 1
 
+    next_num = 1
     for option in options:
         if option.shortcut_key is not None:
-            updated.append(option)
+            shortcut = option.shortcut_key.upper()
+            title = option.title
+            if not title.startswith(f"[{shortcut}]"):
+                title = f"[{shortcut}] {title}"
+            updated.append(
+                SelectOption(
+                    title=title,
+                    value=option.value,
+                    shortcut_key=option.shortcut_key,
+                )
+            )
             continue
 
-        shortcut_key = None
-        while next_digit <= 9:
-            candidate = str(next_digit)
-            next_digit += 1
-            if candidate not in used_shortcuts:
-                shortcut_key = candidate
-                used_shortcuts.add(candidate)
-                break
+        shortcut_key = str(next_num)
+        next_num += 1
+        while shortcut_key.lower() in used_shortcuts:
+            shortcut_key = str(next_num)
+            next_num += 1
+
+        title = option.title
+        clean_title = re.sub(r"^\d+[\.\)]\s*", "", title)
+        formatted_title = f"{shortcut_key}) {clean_title}"
 
         updated.append(
             SelectOption(
-                title=option.title,
+                title=formatted_title,
                 value=option.value,
                 shortcut_key=shortcut_key,
             )
@@ -67,7 +78,6 @@ def _with_shortcuts(options: Sequence[SelectOption[T]]) -> list[SelectOption[T]]
 
 
 def _load_questionary_select_dependencies() -> SimpleNamespace:
-    """Load questionary prompt dependencies into a SimpleNamespace container."""
     from prompt_toolkit.application import Application
     from prompt_toolkit.key_binding import KeyBindings
     from prompt_toolkit.keys import Keys
@@ -92,27 +102,27 @@ def _load_questionary_select_dependencies() -> SimpleNamespace:
 
 
 def _build_questionary_prompt(
-    questionary: Any,
+    questionary,
     message: str,
-    choices: Any,
+    options_with_shortcuts: Sequence[SelectOption[T]],
+    choices,
     *,
-    default_value: Any,
-) -> Any:
-    """Construct an interactive questionary Question prompt instance."""
+    default_value,
+):
     deps = _load_questionary_select_dependencies()
     control = deps.InquirerControl(
         choices,
         default=None,
         pointer=deps.DEFAULT_SELECTED_POINTER,
         use_indicator=False,
-        use_shortcuts=True,
+        use_shortcuts=False,
         show_selected=False,
         show_description=True,
         use_arrow_keys=True,
         initial_choice=default_value,
     )
 
-    def get_prompt_tokens() -> list[tuple[str, str]]:
+    def get_prompt_tokens():
         tokens = [
             ("class:qmark", deps.DEFAULT_QUESTION_PREFIX),
             ("class:question", f" {message} "),
@@ -134,26 +144,27 @@ def _build_questionary_prompt(
 
     @bindings.add(deps.Keys.ControlQ, eager=True)
     @bindings.add(deps.Keys.ControlC, eager=True)
-    def abort(event: Any) -> None:
+    def abort(event):
         event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
 
-    for index, choice in enumerate(control.choices):
-        if isinstance(choice, deps.Separator) or choice.shortcut_key is None or choice.disabled:
+    for index, option in enumerate(options_with_shortcuts):
+        if option.shortcut_key is None:
             continue
 
-        def register_binding(bound_index: int, shortcut_key: str) -> None:
-            @bindings.add(shortcut_key, eager=True)
-            def select_choice(event: Any) -> None:
+        def register_binding(bound_index, shortcut_key):
+            keys = tuple(shortcut_key.lower())
+            @bindings.add(*keys, eager=True)
+            def select_choice(event):
                 control.pointed_at = bound_index
 
-        register_binding(index, choice.shortcut_key)
+        register_binding(index, option.shortcut_key)
 
-    def move_cursor_down(event: Any) -> None:
+    def move_cursor_down(event):
         control.select_next()
         while not control.is_selection_valid():
             control.select_next()
 
-    def move_cursor_up(event: Any) -> None:
+    def move_cursor_up(event):
         control.select_previous()
         while not control.is_selection_valid():
             control.select_previous()
@@ -167,12 +178,12 @@ def _build_questionary_prompt(
 
     @bindings.add(" ", eager=True)
     @bindings.add(deps.Keys.ControlM, eager=True)
-    def set_answer(event: Any) -> None:
+    def set_answer(event):
         control.is_answered = True
         event.app.exit(result=control.get_pointed_at().value)
 
     @bindings.add(deps.Keys.Any)
-    def other(event: Any) -> None:
+    def other(event):
         """Disallow inserting other text."""
 
     style = deps.merge_styles_default(
@@ -212,7 +223,7 @@ def select_one(
             questionary.Choice(
                 title=option.title,
                 value=option.value,
-                shortcut_key=option.shortcut_key,
+                shortcut_key=None,
             )
             for option in options_with_shortcuts
         ]
@@ -220,6 +231,7 @@ def select_one(
             return _build_questionary_prompt(
                 questionary,
                 message,
+                options_with_shortcuts,
                 choices,
                 default_value=default_value,
             ).ask()
@@ -243,15 +255,15 @@ def _fallback_select_one(
 
     while True:
         print(message)
-        for index, option in enumerate(options, start=1):
-            shortcut = f"[{option.shortcut_key}] " if option.shortcut_key else ""
+        for option in options:
             default_marker = " (default)" if option.value == default_value else ""
-            print(f"{index}. {shortcut}{option.title}{default_marker}")
+            print(f"{option.title}{default_marker}")
 
         prompt = "Choose an option"
         if default_value is not None:
             prompt += " [Enter for default]"
         prompt += ": "
+
 
         try:
             raw_value = input(prompt).strip()
@@ -370,10 +382,6 @@ def confirm(message: str, *, default: bool = False) -> bool | None:
         print("Invalid confirmation. Please try again.")
 
 
-def _default_child_title(path: Path, _selectable: bool) -> str:
-    return path.name
-
-
 def select_directory_tree(
     root_path: str | Path,
     *,
@@ -390,7 +398,7 @@ def select_directory_tree(
         raise NotADirectoryError(f"Not a directory: {root}")
 
     if get_child_title is None:
-        get_child_title = _default_child_title
+        get_child_title = lambda path, selectable: path.name
 
     @lru_cache(maxsize=None)
     def has_selectable_descendant(directory: Path) -> bool:
@@ -554,4 +562,3 @@ def prompt_directory_path(
             continue
 
         return entered_path
-

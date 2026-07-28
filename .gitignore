@@ -10,3 +10,8 @@ build/
 .coverage
 htmlcov/
 .env
+.processed_folders.json
+.cli_config.json
+.active_project.json
+diff*.txt
+

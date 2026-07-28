@@ -118,11 +118,31 @@ def select_utility_action(
 def select_settings_action() -> str | SessionCommand | None:
     """Return a settings action or a navigation command."""
     items = [
+        MenuItem("📁 Manage Projects & Workspace Storage", "manage_projects"),
+        MenuItem("Configure Camera Patterns", "configure_cameras"),
         MenuItem("Rollback Version", "rollback"),
         MenuItem("Back", SessionCommand.BACK),
     ]
     return select_menu(
         f"SETTINGS (v{__version__})",
         items,
-        default_value="rollback",
+        default_value="manage_projects",
     )
+
+
+def select_project_management_action() -> str | SessionCommand | None:
+    """Return a project management action or a navigation command."""
+    items = [
+        MenuItem("1. View Current Project Info & Folder Status", "view_info"),
+        MenuItem("2. Switch Active Project", "switch_project"),
+        MenuItem("3. Add / Register New Project", "add_project"),
+        MenuItem("4. Update Project Directory Path", "update_path"),
+        MenuItem("5. Unregister Project", "unregister_project"),
+        MenuItem("Back to Settings Menu", SessionCommand.BACK),
+    ]
+    return select_menu(
+        f"MANAGE PROJECTS & STORAGE (v{__version__})",
+        items,
+        default_value="view_info",
+    )
+

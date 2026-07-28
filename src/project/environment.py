@@ -145,6 +145,9 @@ def create_project_environment(
     if storage is None:
         storage = LocalWorkspaceStorage(metadata.base_path)
 
+    if hasattr(storage, "_initialize_project_workspace"):
+        storage._initialize_project_workspace()
+
     environment = ProjectEnvironment(metadata=metadata, storage=storage)
     if validate:
         environment.validate()

@@ -129,6 +129,12 @@ def _load_whatsapp_runner() -> Callable[[], object]:
     return lambda: WhatsAppReportAction("Generate WhatsApp report").execute(None)
 
 
+def _load_remove_desktop_ini_runner() -> Callable[[], object]:
+    from src.remove_desktop_ini_workflow import run_remove_desktop_ini
+
+    return run_remove_desktop_ini
+
+
 UTILITY_ACTIONS: tuple[UtilityAction, ...] = (
     UtilityAction("Create raw material folders", _load_raw_material_runner),
     UtilityAction("Rename files (match names from input dir)", _load_rename_files_runner),
@@ -140,6 +146,7 @@ UTILITY_ACTIONS: tuple[UtilityAction, ...] = (
     UtilityAction("Apply diagonal borders to blank cells", _load_diagonal_runner),
     UtilityAction("Replace signature images in testsheets", _load_replace_images_runner),
     UtilityAction("Generate WhatsApp report (from Quick Reports)", _load_whatsapp_runner),
+    UtilityAction("Remove desktop.ini files (recursive)", _load_remove_desktop_ini_runner),
 )
 
 

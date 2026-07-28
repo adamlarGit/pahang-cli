@@ -48,6 +48,21 @@ class CliSession:
     def load_last_project_key(self) -> str | None:
         return load_last_project_key(self.persistence_file)
 
+    @property
+    def active_project_key(self) -> str | None:
+        if self.active_project:
+            return self.active_project.project_key
+        return self.load_last_project_key()
+
     def activate_project(self, environment: ProjectEnvironment) -> None:
         self.active_project = environment
         save_last_project_key(environment.project_key, self.persistence_file)
+
+    def deactivate_project(self) -> None:
+        self.active_project = None
+        if self.persistence_file.exists():
+            try:
+                self.persistence_file.unlink()
+            except Exception as exc:
+                logging.warning("Failed to remove active project file: %s", exc)
+

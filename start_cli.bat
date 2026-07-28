@@ -1,8 +1,27 @@
 @echo off
 setlocal enabledelayedexpansion
 
+echo Verifying prerequisites...
+where git >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Git is not installed or not in PATH.
+    echo Please install Git from https://git-scm.com/
+    pause
+    exit /b 1
+)
+
+where uv >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] uv is not installed or not in PATH.
+    echo Please install uv.
+    pause
+    exit /b 1
+)
+
 echo Checking for updates...
 git fetch origin main >nul 2>&1
+
+set BEHIND=0
 
 :: Parse local version
 for /f "tokens=2 delims==" %%a in ('findstr "__version__" "src\__init__.py"') do (
@@ -34,7 +53,7 @@ if !BEHIND! GTR 0 (
         git pull origin main
         echo.
         echo Syncing Project Environment Dependencies...
-        uv sync
+        uv sync --frozen
         echo.
     ) else (
         echo.
@@ -49,6 +68,6 @@ if !BEHIND! GTR 0 (
 echo ===================================================
 echo   Starting Pahang CLI...
 echo ===================================================
-uv run pahang-cli
+uv run --frozen pahang-cli
 
 pause
