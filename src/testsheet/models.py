@@ -53,7 +53,7 @@ class TestsheetData:
     station_name: str = ""
     date_str: str = ""
     fl_number: str = ""
-    type_code: str = "PE"
+    type_code: str = ""
     wo_number: str = ""
     photo_ranges: RawPhotoRanges = RawPhotoRanges()
     fl_erms: str = ""

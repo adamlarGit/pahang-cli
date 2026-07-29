@@ -10,8 +10,8 @@ import pytest
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
-from src.project_workflow_actions import PopulateTotalPeAction, RawMaterialAction
-from src.workflows.models import PopulateTotalPeResult, RawMaterialResult
+from src.project_workflow_actions import PopulateTotalPeAction, QuickReportAction, RawMaterialAction
+from src.workflows.models import PopulateTotalPeResult, QuickReportMode, QuickReportResult, RawMaterialResult
 
 
 @pytest.fixture
@@ -53,3 +53,30 @@ def test_raw_material_action(mock_env: ProjectEnvironment, tmp_path: Path) -> No
             res = action.execute(mock_env)
             assert res.substations_count == 2
             mock_run.assert_called_once()
+
+
+def test_quick_report_action_folder_selection(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    action = QuickReportAction("Generate Quick Report")
+    target_folder = tmp_path / "TESTSHEET" / "KUANTAN" / "2026-01 (Jan)" / "01-01-2026"
+
+    with patch("src.cli_selectors.select_one", return_value="folder"):
+        with patch("src.cli_selectors.select_pahang_date_folder", return_value=target_folder) as mock_select:
+            with patch("src.workflows.service.WorkflowService.run_quick_report") as mock_run:
+                mock_run.return_value = QuickReportResult(reports_generated=1)
+                res = action.execute(mock_env)
+                assert res.reports_generated == 1
+                mock_select.assert_called_once_with(environment=mock_env)
+                mock_run.assert_called_once()
+                req = mock_run.call_args[0][1]
+                assert req.mode == QuickReportMode.FOLDER
+                assert req.target_folders == (str(target_folder),)
+
+
+def test_quick_report_action_folder_selection_cancel(mock_env: ProjectEnvironment) -> None:
+    action = QuickReportAction("Generate Quick Report")
+
+    with patch("src.cli_selectors.select_one", return_value="folder"):
+        with patch("src.cli_selectors.select_pahang_date_folder", return_value=None):
+            res = action.execute(mock_env)
+            assert res is None
+

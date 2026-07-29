@@ -117,7 +117,7 @@ class TestsheetExtractor:
             fl_number = ""
             date_str = date_hint
             station_name = station_hint
-            type_code = "PE"
+            type_code = ""
             wo_number = ""
 
             ir_start: int | None = None
@@ -133,9 +133,29 @@ class TestsheetExtractor:
                 substation_name_erms = cleaned_sub_erms if cleaned_sub_erms is not None else ""
                 cycle_1 = to_excel_date(ws_pce["P4"].value)
 
+                y1_val = ws_pce["Y1"].value
+                if y1_val is not None and str(y1_val).strip() not in ("", "-", "None", "N/A"):
+                    try:
+                        pe_num = int(float(str(y1_val).strip()))
+                    except (ValueError, TypeError):
+                        pass
+
             # Phase 2: PCE VI (fixed cells, optional)
-            if "PCE VI" in wb.sheetnames:
-                ws_vi = wb["PCE VI"]
+            pce_vi_sheet = None
+            for sname in wb.sheetnames:
+                s_lower = sname.strip().lower()
+                if (
+                    s_lower == "pce vi"
+                    or s_lower.startswith("pce vi ")
+                    or s_lower.startswith("pce vi(")
+                    or s_lower.startswith("pce vi_")
+                    or s_lower.startswith("pce vi-")
+                ):
+                    pce_vi_sheet = wb[sname]
+                    break
+
+            if pce_vi_sheet is not None:
+                ws_vi = pce_vi_sheet
                 cleaned_sub_site = clean_val(ws_vi["C7"].value)
                 substation_name_site = cleaned_sub_site if cleaned_sub_site is not None else ""
                 cleaned_gps = clean_val(ws_vi["C8"].value)

@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import os
-import re
-from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Sequence
+from typing import TYPE_CHECKING, Callable
 
 from src import cli_selectors
 from src.workflows.models import (
@@ -215,17 +211,14 @@ class QuickReportAction(ProjectWorkflowAction):
                 progress_sink=_cli_progress_sink,
             )
         else:
-            folders = [p.name for p in environment.storage.list_testsheet_folders()]
-            folder_options = [cli_selectors.SelectOption(f, f) for f in folders]
-            folder_options.append(cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"))
-            selected_folder = cli_selectors.select_one("Select folder to process", folder_options)
-            if selected_folder in ("__cancel__", None):
+            selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
+            if selected_path is None:
                 print("Processing cancelled.")
                 return None
 
             request = QuickReportRequest(
                 mode=QuickReportMode.FOLDER,
-                target_folders=(selected_folder,),
+                target_folders=(str(selected_path),),
                 substation_condition_template_path=default_cond_template,
                 progress_sink=_cli_progress_sink,
             )

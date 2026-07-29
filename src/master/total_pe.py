@@ -10,6 +10,7 @@ import openpyxl
 import pandas as pd
 from openpyxl.utils import column_index_from_string
 
+from src.testsheet.extractor import to_excel_date
 from src.testsheet.models import SubstationTestsheetPackage
 from src.msms.models import WorkbookUpdateMappings
 
@@ -40,11 +41,20 @@ def _resolve_named_column(dataframe: pd.DataFrame, header_names: list[str], fall
     raise KeyError(f"None of the headers {header_names} were found")
 
 
-def normalize_date_str(date_input: str) -> str:
-    """Normalize date strings (e.g., '01/05/2026' -> '01-05-2026')."""
+from datetime import date, datetime
+
+
+def normalize_date_str(date_input: object) -> str:
+    """Normalize date inputs (date, datetime, or strings) to DD-MM-YYYY format."""
     if not date_input:
         return ""
+    if isinstance(date_input, (datetime, date)):
+        return date_input.strftime("%d-%m-%Y")
     s = str(date_input).strip().replace("/", "-")
+    match_iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if match_iso:
+        year, month, day = int(match_iso.group(1)), int(match_iso.group(2)), int(match_iso.group(3))
+        return f"{day:02d}-{month:02d}-{year:04d}"
     match = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})$", s)
     if match:
         day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
@@ -84,6 +94,90 @@ class TotalPeRepository(ABC):
 
 class LocalExcelTotalPeRepository(TotalPeRepository):
     """Excel-backed repository for TOTAL PE workbook management."""
+
+    @staticmethod
+    def _get_real_dimensions(ws: openpyxl.worksheet.worksheet.Worksheet) -> tuple[int, int]:
+        max_r = 1
+        max_c = 1
+        if hasattr(ws, "_cells"):
+            for (r, c), cell in ws._cells.items():
+                if cell.value is not None:
+                    if isinstance(cell.value, str) and str(cell.value).strip() == "":
+                        continue
+                    if r > max_r:
+                        max_r = r
+                    if c > max_c:
+                        max_c = c
+        else:
+            max_r = ws.max_row
+            max_c = ws.max_column
+        return max_r, max_c
+
+    @classmethod
+    def _sanitize_ghost_formatting(cls, wb: openpyxl.Workbook) -> None:
+        for ws in wb.worksheets:
+            real_max_r, real_max_c = cls._get_real_dimensions(ws)
+            reported_max_r = ws.max_row or 1
+            reported_max_c = ws.max_column or 1
+
+            if reported_max_r > real_max_r + 1:
+                ghost_rows = reported_max_r - real_max_r
+                ws.delete_rows(real_max_r + 1, ghost_rows)
+
+            if reported_max_c > real_max_c + 1:
+                ghost_cols = reported_max_c - real_max_c
+                ws.delete_cols(real_max_c + 1, ghost_cols)
+
+    @classmethod
+    def _sort_datacycle_sheet(cls, ws: openpyxl.worksheet.worksheet.Worksheet) -> bool:
+        max_r, max_c = cls._get_real_dimensions(ws)
+        if max_r < 2:
+            return False
+
+        real_max_col = max(max_c, 7)
+
+        last_row = 1
+        for row in range(2, max_r + 1):
+            pe_val = ws.cell(row=row, column=1).value
+            fl_val = ws.cell(row=row, column=2).value
+            sub_val = ws.cell(row=row, column=3).value
+            if pe_val is not None or fl_val is not None or sub_val is not None:
+                last_row = row
+
+        if last_row < 2:
+            return False
+
+        rows_data = []
+        for r in range(2, last_row + 1):
+            vals = []
+            for c in range(1, real_max_col + 1):
+                val = ws.cell(row=r, column=c).value
+                if isinstance(val, str) and val.startswith("="):
+                    vals.append(None)
+                else:
+                    vals.append(val)
+            substation_val = vals[0]
+            try:
+                substation_key = int(float(str(substation_val).strip())) if substation_val is not None and str(substation_val).strip() != "" else 999999
+            except (ValueError, TypeError):
+                substation_key = 999999
+            rows_data.append((substation_key, r, vals))
+
+        sorted_rows = sorted(rows_data, key=lambda x: (x[0], x[1]))
+
+        for idx, (_, _, vals) in enumerate(sorted_rows, start=2):
+            for c, val in enumerate(vals, start=1):
+                existing_val = ws.cell(row=idx, column=c).value
+                if isinstance(existing_val, str) and existing_val.startswith("="):
+                    continue
+                cell = ws.cell(row=idx, column=c, value=val)
+                if c == 1 and val is not None:
+                    try:
+                        cell.value = int(float(str(val).strip()))
+                    except (ValueError, TypeError):
+                        pass
+
+        return True
 
     def get_existing_auto_keys(self, total_pe_path: Path) -> set[tuple[str, str]]:
         if not total_pe_path.exists():
@@ -164,12 +258,20 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                 continue
 
             pe_no = data.pe_number
+            try:
+                pe_no = int(float(str(pe_no).strip()))
+            except (ValueError, TypeError):
+                pass
+
             fl_num = data.fl_number
             sub_name = data.substation_name
             dt_str = data.date_str or pkg.date_str
             norm_pkg_dt = normalize_date_str(dt_str)
             type_c = data.type_code
             wo = data.wo_number
+
+            dt_obj = to_excel_date(dt_str)
+            date_cell_val = dt_obj.date() if dt_obj is not None else norm_pkg_dt
 
             lookup_key = (str(pe_no), dt_str)
             norm_lookup_key = (str(pe_no), norm_pkg_dt)
@@ -191,17 +293,29 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                 ws.cell(target_row, 1, pe_no)
                 ws.cell(target_row, 2, fl_num)
                 ws.cell(target_row, 3, sub_name)
-                ws.cell(target_row, 4, dt_str)
+                c_dt = ws.cell(target_row, 4, date_cell_val)
+                c_dt.number_format = "DD-MMM-YYYY"
                 ws.cell(target_row, 5, type_c)
                 ws.cell(target_row, 6, wo)
                 updated_count += 1
             else:
-                ws.append([pe_no, fl_num, sub_name, dt_str, type_c, wo, ""])
-                new_row_idx = ws.max_row
-                existing_rows[lookup_key] = new_row_idx
-                existing_rows[sub_key] = new_row_idx
+                next_row = 2
+                while ws.cell(next_row, 1).value is not None and str(ws.cell(next_row, 1).value).strip() != "":
+                    next_row += 1
+
+                ws.cell(next_row, 1, pe_no)
+                ws.cell(next_row, 2, fl_num)
+                ws.cell(next_row, 3, sub_name)
+                c_dt = ws.cell(next_row, 4, date_cell_val)
+                c_dt.number_format = "DD-MMM-YYYY"
+                ws.cell(next_row, 5, type_c)
+                ws.cell(next_row, 6, wo)
+                existing_rows[lookup_key] = next_row
+                existing_rows[sub_key] = next_row
                 new_count += 1
 
+        self._sort_datacycle_sheet(ws)
+        self._sanitize_ghost_formatting(wb)
         wb.save(total_pe_path)
         wb.close()
 
@@ -298,7 +412,10 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
         for idx, row in total_pe.iterrows():
             excel_row = idx + 2
             write_cell(ws, excel_row, pe_map["substation_name"], row.iloc[pe_substation_idx])
-            write_cell(ws, excel_row, pe_map["date"], row.iloc[pe_date_idx])
+            dt_obj = to_excel_date(row.iloc[pe_date_idx])
+            cell_date = ws[f"{pe_map['date']}{excel_row}"]
+            cell_date.value = dt_obj.date() if dt_obj is not None else normalize_date_str(row.iloc[pe_date_idx])
+            cell_date.number_format = "DD-MMM-YYYY"
             write_cell(ws, excel_row, pe_map["type"], row.iloc[pe_type_idx])
             write_cell(ws, excel_row, pe_map["wo"], row.iloc[pe_wo_idx])
         

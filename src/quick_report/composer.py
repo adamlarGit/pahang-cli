@@ -5,7 +5,6 @@ from __future__ import annotations
 import gc
 import logging
 from pathlib import Path
-from typing import Sequence
 
 from docx import Document
 from docxcompose.composer import Composer
@@ -39,8 +38,9 @@ class QuickReportComposer:
         packages = []
 
         if request.mode == QuickReportMode.FOLDER:
-            for folder_name in request.target_folders:
-                folder_path = environment.get_testsheet_dir() / folder_name
+            for folder_str in request.target_folders:
+                candidate = Path(folder_str)
+                folder_path = candidate if candidate.exists() else environment.get_testsheet_dir() / folder_str
                 if folder_path.exists():
                     packages.extend(repo.discover_packages(folder_path))
         elif request.mode == QuickReportMode.FL:
@@ -73,6 +73,14 @@ class QuickReportComposer:
             warnings=warnings,
             errors=errors,
         )
+
+    def _resolve_output_dir(self, environment: ProjectEnvironment, pkg: SubstationTestsheetPackage) -> Path:
+        """Resolve output directory mirroring TESTSHEET hierarchy: QUICK REPORT/<STATION>/<MONTH>/<DATE>/."""
+        if pkg.station and pkg.month and pkg.date_str:
+            return environment.get_quick_report_dir() / pkg.station / pkg.month / pkg.date_str
+        if pkg.date_str:
+            return environment.get_quick_report_dir() / pkg.date_str
+        return environment.get_quick_report_dir()
 
     def _build_substation_condition_pairs(self) -> list[tuple[str, str]]:
         """
@@ -158,7 +166,7 @@ class QuickReportComposer:
         suffix_parts = suffix.replace(" (", "").replace(")", "").split("+") if suffix else []
         output_filename = f"{pe_number:03d}. {sanitized_name}{suffix}.docx"
         
-        output_dir = environment.get_quick_report_dir() / pkg.date_str if pkg.date_str else environment.get_quick_report_dir()
+        output_dir = self._resolve_output_dir(environment, pkg)
         output_dir.mkdir(parents=True, exist_ok=True)
         final_output_path = output_dir / output_filename
 

@@ -15,11 +15,20 @@ from src.testsheet.repository import SubstationTestsheetRepository
 from src.workflows.models import RawMaterialRequest, RawMaterialResult
 
 
-def normalize_date_str(date_input: str) -> str:
-    """Normalize date strings (e.g., '01/05/2026' -> '01-05-2026')."""
+from datetime import date, datetime
+
+
+def normalize_date_str(date_input: object) -> str:
+    """Normalize date inputs (date, datetime, or strings) to DD-MM-YYYY format."""
     if not date_input:
         return ""
+    if isinstance(date_input, (datetime, date)):
+        return date_input.strftime("%d-%m-%Y")
     s = str(date_input).strip().replace("/", "-")
+    match_iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if match_iso:
+        year, month, day = int(match_iso.group(1)), int(match_iso.group(2)), int(match_iso.group(3))
+        return f"{day:02d}-{month:02d}-{year:04d}"
     match = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})$", s)
     if match:
         day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))

@@ -119,3 +119,72 @@ def test_suffix_calculation():
     assert composer._calculate_suffix([{"technology": "IR"}, {"technology": "TEV"}], [{"id": "1"}]) == " (IR+TEV+VI)"
     assert composer._calculate_suffix([], [{"id": "1"}]) == " (VI)"
     assert composer._calculate_suffix([{"technology": "TEV"}], []) == " (TEV)"
+
+
+@patch("src.quick_report.composer.SubstationTestsheetRepository")
+def test_composer_folder_path_resolution(mock_repo_cls, tmp_path: Path):
+    """Verify QuickReportComposer resolves existing direct paths and relative testsheet paths."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+    mock_repo.discover_packages.return_value = []
+
+    testsheet_dir = tmp_path / "TESTSHEET"
+    testsheet_dir.mkdir()
+    rel_folder = testsheet_dir / "01-01-2026"
+    rel_folder.mkdir()
+
+    direct_folder = tmp_path / "DIRECT_PATH"
+    direct_folder.mkdir()
+
+    env = MagicMock(spec=ProjectEnvironment)
+    env.get_testsheet_dir.return_value = testsheet_dir
+
+    composer = QuickReportComposer()
+
+    # Test direct path (Path(str) exists)
+    req_direct = QuickReportRequest(mode=QuickReportMode.FOLDER, target_folders=[str(direct_folder)])
+    composer.compose(env, req_direct)
+    mock_repo.discover_packages.assert_called_with(direct_folder)
+
+    # Test relative path under testsheet dir
+    req_rel = QuickReportRequest(mode=QuickReportMode.FOLDER, target_folders=["01-01-2026"])
+    composer.compose(env, req_rel)
+    mock_repo.discover_packages.assert_called_with(rel_folder)
+
+
+def test_composer_output_dir_resolution(tmp_path: Path):
+    """Verify 3-tier Pahang output directory structure in _resolve_output_dir."""
+    quick_report_dir = tmp_path / "QUICK REPORT"
+    env = MagicMock(spec=ProjectEnvironment)
+    env.get_quick_report_dir.return_value = quick_report_dir
+
+    composer = QuickReportComposer()
+
+    # Case 1: 3-tier structure (station, month, date_str) formatted as XX. MONTH
+    pkg_3tier = MagicMock()
+    pkg_3tier.station = "KUANTAN"
+    pkg_3tier.month = "01. JANUARY"
+    pkg_3tier.date_str = "01-01-2026"
+
+    out_3tier = composer._resolve_output_dir(env, pkg_3tier)
+    assert out_3tier == quick_report_dir / "KUANTAN" / "01. JANUARY" / "01-01-2026"
+
+    # Case 2: 1-tier structure (date_str only)
+    pkg_1tier = MagicMock()
+    pkg_1tier.station = ""
+    pkg_1tier.month = ""
+    pkg_1tier.date_str = "02-01-2026"
+
+    out_1tier = composer._resolve_output_dir(env, pkg_1tier)
+    assert out_1tier == quick_report_dir / "02-01-2026"
+
+    # Case 3: Root structure (no date_str, station, or month)
+    pkg_root = MagicMock()
+    pkg_root.station = ""
+    pkg_root.month = ""
+    pkg_root.date_str = ""
+
+    out_root = composer._resolve_output_dir(env, pkg_root)
+    assert out_root == quick_report_dir
+
+
