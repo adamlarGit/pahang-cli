@@ -255,8 +255,8 @@ class PostProcessingPipelineAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for full substation post-processing pipeline."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
-        print("[PIPELINE] Running full substation post-processing pipeline...")
-        return True
+        service = WorkflowService()
+        return service.run_postprocessing_pipeline(environment)
 
 
 class WhatsAppReportAction(ProjectWorkflowAction):
@@ -282,6 +282,11 @@ class WhatsAppReportAction(ProjectWorkflowAction):
         return result
 
 
+class UpdateDataMsmsAction(ProjectWorkflowAction):
+    def execute(self, environment: ProjectEnvironment) -> object:
+        service = WorkflowService()
+        return service.run_update_data_msms(environment)
+
 PROJECT_WORKFLOW_ACTIONS: tuple[ProjectWorkflowAction, ...] = (
     PopulateTotalPeAction("Populate TOTAL PE (from testsheets)"),
     RawMaterialAction("Automate Raw Material Creation & Sorting (from Testsheets)"),
@@ -289,6 +294,7 @@ PROJECT_WORKFLOW_ACTIONS: tuple[ProjectWorkflowAction, ...] = (
     QuickReportAction("Generate Quick Report (Visual Report)"),
     PostProcessingPipelineAction("Run Full Substation Post-Processing Pipeline (1-Click)"),
     WhatsAppReportAction("Generate WhatsApp Report"),
+    UpdateDataMsmsAction("Update DATA_MSMS and TOTAL PE WO"),
 )
 
 

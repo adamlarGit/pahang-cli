@@ -186,3 +186,44 @@ def get_default_project_key(preferred_key: str | None = None) -> str | None:
         return str(preferred_key)
     default_meta = JsonFileProjectRepository().get_default(preferred_key)
     return default_meta.key if default_meta is not None else None
+
+
+def load_project_environment() -> ProjectEnvironment | None:
+    """Load the active project environment if one is saved and valid."""
+    from src.cli_session import load_last_project_key
+    key = load_last_project_key()
+    if key and is_known_project_key(key):
+        try:
+            return create_project_environment(key)
+        except Exception:
+            return None
+    return None
+
+
+def get_or_create_utility_environment(target_dir: Path | None = None) -> ProjectEnvironment:
+    """
+    Get the active project environment or synthesize a transient one.
+    """
+    env = load_project_environment()
+    if env is not None:
+        return env
+        
+    if target_dir is None:
+        from src import cli_selectors
+        target_dir = cli_selectors.prompt_directory_path(
+            "Enter target directory path",
+            must_exist=False
+        )
+        if target_dir is None:
+            raise ValueError("Operation cancelled, no target directory provided.")
+
+    base_p = target_dir
+    # Try to find a logical base path
+    for parent in target_dir.parents:
+        if (parent / "TESTSHEET").exists() or (parent / "PYTHON").exists():
+            base_p = parent
+            break
+            
+    meta = ProjectMetadata(key="utility", name="Utility Action", base_path=str(base_p), state="pahang", po_number="", voltage_type="11kV", year="2026", cycle="Cycle 1", technologies=("IR", "US", "TEV"))
+    storage = LocalWorkspaceStorage(base_p)
+    return ProjectEnvironment(metadata=meta, storage=storage)

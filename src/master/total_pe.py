@@ -7,8 +7,37 @@ from pathlib import Path
 import re
 from typing import Sequence
 import openpyxl
+import pandas as pd
+from openpyxl.utils import column_index_from_string
 
 from src.testsheet.models import SubstationTestsheetPackage
+from src.msms.models import WorkbookUpdateMappings
+
+def col_to_index(col_letter: str) -> int:
+    return column_index_from_string(col_letter) - 1
+
+def read_col(df: pd.DataFrame, col_letter: str):
+    return df.iloc[:, col_to_index(col_letter)]
+
+def write_cell(ws, row: int, col_letter: str, value):
+    ws[f"{col_letter}{row}"] = value
+
+def _resolve_named_column(dataframe: pd.DataFrame, header_names: list[str], fallback_col_letter: str) -> str:
+    columns = dataframe.columns
+    normalized_headers = {
+        str(header).strip().lower(): header
+        for header in columns
+    }
+    for header_name in header_names:
+        actual_header = normalized_headers.get(header_name.strip().lower())
+        if actual_header is not None:
+            return actual_header
+            
+    fallback_idx = col_to_index(fallback_col_letter)
+    if fallback_idx < len(columns):
+        return columns[fallback_idx]
+        
+    raise KeyError(f"None of the headers {header_names} were found")
 
 
 def normalize_date_str(date_input: str) -> str:
@@ -39,6 +68,17 @@ class TotalPeRepository(ABC):
 
         Returns (new_count, updated_count).
         """
+        ...
+
+    @abstractmethod
+    def update_from_engr_and_msms(
+        self,
+        total_pe_path: Path,
+        data_msms: pd.DataFrame,
+        engr_excel: pd.DataFrame,
+        workbook_mappings: WorkbookUpdateMappings,
+    ) -> None:
+        """Update TOTAL_PE with ENGR and MSMS data."""
         ...
 
 
@@ -166,3 +206,101 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
         wb.close()
 
         return new_count, updated_count
+
+    def update_from_engr_and_msms(
+        self,
+        total_pe_path: Path,
+        data_msms: pd.DataFrame,
+        engr_excel: pd.DataFrame,
+        workbook_mappings: WorkbookUpdateMappings,
+    ) -> None:
+        import logging
+        logging.info("Processing TOTAL_PE rows...")
+        
+        if not total_pe_path.exists():
+            logging.warning(f"TOTAL PE not found at {total_pe_path}")
+            return
+            
+        total_pe = pd.read_excel(total_pe_path, sheet_name="DataCycle1")
+        
+        msms_map = workbook_mappings.data_msms
+        engr_map = workbook_mappings.engr_excel
+        pe_map = workbook_mappings.total_pe
+        
+        pe_fl_idx = col_to_index(pe_map["functional_location"])
+        pe_substation_idx = col_to_index(pe_map["substation_name"])
+        pe_date_idx = col_to_index(pe_map["date"])
+        pe_type_idx = col_to_index(pe_map["type"])
+        pe_wo_idx = col_to_index(pe_map["wo"])
+        
+        engr_fl_col = _resolve_named_column(
+            engr_excel,
+            ["FUNCTIONAL LOCATION (ERMS)", "FUNCTIONAL LOCATION"],
+            engr_map["functional_location"],
+        )
+        engr_substation_col = _resolve_named_column(
+            engr_excel,
+            ["SUBSTATION NAME (ERMS)", "SUBSTATION NAME"],
+            engr_map["substation_name"],
+        )
+        engr_date_col = _resolve_named_column(
+            engr_excel,
+            ["CYCLE 1", "CYCLE 1 DATE", "SCAN DATE", "DATE"],
+            engr_map["date"],
+        )
+        engr_type_col = _resolve_named_column(
+            engr_excel,
+            ["TYPE", "BUILDING TYPE", "SUBSTATION TYPE"],
+            engr_map["type"],
+        )
+        
+        msms_wo_idx = col_to_index(msms_map["wo"])
+        
+        total_pe.iloc[:, pe_fl_idx] = total_pe.iloc[:, pe_fl_idx].astype(str).fillna("")
+        engr_excel[engr_fl_col] = engr_excel[engr_fl_col].astype(str).fillna("")
+        
+        for index, row in total_pe.iterrows():
+            current_fl = str(row.iloc[pe_fl_idx]).strip()
+            if not current_fl:
+                logging.warning(f"Skipping row {index + 2} due to empty FL NUMBER")
+                continue
+            
+            engr_match = engr_excel[engr_excel[engr_fl_col].astype(str).str.strip() == current_fl]
+            if not engr_match.empty:
+                engr_row = engr_match.iloc[0]
+                extracted_date = engr_row[engr_date_col]
+                if pd.isna(extracted_date) or extracted_date == "":
+                    logging.warning(f"Skipping row {index + 2} due to missing ENGR date")
+                    continue
+                
+                total_pe.iat[index, pe_substation_idx] = engr_row[engr_substation_col]
+                total_pe.iat[index, pe_date_idx] = extracted_date
+                total_pe.iat[index, pe_type_idx] = engr_row[engr_type_col]
+                
+                msms_match = data_msms[read_col(data_msms, msms_map["functional_location"]) == current_fl]
+                if not msms_match.empty:
+                    total_pe.iat[index, pe_wo_idx] = msms_match.iloc[0, msms_wo_idx]
+                else:
+                    logging.warning(f"No MSMS match for Work Order on row {index + 2}")
+            else:
+                logging.warning(f"No ENGR match found for {current_fl} in row {index + 2}")
+                msms_match = data_msms[read_col(data_msms, msms_map["functional_location"]) == current_fl]
+                if not msms_match.empty:
+                    total_pe.iat[index, pe_wo_idx] = msms_match.iloc[0, msms_wo_idx]
+                    logging.info(f"Updated row {index + 2} with Work Order {total_pe.iat[index, pe_wo_idx]}")
+                else:
+                    logging.warning(f"No DATA_MSMS match found for {current_fl} in row {index + 2}")
+        
+        logging.info("Updating TOTAL_PE with Openpyxl...")
+        wb = openpyxl.load_workbook(total_pe_path)
+        ws = wb["DataCycle1"]
+        
+        for idx, row in total_pe.iterrows():
+            excel_row = idx + 2
+            write_cell(ws, excel_row, pe_map["substation_name"], row.iloc[pe_substation_idx])
+            write_cell(ws, excel_row, pe_map["date"], row.iloc[pe_date_idx])
+            write_cell(ws, excel_row, pe_map["type"], row.iloc[pe_type_idx])
+            write_cell(ws, excel_row, pe_map["wo"], row.iloc[pe_wo_idx])
+        
+        wb.save(total_pe_path)
+        logging.info("TOTAL_PE saved successfully using Openpyxl")

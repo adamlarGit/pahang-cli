@@ -26,29 +26,17 @@ class UtilityAction:
             print(f"\n[TIMER] Utility Action '{self.label}' completed in {elapsed:.2f} seconds.")
 
 
-def _make_stub_runner(action_name: str) -> Callable[[], object]:
-    def runner() -> object:
-        print(f"\n[UTILITY STUB] Running {action_name}...")
-        return True
-
-    return runner
-
-
 def _load_raw_material_runner() -> Callable[[], object]:
     """Lazy loader for Raw Material Creation & Sorting utility action runner."""
     def runner() -> object:
         from src import cli_selectors
-        from src.project.environment import ProjectEnvironment, load_project_environment
+        from src.project.environment import get_or_create_utility_environment
         from src.workflows.models import RawMaterialRequest
         from src.workflows.service import WorkflowService
 
         print("\n[UTILITY] Standalone Raw Material Creation & Sorting...")
-        env = None
-        try:
-            env = load_project_environment()
-        except Exception:
-            pass
-
+        env = get_or_create_utility_environment()
+        
         target_dir = cli_selectors.select_pahang_date_folder(environment=env)
         if target_dir is None:
             default_p = env.get_testsheet_dir() if env else None
@@ -61,19 +49,6 @@ def _load_raw_material_runner() -> Callable[[], object]:
         if target_dir is None:
             print("Operation cancelled.")
             return None
-
-        if env is None:
-            from src.project.models import ProjectMetadata
-            from src.project.storage import LocalWorkspaceStorage
-
-            base_p = target_dir
-            for parent in target_dir.parents:
-                if (parent / "TESTSHEET").exists() or (parent / "PYTHON").exists():
-                    base_p = parent
-                    break
-            meta = ProjectMetadata(key="utility", name="Utility Action", base_path=base_p)
-            storage = LocalWorkspaceStorage(base_p)
-            env = ProjectEnvironment(metadata=meta, storage=storage)
 
         request = RawMaterialRequest(
             output_path=target_dir,
@@ -92,41 +67,76 @@ def _load_raw_material_runner() -> Callable[[], object]:
 
 
 def _load_rename_files_runner() -> Callable[[], object]:
-    return _make_stub_runner("Rename files")
+    from src.workflows.rename_files import run_rename_files
+    return run_rename_files
 
 
 def _load_pdf_extract_runner() -> Callable[[], object]:
-    return _make_stub_runner("Extract PE pages from PDF")
+    from src.workflows.pdf_extract import run_pdf_extract
+    return run_pdf_extract
 
 
 def _load_combine_pdfs_runner() -> Callable[[], object]:
-    return _make_stub_runner("Combine PDFs")
+    from src.workflows.combine_pdfs import run_combine_pdfs
+    return run_combine_pdfs
 
 
 def _load_docx_to_pdf_runner() -> Callable[[], object]:
-    return _make_stub_runner("Convert DOCX to PDF")
+    from src.workflows.docx_to_pdf import run_docx_to_pdf
+    return run_docx_to_pdf
 
 
 def _load_testsheet_to_pdf_runner() -> Callable[[], object]:
-    return _make_stub_runner("Convert Testsheet to PDF")
+    from src.workflows.testsheet_to_pdf import run_testsheet_to_pdf
+    return run_testsheet_to_pdf
 
 
 def _load_rename_flir_runner() -> Callable[[], object]:
-    return _make_stub_runner("Rename FLIR raw files")
+    from src.workflows.rename_flir import run_rename_flir
+    return run_rename_flir
 
 
 def _load_diagonal_runner() -> Callable[[], object]:
-    return _make_stub_runner("Apply diagonal borders")
+    from src.workflows.diagonal_borders import run_diagonal
+    return run_diagonal
 
 
 def _load_replace_images_runner() -> Callable[[], object]:
-    return _make_stub_runner("Replace signature images")
+    from src.workflows.replace_signatures import run_replace_images
+    return run_replace_images
 
 
 def _load_whatsapp_runner() -> Callable[[], object]:
-    from src.project_workflow_actions import WhatsAppReportAction
+    def _run() -> None:
+        from src.project.environment import get_or_create_utility_environment
+        from src.workflows.service import WorkflowService
 
-    return lambda: WhatsAppReportAction("Generate WhatsApp report").execute(None)
+        print("\n[Generate WhatsApp report]")
+        env = get_or_create_utility_environment()
+        try:
+            return WorkflowService.run_whatsapp_report(env)
+        except Exception as e:
+            print(f"Failed to generate WhatsApp report: {e}")
+
+    return _run
+
+
+def _load_msms_runner() -> Callable[[], object]:
+    def _run() -> None:
+        from src.project.environment import get_or_create_utility_environment
+        from src.workflows.service import WorkflowService
+
+        print("\n[Update DATA_MSMS and TOTAL PE WO]")
+        env = get_or_create_utility_environment()
+        try:
+            service = WorkflowService()
+            return service.run_update_data_msms(env)
+        except Exception as e:
+            print(f"Failed to run MSMS update: {e}")
+            import traceback
+            traceback.print_exc()
+
+    return _run
 
 
 def _load_remove_desktop_ini_runner() -> Callable[[], object]:
@@ -146,6 +156,7 @@ UTILITY_ACTIONS: tuple[UtilityAction, ...] = (
     UtilityAction("Apply diagonal borders to blank cells", _load_diagonal_runner),
     UtilityAction("Replace signature images in testsheets", _load_replace_images_runner),
     UtilityAction("Generate WhatsApp report (from Quick Reports)", _load_whatsapp_runner),
+    UtilityAction("Update DATA_MSMS and TOTAL PE WO", _load_msms_runner),
     UtilityAction("Remove desktop.ini files (recursive)", _load_remove_desktop_ini_runner),
 )
 

@@ -59,6 +59,12 @@ class WorkflowService:
         composer = QuickReportComposer()
         return composer.compose(environment, request)
 
+    def run_update_data_msms(
+        self, environment: ProjectEnvironment
+    ) -> object:
+        from src.workflows.update_data_msms import run_update_data_msms
+        return run_update_data_msms(environment)
+
     def run_whatsapp(
         self, environment: ProjectEnvironment, request: WhatsAppReportRequest
     ) -> WhatsAppReportResult:
@@ -79,3 +85,9 @@ class WorkflowService:
             substations_count=summary.substations_count,
             output_path=summary.output_path,
         )
+
+    def run_postprocessing_pipeline(
+        self, environment: ProjectEnvironment
+    ) -> object:
+        from src.workflows.postprocessing_pipeline import run_postprocessing_pipeline
+        return run_postprocessing_pipeline(environment)
