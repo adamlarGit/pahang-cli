@@ -23,6 +23,7 @@ Before generating any commit message or running `git commit`, inspect `git statu
 
 ### 2. `CHANGELOG.md`
 - **Rule:** Every code modification must be recorded under [Keep a Changelog](https://keepachangelog.com/) format.
+- **Audit Intermediate Commits:** Run `git log <last-version-tag>..HEAD --oneline` (or inspect all small `caveman-commit` history since the last version tag/release). Ensure **ALL** intermediate feature, fix, refactor, and chore commits are aggregated and categorized.
 - **Action:** Add concise bullets under the `## [Unreleased]` header (or under the new SemVer version block being prepared in Phase 2) categorized by `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, or `Security`.
 
 ---
