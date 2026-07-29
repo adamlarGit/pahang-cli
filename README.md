@@ -8,7 +8,9 @@ Interactive CLI application for Pahang area PE inspection workflows, multi-proje
 - **Populate TOTAL PE**: Scans daily `TESTSHEET/` input folders (`<STATION>/<MONTH>/<DD-MM-YYYY>/`) and upserts PE metadata into `TOTAL PE.xlsx` (`DataCycle1` sheet).
 - **Automate Raw Material Creation & Sorting**: Validates `TOTAL PE.xlsx` pre-checks, provisions `RAW MATERIAL/` destination folder hierarchies, and matches/copies `IR` (`FLIR*`) and `DG` (`IMG_*`) photos from `UNSORTED RAW DATA/` using testsheet photo range bounds.
 - **Camera Photo Pattern Presets**: Configure single (`FLIR`) or dual pair (`IR_`/`DC_`) IR/visual camera patterns per project.
-- **Generate Quick Report**: Interactively select 3-tier inspection date folders (`<STATION>/<MONTH>/<DATE>/`) and compile 7-part docx visual reports directly into counterpart `QUICK REPORT/<STATION>/<MONTH>/<DATE>/` directory trees.
+- **Update QR02 CBA**: Extracts testsheet metadata (`PCE Testsheet`, `PCE VI`) and upserts per-station ENGR `QR02 CBA` Excel worksheets with atomic transactions and exact FL matching.
+- **Generate Quick Report**: Interactively select 3-tier inspection date folders (`<STATION>/<MONTH>/<DATE>/`) and compile 7-part docx visual reports directly into counterpart `QUICK REPORT/<STATION>/<MONTH>/<DATE>/` directory trees with canonical `(IR+US+TEV+VI)` defect suffixes.
+- **Generate WhatsApp Report**: Interactively select quick report batches to generate formatted WhatsApp inspection summary text files and station reports.
 - **Substation Post-Processing Pipeline**: 1-Click automated post-processing pipeline for substation deliverables combining signature replacement, diagonal borders, and PDF export/merging.
 - **MSMS Integration & Work Order Sync**: Dedicated MSMS domain package for updating `DATA_MSMS.xlsx` and syncing Work Order (`WO`) numbers into `TOTAL_PE.xlsx`.
 - **Standalone Utility Actions**: Batch DOCX/Testsheet to PDF conversion, PDF merging, diagonal cell borders, signature replacement, FLIR photo renaming, MSMS sync, and recursive `desktop.ini` removal.
