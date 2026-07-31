@@ -101,7 +101,7 @@ def test_generate_vi_summary_programmatic(tmp_path: Path):
 
     # Header verification
     header_texts = [c.text.strip() for c in t.rows[0].cells]
-    assert header_texts == ["NO.", "EQUIPMENT", "DEFECT DESCRIPTION", "REMARKS"]
+    assert header_texts == ["NO.", "EQUIPMENT", "DEFECT DESCRIPTION", "ADDITIONAL REMARKS"]
 
     # Data rows verification
     r1_texts = [c.text.strip() for c in t.rows[1].cells]

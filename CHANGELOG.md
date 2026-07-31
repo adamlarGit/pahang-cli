@@ -5,6 +5,17 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-08-01
+
+### Fixed
+- **Quick Report Defect Data Pipeline**: Wired `MasterQr03DefectRepository` in `_process_station` to fetch CBM and VI defects from QR03 master workbooks instead of empty lists.
+- **Word COM Range Collapsing**: Fixed `_compile_document` Range handling (`InsertBreak` + `Paste` on collapsed Range) to prevent Word RPC crashes when appending ActiveX/FLIR parts.
+- **Substation Condition Template Variables**: Updated context variables to `header_left` and `header_right` to correctly populate equipment titles and dehighlight unused cards.
+- **Visual Summary Template Alignment**: Updated `2. VI SUMMARY TEMPLATE Jinja2 DYNAMIC.docx` table properties (centered alignment, fixed layout, `ADDITIONAL REMARKS` header, `0.4 in` row height, matching column widths) to align with sample report `061. DESA RANGIN INDAH (VI).docx`.
+
+### Changed
+- **DocxTemplate Jinja Summary & Defect Rendering**: Refactored `cbm_summary.py`, `vi_summary.py`, and `vi_defect_pages.py` to render native `DocxTemplate` Jinja tags without manual row deletion or empty dict padding.
+
 ## [1.5.0] - 2026-08-01
 
 ### Added

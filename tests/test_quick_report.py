@@ -664,3 +664,111 @@ def test_substation_condition_remove_empty_cell_borders_exception_handling(tmp_p
         _remove_empty_cell_borders_sub_cond(invalid_path, 0)
 
     assert "Failed to remove empty cell borders" in caplog.text
+
+
+def test_quick_report_fl_mode_fl_erms_matching(monkeypatch):
+    """Verify QuickReportComposer FL mode filters using TestsheetData.fl_erms without AttributeError."""
+    from unittest.mock import MagicMock
+    from src.quick_report.composer import QuickReportComposer
+    from src.testsheet.models import SubstationTestsheetPackage, TestsheetData
+    from src.workflows.models import QuickReportMode, QuickReportRequest
+
+    mock_pkg1 = SubstationTestsheetPackage(
+        testsheet_path=Path("test1.xlsx"),
+        unsorted_raw_data_dir=Path("dir1"),
+        station="CCHL",
+        month="05. MAY",
+        date_str="2026-05-15",
+        substation_number=1,
+        data=TestsheetData(
+            substation_number=1,
+            substation_name_erms="SUBSTATION A",
+            fl_erms="CCHL/PCE/J00059",
+            fl_site="CCHL/PCE/J00059",
+        ),
+    )
+
+    mock_pkg2 = SubstationTestsheetPackage(
+        testsheet_path=Path("test2.xlsx"),
+        unsorted_raw_data_dir=Path("dir2"),
+        station="CCHL",
+        month="05. MAY",
+        date_str="2026-05-15",
+        substation_number=2,
+        data=TestsheetData(
+            substation_number=2,
+            substation_name_erms="SUBSTATION B",
+            fl_erms="CCHL/PCE/J00060",
+            fl_site="CCHL/PCE/J00060",
+        ),
+    )
+
+    monkeypatch.setattr(
+        "src.testsheet.repository.SubstationTestsheetRepository.discover_packages",
+        lambda self, folder_path: [mock_pkg1, mock_pkg2],
+    )
+
+    composer = QuickReportComposer()
+    env = MagicMock()
+    req = QuickReportRequest(
+        mode=QuickReportMode.FL,
+        target_package_names=("CCHL/PCE/J00059",),
+    )
+
+    # Mock _process_station to prevent actual word rendering in unit test
+    monkeypatch.setattr(composer, "_process_station", lambda env, pkg, cond: Path("dummy.docx"))
+
+    result = composer.compose(env, req)
+    assert result.reports_generated == 1
+    assert len(result.generated_paths) == 1
+
+
+def test_process_station_fetches_defects_from_repository():
+    """Regression: _process_station must call MasterQr03DefectRepository to fetch
+    cbm_defects and vi_defects and pass them through to _generate_parts.
+    Bug: defects were hardcoded as empty lists, so only the sticker page was generated."""
+    composer = QuickReportComposer()
+
+    mock_data = Mock()
+    mock_data.substation_name_erms = "KEA FARM"
+    mock_data.station_name = "KEA FARM"
+    mock_data.date_str = "17-06-2026"
+    mock_data.gps_coordinate = "4.123,101.456"
+    mock_data.substation_type = "PMU"
+    mock_data.building_type = "BRICK"
+    mock_data.fl_erms = "CCHL/PCE/J00059"
+    mock_data.fl_site = "CCHL/PCE/J00059"
+
+    mock_pkg = Mock()
+    mock_pkg.data = mock_data
+    mock_pkg.station = "CAMERON HIGHLAND"
+    mock_pkg.month = "06. JUNE"
+    mock_pkg.date_str = "17-06-2026"
+    mock_pkg.substation_number = 303
+
+    sample_cbm = [{"equipment": "SWG", "technology": "IR", "defect_area": "Cable lug"}]
+    sample_vi = [{"equipment": "SWG", "defect_area": "Rust", "remarks": "Mild"}]
+
+    captured = {}
+
+    def spy_generate_parts(**kwargs):
+        captured["cbm_defects"] = kwargs.get("cbm_defects", [])
+        captured["vi_defects"] = kwargs.get("vi_defects", [])
+        return [Path("dummy.docx")]
+
+    env = MagicMock()
+    env.get_quick_report_dir.return_value = Path("C:/tmp/qr")
+
+    with patch.object(composer, "_generate_parts", side_effect=spy_generate_parts), \
+         patch.object(composer, "_compile_document"), \
+         patch("src.quick_report.composer.MasterQr03DefectRepository") as MockRepo, \
+         patch("shutil.rmtree"):
+
+        repo_instance = MockRepo.return_value
+        repo_instance.fetch_cbm_defects.return_value = sample_cbm
+        repo_instance.fetch_vi_defects.return_value = sample_vi
+
+        composer._process_station(env, mock_pkg, None)
+
+    assert captured["cbm_defects"] == sample_cbm, "cbm_defects not passed through from repository"
+    assert captured["vi_defects"] == sample_vi, "vi_defects not passed through from repository"

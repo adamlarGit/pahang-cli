@@ -19,6 +19,7 @@ except ImportError:
 
 from src.project.environment import ProjectEnvironment
 from src.quick_report.cbm_defect_pages import generate_cbm_defect_pages, generate_quick_report_detail_pages
+from src.quick_report.defects import MasterQr03DefectRepository
 from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS
 from src.quick_report.cbm_render import (
     generate_front_page,
@@ -27,7 +28,7 @@ from src.quick_report.cbm_summary import generate_cbm_tech_summary
 from src.quick_report.sticker_page import generate_sticker_page
 from src.quick_report.utils import normalize_functional_location_input, sanitize_filename
 from src.quick_report.vi_defect_pages import generate_vi_defect_pages as generate_vi_defect_page
-from src.quick_report.vi_summary import generate_vi_summary, generate_vi_summary
+from src.quick_report.vi_summary import generate_vi_summary
 from src.testsheet.models import SubstationTestsheetPackage
 from src.testsheet.repository import SubstationTestsheetRepository
 from src.workflows.models import QuickReportMode, QuickReportRequest, QuickReportResult
@@ -57,7 +58,7 @@ class QuickReportComposer:
             all_packages = repo.discover_packages(environment.get_testsheet_dir())
             packages = [
                 pkg for pkg in all_packages
-                if pkg.data and normalize_functional_location_input(pkg.data.fl_number) in target_fls
+                if pkg.data and normalize_functional_location_input(pkg.data.fl_erms) in target_fls
             ]
 
         if request.progress_sink:
@@ -159,33 +160,6 @@ class QuickReportComposer:
         suffix_str = f" ({'+'.join(suffix_parts)})" if suffix_parts else ""
         return suffix_str, suffix_parts
 
-    def _process_station(self, environment: ProjectEnvironment, pkg: SubstationTestsheetPackage, cond_template_path: Path | None) -> Path | None:
-        if not pkg.data:
-            return None
-
-        pe_info = {
-            "substation": {
-                "name_erms": pkg.data.substation_name_erms,
-                "date": pkg.data.date_str,
-                "gps_coordinate": pkg.data.gps_coordinate,
-                "substation_type": pkg.data.type_code,
-                "building_type": pkg.data.building_type,
-            }
-        }
-
-        pe_number = pkg.pe_num
-        sanitized_name = sanitize_filename(pkg.data.substation_name_erms or pkg.data.substation_name)
-
-        # TODO: Real defect fetching from QR03 CBA/VI
-        cbm_defects = []
-        vi_defects = []
-
-        suffix, suffix_parts = self._calculate_suffix(cbm_defects, vi_defects)
-        output_filename = f"{pe_number:03d}. {sanitized_name}{suffix}.docx"
-        
-        output_dir = self._resolve_output_dir(environment, pkg)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        final_output_path = output_dir / output_filename
 
     def _generate_parts(
         self,
@@ -201,21 +175,17 @@ class QuickReportComposer:
     ) -> list[Path]:
         parts: list[Path] = []
         # 1. Front Page
-        fp_template = environment.get_template("vi_front_page")
-        if "US" in suffix_parts or "TEV" in suffix_parts:
-            fp_template = environment.get_template("vi_front_page_ir_us_tev")
+        fp_template = environment.get_vi_front_page_template()
         parts.append(generate_front_page(pe_info, str(fp_template), str(temp_dir), substation_number))
 
         # 2A. CBM Tech Summary
         if cbm_defects:
-            cbm_summary_template = environment.get_template("cbm_summary_ir")
-            if "US" in suffix_parts or "TEV" in suffix_parts:
-                cbm_summary_template = environment.get_template("cbm_summary_ir_us_tev")
+            cbm_summary_template = environment.get_cbm_summary_template()
             parts.append(generate_cbm_tech_summary(pe_info, cbm_defects, str(cbm_summary_template), str(temp_dir), substation_number))
 
         # 2. VI Defect Summary
         if vi_defects:
-            vi_summary_template = environment.get_template("vi_summary")
+            vi_summary_template = environment.get_vi_summary_template()
             parts.append(generate_vi_summary(pe_info, vi_defects, str(vi_summary_template), str(temp_dir), substation_number))
 
         # 2B. CBM Defect Family Pages
@@ -260,7 +230,15 @@ class QuickReportComposer:
                     padded_chunk.append(("", ""))
                     
                 context = {
-                    "pairs": [{"left": p[0], "right": p[1]} for p in padded_chunk]
+                    "pairs": [
+                        {
+                            "header_left": p[0],
+                            "header_right": p[1],
+                            "photo_left": "",
+                            "photo_right": "",
+                        }
+                        for p in padded_chunk
+                    ]
                 }
                 context.update(pe_info)
                 
@@ -275,7 +253,7 @@ class QuickReportComposer:
 
         # 6. VI Defect Pages
         if vi_defects:
-            vi_defect_template = environment.get_template("vi_defect")
+            vi_defect_template = environment.get_vi_defect_template()
             vi_pages = generate_vi_defect_page(vi_defects, str(vi_defect_template), str(temp_dir), substation_number, pe_info)
             parts.extend(vi_pages)
 
@@ -289,21 +267,45 @@ class QuickReportComposer:
         if not pkg.data:
             return None
 
+        po_num = getattr(environment, "po_number", None)
+        state = getattr(environment, "state", None)
+
+        substation_name_erms = pkg.data.substation_name_erms or ""
+        substation_name_site = pkg.data.substation_name_site or ""
+
         pe_info = {
+            "purchaseorder": {
+                "number": po_num,
+            },
             "substation": {
-                "name_erms": pkg.data.substation_name_erms,
-                "date": pkg.data.date_str,
-                "gps_coordinate": pkg.data.gps_coordinate,
-                "substation_type": pkg.data.type_code,
-                "building_type": pkg.data.building_type,
+                "name_erms": substation_name_erms,
+                "name_site": substation_name_site,
+                "substation_name_erms": substation_name_erms,
+                "substation_name_site": substation_name_site,
+                "fl_erms": pkg.data.fl_erms,
+                "fl_site": pkg.data.fl_site,
+                "area": pkg.station or "",
+                "state": state.upper() if state else "PAHANG",
+                "datefrontpage": pkg.data.date_str or "",
+                "date": pkg.data.date_str or "",
+                "gps_coordinate": pkg.data.gps_coordinate or "",
+                "gpscoordinate": pkg.data.gps_coordinate or "",
+                "type": pkg.data.substation_type or "",
+                "substation_type": pkg.data.substation_type or "",
+                "building_type": pkg.data.building_type or "",
+                "ambient": pkg.data.ambient if pkg.data.ambient else "-",
+                "humidity": pkg.data.humidity if pkg.data.humidity else "-",
+                "time": pkg.data.time if pkg.data.time else "-",
             }
         }
 
-        pe_number = pkg.pe_num
-        sanitized_name = sanitize_filename(pkg.data.substation_name_erms or pkg.data.substation_name)
+        pe_number = pkg.substation_number
+        sanitized_name = sanitize_filename(pkg.data.substation_name_erms or pkg.data.station_name)
 
-        cbm_defects = []
-        vi_defects = []
+        # Fetch defects from the master QR03 ENGR workbook
+        defect_repo = MasterQr03DefectRepository(environment=environment)
+        cbm_defects = defect_repo.fetch_cbm_defects(pkg.data.fl_erms)
+        vi_defects = defect_repo.fetch_vi_defects(pkg.data.fl_erms)
 
         suffix, suffix_parts = self._calculate_suffix(cbm_defects, vi_defects)
         output_filename = f"{pe_number:03d}. {sanitized_name}{suffix}.docx"
@@ -366,11 +368,12 @@ class QuickReportComposer:
                             else:
                                 break
                     part_doc.Content.Copy()
-                    if hasattr(main_doc, "Content"):
-                        if hasattr(main_doc.Content, "InsertBreak"):
-                            main_doc.Content.InsertBreak(7)
-                        if hasattr(main_doc.Content, "Paste"):
-                            main_doc.Content.Paste()
+                    rng = main_doc.Content
+                    rng.Collapse(0)  # wdCollapseEnd
+                    rng.InsertBreak(7)  # wdPageBreak
+                    rng = main_doc.Content
+                    rng.Collapse(0)  # wdCollapseEnd
+                    rng.Paste()
                     part_doc.Close(False)
                     part_doc = None
                 main_doc.Save()

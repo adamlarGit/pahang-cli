@@ -102,13 +102,7 @@ def generate_vi_defect_pages(defects: list[dict], template_path: str | Path, out
 
     for part_number, chunk in enumerate(chunks, start=1):
         doc = DocxTemplate(template_p)
-        
-        padded_chunk = list(chunk)
-        while len(padded_chunk) < DEFECTS_PER_PAGE:
-            padded_chunk.append({})
-            
-        context = build_vi_defect_page_context(pe_info, padded_chunk)
-        
+        context = build_vi_defect_page_context(pe_info, chunk)
         doc.render(_preserve_blank_render_values(context), jinja_env=_build_jinja_env(), autoescape=True)
 
         output_path = Path(output_dir) / f"{substation_number:03d}_6 VI DEFECT part{part_number}.docx"

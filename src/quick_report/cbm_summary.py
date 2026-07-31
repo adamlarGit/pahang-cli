@@ -2,9 +2,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-import docx
-
-from src.quick_report.utils import format_table_cell
+from src.quick_report.cbm_render import _render_docx_template
 
 
 def _text_or_empty(value) -> str:
@@ -47,7 +45,7 @@ class PreparedTechSummaryRow:
     ir_delta: str = "-"
     us_dB: str = "-"
     tev_dB: str = "-"
-    status: str = "PENDING"
+    status: str = ""
 
 
 def prepare_tech_summary_rows(defects: list[dict]) -> list[PreparedTechSummaryRow]:
@@ -83,7 +81,7 @@ def prepare_tech_summary_rows(defects: list[dict]) -> list[PreparedTechSummaryRo
                 ir_delta=str(defect.get("ir_delta") or "-"),
                 us_dB=_format_db(val_str) if tech == "US" else "-",
                 tev_dB=_format_db(val_str) if tech == "TEV" else "-",
-                status=str(defect.get("status") or "PENDING"),
+                status=str(defect.get("status") or ""),
             )
         else:
             row = paired[key]
@@ -108,14 +106,6 @@ def build_cbm_summary_context(pe_info: dict, defects: list[dict]) -> dict:
     return context
 
 
-def _get_field(row: PreparedTechSummaryRow | dict, field: str, default: str = "-") -> str:
-    if isinstance(row, dict):
-        val = row.get(field, default)
-    else:
-        val = getattr(row, field, default)
-    return str(val) if val is not None and str(val).strip() != "" else default
-
-
 def generate_cbm_tech_summary(
     pe_info: dict,
     defects: list[dict],
@@ -123,64 +113,16 @@ def generate_cbm_tech_summary(
     output_dir: str | Path,
     substation_number: int,
 ) -> Path:
-    """Generate CBM technical summary page joining IR, US, and TEV."""
+    """Generate CBM technical summary page joining IR, US, and TEV via DocxTemplate."""
     template_p = Path(template_path)
     if not template_p.exists():
         raise FileNotFoundError(f"Template not found: {template_path}")
 
-    prepared_rows = prepare_tech_summary_rows(defects)
-
-    doc = docx.Document(str(template_path))
-    table = doc.tables[0]
-
-    # Clear template placeholder loop rows after row 0
-    while len(table.rows) > 1:
-        tr = table.rows[-1]._tr
-        table._tbl.remove(tr)
-
-    # Format header row 0
-    header_row = table.rows[0]
-    for cell in header_row.cells:
-        format_table_cell(cell, cell.text.strip(), font_size_pt=10, bold=True, fill="D9D9D9")
-
-    num_cols = len(header_row.cells)
-
-    for idx, r in enumerate(prepared_rows, start=1):
-        new_row = table.add_row()
-        equip = _get_field(r, "equipment", "")
-        area = _get_field(r, "defect_area", "")
-        ir_abs = _get_field(r, "ir_abs", "-")
-        if ir_abs == "-":
-            ir_abs = _get_field(r, "ir_reading", "-")
-        ir_delta = _get_field(r, "ir_delta", "-")
-        us_dB = _get_field(r, "us_dB", "-")
-        if us_dB == "-":
-            us_dB = _get_field(r, "us_reading", "-")
-        tev_dB = _get_field(r, "tev_dB", "-")
-        if tev_dB == "-":
-            tev_dB = _get_field(r, "tev_reading", "-")
-        status = _get_field(r, "status", "PENDING")
-
-        if num_cols == 6:
-            values = [str(idx), equip, area, ir_abs, ir_delta, status]
-        elif num_cols == 8:
-            values = [str(idx), equip, area, ir_abs, ir_delta, us_dB, tev_dB, status]
-        else:
-            # Dynamic fallback for other column configurations
-            values = [str(idx), equip, area, ir_abs, ir_delta]
-            if num_cols >= 7:
-                values.append(us_dB)
-            if num_cols >= 8:
-                values.append(tev_dB)
-            while len(values) < num_cols:
-                values.append(status if len(values) == num_cols - 1 else "-")
-
-        for j, val in enumerate(values[:num_cols]):
-            format_table_cell(new_row.cells[j], str(val), font_size_pt=10, bold=False, fill=None)
+    context = build_cbm_summary_context(pe_info, defects)
 
     sub_num_int = int(substation_number) if str(substation_number).isdigit() else substation_number
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{sub_num_int:03d}_2 CBM SUMMARY.docx"
-    doc.save(out_path)
-    return out_path
+
+    return _render_docx_template(template_p, out_path, context)
