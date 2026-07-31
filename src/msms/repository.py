@@ -103,7 +103,7 @@ class LocalExcelMsmsRepository(MsmsRepository):
         engr_substation_col = _resolve_named_column(
             engr_excel,
             ["SUBSTATION NAME (ERMS)", "SUBSTATION NAME"],
-            engr_map["substation_name"],
+            engr_map["substation_name_erms"],
         )
         engr_date_col = _resolve_named_column(
             engr_excel,
@@ -127,7 +127,7 @@ class LocalExcelMsmsRepository(MsmsRepository):
                         logging.warning(f"Skipping row {index + 2} due to missing date")
                         continue
                     
-                    data_msms.iat[index, col_to_index(msms_map["substation_name"])] = match.iloc[0][engr_substation_col]
+                    data_msms.iat[index, col_to_index(msms_map["substation_name_erms"])] = match.iloc[0][engr_substation_col]
                     data_msms.iat[index, col_to_index(msms_map["functional_location"])] = match.iloc[0][engr_fl_col]
                     data_msms.iat[index, col_to_index(msms_map["date"])] = extracted_date
                 else:
@@ -139,7 +139,7 @@ class LocalExcelMsmsRepository(MsmsRepository):
         
         for index, row in data_msms.iterrows():
             excel_row = index + 2
-            write_cell(ws, excel_row, msms_map["substation_name"], row.iloc[col_to_index(msms_map["substation_name"])])
+            write_cell(ws, excel_row, msms_map["substation_name_erms"], row.iloc[col_to_index(msms_map["substation_name_erms"])])
             write_cell(ws, excel_row, msms_map["functional_location"], row.iloc[col_to_index(msms_map["functional_location"])])
             write_cell(ws, excel_row, msms_map["date"], row.iloc[col_to_index(msms_map["date"])])
             

@@ -244,12 +244,11 @@ class LocalExcelQr02Transaction(Qr02Transaction):
 
         updated_count = 0
         for rec in records:
-            rec_fl = normalize_fl_erms(_get_field(rec, "fl_erms", "fl_number", "fl", default=""))
+            rec_fl = normalize_fl_erms(_get_field(rec, "fl_erms", "fl", default=""))
             rec_name = str(
                 _get_field(
                     rec,
                     "substation_name_erms",
-                    "substation_name",
                     "name",
                     default="",
                 )
@@ -294,7 +293,7 @@ class LocalExcelQr02Transaction(Qr02Transaction):
                 self.ws.Cells(target_row, 12).Value = str(rec_gps).strip()
 
             # Col M (13): Type (pulled as-is from testsheet, empty if missing/N/A)
-            rec_type = _get_field(rec, "substation_type", "type_code", "type", default=None)
+            rec_type = _get_field(rec, "substation_type", "type", default=None)
             cleaned_type = clean_val(rec_type) if rec_type is not None else None
             self.ws.Cells(target_row, 13).Value = cleaned_type if cleaned_type is not None else ""
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import openpyxl
 import pytest
 
+from src.core.normalizers import format_month_folder
 from src.testsheet.extractor import (
     TestsheetExtractor,
     clean_val,
@@ -16,6 +17,30 @@ from src.testsheet.extractor import (
     to_excel_date,
 )
 from src.testsheet.models import PhotoRange, RawPhotoRanges, TestsheetData
+
+
+def test_format_month_folder() -> None:
+    """Verify format_month_folder converts month inputs to XX. MONTH format."""
+    assert format_month_folder("01. JAN") == "01. JANUARY"
+    assert format_month_folder("01. JANUARY") == "01. JANUARY"
+    assert format_month_folder("2026-01 (Jan)") == "01. JANUARY"
+    assert format_month_folder("01-01-2026") == "01. JANUARY"
+    assert format_month_folder("JANUARY") == "01. JANUARY"
+    assert format_month_folder("january") == "01. JANUARY"
+    assert format_month_folder("02. FEB") == "02. FEBRUARY"
+    assert format_month_folder("03. MARCH") == "03. MARCH"
+    assert format_month_folder("04. APRIL") == "04. APRIL"
+    assert format_month_folder("05. MAY") == "05. MAY"
+    assert format_month_folder("06. JUNE") == "06. JUNE"
+    assert format_month_folder("07. JULY") == "07. JULY"
+    assert format_month_folder("08. AUGUST") == "08. AUGUST"
+    assert format_month_folder("09. SEPTEMBER") == "09. SEPTEMBER"
+    assert format_month_folder("10. OCTOBER") == "10. OCTOBER"
+    assert format_month_folder("11. NOVEMBER") == "11. NOVEMBER"
+    assert format_month_folder("12. DECEMBER") == "12. DECEMBER"
+    assert format_month_folder(date(2026, 3, 15)) == "03. MARCH"
+    assert format_month_folder(datetime(2026, 12, 1, 10, 0)) == "12. DECEMBER"
+
 
 
 def test_normalize_fl_erms() -> None:
@@ -107,6 +132,9 @@ def sample_testsheet_file(tmp_path: Path) -> Path:
     ws_pce["W5"] = "CRAU-S001"
     ws_pce["C5"] = "RM CHEROH"
     ws_pce["P4"] = "01-05-2026"
+    ws_pce["P5"] = "1430"
+    ws_pce["S6"] = "65.0"
+    ws_pce["W6"] = "BACKGROUND TEMP : 23.2 °C"
 
     # PCE VI sheet with fixed cells
     ws_vi = wb.create_sheet(title="PCE VI")
@@ -116,17 +144,16 @@ def sample_testsheet_file(tmp_path: Path) -> Path:
     ws_vi["C9"] = "OUTDOOR"
     ws_vi["D9"] = "/"
 
-    # RAW DATA sheet with photo ranges only
+    # RAW DATA sheet with photo ranges only (schema: Row 1=[None, START, END], Row 2=[IR, start, end], Row 3=[DG, start, end])
     ws = wb.create_sheet(title="RAW DATA")
-    ws.cell(1, 1, "IR START")
-    ws.cell(1, 2, 100)
-    ws.cell(1, 3, "IR END")
-    ws.cell(1, 4, 105)
-
-    ws.cell(2, 1, "DG START")
-    ws.cell(2, 2, 500)
-    ws.cell(2, 3, "DG END")
-    ws.cell(2, 4, 510)
+    ws.cell(1, 2, "START")
+    ws.cell(1, 3, "END")
+    ws.cell(2, 1, "IR")
+    ws.cell(2, 2, 100)
+    ws.cell(2, 3, 105)
+    ws.cell(3, 1, "DG")
+    ws.cell(3, 2, 500)
+    ws.cell(3, 3, 510)
 
     wb.save(file_path)
     wb.close()
@@ -138,15 +165,18 @@ def test_extract_testsheet_data(sample_testsheet_file: Path) -> None:
     data = extractor.extract_testsheet_data(sample_testsheet_file)
 
     assert isinstance(data, TestsheetData)
-    assert data.pe_number == 1
-    assert data.substation_name == "RM CHEROH"
-    assert data.fl_number == "CRAU-S001"
+    assert data.substation_number == 1
+    assert data.substation_name_erms == "RM CHEROH"
     assert data.fl_erms == "CRAU-S001"
-    assert data.date_str == "01-05-2026"
-    assert data.type_code == "RM"
+    assert data.date_str == ""
+    assert data.cycle_1 == datetime(2026, 5, 1)
+    assert data.substation_type == "RM"
     assert data.substation_name_site == "RM CHEROH SITE"
     assert data.gps_coordinate == "3.8, 102.1"
     assert data.building_type == "OUTDOOR"
+    assert data.time == "02:30 PM"
+    assert data.humidity == "65%"
+    assert data.ambient == "23.2 °C"
 
     assert data.photo_ranges.ir == PhotoRange(start_num=100, end_num=105)
     assert data.photo_ranges.dg == PhotoRange(start_num=500, end_num=510)
@@ -176,14 +206,14 @@ def test_fixed_cell_extraction(tmp_path: Path) -> None:
 
     # Sheet 3: RAW DATA
     ws_raw = wb.create_sheet(title="RAW DATA")
-    ws_raw.cell(1, 1, "IR START")
-    ws_raw.cell(1, 2, 200)
-    ws_raw.cell(1, 3, "IR END")
-    ws_raw.cell(1, 4, 210)
-    ws_raw.cell(2, 1, "DG START")
-    ws_raw.cell(2, 2, 600)
-    ws_raw.cell(2, 3, "DG END")
-    ws_raw.cell(2, 4, 615)
+    ws_raw.cell(1, 2, "START")
+    ws_raw.cell(1, 3, "END")
+    ws_raw.cell(2, 1, "IR")
+    ws_raw.cell(2, 2, 200)
+    ws_raw.cell(2, 3, 210)
+    ws_raw.cell(3, 1, "DG")
+    ws_raw.cell(3, 2, 600)
+    ws_raw.cell(3, 3, 615)
 
     wb.save(file_path)
     wb.close()
@@ -191,20 +221,20 @@ def test_fixed_cell_extraction(tmp_path: Path) -> None:
     extractor = TestsheetExtractor()
     data = extractor.extract_testsheet_data(file_path)
 
-    assert data.pe_number == 2
+    assert data.substation_number == 2
     assert data.fl_erms == "CRAU-S002"
     assert data.substation_name_erms == "PPU BENTA ERMS"
-    assert data.substation_name == "PPU BENTA ERMS"
+    assert data.substation_name_erms == "PPU BENTA ERMS"
     assert data.cycle_1 == datetime(2026, 6, 15)
 
     assert data.substation_name_site == "PPU BENTA SITE"
     assert data.gps_coordinate == "3.8123, 102.1234"
     assert data.substation_type == "PPU"
-    assert data.type_code == "PPU"
+    assert data.substation_type == "PPU"
     assert data.building_type == "ATTACH"
 
-    assert data.fl_number == "CRAU-S002"
-    assert data.date_str == "15-06-2026"
+    assert data.fl_erms == "CRAU-S002"
+    assert data.date_str == ""
 
     assert data.photo_ranges.ir == PhotoRange(start_num=200, end_num=210)
     assert data.photo_ranges.dg == PhotoRange(start_num=600, end_num=615)
@@ -231,3 +261,34 @@ def test_single_photo_range() -> None:
     assert single_end.is_valid is True
     assert single_end.contains(99) is True
     assert single_end.contains(98) is False
+
+
+def test_grid_table_photo_range_extraction(tmp_path: Path) -> None:
+    """Test extracting photo ranges from grid table format (Row 1: [None, 'START', 'END'], Row 2: ['IR', 49, 66])."""
+    file_path = tmp_path / "001. GRID_TABLE.xlsx"
+    wb = openpyxl.Workbook()
+
+    ws_test = wb.active
+    ws_test.title = "PCE Testsheet"
+    ws_test.cell(1, 1, "PE NO")
+    ws_test.cell(1, 2, 289)
+
+    ws_raw = wb.create_sheet(title="RAW DATA")
+    ws_raw.cell(1, 2, "START")
+    ws_raw.cell(1, 3, "END")
+    ws_raw.cell(2, 1, "IR")
+    ws_raw.cell(2, 2, 49)
+    ws_raw.cell(2, 3, 66)
+    ws_raw.cell(3, 1, "DG")
+    ws_raw.cell(3, 2, 1715)
+    ws_raw.cell(3, 3, 1739)
+
+    wb.save(file_path)
+    wb.close()
+
+    extractor = TestsheetExtractor()
+    data = extractor.extract_testsheet_data(file_path)
+
+    assert data.photo_ranges.ir == PhotoRange(start_num=49, end_num=66)
+    assert data.photo_ranges.dg == PhotoRange(start_num=1715, end_num=1739)
+

@@ -6,7 +6,7 @@ from pathlib import Path
 @dataclass
 class MsmsRecord:
     functional_location: str
-    substation_name: str
+    substation_name_erms: str
     date: str
     wo: str
 
@@ -29,21 +29,21 @@ class WorkbookUpdateMappings:
 MSMS_COLUMN_MAPPING = {
     "wo": "A",
     "location": "B",
-    "substation_name": "D",
+    "substation_name_erms": "D",
     "functional_location": "E",
     "date": "F",
 }
 
 ENGR_COLUMN_MAPPING_11KV = {
     "functional_location": "I",
-    "substation_name": "J",
+    "substation_name_erms": "J",
     "date": "O",
     "type": "M",
 }
 
 ENGR_COLUMN_MAPPING_33KV = {
     "functional_location": "E",
-    "substation_name": "H",
+    "substation_name_erms": "H",
     "date": "Q",
     "type": "I",
 }
@@ -51,7 +51,7 @@ ENGR_COLUMN_MAPPING_33KV = {
 TOTAL_PE_COLUMN_MAPPING = {
     "pe_no": "A",
     "functional_location": "B",
-    "substation_name": "C",
+    "substation_name_erms": "C",
     "date": "D",
     "type": "E",
     "wo": "F",

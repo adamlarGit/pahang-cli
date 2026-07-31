@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-import re
-from typing import Sequence
+from typing import Any, Sequence
 import openpyxl
 import pandas as pd
 from openpyxl.utils import column_index_from_string
 
+from src.core.normalizers import normalize_date_str
 from src.testsheet.extractor import to_excel_date
 from src.testsheet.models import SubstationTestsheetPackage
 from src.msms.models import WorkbookUpdateMappings
@@ -17,13 +17,13 @@ from src.msms.models import WorkbookUpdateMappings
 def col_to_index(col_letter: str) -> int:
     return column_index_from_string(col_letter) - 1
 
-def read_col(df: pd.DataFrame, col_letter: str):
+def read_col(df: pd.DataFrame, col_letter: str) -> pd.Series:
     return df.iloc[:, col_to_index(col_letter)]
 
-def write_cell(ws, row: int, col_letter: str, value):
+def write_cell(ws: Any, row: int, col_letter: str, value: Any) -> None:
     ws[f"{col_letter}{row}"] = value
 
-def _resolve_named_column(dataframe: pd.DataFrame, header_names: list[str], fallback_col_letter: str) -> str:
+def _resolve_named_column(dataframe: pd.DataFrame, header_names: Sequence[str], fallback_col_letter: str) -> str:
     columns = dataframe.columns
     normalized_headers = {
         str(header).strip().lower(): header
@@ -40,26 +40,6 @@ def _resolve_named_column(dataframe: pd.DataFrame, header_names: list[str], fall
         
     raise KeyError(f"None of the headers {header_names} were found")
 
-
-from datetime import date, datetime
-
-
-def normalize_date_str(date_input: object) -> str:
-    """Normalize date inputs (date, datetime, or strings) to DD-MM-YYYY format."""
-    if not date_input:
-        return ""
-    if isinstance(date_input, (datetime, date)):
-        return date_input.strftime("%d-%m-%Y")
-    s = str(date_input).strip().replace("/", "-")
-    match_iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", s)
-    if match_iso:
-        year, month, day = int(match_iso.group(1)), int(match_iso.group(2)), int(match_iso.group(3))
-        return f"{day:02d}-{month:02d}-{year:04d}"
-    match = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})$", s)
-    if match:
-        day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
-        return f"{day:02d}-{month:02d}-{year:04d}"
-    return s
 
 
 class TotalPeRepository(ABC):
@@ -185,11 +165,9 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
 
         wb_check = openpyxl.load_workbook(total_pe_path, data_only=True)
         try:
-            ws_check = (
-                wb_check["DataCycle1"]
-                if "DataCycle1" in wb_check.sheetnames
-                else wb_check.active
-            )
+            if "DataCycle1" not in wb_check.sheetnames:
+                raise RuntimeError(f"'DataCycle1' sheet missing in {total_pe_path}")
+            ws_check = wb_check["DataCycle1"]
             existing_keys: set[tuple[str, str]] = set()
             for r_idx in range(2, ws_check.max_row + 1):
                 pe_val = str(ws_check.cell(r_idx, 1).value or "").strip()
@@ -226,7 +204,9 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
             ws.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
         else:
             wb = openpyxl.load_workbook(total_pe_path)
-            ws = wb["DataCycle1"] if "DataCycle1" in wb.sheetnames else wb.active
+            if "DataCycle1" not in wb.sheetnames:
+                raise RuntimeError(f"'DataCycle1' sheet missing in {total_pe_path}")
+            ws = wb["DataCycle1"]
 
         new_count = 0
         updated_count = 0
@@ -257,17 +237,17 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
             if data is None:
                 continue
 
-            pe_no = data.pe_number
+            pe_no = data.substation_number
             try:
                 pe_no = int(float(str(pe_no).strip()))
             except (ValueError, TypeError):
                 pass
 
-            fl_num = data.fl_number
-            sub_name = data.substation_name
+            fl_num = data.fl_erms
+            sub_name = data.substation_name_erms
             dt_str = data.date_str or pkg.date_str
             norm_pkg_dt = normalize_date_str(dt_str)
-            type_c = data.type_code
+            type_c = data.substation_type
             wo = data.wo_number
 
             dt_obj = to_excel_date(dt_str)
@@ -342,7 +322,7 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
         pe_map = workbook_mappings.total_pe
         
         pe_fl_idx = col_to_index(pe_map["functional_location"])
-        pe_substation_idx = col_to_index(pe_map["substation_name"])
+        pe_substation_idx = col_to_index(pe_map["substation_name_erms"])
         pe_date_idx = col_to_index(pe_map["date"])
         pe_type_idx = col_to_index(pe_map["type"])
         pe_wo_idx = col_to_index(pe_map["wo"])
@@ -355,7 +335,7 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
         engr_substation_col = _resolve_named_column(
             engr_excel,
             ["SUBSTATION NAME (ERMS)", "SUBSTATION NAME"],
-            engr_map["substation_name"],
+            engr_map["substation_name_erms"],
         )
         engr_date_col = _resolve_named_column(
             engr_excel,
@@ -411,7 +391,7 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
         
         for idx, row in total_pe.iterrows():
             excel_row = idx + 2
-            write_cell(ws, excel_row, pe_map["substation_name"], row.iloc[pe_substation_idx])
+            write_cell(ws, excel_row, pe_map["substation_name_erms"], row.iloc[pe_substation_idx])
             dt_obj = to_excel_date(row.iloc[pe_date_idx])
             cell_date = ws[f"{pe_map['date']}{excel_row}"]
             cell_date.value = dt_obj.date() if dt_obj is not None else normalize_date_str(row.iloc[pe_date_idx])

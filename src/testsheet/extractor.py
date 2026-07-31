@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 import openpyxl
 
+from src.core.normalizers import format_testsheet_time, format_humidity_str, parse_background_temp
 from src.testsheet.models import PhotoRange, RawPhotoRanges, TestsheetData
 
 
@@ -92,20 +93,15 @@ class TestsheetExtractor:
         if not path.exists():
             raise FileNotFoundError(f"Testsheet workbook not found: {path}")
 
-        pe_num = 1
+        substation_number = 1
         num_match = re.match(r"^(\d+)", path.name)
         if num_match:
-            pe_num = int(num_match.group(1))
-
-        substation_name = path.stem
-        if num_match:
-            cleaned = re.sub(r"^\d+[\.\-\s_]*", "", path.stem).strip()
-            if cleaned:
-                substation_name = cleaned
+            substation_number = int(num_match.group(1))
 
         wb = openpyxl.load_workbook(path, data_only=True)
         try:
             fl_erms = ""
+            fl_site = ""
             substation_name_erms = ""
             cycle_1: datetime | None = None
 
@@ -114,16 +110,18 @@ class TestsheetExtractor:
             substation_type = ""
             building_type: str | None = None
 
-            fl_number = ""
             date_str = date_hint
             station_name = station_hint
-            type_code = ""
             wo_number = ""
 
             ir_start: int | None = None
             ir_end: int | None = None
             dg_start: int | None = None
             dg_end: int | None = None
+            
+            ambient = "-"
+            humidity = "-"
+            time_str = "-"
 
             # Phase 1: PCE Testsheet (fixed cells)
             if "PCE Testsheet" in wb.sheetnames:
@@ -132,11 +130,15 @@ class TestsheetExtractor:
                 cleaned_sub_erms = clean_val(ws_pce["C5"].value)
                 substation_name_erms = cleaned_sub_erms if cleaned_sub_erms is not None else ""
                 cycle_1 = to_excel_date(ws_pce["P4"].value)
+                
+                time_str = format_testsheet_time(ws_pce["P5"].value)
+                humidity = format_humidity_str(ws_pce["S6"].value)
+                ambient = parse_background_temp(ws_pce["W6"].value)
 
                 y1_val = ws_pce["Y1"].value
                 if y1_val is not None and str(y1_val).strip() not in ("", "-", "None", "N/A"):
                     try:
-                        pe_num = int(float(str(y1_val).strip()))
+                        substation_number = int(float(str(y1_val).strip()))
                     except (ValueError, TypeError):
                         pass
 
@@ -162,6 +164,8 @@ class TestsheetExtractor:
                 gps_coordinate = cleaned_gps if cleaned_gps is not None else ""
                 cleaned_type = clean_val(ws_vi["N1"].value)
                 substation_type = cleaned_type if cleaned_type is not None else ""
+                cleaned_fl_site = clean_val(ws_vi["K7"].value)
+                fl_site = cleaned_fl_site if cleaned_fl_site is not None else ""
 
                 if is_marked(ws_vi["D9"].value):
                     building_type = normalize_building_type(ws_vi["C9"].value)
@@ -177,27 +181,52 @@ class TestsheetExtractor:
                     o_val = ws_vi["P9"].value if ws_vi["P9"].value is not None else ws_vi["N9"].value
                     building_type = normalize_building_type(o_val)
 
-            # Phase 3: RAW DATA sheet (photo range extraction only)
+            # Phase 3: RAW DATA sheet (photo range extraction)
             if "RAW DATA" in wb.sheetnames:
                 ws_raw = wb["RAW DATA"]
                 for row in ws_raw.iter_rows(values_only=True):
                     row_cells = [str(c).strip() if c is not None else "" for c in row]
+                    if not row_cells:
+                        continue
+
+                    # 1. Grid table schema (e.g. Row 1: [None, 'START', 'END'], Row 2: ['IR', 49, 66], Row 3: ['DG', 1715, 1739])
+                    first_cell = row_cells[0].upper()
+                    if first_cell in ("IR", "FLIR") and len(row_cells) >= 3:
+                        if ir_start is None and row_cells[1]:
+                            ir_start = self._parse_int_safe(row_cells[1])
+                        if ir_end is None and row_cells[2]:
+                            ir_end = self._parse_int_safe(row_cells[2])
+                    elif first_cell in ("DG", "IMG") and len(row_cells) >= 3:
+                        if dg_start is None and row_cells[1]:
+                            dg_start = self._parse_int_safe(row_cells[1])
+                        if dg_end is None and row_cells[2]:
+                            dg_end = self._parse_int_safe(row_cells[2])
+
+                    # 2. Label-based schema (e.g. ['IR START', 10, 'IR END', 12])
                     for idx, text in enumerate(row_cells):
                         text_upper = text.upper()
 
                         if "IR START" in text_upper or "FLIR START" in text_upper:
                             val = self._find_next_val(row_cells, idx)
-                            ir_start = self._parse_int_safe(val)
+                            parsed = self._parse_int_safe(val)
+                            if parsed is not None:
+                                ir_start = parsed
                         elif "IR END" in text_upper or "FLIR END" in text_upper:
                             val = self._find_next_val(row_cells, idx)
-                            ir_end = self._parse_int_safe(val)
+                            parsed = self._parse_int_safe(val)
+                            if parsed is not None:
+                                ir_end = parsed
 
                         elif "DG START" in text_upper or "IMG START" in text_upper:
                             val = self._find_next_val(row_cells, idx)
-                            dg_start = self._parse_int_safe(val)
+                            parsed = self._parse_int_safe(val)
+                            if parsed is not None:
+                                dg_start = parsed
                         elif "DG END" in text_upper or "IMG END" in text_upper:
                             val = self._find_next_val(row_cells, idx)
-                            dg_end = self._parse_int_safe(val)
+                            parsed = self._parse_int_safe(val)
+                            if parsed is not None:
+                                dg_end = parsed
 
                         elif "IR RANGE" in text_upper or "FLIR RANGE" in text_upper or "IR PHOTO" in text_upper:
                             val = self._find_next_val(row_cells, idx)
@@ -214,18 +243,6 @@ class TestsheetExtractor:
                             if dg_end is None:
                                 dg_end = parsed_end
 
-            # Map fixed-cell outputs to existing model fields where appropriate
-            if fl_erms:
-                fl_number = fl_erms
-            if substation_name_erms:
-                substation_name = substation_name_erms
-            elif substation_name_site:
-                substation_name = substation_name_site
-            if substation_type:
-                type_code = substation_type
-            if cycle_1 and not date_str:
-                date_str = cycle_1.strftime("%d-%m-%Y")
-
         finally:
             wb.close()
 
@@ -235,20 +252,21 @@ class TestsheetExtractor:
         )
 
         return TestsheetData(
-            pe_number=pe_num,
-            substation_name=substation_name,
+            substation_number=substation_number,
             station_name=station_name,
             date_str=date_str,
-            fl_number=fl_number,
-            type_code=type_code,
+            fl_erms=fl_erms,
+            fl_site=fl_site,
             wo_number=wo_number,
             photo_ranges=photo_ranges,
-            fl_erms=fl_erms,
             substation_name_erms=substation_name_erms,
             substation_name_site=substation_name_site,
             gps_coordinate=gps_coordinate,
             substation_type=substation_type,
             building_type=building_type,
+            ambient=ambient,
+            humidity=humidity,
+            time=time_str,
             cycle_1=cycle_1,
         )
 

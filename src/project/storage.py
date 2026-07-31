@@ -167,7 +167,16 @@ class LocalWorkspaceStorage(WorkspaceStorage):
     def get_template(self, key: str) -> Path:
         if key not in config.TEMPLATES:
             raise KeyError(f"Unknown template key: {key}")
-        return self._templates_dir / config.TEMPLATES[key]
+
+        relative_path = config.TEMPLATES[key]
+        local_path = self._templates_dir / relative_path
+
+        if not local_path.exists():
+            raise FileNotFoundError(
+                f"Required project template '{key}' ({relative_path}) is missing at '{local_path}'. "
+                f"Every project must contain its own templates in its project root directory ('{self.root_path}')."
+            )
+        return local_path
 
     def validate_existence(self) -> None:
         required = [self.root_path, self.get_python_dir()]
@@ -237,11 +246,8 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         return self.get_engr_folder() / f"ENGR-750-36-CBA-{code}-{year}.xlsx"
 
     def resolve_template_path(self, key: str) -> Path:
-        p = self.get_template(key)
-        if not p.exists():
-            raise FileNotFoundError(f"Template not found for key '{key}' at {p}")
-        return p
-
+        # get_template now strictly verifies existence and raises if missing
+        return self.get_template(key)
     def _initialize_project_workspace(self) -> None:
         """Copy missing master seed templates and seed files to the project workspace."""
         import shutil

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable, Sequence
-from pathlib import Path
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from src.master.qr02 import LocalExcelQr02Repository, Qr02Repository
@@ -50,16 +50,319 @@ def _matches_target(pkg: SubstationTestsheetPackage, key: str, target: str) -> b
     return False
 
 
+@dataclass
+class UpdateQr02StationPlan:
+    station: str
+    records: list[TestsheetData]
+    packages: list[SubstationTestsheetPackage]
+
+
+@dataclass
+class UpdateQr02CbaPlan:
+    station_plans: list[UpdateQr02StationPlan]
+    warnings: list[str]
+
+
+@dataclass
+class UpdateQr02CbaLoadResult:
+    records_updated: int
+    processed_packages: list[SubstationTestsheetPackage]
+
+
+class UpdateQr02CbaPreflightGuard:
+    """Stage 1: PreflightGuard (Pre-flight Resource Guard)
+
+    Validates environmental preconditions and workbook availability before processing.
+    """
+
+    def validate(
+        self,
+        environment: ProjectEnvironment,
+        station: str,
+        year: str,
+        repository_factory: Callable[[WorkspaceStorage, str, str], Qr02Repository] | None = None,
+    ) -> None:
+        """Validate target QR02 CBA workbook exists for the specified station."""
+        if repository_factory is None:
+            cba_path = environment.storage.get_engr_cba_path(station, year)
+            if not cba_path.exists():
+                raise FileNotFoundError(
+                    f"Target QR02 CBA workbook not found for station '{station}' at '{cba_path}'"
+                )
+
+
+class UpdateQr02CbaExtractor:
+    """Stage 2: Extractor (Read Stage)
+
+    Pure read I/O stage responsible for discovering testsheet packages and reading testsheet records.
+    """
+
+    def __init__(
+        self,
+        testsheet_repository: SubstationTestsheetRepository | None = None,
+        data_extractor: TestsheetExtractor | None = None,
+    ) -> None:
+        self.testsheet_repository = testsheet_repository or SubstationTestsheetRepository()
+        self.data_extractor = data_extractor or TestsheetExtractor()
+
+    def extract_packages(
+        self, environment: ProjectEnvironment
+    ) -> list[SubstationTestsheetPackage]:
+        """Discover all testsheet packages under the testsheet directory."""
+        testsheet_dir = environment.storage.get_testsheet_dir()
+        return list(self.testsheet_repository.discover_packages(testsheet_dir))
+
+    def extract_records(
+        self, packages: list[SubstationTestsheetPackage]
+    ) -> tuple[dict[str, list[TestsheetData]], list[str]]:
+        """Read testsheet data records for all target packages."""
+        records_map: dict[str, list[TestsheetData]] = defaultdict(list)
+        warnings: list[str] = []
+        for pkg in packages:
+            data = self._extract_single_package_data(pkg, warnings)
+            if data is not None:
+                records_map[get_package_key(pkg)].append(data)
+        return records_map, warnings
+
+    def _extract_single_package_data(
+        self, pkg: SubstationTestsheetPackage, warnings: list[str]
+    ) -> TestsheetData | None:
+        """Extract data from a single package, collecting warnings on extraction failures."""
+        if pkg.data is not None:
+            return pkg.data
+
+        try:
+            return self.data_extractor.extract_testsheet_data(
+                pkg.testsheet_path,
+                station_hint=pkg.station,
+                date_hint=pkg.date_str,
+            )
+        except Exception as exc:
+            warn_msg = f"Failed to extract testsheet data from {pkg.testsheet_path}: {exc}"
+            warnings.append(warn_msg)
+            return None
+
+
+class UpdateQr02CbaFilter:
+    """Stage 3: Filter (Filter & Row Validation Stage)
+
+    Pure logic stage responsible for filtering testsheet packages based on populate mode and processing history.
+    """
+
+    def filter(
+        self,
+        packages: list[SubstationTestsheetPackage],
+        request: UpdateQr02CbaRequest,
+        history: dict[str, Any],
+    ) -> list[SubstationTestsheetPackage]:
+        """Filter target packages according to populate mode (ALL, SPECIFIC_FOLDERS, AUTO)."""
+        is_all = self._is_all_mode(request)
+        is_specific = self._is_specific_mode(request, is_all)
+
+        if is_all:
+            return self._filter_all_mode(packages)
+        if is_specific:
+            return self._filter_specific_mode(packages, request.target_package_names)
+        return self._filter_auto_mode(packages, history)
+
+    def _is_all_mode(self, request: UpdateQr02CbaRequest) -> bool:
+        """Check if request specifies ALL populate mode."""
+        return request.mode == PopulateMode.ALL or any(
+            str(t).strip().lower() == "all" for t in request.target_package_names
+        )
+
+    def _is_specific_mode(self, request: UpdateQr02CbaRequest, is_all_mode: bool) -> bool:
+        """Check if request specifies SPECIFIC_FOLDERS populate mode."""
+        return request.mode == PopulateMode.SPECIFIC_FOLDERS or (
+            bool(request.target_package_names) and not is_all_mode
+        )
+
+    def _filter_all_mode(
+        self, packages: list[SubstationTestsheetPackage]
+    ) -> list[SubstationTestsheetPackage]:
+        """Return all packages without filtering."""
+        return list(packages)
+
+    def _filter_specific_mode(
+        self,
+        packages: list[SubstationTestsheetPackage],
+        target_package_names: tuple[str, ...],
+    ) -> list[SubstationTestsheetPackage]:
+        """Filter packages matching target package names."""
+        return [
+            pkg
+            for pkg in packages
+            if any(_matches_target(pkg, get_package_key(pkg), t) for t in target_package_names)
+        ]
+
+    def _filter_auto_mode(
+        self,
+        packages: list[SubstationTestsheetPackage],
+        history: dict[str, Any],
+    ) -> list[SubstationTestsheetPackage]:
+        """Filter out packages that have already been recorded in processing history."""
+        return [pkg for pkg in packages if get_package_key(pkg) not in history]
+
+
+class UpdateQr02CbaTransformer:
+    """Stage 4: Transformer (Transform Stage)
+
+    Pure transformation stage grouping records by station into UpdateQr02CbaPlan execution instructions.
+    """
+
+    def transform(
+        self,
+        filtered_packages: list[SubstationTestsheetPackage],
+        records_map: dict[str, list[TestsheetData]],
+        extraction_warnings: list[str],
+    ) -> UpdateQr02CbaPlan:
+        """Build execution plan by grouping filtered packages into station plans."""
+        station_groups = self._group_packages_by_station(filtered_packages)
+        station_plans: list[UpdateQr02StationPlan] = []
+
+        for station, pkgs in station_groups.items():
+            station_plan = self._build_station_plan(station, pkgs, records_map)
+            if station_plan is not None:
+                station_plans.append(station_plan)
+
+        return UpdateQr02CbaPlan(station_plans=station_plans, warnings=extraction_warnings)
+
+    def _group_packages_by_station(
+        self, packages: list[SubstationTestsheetPackage]
+    ) -> dict[str, list[SubstationTestsheetPackage]]:
+        """Group packages by station string."""
+        station_groups: dict[str, list[SubstationTestsheetPackage]] = defaultdict(list)
+        for pkg in packages:
+            station_groups[pkg.station].append(pkg)
+        return station_groups
+
+    def _build_station_plan(
+        self,
+        station: str,
+        packages: list[SubstationTestsheetPackage],
+        records_map: dict[str, list[TestsheetData]],
+    ) -> UpdateQr02StationPlan | None:
+        """Construct station plan containing records and associated packages."""
+        station_records: list[TestsheetData] = []
+        station_pkgs: list[SubstationTestsheetPackage] = []
+        for pkg in packages:
+            key = get_package_key(pkg)
+            records = records_map.get(key, [])
+            if records:
+                station_records.extend(records)
+                station_pkgs.append(pkg)
+
+        if not station_records:
+            return None
+
+        return UpdateQr02StationPlan(
+            station=station, records=station_records, packages=station_pkgs
+        )
+
+
+class UpdateQr02CbaLoader:
+    """Stage 5: Loader (Write Stage)
+
+    Pure write I/O stage responsible for upserting records into station repositories.
+    """
+
+    def load(
+        self,
+        environment: ProjectEnvironment,
+        plan: UpdateQr02CbaPlan,
+        year: str,
+        repository_factory: Callable[[WorkspaceStorage, str, str], Qr02Repository] | None = None,
+    ) -> UpdateQr02CbaLoadResult:
+        """Execute the load plan by writing records to target station repositories."""
+        total_records_updated = 0
+        processed_packages: list[SubstationTestsheetPackage] = []
+
+        for station_plan in plan.station_plans:
+            records_updated = self._load_station_plan(
+                environment, station_plan, year, repository_factory
+            )
+            total_records_updated += records_updated
+            processed_packages.extend(station_plan.packages)
+
+        return UpdateQr02CbaLoadResult(
+            records_updated=total_records_updated,
+            processed_packages=processed_packages,
+        )
+
+    def _load_station_plan(
+        self,
+        environment: ProjectEnvironment,
+        station_plan: UpdateQr02StationPlan,
+        year: str,
+        repository_factory: Callable[[WorkspaceStorage, str, str], Qr02Repository] | None,
+    ) -> int:
+        """Load records for a single station plan using repository transaction."""
+        repo = self._create_repository(environment, station_plan.station, year, repository_factory)
+        with repo.transaction() as tx:
+            return tx.upsert_qr02_cba_records(station_plan.records)
+
+    def _create_repository(
+        self,
+        environment: ProjectEnvironment,
+        station: str,
+        year: str,
+        repository_factory: Callable[[WorkspaceStorage, str, str], Qr02Repository] | None,
+    ) -> Qr02Repository:
+        """Instantiate Qr02Repository via factory or default LocalExcelQr02Repository."""
+        if repository_factory is not None:
+            return repository_factory(environment.storage, station, year)
+        return LocalExcelQr02Repository(environment.storage, station, year)
+
+
+class UpdateQr02CbaAuditor:
+    """Stage 6: Auditor (Verification & History Logging Stage)
+
+    Audits output processing, records history entries, and constructs UpdateQr02CbaResult telemetry.
+    """
+
+    def audit(
+        self,
+        environment: ProjectEnvironment,
+        plan: UpdateQr02CbaPlan,
+        load_result: UpdateQr02CbaLoadResult,
+    ) -> UpdateQr02CbaResult:
+        """Record processed packages to history and format workflow execution result."""
+        python_dir = environment.storage.get_python_dir()
+        history_file = python_dir / "qr02_processed_folders.json"
+        history_store = ProcessingHistoryStore(history_file)
+
+        newly_processed_keys = history_store.record_processed_packages(
+            load_result.processed_packages
+        )
+
+        return UpdateQr02CbaResult(
+            records_updated=load_result.records_updated,
+            processed_folders=tuple(newly_processed_keys),
+            warnings=tuple(plan.warnings),
+            errors=(),
+        )
+
+
 class UpdateQr02CbaWorkflow:
-    """Orchestrates updating QR02 CBA workbook with testsheet data."""
+    """Orchestrates updating QR02 CBA workbook with testsheet data.
+
+    Resilience Policy: best-effort (accumulates warnings for unextractable package data
+    and continues processing valid items).
+    """
 
     def __init__(
         self,
         testsheet_repository: SubstationTestsheetRepository | None = None,
         extractor: TestsheetExtractor | None = None,
     ) -> None:
-        self.testsheet_repository = testsheet_repository or SubstationTestsheetRepository()
-        self.extractor = extractor or TestsheetExtractor()
+        self.preflight_guard = UpdateQr02CbaPreflightGuard()
+        self.extractor = UpdateQr02CbaExtractor(
+            testsheet_repository=testsheet_repository, data_extractor=extractor
+        )
+        self.filter_stage = UpdateQr02CbaFilter()
+        self.transformer = UpdateQr02CbaTransformer()
+        self.loader = UpdateQr02CbaLoader()
+        self.auditor = UpdateQr02CbaAuditor()
 
     def execute(
         self,
@@ -67,46 +370,23 @@ class UpdateQr02CbaWorkflow:
         request: UpdateQr02CbaRequest,
         repository_factory: Callable[[WorkspaceStorage, str, str], Qr02Repository] | None = None,
     ) -> UpdateQr02CbaResult:
-        testsheet_dir = environment.storage.get_testsheet_dir()
-        python_dir = environment.storage.get_python_dir()
-        history_file = python_dir / "qr02_processed_folders.json"
-        history_store = ProcessingHistoryStore(history_file)
-
+        """Execute the Update QR02 CBA workflow across all 6 stages."""
         if request.progress_sink:
+            testsheet_dir = environment.storage.get_testsheet_dir()
             request.progress_sink(f"Scanning testsheet packages in {testsheet_dir}...")
 
-        packages = self.testsheet_repository.discover_packages(testsheet_dir)
-        history = history_store.load()
+        # 2. Extractor (Read package metadata)
+        all_packages = self.extractor.extract_packages(environment)
 
-        # Determine processing mode
-        is_all_mode = (
-            request.mode == PopulateMode.ALL
-            or any(str(t).strip().lower() == "all" for t in request.target_package_names)
-        )
-        is_specific_mode = (
-            request.mode == PopulateMode.SPECIFIC_FOLDERS
-            or (bool(request.target_package_names) and not is_all_mode)
-        )
+        history_file = environment.storage.get_python_dir() / "qr02_processed_folders.json"
+        history = ProcessingHistoryStore(history_file).load()
 
-        # Filter packages
-        filtered_packages: list[SubstationTestsheetPackage] = []
-        if is_all_mode:
-            filtered_packages = list(packages)
-        elif is_specific_mode:
-            filtered_packages = [
-                pkg
-                for pkg in packages
-                if any(_matches_target(pkg, get_package_key(pkg), t) for t in request.target_package_names)
-            ]
-        else:
-            # AUTO mode: skip packages whose key is in history
-            filtered_packages = [
-                pkg for pkg in packages if get_package_key(pkg) not in history
-            ]
+        # 3. Filter (Filter targets)
+        filtered_packages = self.filter_stage.filter(all_packages, request, history)
 
         if request.progress_sink:
             request.progress_sink(
-                f"Discovered {len(packages)} packages. Filtered to {len(filtered_packages)} packages to process."
+                f"Discovered {len(all_packages)} packages. Filtered to {len(filtered_packages)} packages to process."
             )
 
         if not filtered_packages:
@@ -117,84 +397,51 @@ class UpdateQr02CbaWorkflow:
                 errors=(),
             )
 
-        # Group packages by station
-        station_groups: dict[str, list[SubstationTestsheetPackage]] = defaultdict(list)
-        for pkg in filtered_packages:
-            station_groups[pkg.station].append(pkg)
+        year = (
+            getattr(environment, "year", None)
+            or getattr(environment.metadata, "year", None)
+            or "2026"
+        )
 
-        year = getattr(environment, "year", None) or getattr(environment.metadata, "year", None) or "2026"
-        total_records_updated = 0
-        warnings: list[str] = []
-        errors: list[str] = []
-        processed_packages: list[SubstationTestsheetPackage] = []
+        # 1. PreflightGuard (Assert target QR02 CBA workbooks exist)
+        stations_to_process = {pkg.station for pkg in filtered_packages}
+        for station in stations_to_process:
+            self.preflight_guard.validate(
+                environment=environment,
+                station=station,
+                year=year,
+                repository_factory=repository_factory,
+            )
 
-        # Process each station group
-        for station, station_pkgs in station_groups.items():
-            if request.progress_sink:
-                request.progress_sink(f"Processing station '{station}' ({len(station_pkgs)} packages)...")
+        # 2. Extractor (Read data records)
+        records_map, extraction_warnings = self.extractor.extract_records(filtered_packages)
+        if request.progress_sink:
+            for warn_msg in extraction_warnings:
+                request.progress_sink(warn_msg)
 
-            station_records: list[TestsheetData] = []
-            station_processed_pkgs: list[SubstationTestsheetPackage] = []
+        # 4. Transformer (Transform into load plan)
+        plan = self.transformer.transform(filtered_packages, records_map, extraction_warnings)
 
-            for pkg in station_pkgs:
-                data = pkg.data
-                if data is None:
-                    try:
-                        data = self.extractor.extract_testsheet_data(
-                            pkg.testsheet_path,
-                            station_hint=pkg.station,
-                            date_hint=pkg.date_str,
-                        )
-                    except Exception as exc:
-                        warn_msg = f"Failed to extract testsheet data from {pkg.testsheet_path}: {exc}"
-                        warnings.append(warn_msg)
-                        if request.progress_sink:
-                            request.progress_sink(warn_msg)
-                        continue
+        # 5. Loader (Write to target)
+        if request.progress_sink:
+            for station_plan in plan.station_plans:
+                request.progress_sink(
+                    f"Processing station '{station_plan.station}' ({len(station_plan.packages)} packages)..."
+                )
 
-                station_records.append(data)
-                station_processed_pkgs.append(pkg)
+        load_result = self.loader.load(
+            environment=environment,
+            plan=plan,
+            year=year,
+            repository_factory=repository_factory,
+        )
 
-            if not station_records:
-                continue
-
-            # Resolve repository
-            if repository_factory is not None:
-                repo = repository_factory(environment.storage, station, year)
-            else:
-                repo = LocalExcelQr02Repository(environment.storage, station, year)
-
-            # Open transaction and upsert records
-            with repo.transaction() as tx:
-                updated = tx.upsert_qr02_cba_records(station_records)
-                total_records_updated += updated
-
-            processed_packages.extend(station_processed_pkgs)
-
-        # Update history store
-        newly_processed_keys = history_store.record_processed_packages(processed_packages)
+        # 6. Auditor (Verify and return result)
+        result = self.auditor.audit(environment, plan, load_result)
 
         if request.progress_sink:
             request.progress_sink(
-                f"Update QR02 CBA workflow complete. {total_records_updated} records updated."
+                f"Update QR02 CBA workflow complete. {result.records_updated} records updated."
             )
 
-        return UpdateQr02CbaResult(
-            records_updated=total_records_updated,
-            processed_folders=tuple(newly_processed_keys),
-            warnings=warnings,
-            errors=errors,
-        )
-
-
-def run_update_qr02_cba(
-    environment: ProjectEnvironment,
-    request: UpdateQr02CbaRequest,
-    repository_factory: Callable[[WorkspaceStorage, str, str], Qr02Repository] | None = None,
-) -> UpdateQr02CbaResult:
-    """Standalone function entrypoint for Update QR02 CBA workflow."""
-    return UpdateQr02CbaWorkflow().execute(
-        environment=environment,
-        request=request,
-        repository_factory=repository_factory,
-    )
+        return result

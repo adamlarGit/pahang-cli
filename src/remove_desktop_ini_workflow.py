@@ -52,17 +52,22 @@ def remove_desktop_ini_files(target_directory: str | Path) -> int:
     return removed_count
 
 
-def run_remove_desktop_ini() -> int:
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from src.project.environment import ProjectEnvironment
+
+def run_remove_desktop_ini(environment: 'ProjectEnvironment | None' = None) -> int:
     """Interactive entrypoint for removing desktop.ini files."""
-    default_path = Path.cwd()
+    from src.cli_selectors import prompt_directory_path
+    
     print("\n" + "=" * 55)
     print("  🧹 REMOVE DESKTOP.INI FILES")
     print("=" * 55)
-    raw_path = input(f"Enter target folder path to scan [{default_path}]: ").strip().strip('"')
-    target_path = Path(raw_path) if raw_path else default_path
-
-    if not target_path.exists():
-        print(f"❌ Error: Path '{target_path}' does not exist.")
+    
+    default_path = environment.storage.root_path if environment else None
+    
+    target_path = prompt_directory_path("Enter target folder path to scan", default=default_path, must_exist=True)
+    if not target_path:
         return 0
 
     return remove_desktop_ini_files(target_path)

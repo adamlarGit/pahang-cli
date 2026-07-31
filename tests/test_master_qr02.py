@@ -63,8 +63,8 @@ def test_exact_fl_matching(tmp_path: Path) -> None:
     wb.close()
 
     rec = TestsheetData(
-        pe_number=1,
-        substation_name="SSU CHEROH",
+        substation_number=1,
+        substation_name_erms="SSU CHEROH",
         fl_erms="75001234",
         gps_coordinate="3.81, 101.80",
         substation_type="SSU",
@@ -102,8 +102,8 @@ def test_unmatched_fl_appends_new_row(tmp_path: Path) -> None:
     wb.close()
 
     rec = TestsheetData(
-        pe_number=1,
-        substation_name="PE UNMATCHED",
+        substation_number=1,
+        substation_name_erms="PE UNMATCHED",
         fl_erms="75009999",
         gps_coordinate="3.82, 101.81",
         substation_type="PE",
@@ -138,8 +138,8 @@ def test_fallback_append_new_row(tmp_path: Path) -> None:
     wb.close()
 
     rec = TestsheetData(
-        pe_number=3,
-        substation_name="NEW PE STATION",
+        substation_number=3,
+        substation_name_erms="NEW PE STATION",
         fl_erms="75008888",
         gps_coordinate="3.90, 101.90",
         building_type="ATTACHED",
@@ -163,12 +163,12 @@ def test_fallback_append_new_row(tmp_path: Path) -> None:
 def test_fake_qr02_repository() -> None:
     repo = FakeQr02Repository()
 
-    rec1 = TestsheetData(pe_number=1, substation_name="PE 1")
-    rec2 = TestsheetData(pe_number=2, substation_name="PE 2")
+    rec1 = TestsheetData(substation_number=1, substation_name_erms="PE 1")
+    rec2 = TestsheetData(substation_number=2, substation_name_erms="PE 2")
 
     with repo.transaction() as tx:
         tx.upsert_qr02_cba_records([rec1, rec2])
 
     assert len(repo.records) == 2
-    assert repo.records[0].substation_name == "PE 1"
-    assert repo.records[1].substation_name == "PE 2"
+    assert repo.records[0].substation_name_erms == "PE 1"
+    assert repo.records[1].substation_name_erms == "PE 2"

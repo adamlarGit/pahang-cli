@@ -14,7 +14,7 @@ def test_format_package_history_key() -> None:
         station="RAUB",
         month="01. MAY",
         date_str="01-05-2026",
-        pe_num=1,
+        substation_number=1,
         testsheet_path=Path("/tmp/testsheet.xlsx"),
         unsorted_raw_data_dir=Path("/tmp/UNSORTED RAW DATA"),
     )
@@ -32,7 +32,7 @@ def test_processing_history_store_record_and_load(tmp_path: Path) -> None:
         station="RAUB",
         month="01. MAY",
         date_str="01-05-2026",
-        pe_num=1,
+        substation_number=1,
         testsheet_path=Path("/tmp/testsheet.xlsx"),
         unsorted_raw_data_dir=Path("/tmp/UNSORTED RAW DATA"),
     )

@@ -46,6 +46,15 @@ def test_populate_total_pe_workflow_creates_and_updates_rows(mock_env: ProjectEn
     wb.save(date_dir / "001. SSU CHEROH.xlsx")
     wb.close()
 
+    total_pe_path = mock_env.storage.get_total_pe_path()
+    mock_env.storage.ensure_directory(total_pe_path.parent)
+    wb_pe = openpyxl.Workbook()
+    ws_pe = wb_pe.active
+    ws_pe.title = "DataCycle1"
+    ws_pe.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    wb_pe.save(total_pe_path)
+    wb_pe.close()
+
     workflow = PopulateTotalPeWorkflow()
     request = PopulateTotalPeRequest(mode=PopulateMode.AUTO)
     result = workflow.execute(mock_env, request)

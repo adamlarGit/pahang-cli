@@ -19,7 +19,7 @@ from src.workflows.update_data_msms import update_data_msms, get_update_data_msm
 def test_msms_models():
     record = MsmsRecord("FL123", "Sub 1", "2026-01-01", "WO123")
     assert record.functional_location == "FL123"
-    assert record.substation_name == "Sub 1"
+    assert record.substation_name_erms == "Sub 1"
     
     summary = MsmsUpdateSummary(Path("data.xlsx"), Path("pe.xlsx"), "*.xlsx")
     assert summary.engr_pattern == "*.xlsx"
@@ -62,7 +62,7 @@ def test_update_data_msms(mock_get_resources, mock_pe_repo, mock_msms_repo, mock
     resources_mock = MagicMock()
     resources_mock.data_msms_path = Path("msms.xlsx")
     resources_mock.total_pe_path = Path("pe.xlsx")
-    resources_mock.engr_pattern = "*.xlsx"
+    resources_mock.engr_files = [Path("test1.xlsx"), Path("test2.xlsx")]
     resources_mock.data_msms_column_mapping = MSMS_COLUMN_MAPPING
     resources_mock.engr_column_mapping = ENGR_COLUMN_MAPPING_11KV
     resources_mock.total_pe_column_mapping = TOTAL_PE_COLUMN_MAPPING
@@ -75,7 +75,7 @@ def test_update_data_msms(mock_get_resources, mock_pe_repo, mock_msms_repo, mock
     
     assert summary.data_msms_path == Path("msms.xlsx")
     assert summary.total_pe_path == Path("pe.xlsx")
-    assert summary.engr_pattern == "*.xlsx"
+    assert summary.engr_pattern == "test1.xlsx,test2.xlsx"
     
     mock_msms_repo.return_value.update_msms.assert_called_once()
     mock_pe_repo.return_value.update_from_engr_and_msms.assert_called_once()

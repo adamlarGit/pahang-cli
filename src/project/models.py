@@ -56,7 +56,7 @@ class ProjectMetadata:
             key=str(key),
             name=str(data.get("name", "")),
             po_number=str(data.get("po_number", "")),
-            state=str(data.get("state", "pahang")),
+            state=str(data.get("state", "")).upper(),
             voltage_type=voltage_type,
             year=str(data.get("year", "")),
             cycle=str(data.get("cycle", "")),

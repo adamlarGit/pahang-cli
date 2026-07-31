@@ -56,3 +56,16 @@ All project-specific data, user modifications, settings, and templates **MUST li
 
 ### C. Processed Folders Cache (`src/workflows/populate_total_pe_workflow.py`)
 - Processed folder history is stored inside `<base_path>/.processed_folders.json`.
+
+### D. Workspace Path Resolution & Zero CWD Leakage (`src/quick_report/composer.py`, workflow actions)
+- **Zero CWD Leakage**: Never resolve relative user inputs against `Path.cwd()` or `os.getcwd()` (which points to the `pahang-cli` repository install location).
+- **Target Folder Resolution Standard**:
+  - Absolute paths (`Path(str).is_absolute()`) are validated directly.
+  - Relative input folder paths (e.g., `"CMRN/JULY 2026/01-07-2026"`) MUST be resolved strictly relative to the active project's workspace directory (`environment.get_testsheet_dir() / folder_str`).
+- **Standard Implementation Pattern**:
+  ```python
+  candidate = Path(folder_str)
+  folder_path = candidate if candidate.is_absolute() else environment.get_testsheet_dir() / folder_str
+  if folder_path.exists():
+      packages.extend(repo.discover_packages(folder_path))
+  ```

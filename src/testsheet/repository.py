@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from src.core.normalizers import format_month_folder
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import SubstationTestsheetPackage
 
@@ -30,25 +31,24 @@ class SubstationTestsheetRepository:
         packages: list[SubstationTestsheetPackage] = []
         for df in date_folders:
             station = ""
-            month = ""
+            raw_month = ""
             date_str = df.name
 
             # Infer station and month from relative parent directory structure
-            month = ""
-            station = ""
             for idx, part in enumerate(df.parts):
                 if part.upper() in ("TESTSHEET", "RAW MATERIAL") and idx + 2 < len(df.parts):
                     station = df.parts[idx + 1]
-                    month = df.parts[idx + 2]
+                    raw_month = df.parts[idx + 2]
                     break
 
-            if not month:
+            if not raw_month:
                 if df.parent and not df.parent.name.upper().startswith("TESTSHEET"):
-                    month = df.parent.name
+                    raw_month = df.parent.name
             if not station:
                 if df.parent and df.parent.parent and not df.parent.parent.name.upper().startswith("TESTSHEET"):
                     station = df.parent.parent.name
 
+            month = format_month_folder(raw_month) or format_month_folder(date_str)
             unsorted_dir = df / "UNSORTED RAW DATA"
 
             xlsx_files = [
@@ -57,10 +57,10 @@ class SubstationTestsheetRepository:
             ]
 
             for xlsx_path in xlsx_files:
-                pe_num = 1
+                substation_number = 1
                 match = re.match(r"^(\d+)", xlsx_path.name)
                 if match:
-                    pe_num = int(match.group(1))
+                    substation_number = int(match.group(1))
 
                 data = None
                 try:
@@ -76,7 +76,7 @@ class SubstationTestsheetRepository:
                     station=station,
                     month=month,
                     date_str=date_str,
-                    pe_num=pe_num,
+                    substation_number=substation_number,
                     data=data,
                 )
                 packages.append(pkg)

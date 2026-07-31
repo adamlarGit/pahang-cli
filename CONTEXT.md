@@ -20,7 +20,7 @@ A deep module interface (`src/project/storage.py`) acting as the authoritative s
 Regional station location (e.g. `RAUB`, `KUANTAN`, `CAMERON HIGHLAND`, `BENTONG`, `TEMERLOH`, `PEKAN`).
 
 ### MonthFolder
-Monthly tracking folder inside station directories formatted as `<INDEX>. <MONTH_NAME>` (e.g., `01. MAY`, `02. JUNE`, `01. JUN`).
+Monthly tracking folder inside station directories strictly formatted as `<INDEX_2DIGITS>. <FULL_MONTH_NAME>` (e.g., `01. JANUARY`, `02. FEBRUARY`, `03. MARCH`, `04. APRIL`, `05. MAY`, `06. JUNE`, `07. JULY`, `08. AUGUST`, `09. SEPTEMBER`, `10. OCTOBER`, `11. NOVEMBER`, `12. DECEMBER`). Enforced via `format_month_folder()`.
 
 ### DailyDateFolder
 Daily inspection folder inside month folders formatted as `DD-MM-YYYY` (e.g., `01-05-2026`, `09-05-2026`).
@@ -50,3 +50,16 @@ The deep module in `src/master/qr02.py` implementing per-station ENGR `QR02 CBA`
 
 ### ENGR Station Code
 The 3-letter station abbreviation mapping (e.g. `RAUB` -> `RAU`, `KUANTAN` -> `KTN`) used to resolve per-station ENGR CBA workbook filenames matching `PYTHON/ENGR FROM DRIVE/ENGR-750-36-CBA-<STATION_CODE>-<YEAR>.xlsx`.
+
+### WhatsAppReportWorkflow
+The 6-stage ETL pipeline deep module in `src/workflows/whatsapp.py` responsible for scanning `.docx` substation reports in Quick Report date folders, matching substation numbers against `TOTAL PE.xlsx` (`DataCycle1` sheet), formatting inspection dates and station mappings, and rendering WhatsApp report `.docx` files to `PYTHON/WHATSAPP/`.
+
+### UpdateQr02CbaWorkflow
+The 6-stage ETL pipeline deep module in `src/workflows/update_qr02_cba.py` responsible for discovering testsheet packages across `TESTSHEET/`, extracting testsheet data records, filtering target packages based on populate mode (`ALL`, `SPECIFIC_FOLDERS`, `AUTO`) and processing history, transforming records into station plans, and upserting QR02 CBA workbook records via `Qr02Repository`.
+
+### WordComDocumentCompiler
+Quick Report part compilation strictly uses Word COM (`win32com.client`) RECOPY & PASTE with `Documents.Add()` to ensure FLIR Tools+ ActiveX controls (`CIRViewer...`) maintain unique shape IDs and binary OLE streams without page crosstalk or document corruption.
+
+
+
+

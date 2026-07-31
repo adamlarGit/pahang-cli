@@ -28,12 +28,14 @@ GLOBAL_TEMPLATES_DIR: Path = Path(__file__).parent / "templates"
 # ─── Template Paths (relative to global package templates directory) ───
 TEMPLATES: dict[str, str] = {
     "whatsapp_template": r"WHATSAPP\TEMPLATE WHATSAPP PYTHON.docx",
-    "vi_front_page": r"QUICK REPORT\1. FRONT PAGE TEMPLATE IR BOX Jinja2 updated.docx",
+    "vi_front_page_ir": r"QUICK REPORT\1. FRONT PAGE TEMPLATE IR BOX Jinja2 updated.docx",
+    "vi_front_page_ir_us": r"QUICK REPORT\1. FRONT PAGE TEMPLATE IR US BOX Jinja2 updated.docx",
     "vi_front_page_ir_us_tev": r"QUICK REPORT\1. FRONT PAGE TEMPLATE IR US TEV BOX Jinja2 updated.docx",
-    "vi_summary": r"QUICK REPORT\2. VI SUMMARY TEMPLATE Jinja2.docx",
-    "vi_defect": r"QUICK REPORT\10. VISUAL DEFECT Jinja2.docx",
+    "vi_summary": r"QUICK REPORT\2. VI SUMMARY TEMPLATE Jinja2 DYNAMIC.docx",
+    "vi_defect": r"QUICK REPORT\10. VISUAL DEFECT Jinja2 DYNAMIC.docx",
     "cbm_summary": r"QUICK REPORT\CBM DEFECT SUMMARY.docx",
     "cbm_summary_ir": r"QUICK REPORT\CBM DEFECT IR SUMMARY.docx",
+    "cbm_summary_ir_us": r"QUICK REPORT\CBM DEFECT IR+US SUMMARY.docx",
     "cbm_summary_ir_us_tev": r"QUICK REPORT\CBM DEFECT IR+US+TEV SUMMARY.docx",
     "cbm_defect": r"QUICK REPORT\SUBSTATION CONFIGURATION\2B CBM DEFECT.docx",
     "sub_cond_dir": r"QUICK REPORT\SUBSTATION CONFIGURATION",

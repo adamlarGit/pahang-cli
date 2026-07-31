@@ -36,6 +36,10 @@ class ProjectEnvironment:
         return self.metadata.state
 
     @property
+    def po_number(self) -> str:
+        return self.metadata.po_number
+
+    @property
     def voltage_type(self) -> str:
         return self.metadata.voltage_type
 
@@ -105,13 +109,23 @@ class ProjectEnvironment:
         )
 
     def get_vi_front_page_template(self) -> Path:
-        return self.get_template("vi_front_page")
+        techs = {t.upper() for t in self.metadata.technologies}
+        if "TEV" in techs:
+            return self.get_template("vi_front_page_ir_us_tev")
+        elif "US" in techs:
+            return self.get_template("vi_front_page_ir_us")
+        return self.get_template("vi_front_page_ir")
 
     def get_vi_summary_template(self) -> Path:
         return self.get_template("vi_summary")
 
     def get_cbm_summary_template(self) -> Path:
-        return self.get_template("cbm_summary")
+        techs = {t.upper() for t in self.metadata.technologies}
+        if "TEV" in techs:
+            return self.get_template("cbm_summary_ir_us_tev")
+        elif "US" in techs:
+            return self.get_template("cbm_summary_ir_us")
+        return self.get_template("cbm_summary_ir")
 
     def get_vi_defect_template(self) -> Path:
         return self.get_template("vi_defect")

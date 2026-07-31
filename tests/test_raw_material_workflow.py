@@ -28,6 +28,8 @@ def mock_env(tmp_path: Path) -> ProjectEnvironment:
         base_path=str(tmp_path),
     )
     storage = LocalWorkspaceStorage(tmp_path)
+    storage.ensure_directory(storage.get_raw_material_dir())
+    storage.ensure_directory(storage.get_python_dir())
     return ProjectEnvironment(metadata=meta, storage=storage)
 
 
@@ -70,6 +72,16 @@ def test_raw_material_precheck_fails_if_unsorted_raw_data_missing(mock_env: Proj
     wb.save(date_dir / "001. SSU CHEROH.xlsx")
     wb.close()
 
+    # Create a dummy TOTAL PE.xlsx for PopulateTotalPeWorkflow
+    total_pe_path = mock_env.storage.get_total_pe_path()
+    mock_env.storage.ensure_directory(total_pe_path.parent)
+    wb_pe = openpyxl.Workbook()
+    ws_pe = wb_pe.active
+    ws_pe.title = "DataCycle1"
+    ws_pe.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    wb_pe.save(total_pe_path)
+    wb_pe.close()
+
     # Populate TOTAL PE
     PopulateTotalPeWorkflow().execute(mock_env, PopulateTotalPeRequest(mode=PopulateMode.AUTO))
 
@@ -109,6 +121,16 @@ def test_raw_material_workflow_success_and_photo_sorting(mock_env: ProjectEnviro
     wb.save(date_dir / "001. SSU CHEROH.xlsx")
     wb.close()
 
+    # Create a dummy TOTAL PE.xlsx for PopulateTotalPeWorkflow
+    total_pe_path = mock_env.storage.get_total_pe_path()
+    mock_env.storage.ensure_directory(total_pe_path.parent)
+    wb_pe = openpyxl.Workbook()
+    ws_pe = wb_pe.active
+    ws_pe.title = "DataCycle1"
+    ws_pe.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    wb_pe.save(total_pe_path)
+    wb_pe.close()
+
     # Populate TOTAL PE first
     PopulateTotalPeWorkflow().execute(mock_env, PopulateTotalPeRequest(mode=PopulateMode.AUTO))
 
@@ -140,6 +162,6 @@ def test_raw_material_workflow_success_and_photo_sorting(mock_env: ProjectEnviro
 
 
 def test_extract_photo_number_trailing_sequence() -> None:
-    wf = RawMaterialWorkflow()
-    assert wf._extract_photo_number("IMG_20260724_0042.jpg", "IMG") == 42
-    assert wf._extract_photo_number("FLIR0123.jpg", "FLIR") == 123
+    filter_stage = RawMaterialWorkflow().filter_stage
+    assert filter_stage.extract_photo_number("IMG_20260724_0042.jpg", "IMG") == 42
+    assert filter_stage.extract_photo_number("FLIR0123.jpg", "FLIR") == 123

@@ -12,7 +12,7 @@ from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
 from src.workflows.models import PopulateMode, UpdateQr02CbaRequest, UpdateQr02CbaResult
-from src.workflows.update_qr02_cba import UpdateQr02CbaWorkflow, run_update_qr02_cba
+from src.workflows.update_qr02_cba import UpdateQr02CbaWorkflow
 
 
 @pytest.fixture
@@ -74,8 +74,8 @@ def test_discover_packages_and_station_grouping(mock_env: ProjectEnvironment, tm
     assert "KUANTAN" in repos
     assert len(repos["RAUB"].records) == 1
     assert len(repos["KUANTAN"].records) == 1
-    assert repos["RAUB"].records[0].fl_number == "CRAU-S001"
-    assert repos["KUANTAN"].records[0].fl_number == "CKTN-S001"
+    assert repos["RAUB"].records[0].fl_erms == "CRAU-S001"
+    assert repos["KUANTAN"].records[0].fl_erms == "CKTN-S001"
 
 
 def test_auto_mode_filtering_with_history(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
@@ -107,7 +107,7 @@ def test_auto_mode_filtering_with_history(mock_env: ProjectEnvironment, tmp_path
         return repos[station]
 
     request = UpdateQr02CbaRequest(mode=PopulateMode.AUTO)
-    result = run_update_qr02_cba(mock_env, request, repository_factory=fake_repo_factory)
+    result = UpdateQr02CbaWorkflow().execute(mock_env, request, repository_factory=fake_repo_factory)
 
     assert result.records_updated == 1
     assert "RAUB" not in repos
@@ -133,7 +133,7 @@ def test_all_mode_reprocesses_history(mock_env: ProjectEnvironment, tmp_path: Pa
         return repos[station]
 
     request = UpdateQr02CbaRequest(mode=PopulateMode.ALL)
-    result = run_update_qr02_cba(mock_env, request, repository_factory=fake_repo_factory)
+    result = UpdateQr02CbaWorkflow().execute(mock_env, request, repository_factory=fake_repo_factory)
 
     assert result.records_updated == 1
     assert "RAUB" in repos
@@ -154,7 +154,7 @@ def test_specific_mode_filtering(mock_env: ProjectEnvironment, tmp_path: Path) -
         return repos[station]
 
     request = UpdateQr02CbaRequest(mode=PopulateMode.SPECIFIC_FOLDERS, target_package_names=("01-05-2026",))
-    result = run_update_qr02_cba(mock_env, request, repository_factory=fake_repo_factory)
+    result = UpdateQr02CbaWorkflow().execute(mock_env, request, repository_factory=fake_repo_factory)
 
     assert result.records_updated == 1
     assert "RAUB" in repos
@@ -173,7 +173,7 @@ def test_history_persistence(mock_env: ProjectEnvironment, tmp_path: Path) -> No
         return repos[station]
 
     request = UpdateQr02CbaRequest(mode=PopulateMode.ALL)
-    result = run_update_qr02_cba(mock_env, request, repository_factory=fake_repo_factory)
+    result = UpdateQr02CbaWorkflow().execute(mock_env, request, repository_factory=fake_repo_factory)
 
     assert result.records_updated == 1
     assert "RAUB/01. MAY/01-05-2026" in result.processed_folders
@@ -205,7 +205,7 @@ def test_extraction_failure_logs_warning(mock_env: ProjectEnvironment, tmp_path:
         return repos[station]
 
     request = UpdateQr02CbaRequest(mode=PopulateMode.ALL)
-    result = run_update_qr02_cba(mock_env, request, repository_factory=fake_repo_factory)
+    result = UpdateQr02CbaWorkflow().execute(mock_env, request, repository_factory=fake_repo_factory)
 
     assert result.records_updated == 0
     assert len(result.warnings) == 1
@@ -219,4 +219,4 @@ def test_missing_engr_file_raises_error(mock_env: ProjectEnvironment, tmp_path: 
     # Run without providing fake_repo_factory (so LocalExcelQr02Repository runs)
     request = UpdateQr02CbaRequest(mode=PopulateMode.ALL)
     with pytest.raises(FileNotFoundError):
-        run_update_qr02_cba(mock_env, request)
+        UpdateQr02CbaWorkflow().execute(mock_env, request)

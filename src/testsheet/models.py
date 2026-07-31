@@ -48,20 +48,21 @@ class TestsheetData:
 
     __test__ = False
 
-    pe_number: int
-    substation_name: str
+    substation_number: int
+    substation_name_erms: str
     station_name: str = ""
     date_str: str = ""
-    fl_number: str = ""
-    type_code: str = ""
+    fl_erms: str = ""
+    fl_site: str = ""
     wo_number: str = ""
     photo_ranges: RawPhotoRanges = RawPhotoRanges()
-    fl_erms: str = ""
-    substation_name_erms: str = ""
     substation_name_site: str = ""
     gps_coordinate: str = ""
     substation_type: str = ""
     building_type: str | None = None
+    ambient: str = "-"
+    humidity: str = "-"
+    time: str = "-"
     cycle_1: datetime | None = None
 
 
@@ -76,5 +77,5 @@ class SubstationTestsheetPackage:
     station: str
     month: str
     date_str: str
-    pe_num: int
+    substation_number: int
     data: TestsheetData | None = None

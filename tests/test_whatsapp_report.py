@@ -4,91 +4,43 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
 import openpyxl
 import pytest
 
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
-from src.whatsapp import (
-    QUALIFYING_PDF_PATTERN,
-    WhatsAppReportItem,
-    WhatsAppReportResources,
-    WhatsAppReportSummary,
-    build_quick_report_batch_confirmation_lines,
-    generate_whatsapp_report,
-    get_quick_report_batch_option_title,
-    is_selectable_quick_report_batch,
-    list_qualifying_batch_pdfs,
-)
+from src.whatsapp.models import WhatsAppReportResources
 from src.workflows.whatsapp import (
-    run_generate_whatsapp_report,
-    select_quick_report_batch,
+    QUALIFYING_DOCX_PATTERN,
+    WhatsAppReportWorkflow,
 )
 from src.workflows.models import WhatsAppReportRequest, WhatsAppReportResult
 from src.workflows.service import WorkflowService
 
 
-def test_qualifying_pdf_pattern_matching() -> None:
-    """Verify PDF regex matching for PE number, name stem, and defect suffix."""
-    m1 = QUALIFYING_PDF_PATTERN.match("001. SSU CHEROH (VI).pdf")
+def test_qualifying_docx_pattern_matching() -> None:
+    """Verify DOCX regex matching for PE number, name stem, and defect suffix."""
+    m1 = QUALIFYING_DOCX_PATTERN.match("001. SSU CHEROH (VI).docx")
     assert m1 is not None
     assert m1.group(1) == "001"
     assert m1.group(2) == "SSU CHEROH"
     assert m1.group(3) == "VI"
 
-    m2 = QUALIFYING_PDF_PATTERN.match("002 PE PEKAN.pdf")
+    m2 = QUALIFYING_DOCX_PATTERN.match("002 PE PEKAN.docx")
     assert m2 is not None
     assert m2.group(1) == "002"
     assert m2.group(2) == "PE PEKAN"
     assert m2.group(3) is None
 
-    m3 = QUALIFYING_PDF_PATTERN.match("10. MARAN (IR+US+VI).pdf")
+    m3 = QUALIFYING_DOCX_PATTERN.match("10. MARAN (IR+US+VI).docx")
     assert m3 is not None
     assert m3.group(1) == "10"
     assert m3.group(2) == "MARAN"
     assert m3.group(3) == "IR+US+VI"
 
-    assert QUALIFYING_PDF_PATTERN.match("random_file.docx") is None
-    assert QUALIFYING_PDF_PATTERN.match("summary.pdf") is None
-
-
-def test_list_qualifying_batch_pdfs(tmp_path: Path) -> None:
-    """Verify sorting and filtering of batch PDFs by numerical PE prefix."""
-    batch_dir = tmp_path / "batch"
-    batch_dir.mkdir()
-
-    (batch_dir / "010 PE TEN.pdf").write_bytes(b"%PDF-1.4")
-    (batch_dir / "001 PE ONE (VI).pdf").write_bytes(b"%PDF-1.4")
-    (batch_dir / "002 PE TWO.pdf").write_bytes(b"%PDF-1.4")
-    (batch_dir / "notes.txt").write_text("hello")
-
-    pdfs = list_qualifying_batch_pdfs(batch_dir)
-    assert len(pdfs) == 3
-    assert pdfs[0].name == "001 PE ONE (VI).pdf"
-    assert pdfs[1].name == "002 PE TWO.pdf"
-    assert pdfs[2].name == "010 PE TEN.pdf"
-
-    assert is_selectable_quick_report_batch(batch_dir) is True
-    assert get_quick_report_batch_option_title(batch_dir) == "batch (3 PDFs)"
-
-
-def test_build_quick_report_batch_confirmation_lines(tmp_path: Path) -> None:
-    """Verify confirmation summary text generation."""
-    root_dir = tmp_path / "QUICK REPORT"
-    batch_dir = root_dir / "MARAN" / "01-05-2026"
-    batch_dir.mkdir(parents=True)
-
-    (batch_dir / "001 SSU CHEROH (VI).pdf").write_bytes(b"%PDF-1.4")
-    (batch_dir / "005 SSU LUIT.pdf").write_bytes(b"%PDF-1.4")
-
-    lines = build_quick_report_batch_confirmation_lines(root_dir, batch_dir)
-    assert len(lines) == 5
-    assert "MARAN / 01-05-2026" in lines[1]
-    assert "Qualifying PDFs: 2" in lines[2]
-    assert "First PE: 1" in lines[3]
-    assert "Last PE: 5" in lines[4]
+    assert QUALIFYING_DOCX_PATTERN.match("random_file.txt") is None
+    assert QUALIFYING_DOCX_PATTERN.match("summary.pdf") is None
 
 
 def create_dummy_total_pe_file(total_pe_path: Path) -> None:
@@ -125,8 +77,9 @@ def test_generate_whatsapp_report(tmp_path: Path) -> None:
     total_pe_path = python_dir / "TOTAL PE.xlsx"
     create_dummy_total_pe_file(total_pe_path)
 
-    (qr_dir / "001 SSU CHEROH (VI).pdf").write_bytes(b"%PDF-1.4")
-    (qr_dir / "002 PE PEKAN.pdf").write_bytes(b"%PDF-1.4")
+    (qr_dir / "001 SSU CHEROH (VI).docx").write_bytes(b"dummy")
+    (qr_dir / "002 PE PEKAN.docx").write_bytes(b"dummy")
+    (qr_dir / "003 SHOULD BE IGNORED.pdf").write_bytes(b"%PDF-1.4")
 
     metadata = ProjectMetadata(
         key="pahang_2026",
@@ -140,20 +93,29 @@ def test_generate_whatsapp_report(tmp_path: Path) -> None:
         base_path=str(root_path),
     )
     storage = LocalWorkspaceStorage(root_path, templates_dir=template_path.parent)
+    from unittest.mock import MagicMock
+    storage.get_template = MagicMock(return_value=template_path)
     env = ProjectEnvironment(metadata=metadata, storage=storage)
 
-    resources = WhatsAppReportResources(
-        quick_report_dir=root_path / "QUICK REPORT",
-        save_dir=python_dir / "WHATSAPP",
-        template_path=template_path,
-        total_pe_path=total_pe_path,
-        station_mapping={"CMRN": "CAMERON HIGHLAND"},
-    )
+    original_resources = env.get_whatsapp_report_resources
+    def mock_resources():
+        res = original_resources()
+        return WhatsAppReportResources(
+            quick_report_dir=res.quick_report_dir,
+            save_dir=python_dir / "WHATSAPP",
+            template_path=template_path,
+            total_pe_path=total_pe_path,
+            station_mapping={"CMRN": "CAMERON HIGHLAND"},
+        )
+    env.get_whatsapp_report_resources = mock_resources
 
-    summary = generate_whatsapp_report(resources, qr_dir)
-    assert summary.substations_count == 2
-    assert summary.output_path.exists()
-    assert summary.output_path.name == "01. CAMERON HIGHLAND 01-05-2026.docx"
+    workflow = WhatsAppReportWorkflow()
+    request = WhatsAppReportRequest(report_dir=qr_dir)
+    result = workflow.execute(env, request)
+    
+    assert result.substations_count == 2
+    assert result.output_path.exists()
+    assert result.output_path.name == "01. CAMERON HIGHLAND 01-05-2026.docx"
 
 
 def test_workflow_service_run_whatsapp(tmp_path: Path) -> None:
@@ -177,7 +139,7 @@ def test_workflow_service_run_whatsapp(tmp_path: Path) -> None:
     total_pe_path = python_dir / "TOTAL PE.xlsx"
     create_dummy_total_pe_file(total_pe_path)
 
-    (qr_dir / "001 SSU CHEROH (VI).pdf").write_bytes(b"%PDF-1.4")
+    (qr_dir / "001 SSU CHEROH (VI).docx").write_bytes(b"dummy")
 
     metadata = ProjectMetadata(
         key="pahang_2026",
@@ -191,6 +153,8 @@ def test_workflow_service_run_whatsapp(tmp_path: Path) -> None:
         base_path=str(root_path),
     )
     storage = LocalWorkspaceStorage(root_path, templates_dir=template_path.parent)
+    from unittest.mock import MagicMock
+    storage.get_template = MagicMock(return_value=template_path)
     env = ProjectEnvironment(metadata=metadata, storage=storage)
 
     service = WorkflowService()
@@ -201,9 +165,9 @@ def test_workflow_service_run_whatsapp(tmp_path: Path) -> None:
         res = original_resources()
         return WhatsAppReportResources(
             quick_report_dir=res.quick_report_dir,
-            save_dir=res.save_dir,
+            save_dir=python_dir / "WHATSAPP",
             template_path=template_path,
-            total_pe_path=res.total_pe_path,
+            total_pe_path=total_pe_path,
             station_mapping={"CMRN": "CAMERON HIGHLAND"},
         )
     env.get_whatsapp_report_resources = mock_resources

@@ -225,20 +225,44 @@ class QuickReportAction(ProjectWorkflowAction):
 
         service = WorkflowService()
         result = service.run_quick_report(environment, request)
-        print(f"Reports generated: {result.reports_generated}")
-        if result.generated_paths:
-            print("Generated paths:")
-            for p in result.generated_paths:
-                print(f"  - {p}")
-        if result.warnings:
-            print(f"Warnings ({len(result.warnings)}):")
-            for w in result.warnings:
-                print(f"  - {w}")
-        if result.errors:
-            print(f"Errors ({len(result.errors)}):")
-            for e in result.errors:
-                print(f"  - {e}")
+        _print_quick_report_batch_summary(result)
         return result
+
+
+def _print_quick_report_batch_summary(result: QuickReportResult) -> None:
+    """Display clean formatted CLI summary box for quick report batch runs."""
+    total_generated = result.reports_generated
+    total_failed = len(result.errors)
+    total_warnings = len(result.warnings)
+    total_processed = total_generated + total_failed
+
+    print("\n  =======================================================")
+    print("    📌 QUICK REPORT BATCH EXECUTION SUMMARY")
+    print("  =======================================================")
+    print(f"    Total Processed : {total_processed}")
+    print(f"    Succeeded       : {total_generated}")
+    print(f"    Failed          : {total_failed}")
+    print(f"    Warnings        : {total_warnings}")
+    print("  =======================================================")
+
+    if result.generated_paths:
+        print("\n    📄 GENERATED QUICK REPORTS:")
+        for p in result.generated_paths:
+            print(f"      ✓ {p.name}")
+
+    if result.warnings:
+        print("\n    ⚠️ WARNINGS:")
+        for w in result.warnings:
+            print(f"      - {w}")
+
+    if result.errors:
+        print("\n    ❌ FAILED SUBSTATIONS:")
+        for e in result.errors:
+            err_msg = Path(e).name if ("/" in str(e) or "\\" in str(e)) else str(e)
+            print(f"      - [FAILED] {err_msg}")
+
+    print("  =======================================================\n")
+
 
 
 VisualReportAction = QuickReportAction
@@ -252,25 +276,81 @@ class PostProcessingPipelineAction(ProjectWorkflowAction):
         return service.run_postprocessing_pipeline(environment)
 
 
+def _select_whatsapp_report_batch(root_dir: Path) -> Path | None:
+    from pathlib import Path
+    from src import cli_selectors
+    from src.workflows.whatsapp import QUALIFYING_DOCX_PATTERN
+    
+    root_path = Path(root_dir)
+    
+    def _list_qualifying(batch_dir):
+        bp = Path(batch_dir)
+        if not bp.exists() or not bp.is_dir():
+            return []
+        q = []
+        for child in bp.iterdir():
+            if child.is_file() and child.suffix.lower() == ".docx":
+                m = QUALIFYING_DOCX_PATTERN.match(child.name)
+                if m:
+                    q.append((int(m.group(1)), child))
+        q.sort(key=lambda x: x[0])
+        return [path for _, path in q]
+
+    def _is_selectable(batch_dir):
+        return bool(_list_qualifying(batch_dir))
+
+    def _get_title(batch_dir):
+        bp = Path(batch_dir)
+        c = len(_list_qualifying(bp))
+        if c:
+            return f"{bp.name} ({c} DOCXs)"
+        return bp.name
+
+    def _get_lines(batch_dir):
+        bp = Path(batch_dir)
+        q = _list_qualifying(bp)
+        if not q:
+            return [f"No qualifying DOCXs in batch: {bp.name}"]
+        nums = [int(QUALIFYING_DOCX_PATTERN.match(p.name).group(1)) for p in q]
+        try:
+            rel = " / ".join(bp.relative_to(root_path).parts)
+        except ValueError:
+            rel = bp.name
+        return [
+            "Generate WhatsApp report for this batch?",
+            f"Batch: {rel}",
+            f"Qualifying DOCXs: {len(q)}",
+            f"First PE: {nums[0]}",
+            f"Last PE: {nums[-1]}",
+        ]
+
+    return cli_selectors.select_directory_tree(
+        root_path,
+        title="Select Quick Report Batch",
+        is_selectable=_is_selectable,
+        get_child_title=lambda path, _: _get_title(path),
+        get_confirmation_lines=_get_lines,
+    )
+
+
 class WhatsAppReportAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for generating WhatsApp reports."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
-        from src.workflows.whatsapp import select_quick_report_batch
-
-        selected_batch = select_quick_report_batch(environment.get_quick_report_dir())
-        if selected_batch is None:
+        resources = environment.get_whatsapp_report_resources()
+        report_dir = _select_whatsapp_report_batch(resources.quick_report_dir)
+        if report_dir is None:
             print("Operation cancelled.")
             return None
 
         request = WhatsAppReportRequest(
-            report_dir=selected_batch,
+            report_dir=report_dir,
             progress_sink=_cli_progress_sink,
         )
         service = WorkflowService()
         result = service.run_whatsapp(environment, request)
         print(f"Substations processed: {result.substations_count}")
-        if result.output_path:
+        if getattr(result, "output_path", None):
             print(f"WhatsApp report generated: {result.output_path}")
         return result
 

@@ -22,11 +22,11 @@ from src.master.total_pe import LocalExcelTotalPeRepository
 from src.msms.repository import col_to_index
 
 
-def load_engr_files(pattern: str, engr_mapping: dict[str, str], sheet_name: str = "QR02 CBA") -> pd.DataFrame:
+def load_engr_files(files: list[str | Path], engr_mapping: dict[str, str], sheet_name: str = "QR02 CBA") -> pd.DataFrame:
     """Load and combine multiple ENGR Excel files."""
-    engr_files = list(glob(pattern))
+    engr_files = files
     if not engr_files:
-        raise FileNotFoundError(f"No ENGR files found matching pattern: {pattern}")
+        raise FileNotFoundError(f"No ENGR files provided.")
     
     logging.info(f"Found {len(engr_files)} ENGR files")
     
@@ -43,30 +43,28 @@ def load_engr_files(pattern: str, engr_mapping: dict[str, str], sheet_name: str 
     return combined
 
 
-def get_update_data_msms_resources(env: ProjectEnvironment):
+@dataclass(frozen=True)
+class UpdateDataMsmsResources:
+    """Resources resolved from workspace storage for DATA_MSMS update workflow."""
+
+    data_msms_path: Path
+    total_pe_path: Path
+    engr_files: list[Path]
+    data_msms_column_mapping: dict[str, str]
+    engr_column_mapping: dict[str, str]
+    total_pe_column_mapping: dict[str, str]
+
+
+def get_update_data_msms_resources(env: ProjectEnvironment) -> UpdateDataMsmsResources:
     """Get project resources needed for MSMS updates."""
-    from dataclasses import make_dataclass
-    
-    UpdateDataMsmsResources = make_dataclass('UpdateDataMsmsResources', [
-        ('data_msms_path', Path),
-        ('total_pe_path', Path),
-        ('engr_pattern', str),
-        ('data_msms_column_mapping', dict),
-        ('engr_column_mapping', dict),
-        ('total_pe_column_mapping', dict),
-    ])
-    
     engr_mapping = ENGR_COLUMN_MAPPING_33KV if "33kV" in env.voltage_type else ENGR_COLUMN_MAPPING_11KV
-    engr_pattern_str = f"{env.base_path}/PYTHON/ENGR FROM DRIVE/ENGR-*.xlsx"
-    if hasattr(env, "get_engr_pattern"):
-        engr_pattern_str = env.get_engr_pattern()
-        
-    data_msms_path = env.base_path / "PYTHON" / "DATA MSMS.xlsx"
-    
+    engr_files = env.storage.list_engr_files()
+    data_msms_path = env.storage.get_data_msms_path()
+
     return UpdateDataMsmsResources(
         data_msms_path=data_msms_path,
-        total_pe_path=env.get_total_pe_path(),
-        engr_pattern=engr_pattern_str,
+        total_pe_path=env.storage.get_total_pe_path(),
+        engr_files=engr_files,
         data_msms_column_mapping=MSMS_COLUMN_MAPPING,
         engr_column_mapping=engr_mapping,
         total_pe_column_mapping=TOTAL_PE_COLUMN_MAPPING,
@@ -78,7 +76,7 @@ def update_data_msms(env: ProjectEnvironment) -> MsmsUpdateSummary:
     resources = get_update_data_msms_resources(env)
 
     data_msms = pd.read_excel(resources.data_msms_path)
-    engr_excel = load_engr_files(resources.engr_pattern, resources.engr_column_mapping)
+    engr_excel = load_engr_files(resources.engr_files, resources.engr_column_mapping)
     
     workbook_mappings = WorkbookUpdateMappings(
         data_msms=resources.data_msms_column_mapping,
@@ -98,7 +96,7 @@ def update_data_msms(env: ProjectEnvironment) -> MsmsUpdateSummary:
     return MsmsUpdateSummary(
         data_msms_path=resources.data_msms_path,
         total_pe_path=resources.total_pe_path,
-        engr_pattern=resources.engr_pattern,
+        engr_pattern=",".join(str(p) for p in resources.engr_files),
     )
 
 

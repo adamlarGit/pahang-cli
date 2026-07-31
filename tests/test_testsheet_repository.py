@@ -19,14 +19,14 @@ def pahang_testsheet_tree(tmp_path: Path) -> Path:
     unsorted_dir.mkdir()
 
     # Create 001.xlsx and 002.xlsx
-    for pe_num, name in [(1, "001. SSU CHEROH.xlsx"), (2, "002. RM CHEROH.xlsx")]:
+    for substation_number, name in [(1, "001. SSU CHEROH.xlsx"), (2, "002. RM CHEROH.xlsx")]:
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "RAW DATA"
         ws.cell(1, 1, "PE NO")
-        ws.cell(1, 2, pe_num)
+        ws.cell(1, 2, substation_number)
         ws.cell(2, 1, "SUBSTATION NAME")
-        ws.cell(2, 2, f"PE_{pe_num}")
+        ws.cell(2, 2, f"PE_{substation_number}")
         wb.save(date_dir / name)
         wb.close()
 
@@ -43,7 +43,7 @@ def test_discover_packages(pahang_testsheet_tree: Path) -> None:
     assert pkg1.station == "RAUB"
     assert pkg1.month == "01. MAY"
     assert pkg1.date_str == "01-05-2026"
-    assert pkg1.pe_num in (1, 2)
+    assert pkg1.substation_number in (1, 2)
     assert pkg1.unsorted_raw_data_dir.name == "UNSORTED RAW DATA"
     assert pkg1.testsheet_path.exists()
 

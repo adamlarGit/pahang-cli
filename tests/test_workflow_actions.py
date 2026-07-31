@@ -28,6 +28,7 @@ def mock_env(tmp_path: Path) -> ProjectEnvironment:
         base_path=str(tmp_path),
     )
     storage = LocalWorkspaceStorage(tmp_path)
+    storage.get_template = MagicMock(return_value=tmp_path) # prevent FileNotFoundError
     return ProjectEnvironment(metadata=meta, storage=storage)
 
 
@@ -79,4 +80,28 @@ def test_quick_report_action_folder_selection_cancel(mock_env: ProjectEnvironmen
         with patch("src.cli_selectors.select_pahang_date_folder", return_value=None):
             res = action.execute(mock_env)
             assert res is None
+
+
+def test_print_quick_report_batch_summary(capsys: pytest.CaptureFixture[str]) -> None:
+    """Verify _print_quick_report_batch_summary formats CLI summary box."""
+    from src.project_workflow_actions import _print_quick_report_batch_summary
+
+    result = QuickReportResult(
+        reports_generated=2,
+        generated_paths=[Path("001. SUBSTATION A.docx"), Path("002. SUBSTATION B (IR).docx")],
+        warnings=["Missing DG photo for SUBSTATION B"],
+        errors=["003. SUBSTATION C: PCE VI sheet missing"],
+    )
+
+    _print_quick_report_batch_summary(result)
+    captured = capsys.readouterr().out
+
+    assert "QUICK REPORT BATCH EXECUTION SUMMARY" in captured
+    assert "Total Processed : 3" in captured
+    assert "Succeeded       : 2" in captured
+    assert "Failed          : 1" in captured
+    assert "Warnings        : 1" in captured
+    assert "✓ 001. SUBSTATION A.docx" in captured
+    assert "[FAILED] 003. SUBSTATION C: PCE VI sheet missing" in captured
+
 

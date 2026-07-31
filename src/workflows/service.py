@@ -47,17 +47,18 @@ class WorkflowService:
     ) -> UpdateQr02CbaResult:
         if request.progress_sink:
             request.progress_sink("Executing Update QR02 CBA workflow...")
-        from src.workflows.update_qr02_cba import run_update_qr02_cba
-        return run_update_qr02_cba(environment, request)
+        from src.workflows.update_qr02_cba import UpdateQr02CbaWorkflow
+        workflow = UpdateQr02CbaWorkflow()
+        return workflow.execute(environment, request)
 
     def run_quick_report(
         self, environment: ProjectEnvironment, request: QuickReportRequest
     ) -> QuickReportResult:
         if request.progress_sink:
             request.progress_sink("Executing Quick Report generation...")
-        from src.quick_report import QuickReportComposer
-        composer = QuickReportComposer()
-        return composer.compose(environment, request)
+        from src.workflows.quick_report import QuickReportWorkflow
+        workflow = QuickReportWorkflow()
+        return workflow.execute(environment, request)
 
     def run_update_data_msms(
         self, environment: ProjectEnvironment
@@ -70,21 +71,9 @@ class WorkflowService:
     ) -> WhatsAppReportResult:
         if request.progress_sink:
             request.progress_sink("Executing WhatsApp Report generation...")
-        from src.whatsapp import generate_whatsapp_report
-        from src.workflows.whatsapp import run_generate_whatsapp_report
-
-        if request.report_dir is not None:
-            summary = generate_whatsapp_report(environment, request.report_dir)
-        else:
-            summary = run_generate_whatsapp_report(environment)
-
-        if summary is None:
-            return WhatsAppReportResult(substations_count=0)
-
-        return WhatsAppReportResult(
-            substations_count=summary.substations_count,
-            output_path=summary.output_path,
-        )
+        from src.workflows.whatsapp import WhatsAppReportWorkflow
+        workflow = WhatsAppReportWorkflow()
+        return workflow.execute(environment, request)
 
     def run_postprocessing_pipeline(
         self, environment: ProjectEnvironment

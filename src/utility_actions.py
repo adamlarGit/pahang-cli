@@ -110,11 +110,25 @@ def _load_whatsapp_runner() -> Callable[[], object]:
     def _run() -> None:
         from src.project.environment import get_or_create_utility_environment
         from src.workflows.service import WorkflowService
+        from src.workflows.models import WhatsAppReportRequest
+        from src.project_workflow_actions import _select_whatsapp_report_batch
 
         print("\n[Generate WhatsApp report]")
         env = get_or_create_utility_environment()
+        if not env:
+            print("No project environment available.")
+            return None
+            
         try:
-            return WorkflowService.run_whatsapp_report(env)
+            resources = env.get_whatsapp_report_resources()
+            report_dir = _select_whatsapp_report_batch(resources.quick_report_dir)
+            if report_dir is None:
+                print("Operation cancelled.")
+                return None
+                
+            request = WhatsAppReportRequest(report_dir=report_dir)
+            service = WorkflowService()
+            return service.run_whatsapp(env, request)
         except Exception as e:
             print(f"Failed to generate WhatsApp report: {e}")
 
@@ -140,9 +154,14 @@ def _load_msms_runner() -> Callable[[], object]:
 
 
 def _load_remove_desktop_ini_runner() -> Callable[[], object]:
-    from src.remove_desktop_ini_workflow import run_remove_desktop_ini
+    def _run() -> object:
+        from src.project.environment import get_or_create_utility_environment
+        from src.remove_desktop_ini_workflow import run_remove_desktop_ini
 
-    return run_remove_desktop_ini
+        env = get_or_create_utility_environment()
+        return run_remove_desktop_ini(env)
+
+    return _run
 
 
 UTILITY_ACTIONS: tuple[UtilityAction, ...] = (
