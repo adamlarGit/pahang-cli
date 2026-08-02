@@ -3,32 +3,16 @@
 from __future__ import annotations
 
 import gc
-import logging
-from copy import deepcopy
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from docxtpl import DocxTemplate
 from jinja2 import Environment, Undefined
 
-from src.quick_report.cbm_family import QuickReportFamilySpec, QUICK_REPORT_FAMILY_SPECS_BY_ID
+from src.quick_report.cbm_family import QuickReportFamilySpec
 from src.quick_report.utils import sanitize_filename
 
 _MISSING = object()
-
-
-@dataclass
-class PreparedTechSummaryRow:
-    equipment: str
-    brand: str
-    model: str
-    rating: str
-    defect_area: str
-    remarks: str
-    ir_reading: str
-    us_reading: str
-    tev_reading: str
 
 
 class PreservingUndefined(Undefined):
@@ -235,7 +219,15 @@ def _build_swg_render_context(payload: object, *, overview: bool, item_key: str 
             "linknumber": item_key,
             "loadamp": "",
             "serialnumber": "",
-            "us": {"char": _text_or_empty(_lookup_family_value(payload, "defect_from"))},
+            "ir": {"reading": _text_or_empty(_lookup_family_value(payload, "ir_reading"))},
+            "us": {
+                "reading": _text_or_empty(_lookup_family_value(payload, "us_reading")),
+                "char": _text_or_empty(_lookup_family_value(payload, "us_char")),
+            },
+            "tev": {
+                "reading": _text_or_empty(_lookup_family_value(payload, "tev_reading")),
+                "char": _text_or_empty(_lookup_family_value(payload, "tev_char")),
+            },
         },
     }) or {}
 
@@ -252,9 +244,11 @@ def _build_tx_render_context(payload: object, *, overview: bool, item_key: str =
             "number": item_key,
             "rating": _text_or_empty(_lookup_family_value(payload, "rating")),
             "serialnumber": "",
-        },
-        "panel": {
-            "us": {"char": _text_or_empty(_lookup_family_value(payload, "defect_from"))},
+            "ir": {"reading": _text_or_empty(_lookup_family_value(payload, "ir_reading"))},
+            "us": {
+                "reading": _text_or_empty(_lookup_family_value(payload, "us_reading")),
+                "char": _text_or_empty(_lookup_family_value(payload, "us_char")),
+            },
         },
     }) or {}
 
@@ -293,116 +287,3 @@ def _build_family_render_context(family_spec: QuickReportFamilySpec, payload: ob
     if family_spec.id == "battery":
         return _build_battery_render_context(payload, overview=overview, item_key=item_key, item_suffix=item_suffix)
     return payload if isinstance(payload, dict) else {}
-
-
-def generate_front_page(pe_info: dict, template_path: str, output_dir: str, pe_number: int) -> Path:
-    """Generate the CBM quick report front page."""
-    doc = DocxTemplate(template_path)
-    doc.render(_preserve_blank_render_values(pe_info), jinja_env=_build_jinja_env(), autoescape=True)
-    out_path = Path(output_dir) / f"{pe_number:03d}_1 FRONT PAGE.docx"
-    doc.save(out_path)
-    return out_path
-
-
-def generate_quick_report_detail_pages(
-    groups: list[object],
-    family_spec: QuickReportFamilySpec,
-    template_paths: dict[str, str | Path],
-    output_dir: str | Path,
-    pe_number: int,
-    pe_info: dict,
-) -> list[Path]:
-    """Generate one quick-report family with overview and repeated detail pages."""
-    if not groups:
-        return []
-
-    overview_template_path = template_paths.get(family_spec.overview_template_key)
-    if not overview_template_path:
-        return []
-
-    overview_path = Path(overview_template_path)
-    if not overview_path.exists():
-        return []
-
-    output_paths: list[Path] = []
-    pe_num_str = f"{pe_number:03d}"
-    output_dir_path = Path(output_dir)
-
-    for group_index, group in enumerate(groups, start=1):
-        group_item_key = _text_or_empty(_payload_get(group, "item_key", "")).strip()
-        group_item_suffix = _text_or_empty(_payload_get(group, "item_suffix", "")).strip()
-        item_key = sanitize_filename(group_item_key or f"GROUP {group_index}")
-        
-        overview_context = pe_info.copy()
-        overview_context.update(_build_family_render_context(
-            family_spec, _payload_get(group, "overview", {}), overview=True, item_key=group_item_key, item_suffix=group_item_suffix
-        ))
-        
-        overview_output = output_dir_path / f"{pe_num_str}_2B {family_spec.output_label} OVERVIEW {item_key}.docx"
-        _render_docx_template(overview_template_path, overview_output, overview_context)
-        output_paths.append(overview_output)
-
-        detail_groups = _payload_get(group, "detail_groups", {})
-        for role_index, role_spec in enumerate(family_spec.detail_roles, start=1):
-            role_template_path = template_paths.get(role_spec.template_key)
-            if not role_template_path or not Path(role_template_path).exists():
-                continue
-
-            for defect_index, defect_context in enumerate(detail_groups.get(role_spec.id, []), start=1):
-                render_context = pe_info.copy()
-                render_context.update(_build_family_render_context(
-                    family_spec, defect_context, overview=False, item_key=group_item_key, item_suffix=group_item_suffix
-                ))
-                defect_path = output_dir_path / f"{pe_num_str}_2B {role_spec.output_label} DEFECT {item_key} part{defect_index}.docx"
-                _render_docx_template(role_template_path, defect_path, render_context)
-                output_paths.append(defect_path)
-
-    return output_paths
-
-
-def prepare_tech_summary_rows(defects: list[dict]) -> list[PreparedTechSummaryRow]:
-    """Prepare summary rows pairing IR, US, and TEV defect readings."""
-    paired: dict[tuple[str, str, str], PreparedTechSummaryRow] = {}
-    
-    for defect in defects:
-        equip = _text_or_empty(defect.get("equipment")).strip()
-        area = _text_or_empty(defect.get("defect_area")).strip()
-        remarks = _text_or_empty(defect.get("additional_remarks")).strip()
-        key = (equip, area, remarks)
-        
-        if key not in paired:
-            paired[key] = PreparedTechSummaryRow(
-                equipment=equip,
-                brand=_text_or_empty(defect.get("brand")),
-                model=_text_or_empty(defect.get("model")),
-                rating=_text_or_empty(defect.get("rating")),
-                defect_area=area,
-                remarks=remarks,
-                ir_reading="-",
-                us_reading="-",
-                tev_reading="-",
-            )
-            
-        tech = _text_or_empty(defect.get("technology")).upper()
-        if tech == "IR":
-            val = defect.get("temperature")
-            paired[key].ir_reading = f"{float(val)} °C" if val else "-"
-        elif tech == "US":
-            val = defect.get("us_value")
-            paired[key].us_reading = f"{int(float(val))}dB" if val else "-"
-        elif tech == "TEV":
-            val = defect.get("tev_value")
-            paired[key].tev_reading = f"{int(float(val))}dB" if val else "-"
-            
-    return list(paired.values())
-
-
-def generate_cbm_tech_summary(pe_info: dict, defects: list[dict], template_path: str, output_dir: str, pe_number: int) -> Path:
-    """Generate CBM technical summary page joining IR, US, and TEV."""
-    rows = prepare_tech_summary_rows(defects)
-    context = pe_info.copy()
-    context["defects"] = [row.__dict__ for row in rows]
-    
-    out_path = Path(output_dir) / f"{pe_number:03d}_2A CBM DEFECT SUMMARY.docx"
-    _render_docx_template(template_path, out_path, context)
-    return out_path

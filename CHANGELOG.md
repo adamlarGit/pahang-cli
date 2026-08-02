@@ -5,6 +5,22 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-08-03
+
+### Refactored
+- **Quick Report 6-Stage ETL Pipeline**: Refactored `QuickReportWorkflow` into a 6-stage ETL pipeline (`QuickReportExtractor`, `QuickReportFilter`, `QuickReportTransformer`, `CbmDefectPlanner`, `QuickReportComposer` Loader, `QuickReportWorkflow` orchestrator) following `etl_pipeline_refactoring_methodology.md`.
+- **End-to-End Typed Defect Records & Plans**: Data flows end-to-end as strongly typed `CbmDefectRecord`, `ViDefectRecord`, `CbmDefectGroup`, and `CbmDefectFamilyPlan` dataclasses, deferring `.to_dict()` conversions strictly to the template rendering boundary (`DocxTemplate.render()`).
+- **Pure CBM Defect Planner**: Created `CbmDefectPlanner` stage (`src/quick_report/cbm_defect_planner.py`) to match equipment items to family specs and template files in-memory without disk write I/O or Word rendering.
+- **Deep Renderer Integration**: Updated `cbm_summary.py` (`prepare_tech_summary_rows`), `vi_summary.py` (`build_vi_summary_context`), `vi_defect_pages.py` (`build_vi_defect_page_context`), and `cbm_defect_pages.py` (`generate_cbm_defect_pages`) to accept typed records directly with unified `_get_field()` property access.
+- **QR03 Master Sheet Caching**: `MasterQr03DefectRepository` now caches opened Excel worksheets per workflow run to avoid reopening workbooks 2N times.
+- **Fail-Fast Defect Repository**: Defect source failures now raise explicit `FileNotFoundError` or `RuntimeError` instead of returning empty lists silently.
+
+### Fixed
+- **Quick Report Detail Pages Data Loss**: Fixed `additional_remarks` data loss in detail pages and eliminated dead keys (`temperature`, `us_value`, `tev_value`, `defect_from`).
+- **Switchgear & Transformer Panels**: Fixed SWG panel missing IR/TEV readings, removed invalid TX panel key, and removed duplicate helper functions in `cbm_render.py`.
+- **Substation Condition Pair Coupling**: Decoupled `generate_substation_condition_pages` from package objects, consuming pre-planned `condition_pairs` directly from `plan.condition_pairs`.
+- **Circular Imports**: Fixed circular import dependency between `src.quick_report` and `src.workflows` using local method imports and `TYPE_CHECKING` guards.
+
 ## [1.5.1] - 2026-08-01
 
 ### Fixed

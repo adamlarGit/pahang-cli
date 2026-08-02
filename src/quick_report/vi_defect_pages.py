@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING, Sequence
+
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docxtpl import DocxTemplate
 
 from src.quick_report.cbm_render import _build_jinja_env, _preserve_blank_render_values
+
+if TYPE_CHECKING:
+    from src.quick_report.defects import ViDefectRecord
 
 # Constants
 DEFECTS_PER_PAGE = 6
@@ -77,18 +82,30 @@ def _remove_empty_cell_borders(docx_path: Path, active_count: int) -> None:
         logging.warning(f"Failed to remove empty cell borders for {docx_path}: {exc}")
 
 
-def build_vi_defect_page_context(pe_info: dict, chunk: list[dict]) -> dict:
+def build_vi_defect_page_context(pe_info: dict, chunk: Sequence[ViDefectRecord]) -> dict:
     """Build context for a single VI defect page."""
     context = pe_info.copy()
-    context["defects"] = chunk
+    raw_chunk = []
     for idx_slot, item in enumerate(chunk, start=1):
-        context[f"equipment{idx_slot}"] = item.get("equipment", "")
-        context[f"description{idx_slot}"] = item.get("defect_area", "")
-        context[f"remark{idx_slot}"] = item.get("remarks", "")
+        if hasattr(item, "to_dict"):
+            d_item = item.to_dict()
+        elif isinstance(item, dict):
+            d_item = item
+        else:
+            d_item = {}
+        raw_chunk.append(d_item)
+        equip = getattr(item, "equipment", None) or d_item.get("equipment", "")
+        desc = getattr(item, "defect_area", None) or d_item.get("defect_area", "")
+        remark = getattr(item, "additional_remarks", None) or d_item.get("additional_remarks", "")
+        context[f"equipment{idx_slot}"] = equip
+        context[f"description{idx_slot}"] = desc
+        context[f"remark{idx_slot}"] = remark
+
+    context["defects"] = raw_chunk
     return context
 
 
-def generate_vi_defect_pages(defects: list[dict], template_path: str | Path, output_dir: str | Path, substation_number: int, pe_info: dict) -> list[Path]:
+def generate_vi_defect_pages(defects: Sequence[ViDefectRecord], template_path: str | Path, output_dir: str | Path, substation_number: int, pe_info: dict) -> list[Path]:
     """Generate VI defect pages dynamically with automatic pagination."""
     template_p = Path(template_path)
     if not template_p.exists():
@@ -107,7 +124,7 @@ def generate_vi_defect_pages(defects: list[dict], template_path: str | Path, out
 
         output_path = Path(output_dir) / f"{substation_number:03d}_6 VI DEFECT part{part_number}.docx"
         doc.save(output_path)
-        
+
         _remove_empty_cell_borders(output_path, len(chunk))
         output_paths.append(output_path)
 

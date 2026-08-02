@@ -109,9 +109,12 @@ def _remove_empty_cell_borders_sub_cond(docx_path: Path, active_count: int) -> N
         logging.warning(f"Failed to remove empty cell borders for {docx_path}: {exc}")
 
 
+from typing import Sequence
+
+
 def generate_substation_condition_pages(
     pe_info: dict,
-    pkg: SubstationTestsheetPackage | None,
+    condition_pairs_or_pkg: Sequence[tuple[str, str]] | SubstationTestsheetPackage | None,
     template_path: Path | str,
     output_dir: Path | str,
     substation_number: int
@@ -124,7 +127,10 @@ def generate_substation_condition_pages(
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    pairs = build_substation_condition_pairs(pkg)
+    if isinstance(condition_pairs_or_pkg, (list, tuple)):
+        pairs = list(condition_pairs_or_pkg)
+    else:
+        pairs = build_substation_condition_pairs(condition_pairs_or_pkg)
     chunks = [pairs[i:i + 3] for i in range(0, len(pairs), 3)]
     if not chunks:
         chunks = [[]]

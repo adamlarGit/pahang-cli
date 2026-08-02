@@ -1,19 +1,33 @@
-"""Part 3: VI Defect Summary Generator"""
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING, Sequence
 
 from src.quick_report.cbm_render import _render_docx_template
 
+if TYPE_CHECKING:
+    from src.quick_report.defects import ViDefectRecord
 
-def build_vi_summary_context(pe_info: dict, defects: list[dict]) -> dict:
+
+def build_vi_summary_context(pe_info: dict, defects: Sequence[ViDefectRecord]) -> dict:
     """Pure context builder for VI Defect Summary."""
     formatted_defects = []
     for d in defects:
-        item = d.copy()
-        item["equipment"] = d.get("equipment") or ""
-        item["defect_area"] = d.get("defect_area") or d.get("description") or ""
-        item["remarks"] = d.get("remarks") or d.get("additional_remarks") or d.get("remark") or ""
-        item["description"] = item["defect_area"]
-        item["remark"] = item["remarks"]
+        if hasattr(d, "to_dict"):
+            item = d.to_dict()
+        elif isinstance(d, dict):
+            item = d.copy()
+        else:
+            item = {}
+        equip = getattr(d, "equipment", None) or item.get("equipment") or ""
+        defect_area = getattr(d, "defect_area", None) or item.get("defect_area") or ""
+        remarks = getattr(d, "additional_remarks", None) or item.get("additional_remarks") or ""
+        item["equipment"] = equip
+        item["defect_area"] = defect_area
+        item["remarks"] = remarks
+        item["additional_remarks"] = remarks
+        item["description"] = defect_area
+        item["remark"] = remarks
         formatted_defects.append(item)
 
     context = pe_info.copy()
@@ -23,7 +37,7 @@ def build_vi_summary_context(pe_info: dict, defects: list[dict]) -> dict:
 
 def generate_vi_summary(
     pe_info: dict,
-    defects: list[dict],
+    defects: Sequence[ViDefectRecord],
     template_path: str | Path,
     output_dir: str | Path,
     substation_number: int,

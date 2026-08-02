@@ -57,6 +57,9 @@ The 6-stage ETL pipeline deep module in `src/workflows/whatsapp.py` responsible 
 ### UpdateQr02CbaWorkflow
 The 6-stage ETL pipeline deep module in `src/workflows/update_qr02_cba.py` responsible for discovering testsheet packages across `TESTSHEET/`, extracting testsheet data records, filtering target packages based on populate mode (`ALL`, `SPECIFIC_FOLDERS`, `AUTO`) and processing history, transforming records into station plans, and upserting QR02 CBA workbook records via `Qr02Repository`.
 
+### QuickReportWorkflow
+The 6-stage ETL pipeline deep module in `src/workflows/quick_report.py` responsible for discovering testsheet packages across `TESTSHEET/`, filtering targets, fetching per-station CBM and VI defects from master ENGR workbooks (`QR03 CBA.xlsx` and `QR03 VI.xlsx`), transforming station data into rendering plans with canonical defect status suffixes `(IR+US+TEV+VI)`, rendering multi-part `.docx` templates, and compiling final Word documents.
+
 ### WordComDocumentCompiler
 Quick Report part compilation strictly uses Word COM (`win32com.client`) RECOPY & PASTE with `Documents.Add()` to ensure FLIR Tools+ ActiveX controls (`CIRViewer...`) maintain unique shape IDs and binary OLE streams without page crosstalk or document corruption.
 

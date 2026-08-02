@@ -5,8 +5,8 @@ from src.quick_report.cbm_summary import prepare_tech_summary_rows
 
 def test_prepare_tech_summary_rows():
     defects = [
-        {"equipment": "TX", "technology": "IR", "defect_area": "Body", "reading": "50"},
-        {"equipment": "TX", "technology": "US", "defect_area": "Body", "reading": "20"},
+        {"equipment": "TX", "technology": "IR", "defect_area": "Body", "raw_measurement": "50"},
+        {"equipment": "TX", "technology": "US", "defect_area": "Body", "raw_measurement": "20"},
     ]
     rows = prepare_tech_summary_rows(defects)
     assert len(rows) == 1
@@ -20,8 +20,8 @@ def test_prepare_tech_summary_rows_empty():
 
 def test_prepare_tech_summary_rows_different_areas():
     defects = [
-        {"equipment": "TX", "technology": "IR", "defect_area": "Body", "reading": "50"},
-        {"equipment": "TX", "technology": "US", "defect_area": "Bush", "reading": "20"},
+        {"equipment": "TX", "technology": "IR", "defect_area": "Body", "raw_measurement": "50"},
+        {"equipment": "TX", "technology": "US", "defect_area": "Bush", "raw_measurement": "20"},
     ]
     rows = prepare_tech_summary_rows(defects)
     assert len(rows) == 2
@@ -87,8 +87,8 @@ def test_generate_vi_summary_programmatic(tmp_path: Path):
 
     pe_info = {"substation": {"name_erms": "TEST SUB"}}
     defects = [
-        {"equipment": "SWITCHGEAR", "defect_area": "Indicator Fault", "remarks": "Replace lamp"},
-        {"equipment": "TRANSFORMER", "defect_area": "Oil Leakage", "remarks": "Top up oil"},
+        {"equipment": "SWITCHGEAR", "defect_area": "Indicator Fault", "additional_remarks": "Replace lamp"},
+        {"equipment": "TRANSFORMER", "defect_area": "Oil Leakage", "additional_remarks": "Top up oil"},
     ]
 
     out_path = generate_vi_summary(pe_info, defects, template_p, tmp_path, 1)
@@ -133,7 +133,7 @@ def test_generate_cbm_tech_summary_programmatic(tmp_path: Path):
 
     pe_info = {"substation": {"name_erms": "TEST SUB"}}
     defects = [
-        {"equipment": "TRANSFORMER", "technology": "IR", "defect_area": "HV Bushing", "reading": "65", "status": "PENDING"},
+        {"equipment": "TRANSFORMER", "technology": "IR", "defect_area": "HV Bushing", "raw_measurement": "65", "status": "PENDING"},
     ]
 
     out_path = generate_cbm_tech_summary(pe_info, defects, template_p, tmp_path, 1)
@@ -158,5 +158,26 @@ def test_generate_cbm_tech_summary_programmatic(tmp_path: Path):
     assert pPr.find("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}spacing") is not None
 
 
+def test_cbm_defect_planner(tmp_path: Path):
+    from unittest.mock import MagicMock
+    from src.quick_report.cbm_defect_planner import CbmDefectPlanner
+    from src.quick_report.defects import CbmDefectRecord
 
+    tmpl = tmp_path / "swg_overview.docx"
+    tmpl.touch()
 
+    env = MagicMock()
+    env.get_template.side_effect = lambda k: tmpl if "swg" in k or "panel" in k else None
+
+    planner = CbmDefectPlanner()
+    defects = [
+        CbmDefectRecord(equipment="RMU SF6", technology="IR"),
+    ]
+    plans = planner.plan(defects, env)
+
+    assert len(plans) == 1
+    assert plans[0].spec.id == "swg"
+    assert plans[0].overview_template == tmpl
+    assert len(plans[0].groups) == 1
+    assert plans[0].groups[0].item_key == "RMU SF6"
+    assert plans[0].groups[0].overview.technology == "IR"
