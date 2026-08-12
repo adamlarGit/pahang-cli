@@ -6,15 +6,14 @@ import gc
 import logging
 from pathlib import Path
 import shutil
+import time
 
 logger = logging.getLogger(__name__)
 
 try:
-    import pythoncom
-    import win32com.client
+    import pywintypes
 except ImportError:
-    pythoncom = None
-    win32com = None
+    pywintypes = None
 
 from src.quick_report.cbm_defect_pages import generate_cbm_defect_pages
 from src.quick_report.cbm_summary import generate_cbm_tech_summary
@@ -26,10 +25,41 @@ from src.quick_report.vi_defect_pages import generate_vi_defect_pages
 from src.quick_report.vi_summary import generate_vi_summary
 
 
+def _collapse_and_escape_table(main_doc):
+    """Collapse range to document end, inserting a paragraph after table if selection is inside a table."""
+    rng = main_doc.Content
+    rng.Collapse(0)  # wdCollapseEnd = 0
+    if rng.Information(12):  # 12 = wdWithInTable
+        if main_doc.Tables.Count > 0:
+            main_doc.Tables(main_doc.Tables.Count).Range.InsertParagraphAfter()
+        rng = main_doc.Content
+        rng.Collapse(0)
+    return rng
+
+
+def _paste_with_retry(rng, max_attempts: int = 5, delay: float = 0.15) -> None:
+    """Retry rng.Paste() up to max_attempts times to handle transient COM/clipboard errors."""
+    exceptions: tuple[type[BaseException], ...]
+    if pywintypes and hasattr(pywintypes, "com_error"):
+        exceptions = (pywintypes.com_error, Exception)
+    else:
+        exceptions = (Exception,)
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            rng.Paste()
+            return
+        except exceptions as exc:
+            if attempt == max_attempts:
+                logger.error("rng.Paste() failed after %d attempts: %s", max_attempts, exc)
+                raise
+            time.sleep(delay)
+
+
 class QuickReportComposer:
     """Loader stage: renders docx report parts and compiles final Word document."""
 
-    def load(self, plan: QuickReportStationPlan, word_app=None) -> Path:
+    def load(self, plan: QuickReportStationPlan, word_app) -> Path:
         """Render docx parts, compile final document, and clean up temporary files."""
         plan.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -133,44 +163,37 @@ class QuickReportComposer:
         return parts
 
     def _compile_document(
-        self, parts: list[Path], output_path: Path, word_app=None
+        self, parts: list[Path], output_path: Path, word_app
     ) -> None:
         """Compile document parts into final output file via Word COM ActiveX Recopy & Paste."""
         if not parts:
             return
+        if word_app is None:
+            raise RuntimeError("word_app is required for Quick Report compilation.")
 
-        if not (win32com and getattr(win32com, "client", None) and pythoncom):
-            raise RuntimeError("win32com is required for Quick Report compilation.")
-
-        word = None
-        own_word = False
         main_doc = None
         try:
-            if word_app is not None:
-                word = word_app
-                own_word = False
-            else:
-                if pythoncom:
-                    pythoncom.CoInitialize()
-                word = win32com.client.Dispatch("Word.Application")
-                word.Visible = False
-                word.DisplayAlerts = 0
-                own_word = True
-
-            main_doc = word.Documents.Add()
+            main_doc = word_app.Documents.Add()
             for idx, part in enumerate(parts):
                 part_path = str(Path(part).resolve())
-                part_doc = word.Documents.Open(part_path, False, True)
-                part_doc.Content.Copy()
-                part_doc.Close(False)
+                part_doc = None
+                try:
+                    part_doc = word_app.Documents.Open(part_path, False, True)
+                    part_doc.Content.Copy()
 
-                rng = main_doc.Content
-                rng.Collapse(0)  # wdCollapseEnd = 0
-                if idx > 0:
-                    rng.InsertBreak(7)  # wdPageBreak = 7
-                    rng = main_doc.Content
-                    rng.Collapse(0)
-                rng.Paste()
+                    rng = _collapse_and_escape_table(main_doc)
+                    if idx > 0:
+                        rng.InsertBreak(7)  # wdPageBreak = 7
+                        rng = _collapse_and_escape_table(main_doc)
+
+                    _paste_with_retry(rng)
+                finally:
+                    if part_doc is not None:
+                        try:
+                            part_doc.Close(False)
+                        except Exception:
+                            pass
+                        part_doc = None
 
             main_doc.SaveAs2(str(Path(output_path).resolve()))
             main_doc.Close(False)
@@ -179,15 +202,5 @@ class QuickReportComposer:
             if main_doc is not None:
                 try:
                     main_doc.Close(False)
-                except Exception:
-                    pass
-            if own_word and word:
-                try:
-                    word.Quit()
-                except Exception:
-                    pass
-            if own_word and pythoncom:
-                try:
-                    pythoncom.CoUninitialize()
                 except Exception:
                     pass

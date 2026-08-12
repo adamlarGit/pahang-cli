@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
-from docx import Document
 import pytest
 
 from src.project.environment import ProjectEnvironment
@@ -166,7 +165,11 @@ def test_workflow_error_isolation(mock_repo_cls, tmp_path: Path):
         mode=QuickReportMode.FOLDER, target_folders=["01-01-2026"]
     )
 
-    with patch.object(workflow.extractor, "extract_defects", return_value=([], [])):
+    with (
+        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+        patch("src.workflows.quick_report.win32com"),
+        patch("src.workflows.quick_report.pythoncom"),
+    ):
         result = workflow.execute(env, req)
 
     assert result.reports_generated == 1
@@ -477,12 +480,8 @@ def test_composer_cbm_defect_pages_with_cbm_defects(tmp_path: Path):
         assert call_args[3] == pe_info  # pe_info
 
 
-@patch("src.quick_report.composer.pythoncom")
-@patch("src.quick_report.composer.win32com.client")
-def test_compile_document_word_com_success(
-    mock_win32com, mock_pythoncom, tmp_path: Path
-):
-    """Verify _compile_document uses win32com Documents.Add and Recopy & Paste to combine document parts."""
+def test_compile_document_word_com_success(tmp_path: Path):
+    """Verify _compile_document uses Documents.Add and Recopy & Paste to combine document parts."""
     composer = QuickReportComposer()
 
     mock_word = MagicMock()
@@ -490,10 +489,11 @@ def test_compile_document_word_com_success(
     mock_part_doc = MagicMock()
     mock_rng = MagicMock()
 
-    mock_win32com.Dispatch.return_value = mock_word
     mock_word.Documents.Add.return_value = mock_main_doc
     mock_word.Documents.Open.return_value = mock_part_doc
     mock_main_doc.Content = mock_rng
+    mock_main_doc.Tables.Count = 0
+    mock_rng.Information.return_value = False
 
     part1 = tmp_path / "part1.docx"
     part2 = tmp_path / "part2.docx"
@@ -502,14 +502,9 @@ def test_compile_document_word_com_success(
     part1.touch()
     part2.touch()
 
-    composer._compile_document([part1, part2], output_path)
+    composer._compile_document([part1, part2], output_path, word_app=mock_word)
 
     # Verification
-    mock_pythoncom.CoInitialize.assert_called_once()
-    mock_win32com.Dispatch.assert_called_once_with("Word.Application")
-    assert mock_word.Visible is False
-    assert mock_word.DisplayAlerts == 0
-
     mock_word.Documents.Add.assert_called_once()
     assert mock_word.Documents.Open.call_count == 2
     mock_part_doc.Content.Copy.assert_called()
@@ -520,38 +515,27 @@ def test_compile_document_word_com_success(
 
     mock_main_doc.SaveAs2.assert_called_once_with(str(output_path.resolve()))
     mock_main_doc.Close.assert_called_once_with(False)
-    mock_word.Quit.assert_called_once()
-    mock_pythoncom.CoUninitialize.assert_called_once()
 
 
-@patch("src.quick_report.composer.pythoncom")
-@patch("src.quick_report.composer.win32com.client")
-def test_compile_document_word_com_cleanup_on_error(
-    mock_win32com, mock_pythoncom, tmp_path: Path
-):
-    """Verify _compile_document executes cleanup (Close, Quit, CoUninitialize) and re-raises exception when COM fails."""
+def test_compile_document_word_com_cleanup_on_error(tmp_path: Path):
+    """Verify _compile_document executes cleanup (Close) and re-raises exception when COM fails."""
     composer = QuickReportComposer()
 
     mock_word = MagicMock()
     mock_main_doc = MagicMock()
-    mock_part_doc = MagicMock()
 
-    mock_win32com.Dispatch.return_value = mock_word
     mock_word.Documents.Add.return_value = mock_main_doc
-    mock_word.Documents.Open.return_value = mock_part_doc
-    mock_part_doc.Content.Copy.side_effect = RuntimeError("Copy failed")
+    mock_word.Documents.Open.side_effect = RuntimeError("Open failed")
 
     part1 = tmp_path / "part1.docx"
     output_path = tmp_path / "output.docx"
     part1.touch()
 
-    with pytest.raises(RuntimeError, match="Copy failed"):
-        composer._compile_document([part1], output_path)
+    with pytest.raises(RuntimeError, match="Open failed"):
+        composer._compile_document([part1], output_path, word_app=mock_word)
 
     # Verification of cleanup in finally block
     mock_main_doc.Close.assert_called_once_with(False)
-    mock_word.Quit.assert_called_once()
-    mock_pythoncom.CoUninitialize.assert_called_once()
 
 
 def test_generate_cbm_defect_pages_filename_uniqueness(tmp_path: Path):
@@ -787,7 +771,11 @@ def test_quick_report_fl_mode_fl_erms_matching(monkeypatch, tmp_path: Path):
     mock_composer.load.return_value = dummy_path
 
     workflow = QuickReportWorkflow(composer=mock_composer)
-    with patch.object(workflow.extractor, "extract_defects", return_value=([], [])):
+    with (
+        patch("src.workflows.quick_report.win32com"),
+        patch("src.workflows.quick_report.pythoncom"),
+        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+    ):
         result = workflow.execute(env, req)
     assert result.reports_generated == 1
     assert len(result.generated_paths) == 1
@@ -844,6 +832,8 @@ def test_workflow_fetches_defects_from_repository(tmp_path: Path):
     mock_composer.load.side_effect = spy_load
 
     with (
+        patch("src.workflows.quick_report.win32com"),
+        patch("src.workflows.quick_report.pythoncom"),
         patch("src.quick_report.extractor.SubstationTestsheetRepository") as MockRepo,
         patch(
             "src.quick_report.extractor.MasterQr03DefectRepository"
@@ -979,3 +969,152 @@ def test_extract_defects_raises_when_qr03_vi_sheet_missing(tmp_path: Path):
     extractor = QuickReportExtractor()
     with pytest.raises(RuntimeError, match="Missing required sheet 'QR03 VI'"):
         extractor.extract_defects(pkg, env)
+
+
+def test_workflow_fresh_word_com_session_per_package(tmp_path: Path):
+    """Verify batch execution processes multiple packages with fresh isolated Word sessions and cleans up resources cleanly."""
+    pkg1 = MagicMock()
+    pkg1.station = "STATION A"
+    pkg1.substation_number = 1
+    pkg1.data = MagicMock()
+    pkg1.data.fl_erms = "FL1"
+    pkg1.data.substation_name_erms = "STATION A"
+    pkg1.data.station_name = "STATION A"
+
+    pkg2 = MagicMock()
+    pkg2.station = "STATION B"
+    pkg2.substation_number = 2
+    pkg2.data = MagicMock()
+    pkg2.data.fl_erms = "FL2"
+    pkg2.data.substation_name_erms = "STATION B"
+    pkg2.data.station_name = "STATION B"
+
+    pkg3 = MagicMock()
+    pkg3.station = "STATION C"
+    pkg3.substation_number = 3
+    pkg3.data = MagicMock()
+    pkg3.data.fl_erms = "FL3"
+    pkg3.data.substation_name_erms = "STATION C"
+    pkg3.data.station_name = "STATION C"
+
+    tpl_file = tmp_path / "tpl.docx"
+    tpl_file.touch()
+
+    out1 = tmp_path / "out1.docx"
+    out2 = tmp_path / "out2.docx"
+    out3 = tmp_path / "out3.docx"
+    out1.write_text("dummy1")
+    out2.write_text("dummy2")
+    out3.write_text("dummy3")
+
+    env = MagicMock(spec=ProjectEnvironment)
+    env.get_vi_front_page_template.return_value = tpl_file
+    env.get_template.return_value = tpl_file
+
+    mock_word1 = MagicMock()
+    mock_word2 = MagicMock()
+    mock_word3 = MagicMock()
+
+    dispatched_apps = [mock_word1, mock_word2, mock_word3]
+    captured_word_apps = []
+
+    def spy_load(plan, word_app=None):
+        captured_word_apps.append(word_app)
+        if len(captured_word_apps) == 1:
+            return out1
+        elif len(captured_word_apps) == 2:
+            return out2
+        else:
+            return out3
+
+    mock_composer = Mock()
+    mock_composer.load.side_effect = spy_load
+
+    workflow = QuickReportWorkflow(composer=mock_composer)
+    workflow.extractor = Mock()
+    workflow.extractor.extract.return_value = [pkg1, pkg2, pkg3]
+    workflow.filter_stage = Mock()
+    workflow.filter_stage.filter.return_value = [pkg1, pkg2, pkg3]
+    workflow.extractor.extract_defects.return_value = ([], [])
+
+    req = QuickReportRequest(mode=QuickReportMode.FOLDER, target_folders=["01-01-2026"])
+
+    mock_win32com = MagicMock()
+    mock_win32com.client.Dispatch.return_value = mock_word1
+
+    with (
+        patch("src.workflows.quick_report.win32com", mock_win32com),
+        patch("src.workflows.quick_report.pythoncom") as mock_pythoncom,
+    ):
+        result = workflow.execute(env, req)
+
+    mock_win32com.client.Dispatch.assert_called_once_with("Word.Application")
+    mock_pythoncom.CoInitialize.assert_called_once()
+    mock_pythoncom.CoUninitialize.assert_called_once()
+    mock_word1.Quit.assert_called_once()
+    assert captured_word_apps == [mock_word1, mock_word1, mock_word1]
+    assert result.reports_generated == 3
+    assert result.generated_paths == [out1, out2, out3]
+    assert len(result.errors) == 0
+
+
+def test_workflow_fresh_word_com_session_cleanup_on_per_package_error(tmp_path: Path):
+    """Verify that when a package fails midway, its isolated Word COM session is still quit cleanly."""
+    pkg1 = MagicMock()
+    pkg1.station = "STATION FAILING"
+    pkg1.substation_number = 1
+    pkg1.data = MagicMock()
+    pkg1.data.fl_erms = "FL1"
+    pkg1.data.substation_name_erms = "STATION FAILING"
+    pkg1.data.station_name = "STATION FAILING"
+
+    pkg2 = MagicMock()
+    pkg2.station = "STATION OK"
+    pkg2.substation_number = 2
+    pkg2.data = MagicMock()
+    pkg2.data.fl_erms = "FL2"
+    pkg2.data.substation_name_erms = "STATION OK"
+    pkg2.data.station_name = "STATION OK"
+
+    tpl_file = tmp_path / "tpl.docx"
+    tpl_file.touch()
+
+    out2 = tmp_path / "out2.docx"
+    out2.write_text("dummy2")
+
+    env = MagicMock(spec=ProjectEnvironment)
+    env.get_vi_front_page_template.return_value = tpl_file
+    env.get_template.return_value = tpl_file
+
+    mock_word1 = MagicMock()
+    mock_word2 = MagicMock()
+
+    mock_composer = Mock()
+    mock_composer.load.side_effect = [RuntimeError("Composer crash"), out2]
+
+    workflow = QuickReportWorkflow(composer=mock_composer)
+    workflow.extractor = Mock()
+    workflow.extractor.extract.return_value = [pkg1, pkg2]
+    workflow.filter_stage = Mock()
+    workflow.filter_stage.filter.return_value = [pkg1, pkg2]
+    workflow.extractor.extract_defects.return_value = ([], [])
+
+    req = QuickReportRequest(mode=QuickReportMode.FOLDER, target_folders=["01-01-2026"])
+
+    mock_win32com = MagicMock()
+    mock_win32com.client.Dispatch.return_value = mock_word1
+
+    with (
+        patch("src.workflows.quick_report.win32com", mock_win32com),
+        patch("src.workflows.quick_report.pythoncom") as mock_pythoncom,
+    ):
+        result = workflow.execute(env, req)
+
+    mock_win32com.client.Dispatch.assert_called_once_with("Word.Application")
+    mock_pythoncom.CoInitialize.assert_called_once()
+    mock_pythoncom.CoUninitialize.assert_called_once()
+    mock_word1.Quit.assert_called_once()
+    assert result.reports_generated == 1
+    assert len(result.errors) == 1
+    assert "Composer crash" in result.errors[0]
+

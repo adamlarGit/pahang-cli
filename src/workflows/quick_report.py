@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -63,18 +64,21 @@ class QuickReportWorkflow:
         generated_paths: list[Path] = []
         errors: list[str] = []
 
-        word_app = None
-        if win32com and getattr(win32com, "client", None):
-            try:
-                if pythoncom:
-                    pythoncom.CoInitialize()
-                word_app = win32com.client.Dispatch("Word.Application")
-                word_app.Visible = False
-                word_app.DisplayAlerts = 0
-            except Exception as e:
-                logging.warning(f"Could not pre-initialize Word COM: {e}")
+        if not filtered_packages:
+            return self._audit_and_build_result([], [], [])
 
+        if not (win32com and getattr(win32com, "client", None) and pythoncom):
+            raise RuntimeError("win32com is required for Quick Report compilation.")
+
+        co_initialized = False
+        word_app = None
         try:
+            pythoncom.CoInitialize()
+            co_initialized = True
+            word_app = win32com.client.Dispatch("Word.Application")
+            word_app.Visible = False
+            word_app.DisplayAlerts = 0
+
             for i, pkg in enumerate(filtered_packages, start=1):
                 if request.progress_sink:
                     request.progress_sink(
@@ -105,7 +109,9 @@ class QuickReportWorkflow:
                     word_app.Quit()
                 except Exception:
                     pass
-            if word_app is not None and pythoncom:
+                word_app = None
+                gc.collect()
+            if co_initialized:
                 try:
                     pythoncom.CoUninitialize()
                 except Exception:

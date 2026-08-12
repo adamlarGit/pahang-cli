@@ -6,12 +6,60 @@ from datetime import date, datetime
 import pytest
 
 from src.core.normalizers import (
-    format_month_folder, 
-    normalize_date_str,
-    format_testsheet_time,
+    format_date_cbm,
+    format_date_front_page,
     format_humidity_str,
-    parse_background_temp
+    format_month_folder, 
+    format_testsheet_time,
+    normalize_date_str,
+    parse_background_temp,
 )
+
+
+def test_format_date_front_page() -> None:
+    # Hyphenated strings (DD-MM-YYYY)
+    assert format_date_front_page("12-08-2026") == "12 AUG 2026"
+    assert format_date_front_page("5-7-2026") == "05 JUL 2026"
+    # Slashed strings (DD/MM/YYYY)
+    assert format_date_front_page("12/08/2026") == "12 AUG 2026"
+    assert format_date_front_page("5/7/2026") == "05 JUL 2026"
+    # ISO strings (YYYY-MM-DD and YYYY/MM/DD)
+    assert format_date_front_page("2026-08-12") == "12 AUG 2026"
+    assert format_date_front_page("2026/08/12") == "12 AUG 2026"
+    # Named month strings
+    assert format_date_front_page("12 AUG 2026") == "12 AUG 2026"
+    assert format_date_front_page("12-Aug-2026") == "12 AUG 2026"
+    # date and datetime objects
+    assert format_date_front_page(date(2026, 8, 12)) == "12 AUG 2026"
+    assert format_date_front_page(datetime(2026, 8, 12, 14, 30)) == "12 AUG 2026"
+    # Fallback for None, empty string, or invalid text
+    assert format_date_front_page(None) == "-"
+    assert format_date_front_page("") == "-"
+    assert format_date_front_page("invalid_date") == "-"
+    assert format_date_front_page("N/A") == "-"
+
+
+def test_format_date_cbm() -> None:
+    # Hyphenated strings (DD-MM-YYYY)
+    assert format_date_cbm("12-08-2026") == "12/08/2026"
+    assert format_date_cbm("5-7-2026") == "05/07/2026"
+    # Slashed strings (DD/MM/YYYY)
+    assert format_date_cbm("12/08/2026") == "12/08/2026"
+    assert format_date_cbm("5/7/2026") == "05/07/2026"
+    # ISO strings (YYYY-MM-DD and YYYY/MM/DD)
+    assert format_date_cbm("2026-08-12") == "12/08/2026"
+    assert format_date_cbm("2026/08/12") == "12/08/2026"
+    # Named month strings
+    assert format_date_cbm("12 AUG 2026") == "12/08/2026"
+    assert format_date_cbm("12-Aug-2026") == "12/08/2026"
+    # date and datetime objects
+    assert format_date_cbm(date(2026, 8, 12)) == "12/08/2026"
+    assert format_date_cbm(datetime(2026, 8, 12, 14, 30)) == "12/08/2026"
+    # Fallback for None, empty string, or invalid text
+    assert format_date_cbm(None) == "-"
+    assert format_date_cbm("") == "-"
+    assert format_date_cbm("invalid_date") == "-"
+    assert format_date_cbm("N/A") == "-"
 
 
 def test_normalize_date_str_empty() -> None:

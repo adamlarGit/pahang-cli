@@ -23,6 +23,55 @@ def test_format_temperature_reading():
     assert format_temperature_reading("50°C") == "50 °C"
 
 
+def test_quick_report_transformer_date_formatting():
+    """Verify QuickReportTransformer formats datefrontpage as DD MMM YYYY and date as DD/MM/YYYY."""
+    from unittest.mock import MagicMock
+    from src.quick_report.transformer import QuickReportTransformer
+
+    transformer = QuickReportTransformer()
+
+    pkg = MagicMock()
+    pkg.station = "KUANTAN"
+    pkg.month = "08. AUGUST"
+    pkg.substation_number = 1
+    pkg.data = MagicMock()
+    pkg.data.date_str = "12-08-2026"
+    pkg.data.substation_name_erms = "TEST SUBSTATION"
+    pkg.data.substation_name_site = "TEST SUBSTATION"
+    pkg.data.fl_erms = "FL123"
+    pkg.data.fl_site = "FL123"
+    pkg.data.gps_coordinate = ""
+    pkg.data.substation_type = ""
+    pkg.data.building_type = ""
+    pkg.data.ambient = ""
+    pkg.data.humidity = ""
+    pkg.data.time = ""
+
+    env = MagicMock()
+    env.po_number = "12345"
+    env.state = "PAHANG"
+    env.get_vi_front_page_template.return_value = Path("dummy.docx")
+    env.get_template.return_value = Path("dummy.docx")
+
+    plan = transformer.transform(pkg, [], [], env)
+
+    substation_info = plan.pe_info["substation"]
+    assert substation_info["datefrontpage"] == "12 AUG 2026"
+    assert substation_info["date"] == "12/08/2026"
+
+    # Test with ISO date string format
+    pkg.data.date_str = "2026-08-12"
+    plan_iso = transformer.transform(pkg, [], [], env)
+    assert plan_iso.pe_info["substation"]["datefrontpage"] == "12 AUG 2026"
+    assert plan_iso.pe_info["substation"]["date"] == "12/08/2026"
+
+    # Test fallback for None / empty date_str
+    pkg.data.date_str = None
+    plan_none = transformer.transform(pkg, [], [], env)
+    assert plan_none.pe_info["substation"]["datefrontpage"] == "-"
+    assert plan_none.pe_info["substation"]["date"] == "-"
+
+
 def test_format_db_reading():
     assert format_db_reading("") == "-"
     assert format_db_reading(None) == "-"

@@ -36,6 +36,102 @@ MONTH_STEM_TO_NUM = {
     "DEC": 12, "DECEMBER": 12,
 }
 
+MONTH_ABBR_MAP = {
+    1: "JAN",
+    2: "FEB",
+    3: "MAR",
+    4: "APR",
+    5: "MAY",
+    6: "JUN",
+    7: "JUL",
+    8: "AUG",
+    9: "SEP",
+    10: "OCT",
+    11: "NOV",
+    12: "DEC",
+}
+
+
+def _parse_date_object(date_input: str | date | datetime | None) -> date | None:
+    """Parse date input into a datetime.date instance, returning None if unparseable."""
+    if date_input is None:
+        return None
+    if isinstance(date_input, datetime):
+        return date_input.date()
+    if isinstance(date_input, date):
+        return date_input
+
+    s = str(date_input).strip()
+    if not s or s in ("-", "None", "N/A"):
+        return None
+
+    # Try ISO format YYYY-MM-DD or YYYY/MM/DD
+    match_iso = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$", s)
+    if match_iso:
+        try:
+            return date(int(match_iso.group(1)), int(match_iso.group(2)), int(match_iso.group(3)))
+        except ValueError:
+            return None
+
+    # Try DD-MM-YYYY or DD/MM/YYYY format
+    match_ddmmyyyy = re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$", s)
+    if match_ddmmyyyy:
+        try:
+            return date(int(match_ddmmyyyy.group(3)), int(match_ddmmyyyy.group(2)), int(match_ddmmyyyy.group(1)))
+        except ValueError:
+            return None
+
+    # Try DD MMM YYYY (e.g., "12 AUG 2026", "12-Aug-2026")
+    match_named = re.match(r"^(\d{1,2})[\s\-\/]+([A-Za-z]+)[\s\-\/]+(\d{4})$", s)
+    if match_named:
+        day_str, month_str, year_str = match_named.groups()
+        month_upper = month_str.upper()
+        if month_upper in MONTH_STEM_TO_NUM:
+            try:
+                return date(int(year_str), MONTH_STEM_TO_NUM[month_upper], int(day_str))
+            except ValueError:
+                return None
+
+    return None
+
+
+def format_date_front_page(date_input: str | date | datetime | None) -> str:
+    """Format date input for Quick Report Front Page ('datefrontpage') as 'DD MMM YYYY' with uppercase month.
+
+    Parses hyphenated strings ('12-08-2026'), slashed strings ('12/08/2026'), ISO strings ('2026-08-12'),
+    and date/datetime objects. Falls back to '-' for None, empty strings, or unparseable input.
+
+    Args:
+        date_input: Date input as a string, date, datetime object, or None.
+
+    Returns:
+        Formatted date string in 'DD MMM YYYY' format with uppercase month (e.g. '12 AUG 2026'),
+        or '-' if input is None, empty, or unparseable.
+    """
+    d = _parse_date_object(date_input)
+    if d is None:
+        return "-"
+    return f"{d.day:02d} {MONTH_ABBR_MAP[d.month]} {d.year:04d}"
+
+
+def format_date_cbm(date_input: str | date | datetime | None) -> str:
+    """Format date input for Quick Report CBM Defect Pages ('date') as 'DD/MM/YYYY' with forward slashes.
+
+    Parses hyphenated strings ('12-08-2026'), slashed strings ('12/08/2026'), ISO strings ('2026-08-12'),
+    and date/datetime objects. Falls back to '-' for None, empty strings, or unparseable input.
+
+    Args:
+        date_input: Date input as a string, date, datetime object, or None.
+
+    Returns:
+        Formatted date string in 'DD/MM/YYYY' format with forward slashes (e.g. '12/08/2026'),
+        or '-' if input is None, empty, or unparseable.
+    """
+    d = _parse_date_object(date_input)
+    if d is None:
+        return "-"
+    return f"{d.day:02d}/{d.month:02d}/{d.year:04d}"
+
 
 def normalize_date_str(date_input: object) -> str:
     """Normalize date inputs (date, datetime, or strings) to DD-MM-YYYY format."""

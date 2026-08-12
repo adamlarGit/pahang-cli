@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from src.core.normalizers import format_date_cbm, format_date_front_page
 from src.quick_report.cbm_defect_planner import CbmDefectPlanner
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.utils import sanitize_filename
@@ -52,8 +53,8 @@ class QuickReportTransformer:
                 "fl_site": pkg.data.fl_site,
                 "area": pkg.station or "",
                 "state": state.upper() if state else "PAHANG",
-                "datefrontpage": pkg.data.date_str or "",
-                "date": pkg.data.date_str or "",
+                "datefrontpage": format_date_front_page(pkg.data.date_str),
+                "date": format_date_cbm(pkg.data.date_str),
                 "gps_coordinate": pkg.data.gps_coordinate or "",
                 "gpscoordinate": pkg.data.gps_coordinate or "",
                 "type": pkg.data.substation_type or "",
