@@ -5,6 +5,16 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 2026-08-13
+
+### Fixed
+- **Substation Condition & Visual Defect Blank Page Prevention**: Fixed blank page generation between Substation Condition pages (Part 5) and Visual Defect pages (Part 6) by stripping trailing `<w:sectPr>` section breaks and `<w:br w:type="page"/>` manual page breaks injected by `docxcompose` from the merged condition document's final paragraph prior to Word COM compilation.
+- **Substation Condition Pair Card Labels**: Standardized condition pair card image headers to full verbose labels (e.g. `SWITCHGEAR 1 NAMEPLATE`, `TRANSFORMER 1 NAMEPLATE`, `FEEDER PILLAR 1 NAMEPLATE`, `BATTERY CHARGER NAMEPLATE`, `RTU NAMEPLATE`, `EFI / SF6 GAS INDICATOR`, `FIRE EXTINGUISHER EXPIRY DATE`, `TRANSFORMER OIL LEVEL INDICATOR`).
+
+### Refactored
+- **Shared DOCX Table Cell XML Utilities**: Consolidated duplicate `_clear_cell_text` and `_set_cell_no_borders` cell XML functions from `vi_defect_pages.py` and `substation_condition.py` into shared public helpers `clear_cell_text()` and `set_cell_no_borders()` in `src/quick_report/utils.py`.
+- **Dynamic Builder Preservation**: Documented future-use reservation on `build_substation_condition_pairs()` in `substation_condition.py` for upcoming dynamic pair configuration logic.
+
 ## [1.7.1] - 2026-08-13
 
 ### Fixed

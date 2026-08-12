@@ -148,12 +148,12 @@ class QuickReportTransformer:
             return [("SUBSTATION OVERVIEW", "SIGNBOARD")]
         return [
             ("SUBSTATION OVERVIEW", "SIGNBOARD"),
-            ("SWITCHGEAR 1", "NAMEPLATE"),
-            ("TRANSFORMER 1", "NAMEPLATE"),
-            ("FEEDER PILLAR 1", "NAMEPLATE"),
-            ("BATTERY CHARGER", "NAMEPLATE"),
-            ("RTU", "NAMEPLATE"),
-            ("EFI", "NAMEPLATE"),
-            ("FIRE EXTINGUISHER", "EXPIRY"),
-            ("TRANSFORMER OIL LEVEL INDICATOR", "NAMEPLATE"),
+            ("SWITCHGEAR 1", "SWITCHGEAR 1 NAMEPLATE"),
+            ("TRANSFORMER 1", "TRANSFORMER 1 NAMEPLATE"),
+            ("FEEDER PILLAR 1", "FEEDER PILLAR 1 NAMEPLATE"),
+            ("BATTERY CHARGER", "BATTERY CHARGER NAMEPLATE"),
+            ("RTU", "RTU NAMEPLATE"),
+            ("EFI", "SF6 GAS INDICATOR"),
+            ("FIRE EXTINGUISHER", "FIRE EXTINGUISHER EXPIRY DATE"),
+            ("TRANSFORMER OIL LEVEL INDICATOR", "TRANSFORMER OIL LEVEL INDICATOR"),
         ]

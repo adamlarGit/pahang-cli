@@ -26,12 +26,21 @@ from src.quick_report.vi_summary import generate_vi_summary
 
 
 def _collapse_and_escape_table(main_doc):
-    """Collapse range to document end, inserting a paragraph after table if selection is inside a table."""
+    """Collapse range to document end, inserting a minimal paragraph after table if selection is inside a table."""
     rng = main_doc.Content
     rng.Collapse(0)  # wdCollapseEnd = 0
     if rng.Information(12):  # 12 = wdWithInTable
         if main_doc.Tables.Count > 0:
-            main_doc.Tables(main_doc.Tables.Count).Range.InsertParagraphAfter()
+            last_table = main_doc.Tables(main_doc.Tables.Count)
+            last_table.Range.InsertParagraphAfter()
+            # Minimize the escape paragraph to prevent blank page overflow.
+            escape_rng = last_table.Range
+            escape_rng.Collapse(0)  # wdCollapseEnd
+            escape_rng.MoveEnd(1, 1)  # wdCharacter = 1, extend by 1 char
+            escape_rng.Font.Size = 1
+            escape_rng.ParagraphFormat.SpaceBefore = 0
+            escape_rng.ParagraphFormat.SpaceAfter = 0
+            escape_rng.ParagraphFormat.LineSpacingRule = 0  # wdLineSpaceSingle
         rng = main_doc.Content
         rng.Collapse(0)
     return rng

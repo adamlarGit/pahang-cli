@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
+
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 
 from src.project.storage import sanitize_filename
 
@@ -93,13 +97,41 @@ def format_table_cell(
             r.bold = bold
 
 
+def clear_cell_text(cell: Any) -> None:
+    """Clear paragraph text and run text in a python-docx table cell."""
+    for paragraph in cell.paragraphs:
+        for run in paragraph.runs:
+            run.text = ""
+        paragraph.text = ""
+
+
+def set_cell_no_borders(cell: Any) -> None:
+    """Set all borders on a python-docx table cell to nil (invisible)."""
+    tcPr = cell._tc.get_or_add_tcPr()
+    tcBorders = tcPr.find(qn('w:tcBorders'))
+    if tcBorders is None:
+        tcBorders = OxmlElement('w:tcBorders')
+        tcPr.append(tcBorders)
+
+    for border_name in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
+        border = tcBorders.find(qn(f'w:{border_name}'))
+        if border is None:
+            border = OxmlElement(f'w:{border_name}')
+            tcBorders.append(border)
+        border.set(qn('w:val'), 'nil')
+
+
 __all__ = [
     "normalize_functional_location_input",
     "sort_quick_report_detail_jobs",
     "sanitize_filename",
     "format_table_cell",
+    "clear_cell_text",
+    "set_cell_no_borders",
     "_find_dg_photo",
     "_find_ir_photo",
     "_find_us_photo",
     "_find_tev_photo",
 ]
+
+

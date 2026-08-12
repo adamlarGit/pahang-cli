@@ -1118,3 +1118,107 @@ def test_workflow_fresh_word_com_session_cleanup_on_per_package_error(tmp_path: 
     assert len(result.errors) == 1
     assert "Composer crash" in result.errors[0]
 
+
+def test_generate_substation_condition_pages_removes_trailing_sectpr(tmp_path: Path):
+    """Verify generate_substation_condition_pages merges multi-part condition files without trailing sectPr on last paragraph."""
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    from src.quick_report.substation_condition import (
+        generate_substation_condition_pages,
+    )
+
+    template_doc = Document()
+    template_doc.add_paragraph("Substation Condition Template")
+    tpl_path = tmp_path / "substation_condition_template.docx"
+    template_doc.save(tpl_path)
+
+    # 5 pairs forces 2 parts (chunks of 3) -> triggers DocxComposer merge
+    pairs = [
+        ("SUBSTATION OVERVIEW", "SIGNBOARD"),
+        ("SWITCHGEAR 1", "SWITCHGEAR 1 NAMEPLATE"),
+        ("TRANSFORMER 1", "TRANSFORMER 1 NAMEPLATE"),
+        ("FEEDER PILLAR 1", "FEEDER PILLAR 1 NAMEPLATE"),
+        ("BATTERY CHARGER", "BATTERY CHARGER NAMEPLATE"),
+    ]
+
+    out_files = generate_substation_condition_pages(
+        pe_info={"pe_name": "PE TEST"},
+        condition_pairs_or_pkg=pairs,
+        template_path=tpl_path,
+        output_dir=tmp_path,
+        substation_number=1,
+    )
+
+    assert len(out_files) == 1
+    merged_path = out_files[0]
+    assert merged_path.name == "001_5 SUBSTATION CONDITION.docx"
+
+    merged_doc = Document(merged_path)
+    assert len(merged_doc.paragraphs) > 0
+    last_para = merged_doc.paragraphs[-1]
+    pPr = last_para._p.get_or_add_pPr()
+    sectPr = pPr.find(qn("w:sectPr"))
+    assert sectPr is None
+    assert len(last_para._p.findall(qn("w:br"))) == 0
+
+def test_generate_substation_condition_pages_removes_br_page_breaks_cleanly(tmp_path: Path):
+    """Verify generate_substation_condition_pages strips w:br from last paragraph without affecting preceding content."""
+    from docx import Document
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    from src.quick_report.substation_condition import (
+        generate_substation_condition_pages,
+    )
+
+    template_doc = Document()
+    p1 = template_doc.add_paragraph("Preceding Paragraph")
+    run1 = p1.add_run("Text in paragraph 1")
+    
+    # Add a paragraph with a break
+    p_last = template_doc.add_paragraph()
+    r_last = p_last.add_run("Trailing text")
+    
+    # Inject w:br inside r_last
+    br1 = OxmlElement("w:br")
+    r_last._r.append(br1)
+    
+    # Inject direct w:br inside p_last._p
+    br2 = OxmlElement("w:br")
+    p_last._p.append(br2)
+
+    tpl_path = tmp_path / "substation_condition_template_br.docx"
+    template_doc.save(tpl_path)
+
+    pairs = [
+        ("SUBSTATION OVERVIEW", "SIGNBOARD"),
+        ("SWITCHGEAR 1", "SWITCHGEAR 1 NAMEPLATE"),
+        ("TRANSFORMER 1", "TRANSFORMER 1 NAMEPLATE"),
+        ("FEEDER PILLAR 1", "FEEDER PILLAR 1 NAMEPLATE"),
+    ]
+
+    out_files = generate_substation_condition_pages(
+        pe_info={"pe_name": "PE TEST BR"},
+        condition_pairs_or_pkg=pairs,
+        template_path=tpl_path,
+        output_dir=tmp_path,
+        substation_number=2,
+    )
+
+    assert len(out_files) == 1
+    merged_doc = Document(out_files[0])
+    
+    # Check preceding paragraph is intact
+    assert merged_doc.paragraphs[0].text == "Preceding ParagraphText in paragraph 1"
+
+    
+    # Check last paragraph has no w:br elements
+    last_para = merged_doc.paragraphs[-1]
+    assert len(last_para._p.findall(qn("w:br"))) == 0
+    for r in last_para.runs:
+        assert len(r._r.findall(qn("w:br"))) == 0
+
+
+
+

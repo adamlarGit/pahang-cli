@@ -5,12 +5,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from docx import Document
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 from docxtpl import DocxTemplate
 
 from src.quick_report.cbm_render import _build_jinja_env
 from src.quick_report.models import ViDefectPagePlan
+from src.quick_report.utils import clear_cell_text, set_cell_no_borders
 
 if TYPE_CHECKING:
     from src.quick_report.defects import ViDefectRecord
@@ -26,30 +25,6 @@ EMPTY_DEFECT_CELL_MAP = {
     4: ([8, 9, 10], [0], 7),
     5: ([8, 9, 10], [1, 2], 7),
 }
-
-
-def _clear_cell_text(cell: Any) -> None:
-    """Clear paragraph text and run text in cell."""
-    for paragraph in cell.paragraphs:
-        for run in paragraph.runs:
-            run.text = ""
-        paragraph.text = ""
-
-
-def _set_cell_no_borders(cell: Any) -> None:
-    """Construct/update <w:tcBorders> XML element on cell tcPr with w:val='nil'."""
-    tcPr = cell._tc.get_or_add_tcPr()
-    tcBorders = tcPr.find(qn('w:tcBorders'))
-    if tcBorders is None:
-        tcBorders = OxmlElement('w:tcBorders')
-        tcPr.append(tcBorders)
-
-    for border_name in ('top', 'left', 'bottom', 'right', 'insideH', 'insideV'):
-        border = tcBorders.find(qn(f'w:{border_name}'))
-        if border is None:
-            border = OxmlElement(f'w:{border_name}')
-            tcBorders.append(border)
-        border.set(qn('w:val'), 'nil')
 
 
 def _remove_empty_cell_borders(docx_path: Path, active_count: int) -> None:
@@ -69,14 +44,14 @@ def _remove_empty_cell_borders(docx_path: Path, active_count: int) -> None:
                 for c in col_indices:
                     if r < len(table.rows) and c < len(table.rows[r].cells):
                         cell = table.cell(r, c)
-                        _clear_cell_text(cell)
-                        _set_cell_no_borders(cell)
+                        clear_cell_text(cell)
+                        set_cell_no_borders(cell)
             if spacer_row is not None and spacer_row < len(table.rows):
                 for c in col_indices:
                     if c < len(table.rows[spacer_row].cells):
                         cell = table.cell(spacer_row, c)
-                        _clear_cell_text(cell)
-                        _set_cell_no_borders(cell)
+                        clear_cell_text(cell)
+                        set_cell_no_borders(cell)
 
         doc.save(docx_path)
     except Exception as exc:

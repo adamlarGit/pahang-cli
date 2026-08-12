@@ -1,6 +1,6 @@
 [project]
 name = "pahang-cli"
-version = "1.7.1"
+version = "1.7.2"
 description = "Pahang Area - Interactive CLI for PE inspection workflows"
 
 requires-python = ">=3.11"
