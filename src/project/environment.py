@@ -85,7 +85,11 @@ class ProjectEnvironment:
     def get_whatsapp_dir(self) -> Path:
         return self.storage.get_whatsapp_dir()
 
+    def get_sign_dir(self) -> Path:
+        return self.storage.get_sign_dir()
+
     def get_po_number(self) -> str:
+
         return self.metadata.po_number
 
     def get_station_mapping(self) -> dict[str, str]:

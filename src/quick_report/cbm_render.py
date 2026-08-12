@@ -10,6 +10,7 @@ from docxtpl import DocxTemplate
 from jinja2 import Environment, Undefined
 
 from src.quick_report.cbm_family import QuickReportFamilySpec
+from src.quick_report.defects import CbmDefectRecord
 from src.quick_report.utils import sanitize_filename
 
 _MISSING = object()
@@ -132,32 +133,6 @@ def _format_detail_area(defect_area, additional_remarks, *, overview: bool = Fal
     return defect_area_text
 
 
-def _payload_get(payload: object, key: str, default: Any = None) -> Any:
-    if isinstance(payload, dict):
-        return payload.get(key, default)
-    return getattr(payload, key, default)
-
-
-def _lookup_family_value(payload: object, key: str, default: Any = None) -> Any:
-    value = _payload_get(payload, key, _MISSING)
-    if value is not _MISSING:
-        return value
-    for nested_key in ("defect", "tech_defect", "anchor_defect"):
-        nested_payload = _payload_get(payload, nested_key, None)
-        if nested_payload is None:
-            continue
-        value = _payload_get(nested_payload, key, _MISSING)
-        if value is not _MISSING:
-            return value
-    return default
-
-
-def _resolve_item_identity(payload: object, *, item_key: str = "", item_suffix: str = "") -> tuple[str, str]:
-    resolved_item_key = _text_or_empty(item_key or _lookup_family_value(payload, "item_key", ""))
-    resolved_item_suffix = _text_or_empty(item_suffix or _lookup_family_value(payload, "item_suffix", ""))
-    return resolved_item_key, resolved_item_suffix
-
-
 def _prune_unset_detail_payload(value):
     if isinstance(value, dict):
         cleaned = {}
@@ -181,109 +156,150 @@ def _prune_unset_detail_payload(value):
     return value
 
 
-def _build_fp_lvdb_render_context(payload: object, *, overview: bool, item_key: str = "", item_suffix: str = "") -> dict:
-    item_key, _ = _resolve_item_identity(payload, item_key=item_key, item_suffix=item_suffix)
+def _build_fp_lvdb_render_context(
+    record: CbmDefectRecord,
+    *,
+    overview: bool,
+    item_key: str = "",
+    item_suffix: str = "",
+) -> dict:
+    resolved_item_key = _text_or_empty(item_key)
     return _prune_unset_detail_payload({
         "fp": {
-            "labelsource": item_key,
-            "area": _format_detail_area(_lookup_family_value(payload, "defect_area"), _lookup_family_value(payload, "additional_remarks"), overview=overview),
-            "manufacturer": _text_or_empty(_lookup_family_value(payload, "brand")),
-            "model": _text_or_empty(_lookup_family_value(payload, "model")),
-            "rating": _text_or_empty(_lookup_family_value(payload, "rating")),
+            "labelsource": resolved_item_key,
+            "area": _format_detail_area(record.defect_area, record.additional_remarks, overview=overview),
+            "manufacturer": _text_or_empty(record.brand),
+            "model": _text_or_empty(record.model),
+            "rating": _text_or_empty(record.rating),
             "serialnumber": "",
             "cabletype": "",
         }
     }) or {}
 
 
-def _build_swg_render_context(payload: object, *, overview: bool, item_key: str = "", item_suffix: str = "") -> dict:
-    item_key, item_suffix = _resolve_item_identity(payload, item_key=item_key, item_suffix=item_suffix)
-    equipment = _text_or_empty(_lookup_family_value(payload, "equipment")).strip()
-    area = _format_detail_area(_lookup_family_value(payload, "defect_area"), _lookup_family_value(payload, "additional_remarks"), overview=overview)
+def _build_swg_render_context(
+    record: CbmDefectRecord,
+    *,
+    overview: bool,
+    item_key: str = "",
+    item_suffix: str = "",
+) -> dict:
+    resolved_item_key = _text_or_empty(item_key)
+    resolved_item_suffix = _text_or_empty(item_suffix)
+    equipment = _text_or_empty(record.equipment).strip()
+    area = _format_detail_area(record.defect_area, record.additional_remarks, overview=overview)
     return _prune_unset_detail_payload({
         "swg": {
             "area": area,
-            "manufacturer": _text_or_empty(_lookup_family_value(payload, "brand")),
-            "model": _text_or_empty(_lookup_family_value(payload, "model")),
-            "rating": _text_or_empty(_lookup_family_value(payload, "rating")),
+            "manufacturer": _text_or_empty(record.brand),
+            "model": _text_or_empty(record.model),
+            "rating": _text_or_empty(record.rating),
             "serialnumber": "",
             "type": equipment,
         },
         "panel": {
-            "name": item_suffix or item_key,
+            "name": resolved_item_suffix or resolved_item_key,
             "area": area,
             "breakerstatus": "",
             "busbarposition": "",
             "cabletype": equipment if "CABLE" in equipment.upper() else "",
             "heateramp": "",
-            "linknumber": item_key,
+            "linknumber": resolved_item_key,
             "loadamp": "",
             "serialnumber": "",
-            "ir": {"reading": _text_or_empty(_lookup_family_value(payload, "ir_reading"))},
+            "ir": {"reading": _text_or_empty(record.ir_reading)},
             "us": {
-                "reading": _text_or_empty(_lookup_family_value(payload, "us_reading")),
-                "char": _text_or_empty(_lookup_family_value(payload, "us_char")),
+                "reading": _text_or_empty(record.us_reading),
+                "char": _text_or_empty(record.us_char),
             },
             "tev": {
-                "reading": _text_or_empty(_lookup_family_value(payload, "tev_reading")),
-                "char": _text_or_empty(_lookup_family_value(payload, "tev_char")),
+                "reading": _text_or_empty(record.tev_reading),
+                "char": _text_or_empty(record.tev_char),
             },
         },
     }) or {}
 
 
-def _build_tx_render_context(payload: object, *, overview: bool, item_key: str = "", item_suffix: str = "") -> dict:
-    item_key, item_suffix = _resolve_item_identity(payload, item_key=item_key, item_suffix=item_suffix)
+def _build_tx_render_context(
+    record: CbmDefectRecord,
+    *,
+    overview: bool,
+    item_key: str = "",
+    item_suffix: str = "",
+) -> dict:
+    resolved_item_key = _text_or_empty(item_key)
+    resolved_item_suffix = _text_or_empty(item_suffix)
     return _prune_unset_detail_payload({
         "tx": {
-            "area": _format_detail_area(_lookup_family_value(payload, "defect_area"), _lookup_family_value(payload, "additional_remarks"), overview=overview),
-            "cabletype": _text_or_empty(_lookup_family_value(payload, "equipment")),
-            "location": item_suffix,
-            "manufacturer": _text_or_empty(_lookup_family_value(payload, "brand")),
-            "model": _text_or_empty(_lookup_family_value(payload, "model")),
-            "number": item_key,
-            "rating": _text_or_empty(_lookup_family_value(payload, "rating")),
+            "area": _format_detail_area(record.defect_area, record.additional_remarks, overview=overview),
+            "cabletype": _text_or_empty(record.equipment),
+            "location": resolved_item_suffix,
+            "manufacturer": _text_or_empty(record.brand),
+            "model": _text_or_empty(record.model),
+            "number": resolved_item_key,
+            "rating": _text_or_empty(record.rating),
             "serialnumber": "",
-            "ir": {"reading": _text_or_empty(_lookup_family_value(payload, "ir_reading"))},
+            "ir": {"reading": _text_or_empty(record.ir_reading)},
             "us": {
-                "reading": _text_or_empty(_lookup_family_value(payload, "us_reading")),
-                "char": _text_or_empty(_lookup_family_value(payload, "us_char")),
+                "reading": _text_or_empty(record.us_reading),
+                "char": _text_or_empty(record.us_char),
             },
         },
     }) or {}
 
 
-def _build_blackbox_render_context(payload: object, *, overview: bool, item_key: str = "", item_suffix: str = "") -> dict:
-    item_key, item_suffix = _resolve_item_identity(payload, item_key=item_key, item_suffix=item_suffix)
+def _build_blackbox_render_context(
+    record: CbmDefectRecord,
+    *,
+    overview: bool,
+    item_key: str = "",
+    item_suffix: str = "",
+) -> dict:
+    resolved_item_key = _text_or_empty(item_key)
+    resolved_item_suffix = _text_or_empty(item_suffix)
     return _prune_unset_detail_payload({
         "bbox": {
-            "location": item_suffix or item_key,
-            "number": item_key,
+            "location": resolved_item_suffix or resolved_item_key,
+            "number": resolved_item_key,
         }
     }) or {}
 
 
-def _build_battery_render_context(payload: object, *, overview: bool, item_key: str = "", item_suffix: str = "") -> dict:
-    item_key, _ = _resolve_item_identity(payload, item_key=item_key, item_suffix=item_suffix)
+def _build_battery_render_context(
+    record: CbmDefectRecord,
+    *,
+    overview: bool,
+    item_key: str = "",
+    item_suffix: str = "",
+) -> dict:
+    resolved_item_key = _text_or_empty(item_key)
     return _prune_unset_detail_payload({
         "batt": {
-            "manufacturer": _text_or_empty(_lookup_family_value(payload, "brand")),
-            "model": _text_or_empty(_lookup_family_value(payload, "model")),
-            "number": item_key,
+            "manufacturer": _text_or_empty(record.brand),
+            "model": _text_or_empty(record.model),
+            "number": resolved_item_key,
             "serialnumber": "",
         }
     }) or {}
 
 
-def _build_family_render_context(family_spec: QuickReportFamilySpec, payload: object, *, overview: bool, item_key: str = "", item_suffix: str = "") -> dict:
+def _build_family_render_context(
+    family_spec: QuickReportFamilySpec,
+    record: CbmDefectRecord,
+    *,
+    overview: bool,
+    item_key: str = "",
+    item_suffix: str = "",
+) -> dict:
     if family_spec.id == "fp_lvdb":
-        return _build_fp_lvdb_render_context(payload, overview=overview, item_key=item_key, item_suffix=item_suffix)
+        return _build_fp_lvdb_render_context(record, overview=overview, item_key=item_key, item_suffix=item_suffix)
     if family_spec.id == "swg":
-        return _build_swg_render_context(payload, overview=overview, item_key=item_key, item_suffix=item_suffix)
+        return _build_swg_render_context(record, overview=overview, item_key=item_key, item_suffix=item_suffix)
     if family_spec.id == "tx":
-        return _build_tx_render_context(payload, overview=overview, item_key=item_key, item_suffix=item_suffix)
+        return _build_tx_render_context(record, overview=overview, item_key=item_key, item_suffix=item_suffix)
     if family_spec.id == "blackbox":
-        return _build_blackbox_render_context(payload, overview=overview, item_key=item_key, item_suffix=item_suffix)
+        return _build_blackbox_render_context(record, overview=overview, item_key=item_key, item_suffix=item_suffix)
     if family_spec.id == "battery":
-        return _build_battery_render_context(payload, overview=overview, item_key=item_key, item_suffix=item_suffix)
-    return payload if isinstance(payload, dict) else {}
+        return _build_battery_render_context(record, overview=overview, item_key=item_key, item_suffix=item_suffix)
+    return {}
+

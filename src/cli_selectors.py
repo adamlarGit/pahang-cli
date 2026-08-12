@@ -525,6 +525,37 @@ def select_pahang_date_folder(
     )
 
 
+def select_testsheet_subfolder(
+    root_dir: Path | str | None = None,
+    environment: object | None = None,
+    title: str = "Select TESTSHEET Folder",
+) -> Path | None:
+    """Select any folder inside TESTSHEET/ interactively.
+
+    Supports both Active Project Context (via `environment`) and Standalone Utility Context (via `root_dir`).
+    """
+    base_dir: Path | None = None
+    if environment is not None and hasattr(environment, "storage"):
+        base_dir = environment.storage.get_testsheet_dir()
+    elif root_dir is not None:
+        base_dir = Path(root_dir)
+
+    if base_dir is None or not base_dir.exists():
+        if environment is not None and hasattr(environment, "get_base_path"):
+            base_dir = environment.get_base_path() / "TESTSHEET"
+        if base_dir is None or not base_dir.exists():
+            return prompt_directory_path("Enter target TESTSHEET directory path: ")
+
+    return select_directory_tree(
+        root_path=base_dir,
+        title=title,
+        is_selectable=lambda p: True,
+        get_child_title=lambda p, selectable: p.name,
+        get_confirmation_lines=lambda p: [f"Selected Folder: {p}"],
+    )
+
+
+
 def prompt_directory_path(
     message: str = "Enter directory path: ",
     default: Path | str | None = None,

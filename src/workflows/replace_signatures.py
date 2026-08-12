@@ -31,25 +31,22 @@ class ReplaceImagesSummary:
 
 def replace_pce_images(
     xlsx_path: str | Path,
-    photo1_path: str | Path,
+    photo1_path: str | Path | None = None,
     photo2_path: str | Path | None = None,
     output_path: str | Path | None = None,
     mode: str = "placeholder",
 ) -> str:
     """Replace inspection photos or placeholders on 'PCE Testsheet' and 'PCE VI' inside the given Excel file."""
     path = Path(xlsx_path).expanduser().resolve()
-    p1 = Path(photo1_path).expanduser().resolve()
+    p1 = Path(photo1_path).expanduser().resolve() if photo1_path else None
     p2 = Path(photo2_path).expanduser().resolve() if photo2_path else None
 
     if not path.exists():
         raise FileNotFoundError(f"Excel file not found: {path}")
-    if not p1.exists():
+    if p1 and not p1.exists():
         raise FileNotFoundError(f"New image 1 not found: {p1}")
     if p2 and not p2.exists():
         raise FileNotFoundError(f"New image 2 not found: {p2}")
-
-    if p2 is None:
-        p2 = p1
 
     def get_img_file(path_arg: Path) -> Path:
         if path_arg.is_dir():
@@ -90,95 +87,92 @@ def replace_pce_images(
                     cell.value = val_clean if val_clean else None
 
                     if has_vendor:
-                        chosen_p1 = get_img_file(p1)
-                        img1 = Image(str(chosen_p1))
-                        if get_format(chosen_p1) == "png":
-                            img1.format = "png"
-                        if ws.title == "PCE Testsheet":
-                            if col_idx <= 6 and 60 <= row_idx <= 72:
-                                marker_from = AnchorMarker(col=3, colOff=1449204, row=65, rowOff=12650)
-                                marker_to = AnchorMarker(col=6, colOff=826923, row=70, rowOff=62917)
-                            else:
-                                marker_from = AnchorMarker(col=col_idx, colOff=1449204, row=row_idx, rowOff=12650)
-                                marker_to = AnchorMarker(col=col_idx + 3, colOff=826923, row=row_idx + 5, rowOff=62917)
-                        elif ws.title == "PCE VI":
-                            if col_idx <= 6 and 42 <= row_idx <= 55:
-                                marker_from = AnchorMarker(col=2, colOff=14608, row=47, rowOff=164752)
-                                marker_to = AnchorMarker(col=5, colOff=663339, row=51, rowOff=50601)
-                            else:
-                                marker_from = AnchorMarker(col=col_idx, colOff=14608, row=row_idx, rowOff=164752)
-                                marker_to = AnchorMarker(col=col_idx + 3, colOff=663339, row=row_idx + 4, rowOff=50601)
-                        else:
-                            marker_from = AnchorMarker(col=col_idx, colOff=1449204, row=row_idx, rowOff=12650)
-                            marker_to = AnchorMarker(col=col_idx + 3, colOff=826923, row=row_idx + 5, rowOff=62917)
+                        if p1 is not None:
+                            chosen_p1 = get_img_file(p1)
+                            img1 = Image(str(chosen_p1))
+                            if get_format(chosen_p1) == "png":
+                                img1.format = "png"
 
-                        img1.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
-                        ws.add_image(img1)
+                            title_lower = ws.title.lower()
+                            if "pce testsheet" in title_lower:
+                                marker_from = AnchorMarker(col=3, colOff=1449204, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=12650)
+                                marker_to = AnchorMarker(col=6, colOff=826923, row=row_idx + 4, rowOff=62917)
+                            elif "pce vi" in title_lower:
+                                marker_from = AnchorMarker(col=2, colOff=14608, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=164752)
+                                marker_to = AnchorMarker(col=5, colOff=663339, row=row_idx + 3, rowOff=50601)
+                            else:
+                                marker_from = AnchorMarker(col=col_idx, colOff=1449204, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=12650)
+                                marker_to = AnchorMarker(col=col_idx + 3, colOff=826923, row=row_idx + 4, rowOff=62917)
+
+                            img1.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
+                            ws.add_image(img1)
                         placeholders_replaced += 1
 
                     if has_tnb:
-                        chosen_p2 = get_img_file(p2)
-                        img2 = Image(str(chosen_p2))
-                        if get_format(chosen_p2) == "png":
-                            img2.format = "png"
-                        if ws.title == "PCE Testsheet":
-                            if col_idx >= 15 and 60 <= row_idx <= 72:
-                                marker_from = AnchorMarker(col=19, colOff=502432, row=64, rowOff=24928)
-                                marker_to = AnchorMarker(col=24, colOff=23064, row=71, rowOff=12017)
-                            else:
-                                marker_from = AnchorMarker(col=col_idx, colOff=502432, row=row_idx, rowOff=24928)
-                                marker_to = AnchorMarker(col=col_idx + 5, colOff=23064, row=row_idx + 7, rowOff=12017)
-                        elif ws.title == "PCE VI":
-                            if col_idx >= 7 and 42 <= row_idx <= 55:
-                                marker_from = AnchorMarker(col=10, colOff=463652, row=46, rowOff=114300)
-                                marker_to = AnchorMarker(col=14, colOff=197220, row=51, rowOff=126503)
-                            else:
-                                marker_from = AnchorMarker(col=col_idx, colOff=463652, row=row_idx, rowOff=114300)
-                                marker_to = AnchorMarker(col=col_idx + 4, colOff=197220, row=row_idx + 5, rowOff=126503)
-                        else:
-                            marker_from = AnchorMarker(col=col_idx, colOff=502432, row=row_idx, rowOff=24928)
-                            marker_to = AnchorMarker(col=col_idx + 5, colOff=23064, row=row_idx + 7, rowOff=12017)
+                        if p2 is not None:
+                            chosen_p2 = get_img_file(p2)
+                            img2 = Image(str(chosen_p2))
+                            if get_format(chosen_p2) == "png":
+                                img2.format = "png"
 
-                        img2.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
-                        ws.add_image(img2)
+                            title_lower = ws.title.lower()
+                            if "pce testsheet" in title_lower:
+                                marker_from = AnchorMarker(col=19, colOff=502432, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=24928)
+                                marker_to = AnchorMarker(col=24, colOff=23064, row=row_idx + 6, rowOff=12017)
+                            elif "pce vi" in title_lower:
+                                marker_from = AnchorMarker(col=10, colOff=463652, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=114300)
+                                marker_to = AnchorMarker(col=14, colOff=197220, row=row_idx + 4, rowOff=126503)
+                            else:
+                                marker_from = AnchorMarker(col=col_idx, colOff=502432, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=24928)
+                                marker_to = AnchorMarker(col=col_idx + 5, colOff=23064, row=row_idx + 6, rowOff=12017)
+
+                            img2.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
+                            ws.add_image(img2)
                         placeholders_replaced += 1
 
             if ws.title in ["PCE Testsheet", "PCE VI"]:
                 if placeholders_replaced > 0:
-                    print(f" -> Replaced {placeholders_replaced} placeholder(s) on '{ws.title}' successfully.")
+                    print(f" -> Replaced/cleared {placeholders_replaced} placeholder(s) on '{ws.title}' successfully.")
                 else:
                     print(f" -> Warning: No '{{{{signvendor}}}}' or '{{{{signtnb}}}}' placeholders found on '{ws.title}'.")
             elif placeholders_replaced > 0:
-                print(f" -> Replaced {placeholders_replaced} placeholder(s) on '{ws.title}' successfully.")
+                print(f" -> Replaced/cleared {placeholders_replaced} placeholder(s) on '{ws.title}' successfully.")
 
     else:
         if "PCE Testsheet" in wb.sheetnames:
             ws_test = wb["PCE Testsheet"]
             if len(ws_test._images) >= 2:
-                chosen_p2 = get_img_file(p2)
-                ws_test._images[0].ref = str(chosen_p2)
-                ws_test._images[0].format = get_format(chosen_p2)
+                if p2 is not None:
+                    chosen_p2 = get_img_file(p2)
+                    ws_test._images[0].ref = str(chosen_p2)
+                    ws_test._images[0].format = get_format(chosen_p2)
 
-                chosen_p1 = get_img_file(p1)
-                ws_test._images[1].ref = str(chosen_p1)
-                ws_test._images[1].format = get_format(chosen_p1)
-                print(" -> Replaced both existing images on 'PCE Testsheet' successfully.")
+                if p1 is not None:
+                    chosen_p1 = get_img_file(p1)
+                    ws_test._images[1].ref = str(chosen_p1)
+                    ws_test._images[1].format = get_format(chosen_p1)
+                print(" -> Processed image replacements on 'PCE Testsheet'.")
             else:
                 print(f" -> Warning: Expected 2 images on 'PCE Testsheet', found {len(ws_test._images)}")
 
         if "PCE VI" in wb.sheetnames:
             ws_vi = wb["PCE VI"]
             if len(ws_vi._images) >= 3:
-                chosen_p1 = get_img_file(p1)
-                ws_vi._images[1].ref = str(chosen_p1)
-                ws_vi._images[1].format = get_format(chosen_p1)
+                if p1 is not None:
+                    chosen_p1 = get_img_file(p1)
+                    ws_vi._images[1].ref = str(chosen_p1)
+                    ws_vi._images[1].format = get_format(chosen_p1)
 
-                chosen_p2 = get_img_file(p2)
-                ws_vi._images[2].ref = str(chosen_p2)
-                ws_vi._images[2].format = get_format(chosen_p2)
-                print(" -> Replaced both existing inspection photos on 'PCE VI' successfully (Header logo preserved).")
+                if p2 is not None:
+                    chosen_p2 = get_img_file(p2)
+                    ws_vi._images[2].ref = str(chosen_p2)
+                    ws_vi._images[2].format = get_format(chosen_p2)
+                print(" -> Processed image replacements on 'PCE VI' (Header logo preserved).")
             else:
                 print(f" -> Warning: Expected 3 images on 'PCE VI', found {len(ws_vi._images)}")
+
+    for ws in wb.worksheets:
+        ws._tables.clear()
 
     save_target = str(output_path) if output_path else str(path)
     wb.save(save_target)
@@ -188,7 +182,7 @@ def replace_pce_images(
 
 def batch_replace_pce_images(
     folder_path: str | Path,
-    photo1_path: str | Path,
+    photo1_path: str | Path | None = None,
     photo2_path: str | Path | None = None,
     output_folder: str | Path | None = None,
     mode: str = "placeholder",
@@ -239,7 +233,7 @@ def _select_signature_path(
     sign_base_dir: Path,
     default_folder: str | None = None,
 ) -> tuple[Path | None, str | None]:
-    """Scan `sign_base_dir` for subfolders with .png files and prompt user to select one or enter custom path."""
+    """Scan `sign_base_dir` for subfolders with .png files and prompt user to select one, enter custom path, or choose None."""
     valid_folders: list[tuple[str, Path, list[Path]]] = []
     if sign_base_dir.exists() and sign_base_dir.is_dir():
         for item in sorted(os.listdir(sign_base_dir)):
@@ -260,6 +254,7 @@ def _select_signature_path(
                 folder_name,
             )
         )
+    options.append(cli_selectors.SelectOption("None (Remove placeholder text only)", "__none__"))
     options.append(cli_selectors.SelectOption("Enter custom image path (.png)", "__custom__"))
     options.append(cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"))
 
@@ -269,16 +264,22 @@ def _select_signature_path(
         chosen_default = default_folder
     elif valid_folders:
         chosen_default = valid_folders[0][0]
+    else:
+        chosen_default = "__none__"
 
     selection = cli_selectors.select_one(prompt_message, options, default_value=chosen_default)
     if selection in ("__cancel__", None):
-        return None, None
+        return None, "__cancel__"
+
+    if selection == "__none__":
+        print(" -> Selected: None (Placeholder text will be removed without image insertion)")
+        return None, "__none__"
 
     if selection == "__custom__":
         while True:
             custom_str = input("Enter path to .png signature image (or 'q' to cancel): ").strip().strip('"')
             if not custom_str or custom_str.lower() == "q":
-                return None, None
+                return None, "__cancel__"
             custom_path = Path(custom_str).expanduser().resolve()
             if custom_path.is_file() and custom_path.suffix.lower() == ".png":
                 return custom_path, "__custom__"
@@ -289,13 +290,16 @@ def _select_signature_path(
             print(f" -> Selected signature person: {folder_name} ({len(png_files)} signature variations will be dynamically randomized per replacement)")
             return subfolder, folder_name
 
-    return None, None
+    return None, "__cancel__"
 
 
-def run_replace_images() -> ReplaceImagesSummary:
+def run_replace_images(env: ProjectEnvironment | None = None) -> ReplaceImagesSummary:
     """Interactive entrypoint for inspection photo / signature stamp replacement."""
-    project_root = Path(__file__).resolve().parent.parent
-    sign_dir = project_root / "OTHERS" / "SIGN"
+    if env is None:
+        from src.project.environment import get_or_create_utility_environment
+        env = get_or_create_utility_environment()
+
+    sign_dir = env.get_sign_dir()
 
     # Robust target path validation loop
     target: Path | None = None
@@ -325,7 +329,7 @@ def run_replace_images() -> ReplaceImagesSummary:
         "Select signature person for img1 (Tested by / {{signvendor}}):",
         sign_dir,
     )
-    if not photo1_path:
+    if folder1 in ("__cancel__", None):
         print("Cancelled signature selection for img1.")
         return ReplaceImagesSummary(target=target, photo1=Path("."), photo2=None, mode=mode, processed_count=0, failed_count=0)
 
@@ -333,20 +337,20 @@ def run_replace_images() -> ReplaceImagesSummary:
     photo2_path, folder2 = _select_signature_path(
         "Select signature person for img2 (TNB Supervisor / {{signtnb}}):",
         sign_dir,
-        default_folder=folder1,
+        default_folder=folder1 if folder1 != "__none__" else None,
     )
-    if not photo2_path:
+    if folder2 in ("__cancel__", None):
         print("Cancelled signature selection for img2.")
-        return ReplaceImagesSummary(target=target, photo1=photo1_path, photo2=None, mode=mode, processed_count=0, failed_count=0)
+        return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=None, mode=mode, processed_count=0, failed_count=0)
 
     print(f"\n=== Running {mode.upper()} replacement ===")
     print(f"Target : {target}")
-    print(f"Img1   : {photo1_path}")
-    print(f"Img2   : {photo2_path}\n")
+    print(f"Img1   : {photo1_path if photo1_path else '[None - Text Removal Only]'}")
+    print(f"Img2   : {photo2_path if photo2_path else '[None - Text Removal Only]'}\n")
 
     if target.is_dir():
         proc, fail = batch_replace_pce_images(target, photo1_path, photo2_path, mode=mode)
-        return ReplaceImagesSummary(target=target, photo1=photo1_path, photo2=photo2_path, mode=mode, processed_count=proc, failed_count=fail)
+        return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=photo2_path, mode=mode, processed_count=proc, failed_count=fail)
     elif target.is_file():
         try:
             if target.parent.name == "processed_testsheet":
@@ -356,10 +360,11 @@ def run_replace_images() -> ReplaceImagesSummary:
                 out_dir.mkdir(parents=True, exist_ok=True)
                 out_path = out_dir / target.name
             replace_pce_images(target, photo1_path, photo2_path, output_path=out_path, mode=mode)
-            return ReplaceImagesSummary(target=target, photo1=photo1_path, photo2=photo2_path, mode=mode, processed_count=1, failed_count=0)
+            return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=photo2_path, mode=mode, processed_count=1, failed_count=0)
         except Exception as e:
             print(f"[ERROR] Failed to process file {target}: {e}")
-            return ReplaceImagesSummary(target=target, photo1=photo1_path, photo2=photo2_path, mode=mode, processed_count=0, failed_count=1)
+            return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=photo2_path, mode=mode, processed_count=0, failed_count=1)
     else:
         raise FileNotFoundError(f"Target not found: {target}")
+
 

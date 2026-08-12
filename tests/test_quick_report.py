@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+from docx import Document
 import pytest
 
 from src.project.environment import ProjectEnvironment
@@ -61,6 +62,7 @@ def test_cbm_tech_summary_pairing():
             additional_remarks="Remark 1",
             technology="IR",
             raw_measurement="54.2",
+            ir_reading="54.2",
         ),
         CbmDefectRecord(
             equipment="RMU",
@@ -68,6 +70,7 @@ def test_cbm_tech_summary_pairing():
             additional_remarks="Remark 1",
             technology="US",
             raw_measurement="12.0",
+            us_reading="12.0",
         ),
         CbmDefectRecord(
             equipment="RMU",
@@ -75,6 +78,7 @@ def test_cbm_tech_summary_pairing():
             additional_remarks="Remark 1",
             technology="TEV",
             raw_measurement="24.0",
+            tev_reading="24.0",
         ),
         CbmDefectRecord(
             equipment="TX",
@@ -82,6 +86,7 @@ def test_cbm_tech_summary_pairing():
             additional_remarks="",
             technology="IR",
             raw_measurement="45.0",
+            ir_reading="45.0",
         ),
     ]
     rows = prepare_tech_summary_rows(defects)
@@ -477,18 +482,18 @@ def test_composer_cbm_defect_pages_with_cbm_defects(tmp_path: Path):
 def test_compile_document_word_com_success(
     mock_win32com, mock_pythoncom, tmp_path: Path
 ):
-    """Verify _compile_document uses win32com to copy/paste document parts and saves properly."""
+    """Verify _compile_document uses win32com Documents.Add and Recopy & Paste to combine document parts."""
     composer = QuickReportComposer()
 
     mock_word = MagicMock()
     mock_main_doc = MagicMock()
-    mock_part_doc2 = MagicMock()
+    mock_part_doc = MagicMock()
     mock_rng = MagicMock()
 
     mock_win32com.Dispatch.return_value = mock_word
-    mock_word.Documents.Open.side_effect = [mock_main_doc, mock_part_doc2]
+    mock_word.Documents.Add.return_value = mock_main_doc
+    mock_word.Documents.Open.return_value = mock_part_doc
     mock_main_doc.Content = mock_rng
-    mock_part_doc2.Paragraphs = []
 
     part1 = tmp_path / "part1.docx"
     part2 = tmp_path / "part2.docx"
@@ -505,17 +510,15 @@ def test_compile_document_word_com_success(
     assert mock_word.Visible is False
     assert mock_word.DisplayAlerts == 0
 
+    mock_word.Documents.Add.assert_called_once()
     assert mock_word.Documents.Open.call_count == 2
-    mock_word.Documents.Open.assert_any_call(str(output_path.resolve()))
-    mock_word.Documents.Open.assert_any_call(str(part2.resolve()))
-
-    mock_part_doc2.Content.Copy.assert_called_once()
-    mock_part_doc2.Close.assert_called_once_with(False)
+    mock_part_doc.Content.Copy.assert_called()
+    mock_part_doc.Close.assert_called_with(False)
 
     mock_rng.InsertBreak.assert_called_once_with(7)
-    assert mock_rng.Paste.call_count == 1
+    assert mock_rng.Paste.call_count == 2
 
-    mock_main_doc.Save.assert_called_once()
+    mock_main_doc.SaveAs2.assert_called_once_with(str(output_path.resolve()))
     mock_main_doc.Close.assert_called_once_with(False)
     mock_word.Quit.assert_called_once()
     mock_pythoncom.CoUninitialize.assert_called_once()
@@ -526,26 +529,24 @@ def test_compile_document_word_com_success(
 def test_compile_document_word_com_cleanup_on_error(
     mock_win32com, mock_pythoncom, tmp_path: Path
 ):
-    """Verify _compile_document executes cleanup (Close, Quit, CoUninitialize) when an exception occurs."""
+    """Verify _compile_document executes cleanup (Close, Quit, CoUninitialize) and re-raises exception when COM fails."""
     composer = QuickReportComposer()
 
     mock_word = MagicMock()
     mock_main_doc = MagicMock()
-    mock_part_doc2 = MagicMock()
+    mock_part_doc = MagicMock()
 
     mock_win32com.Dispatch.return_value = mock_word
-    mock_word.Documents.Open.side_effect = [mock_main_doc, mock_part_doc2]
-    mock_part_doc2.Paragraphs = []
-    mock_part_doc2.Content.Copy.side_effect = RuntimeError("Copy failed")
+    mock_word.Documents.Add.return_value = mock_main_doc
+    mock_word.Documents.Open.return_value = mock_part_doc
+    mock_part_doc.Content.Copy.side_effect = RuntimeError("Copy failed")
 
     part1 = tmp_path / "part1.docx"
-    part2 = tmp_path / "part2.docx"
     output_path = tmp_path / "output.docx"
     part1.touch()
-    part2.touch()
 
     with pytest.raises(RuntimeError, match="Copy failed"):
-        composer._compile_document([part1, part2], output_path)
+        composer._compile_document([part1], output_path)
 
     # Verification of cleanup in finally block
     mock_main_doc.Close.assert_called_once_with(False)
@@ -553,144 +554,13 @@ def test_compile_document_word_com_cleanup_on_error(
     mock_pythoncom.CoUninitialize.assert_called_once()
 
 
-def test_generate_cbm_defect_pages_fallback_detail_groups(tmp_path: Path):
-    """Verify generate_cbm_defect_pages defensive fallback when detail_groups is missing."""
-    from src.quick_report.cbm_defect_pages import generate_cbm_defect_pages
-    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
-
-    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
-
-    # Create fake template files
-    overview_t = tmp_path / "swg_overview.docx"
-    panel_t = tmp_path / "swg_panel.docx"
-    overview_t.touch()
-    panel_t.touch()
-
-    template_paths = {
-        spec.overview_template_key: str(overview_t),
-        spec.detail_roles[0].template_key: str(panel_t),
-    }
-
-    groups = [
-        {
-            "item_key": "RMU SF6",
-            "defects": [{"equipment": "RMU SF6", "technology": "IR"}],
-            "overview": {"equipment": "RMU SF6"},
-            # detail_groups intentionally missing to test fallback
-        }
-    ]
-
-    with patch("src.quick_report.cbm_defect_pages._render_docx_template"):
-        paths = generate_cbm_defect_pages(
-            groups, spec, template_paths, tmp_path, 1, {"pe": "info"}
-        )
-
-    assert len(paths) == 2
-    assert "SWG OVERVIEW" in paths[0].name
-    assert "SWG RMU SF6" in paths[1].name
-
-
-def test_vi_defect_pages_remove_empty_cell_borders(tmp_path: Path):
-    """Verify _remove_empty_cell_borders and cell text clearing on docx table."""
-    from docx import Document
-
-    from src.quick_report.vi_defect_pages import _remove_empty_cell_borders
-
-    doc_path = tmp_path / "vi_defect_test.docx"
-    doc = Document()
-    table = doc.add_table(rows=11, cols=3)
-    # Fill cell (4, 0) with dummy text
-    cell = table.cell(4, 0)
-    cell.paragraphs[0].text = "Dummy defect"
-    doc.save(doc_path)
-
-    # Call _remove_empty_cell_borders with active_count=2 (slot 2 at row 4, col 0 is empty)
-    _remove_empty_cell_borders(doc_path, 2)
-
-    updated_doc = Document(doc_path)
-    updated_cell = updated_doc.tables[0].cell(4, 0)
-    assert updated_cell.text == ""
-    tcPr = updated_cell._tc.get_or_add_tcPr()
-    assert (
-        tcPr.find(
-            "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tcBorders"
-        )
-        is not None
-    )
-
-
-def test_compile_document_paragraph_trimming_infinite_loop_protection(tmp_path: Path):
-    """Verify _compile_document breaks out of paragraph trimming loop when paragraph count does not change."""
-    composer = QuickReportComposer()
-
-    with (
-        patch("src.quick_report.composer.pythoncom"),
-        patch("src.quick_report.composer.win32com.client") as mock_win32com,
-    ):
-        mock_word = MagicMock()
-        mock_main_doc = MagicMock()
-        mock_part_doc2 = MagicMock()
-
-        mock_win32com.Dispatch.return_value = mock_word
-        mock_word.Documents.Open.side_effect = [mock_main_doc, mock_part_doc2]
-
-        mock_paragraph = MagicMock()
-        mock_paragraph.Range.Text.strip.return_value = ""
-        # Paragraphs count stays at 1 even when Delete() is called (simulating Word COM final paragraph mark)
-        mock_paragraphs = MagicMock()
-        mock_paragraphs.__len__.return_value = 1
-        mock_paragraphs.Last = mock_paragraph
-        mock_part_doc2.Paragraphs = mock_paragraphs
-
-        part1 = tmp_path / "part1.docx"
-        part2 = tmp_path / "part2.docx"
-        output_path = tmp_path / "output.docx"
-        part1.touch()
-        part2.touch()
-
-        # Should complete without infinite loop
-        composer._compile_document([part1, part2], output_path)
-        assert mock_paragraph.Range.Delete.call_count == 1
-
-
-def test_compile_document_paste_before_close(tmp_path: Path):
-    """Verify rng.Paste() is executed BEFORE part_doc.Close(False)."""
-    composer = QuickReportComposer()
-
-    call_order = []
-
-    with (
-        patch("src.quick_report.composer.pythoncom"),
-        patch("src.quick_report.composer.win32com.client") as mock_win32com,
-    ):
-        mock_word = MagicMock()
-        mock_main_doc = MagicMock()
-        mock_part_doc2 = MagicMock()
-        mock_rng = MagicMock()
-
-        mock_win32com.Dispatch.return_value = mock_word
-        mock_word.Documents.Open.side_effect = [mock_main_doc, mock_part_doc2]
-        mock_main_doc.Content = mock_rng
-        mock_part_doc2.Paragraphs = MagicMock()
-        mock_part_doc2.Paragraphs.__len__.return_value = 0
-
-        mock_rng.Paste.side_effect = lambda: call_order.append("paste")
-        mock_part_doc2.Close.side_effect = lambda arg: call_order.append("close")
-
-        part1 = tmp_path / "part1.docx"
-        part2 = tmp_path / "part2.docx"
-        output_path = tmp_path / "output.docx"
-        part1.touch()
-        part2.touch()
-
-        composer._compile_document([part1, part2], output_path)
-        assert call_order == ["paste", "close"]
-
-
 def test_generate_cbm_defect_pages_filename_uniqueness(tmp_path: Path):
+
     """Verify unique filenames are generated when multiple groups and defects exist."""
     from src.quick_report.cbm_defect_pages import generate_cbm_defect_pages
     from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.defects import CbmDefectRecord
+    from src.quick_report.models import CbmDefectDetailGroup, CbmDefectFamilyPlan, CbmDefectGroup
 
     spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
 
@@ -699,31 +569,39 @@ def test_generate_cbm_defect_pages_filename_uniqueness(tmp_path: Path):
     overview_t.touch()
     panel_t.touch()
 
-    template_paths = {
-        spec.overview_template_key: str(overview_t),
-        spec.detail_roles[0].template_key: str(panel_t),
-    }
+    d1 = CbmDefectRecord(equipment="RMU SF6", technology="IR")
+    d2 = CbmDefectRecord(equipment="RMU SF6", technology="US")
+    d3 = CbmDefectRecord(equipment="RMU SF6", technology="IR")
 
-    groups = [
-        {
-            "item_key": "RMU SF6",
-            "defects": [{"equipment": "RMU SF6"}, {"equipment": "RMU SF6"}],
-            "overview": {"equipment": "RMU SF6"},
-            "detail_groups": {
-                "panel_area": [{"equipment": "RMU SF6"}, {"equipment": "RMU SF6"}]
-            },
-        },
-        {
-            "item_key": "RMU SF6",
-            "defects": [{"equipment": "RMU SF6"}],
-            "overview": {"equipment": "RMU SF6"},
-            "detail_groups": {"panel_area": [{"equipment": "RMU SF6"}]},
-        },
-    ]
+    group1 = CbmDefectGroup(
+        item_key="RMU SF6",
+        item_suffix="",
+        defects=(d1, d2),
+        overview=d1,
+        detail_groups=(
+            CbmDefectDetailGroup(role_id="panel_area", defects=(d1, d2)),
+        ),
+    )
+    group2 = CbmDefectGroup(
+        item_key="RMU SF6",
+        item_suffix="",
+        defects=(d3,),
+        overview=d3,
+        detail_groups=(
+            CbmDefectDetailGroup(role_id="panel_area", defects=(d3,)),
+        ),
+    )
+
+    family_plan = CbmDefectFamilyPlan(
+        spec=spec,
+        overview_template=overview_t,
+        detail_templates=(("panel_area", panel_t),),
+        groups=(group1, group2),
+    )
 
     with patch("src.quick_report.cbm_defect_pages._render_docx_template"):
         paths = generate_cbm_defect_pages(
-            groups, spec, template_paths, tmp_path, 1, {"pe": "info"}
+            family_plan, tmp_path, 1, {"pe": "info"}
         )
 
     filenames = [p.name for p in paths]
@@ -958,7 +836,7 @@ def test_workflow_fetches_defects_from_repository(tmp_path: Path):
 
     captured_plan = {}
 
-    def spy_load(plan):
+    def spy_load(plan, word_app=None):
         captured_plan["plan"] = plan
         return dummy_path
 

@@ -60,8 +60,13 @@ The 6-stage ETL pipeline deep module in `src/workflows/update_qr02_cba.py` respo
 ### QuickReportWorkflow
 The 6-stage ETL pipeline deep module in `src/workflows/quick_report.py` responsible for discovering testsheet packages across `TESTSHEET/`, filtering targets, fetching per-station CBM and VI defects from master ENGR workbooks (`QR03 CBA.xlsx` and `QR03 VI.xlsx`), transforming station data into rendering plans with canonical defect status suffixes `(IR+US+TEV+VI)`, rendering multi-part `.docx` templates, and compiling final Word documents.
 
-### WordComDocumentCompiler
-Quick Report part compilation strictly uses Word COM (`win32com.client`) RECOPY & PASTE with `Documents.Add()` to ensure FLIR Tools+ ActiveX controls (`CIRViewer...`) maintain unique shape IDs and binary OLE streams without page crosstalk or document corruption.
+### SignatureReplacementWorkflow
+The deep module in `src/workflows/replace_signatures.py` responsible for processing Excel testsheet signature placeholders (`{{signvendor}}`, `{{signtnb}}`). Supports signature image insertion or explicit `None` placeholder text removal (stripping `{{signvendor}}` and `{{signtnb}}` without inserting drawings to facilitate paper signing), anchor positioning, and worksheet table definition sanitization (`ws._tables.clear()`) prior to saving. Reused by both utility action and `PostProcessingPipelineWorkflow`.
+
+### CombinePdfsWithSeparatorWorkflow
+A standalone utility workflow that scans a target folder for PDFs, sorts them in ascending numerical order based on filename leading digits (`001`, `002`), and merges them into a single output PDF with `separator_sheet.pdf` inserted strictly between consecutive PDF files.
+
+
 
 
 

@@ -88,8 +88,13 @@ class WorkspaceStorage(ABC):
         """Return the WHATSAPP directory path."""
 
     @abstractmethod
+    def get_sign_dir(self) -> Path:
+        """Return the OTHERS/SIGN directory path for signatures."""
+
+    @abstractmethod
     def get_template(self, key: str) -> Path:
         """Return the resolved path for a template key."""
+
 
     @abstractmethod
     def validate_existence(self) -> None:
@@ -164,7 +169,11 @@ class LocalWorkspaceStorage(WorkspaceStorage):
     def get_whatsapp_dir(self) -> Path:
         return self.get_python_dir() / "WHATSAPP"
 
+    def get_sign_dir(self) -> Path:
+        return self.root_path / "OTHERS" / "SIGN"
+
     def get_template(self, key: str) -> Path:
+
         if key not in config.TEMPLATES:
             raise KeyError(f"Unknown template key: {key}")
 

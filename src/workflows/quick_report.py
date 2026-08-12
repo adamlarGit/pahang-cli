@@ -12,6 +12,13 @@ from src.quick_report.filter import QuickReportFilter
 from src.quick_report.transformer import QuickReportTransformer
 from src.workflows.models import QuickReportResult
 
+try:
+    import pythoncom
+    import win32com.client
+except ImportError:
+    pythoncom = None
+    win32com = None
+
 if TYPE_CHECKING:
     from src.project.environment import ProjectEnvironment
     from src.workflows.models import QuickReportRequest
@@ -56,30 +63,53 @@ class QuickReportWorkflow:
         generated_paths: list[Path] = []
         errors: list[str] = []
 
-        for i, pkg in enumerate(filtered_packages, start=1):
-            if request.progress_sink:
-                request.progress_sink(
-                    f"[{i}/{len(filtered_packages)}] Generating quick report for {pkg.station}..."
-                )
-
+        word_app = None
+        if win32com and getattr(win32com, "client", None):
             try:
-                cbm_defects, vi_defects = self.extractor.extract_defects(
-                    pkg, environment
-                )
-
-                plan = self.transformer.transform(
-                    pkg=pkg,
-                    cbm_defects=cbm_defects,
-                    vi_defects=vi_defects,
-                    environment=environment,
-                    cond_template_path=request.substation_condition_template_path,
-                )
-                out_path = self.composer.load(plan)
-                if out_path:
-                    generated_paths.append(out_path)
+                if pythoncom:
+                    pythoncom.CoInitialize()
+                word_app = win32com.client.Dispatch("Word.Application")
+                word_app.Visible = False
+                word_app.DisplayAlerts = 0
             except Exception as e:
-                errors.append(f"Failed to process {pkg.station}: {e}")
-                logging.exception(f"Failed to process {pkg.station}")
+                logging.warning(f"Could not pre-initialize Word COM: {e}")
+
+        try:
+            for i, pkg in enumerate(filtered_packages, start=1):
+                if request.progress_sink:
+                    request.progress_sink(
+                        f"[{i}/{len(filtered_packages)}] Generating quick report for {pkg.station}..."
+                    )
+
+                try:
+                    cbm_defects, vi_defects = self.extractor.extract_defects(
+                        pkg, environment
+                    )
+
+                    plan = self.transformer.transform(
+                        pkg=pkg,
+                        cbm_defects=cbm_defects,
+                        vi_defects=vi_defects,
+                        environment=environment,
+                        cond_template_path=request.substation_condition_template_path,
+                    )
+                    out_path = self.composer.load(plan, word_app=word_app)
+                    if out_path:
+                        generated_paths.append(out_path)
+                except Exception as e:
+                    errors.append(f"Failed to process {pkg.station}: {e}")
+                    logging.exception(f"Failed to process {pkg.station}")
+        finally:
+            if word_app is not None:
+                try:
+                    word_app.Quit()
+                except Exception:
+                    pass
+            if word_app is not None and pythoncom:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
 
         return self._audit_and_build_result(
             generated_paths, [], errors

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -235,6 +237,44 @@ def process_range(ws: object, range_string: str, wb: object | None = None) -> No
             _apply_diagonal_border(cell)
 
 
+def _repair_openpyxl_zip(input_path: Path, output_path: Path) -> None:
+    """Repair openpyxl saved workbook by fixing table relationship target paths and restoring missing drawing parts."""
+    if not output_path.exists():
+        return
+
+    input_drawings: dict[str, bytes] = {}
+    if input_path.exists():
+        try:
+            with zipfile.ZipFile(input_path, "r") as z_in:
+                for name in z_in.namelist():
+                    if name.startswith("xl/drawings/"):
+                        input_drawings[name] = z_in.read(name)
+        except Exception:
+            pass
+
+    temp_repaired = output_path.with_suffix(".repaired.tmp")
+    try:
+        with zipfile.ZipFile(output_path, "r") as z_out, zipfile.ZipFile(temp_repaired, "w") as z_rep:
+            for item in z_out.infolist():
+                content = z_out.read(item.filename)
+                if item.filename.startswith("xl/worksheets/_rels/"):
+                    content_str = content.decode("utf-8", errors="ignore")
+                    fixed_str = re.sub(r'Target="/xl/tables/', 'Target="../tables/', content_str)
+                    fixed_str = re.sub(r'Target="/xl/drawings/', 'Target="../drawings/', fixed_str)
+                    content = fixed_str.encode("utf-8")
+                z_rep.writestr(item, content)
+
+            out_names = set(z_out.namelist())
+            for d_name, d_bytes in input_drawings.items():
+                if d_name not in out_names:
+                    z_rep.writestr(d_name, d_bytes)
+
+        shutil.move(temp_repaired, output_path)
+    except Exception:
+        if temp_repaired.exists():
+            temp_repaired.unlink(missing_ok=True)
+
+
 def process_workbook(file_path: str | Path) -> str:
     """Process a single workbook applying diagonal borders to blank cells."""
     path = Path(file_path).expanduser().resolve()
@@ -248,6 +288,9 @@ def process_workbook(file_path: str | Path) -> str:
             for rng in VI_SHEET_RANGES_TO_PROCESS:
                 process_range(ws, rng, wb)
 
+    for ws in wb.worksheets:
+        ws._tables.clear()
+
     if path.parent.name == "processed_testsheet":
         new_file_path = path
         wb.save(str(new_file_path))
@@ -258,6 +301,9 @@ def process_workbook(file_path: str | Path) -> str:
         new_file_path = output_dir / path.name
         wb.save(str(new_file_path))
         print(f"Processed {path.name} -> saved as {new_file_path}")
+
+    wb.close()
+    _repair_openpyxl_zip(path, new_file_path)
     return str(new_file_path)
 
 

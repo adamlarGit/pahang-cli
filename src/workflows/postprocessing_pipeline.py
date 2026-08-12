@@ -26,7 +26,12 @@ from src.postprocessing.converters import (
 )
 from src.project.environment import ProjectEnvironment
 # Core functions imported from replace_signatures (reused per architecture design)
-from src.workflows.replace_signatures import _select_signature_path, replace_pce_images
+from src.workflows.replace_signatures import (
+    _select_signature_path,
+    replace_pce_images,
+)
+
+
 from src.workflows.whatsapp import run_generate_whatsapp_report
 
 
@@ -49,19 +54,12 @@ def discover_substation_packages(env: ProjectEnvironment) -> list[SubstationPack
 
 def _apply_diagonals_to_workbook(input_xlsx: Path, output_xlsx: Path) -> Path:
     """Load workbook, apply diagonal borders across standard testsheet ranges, and save."""
-    wb = openpyxl.load_workbook(str(input_xlsx), data_only=False)
-
-    for ws in wb.worksheets:
-        if _is_pce_testsheet_sheet(ws.title):
-            for rng in TESTSHEET_RANGES_TO_PROCESS:
-                process_range(ws, rng, wb)
-        elif _is_pce_vi_sheet(ws.title):
-            for rng in VI_SHEET_RANGES_TO_PROCESS:
-                process_range(ws, rng, wb)
-
-    wb.save(str(output_xlsx))
-    wb.close()
+    from src.workflows.diagonal_borders import process_workbook
+    res = Path(process_workbook(input_xlsx))
+    if res.resolve() != output_xlsx.resolve():
+        shutil.copy2(res, output_xlsx)
     return output_xlsx
+
 
 
 def run_postprocessing_pipeline(env: ProjectEnvironment) -> PostProcessingSummary:
@@ -146,23 +144,21 @@ def run_postprocessing_pipeline(env: ProjectEnvironment) -> PostProcessingSummar
         return PostProcessingSummary(processed_packages=(), final_deliverables=())
 
     if sign_choice is True:
-        project_root = Path(__file__).resolve().parent.parent
-        sign_dir = project_root / "OTHERS" / "SIGN"
-
+        sign_dir = env.get_sign_dir()
         vendor_sign_path, folder1 = _select_signature_path(
             "Select vendor signature person (from OTHERS/SIGN/):",
             sign_dir,
         )
-        if not vendor_sign_path:
+        if folder1 in (None, "__cancel__"):
             print("Cancelled signature selection for vendor. Operation cancelled.")
             return PostProcessingSummary(processed_packages=(), final_deliverables=())
 
-        tnb_sign_path, _ = _select_signature_path(
+        tnb_sign_path, folder2 = _select_signature_path(
             "Select TNB signature person (from OTHERS/SIGN/):",
             sign_dir,
-            default_folder=folder1,
+            default_folder=folder1 if folder1 != "__none__" else None,
         )
-        if not tnb_sign_path:
+        if folder2 in (None, "__cancel__"):
             print("Cancelled signature selection for TNB. Operation cancelled.")
             return PostProcessingSummary(processed_packages=(), final_deliverables=())
 
@@ -170,19 +166,17 @@ def run_postprocessing_pipeline(env: ProjectEnvironment) -> PostProcessingSummar
 
     # WhatsApp generation prompt (only for by_date mode)
     generate_whatsapp = False
-    if mode == "by_date":
-        whatsapp_options = [
-            cli_selectors.SelectOption("Yes - Generate WhatsApp daily report", True),
-            cli_selectors.SelectOption("No - Skip WhatsApp generation", False),
+    if selection_mode == "by_date":
+        wa_options = [
+            cli_selectors.SelectOption("Yes - Generate WhatsApp report (.docx)", True),
+            cli_selectors.SelectOption("No - Skip WhatsApp report generation", False),
         ]
-        whatsapp_choice = cli_selectors.select_one(
-            "Generate WhatsApp daily report?", whatsapp_options, default_value=True
-        )
-        if whatsapp_choice in (None, "__cancel__"):
+        wa_choice = cli_selectors.select_one("Generate WhatsApp report?", wa_options, default_value=True)
+        if wa_choice in (None, "__cancel__"):
             return PostProcessingSummary(processed_packages=(), final_deliverables=())
-        generate_whatsapp = bool(whatsapp_choice)
+        generate_whatsapp = bool(wa_choice)
 
-    total_steps = 5 if apply_signatures else 4
+    total_steps = 4 if apply_signatures else 3
 
     # Step 1: Generate WhatsApp daily report right at the start if requested
     if generate_whatsapp and target_packages:

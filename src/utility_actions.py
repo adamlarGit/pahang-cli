@@ -102,8 +102,15 @@ def _load_diagonal_runner() -> Callable[[], object]:
 
 
 def _load_replace_images_runner() -> Callable[[], object]:
-    from src.workflows.replace_signatures import run_replace_images
-    return run_replace_images
+    def _run() -> object:
+        from src.project.environment import get_or_create_utility_environment
+        from src.workflows.replace_signatures import run_replace_images
+
+        env = get_or_create_utility_environment()
+        return run_replace_images(env)
+
+    return _run
+
 
 
 def _load_whatsapp_runner() -> Callable[[], object]:
@@ -164,11 +171,17 @@ def _load_remove_desktop_ini_runner() -> Callable[[], object]:
     return _run
 
 
+def _load_combine_pdfs_with_separator_runner() -> Callable[[], object]:
+    from src.workflows.combine_pdfs_with_separator import run_combine_pdfs_with_separator
+    return run_combine_pdfs_with_separator
+
+
 UTILITY_ACTIONS: tuple[UtilityAction, ...] = (
     UtilityAction("Create raw material folders", _load_raw_material_runner),
     UtilityAction("Rename files (match names from input dir)", _load_rename_files_runner),
     UtilityAction("Extract PE pages from PDF (black-page detection)", _load_pdf_extract_runner),
     UtilityAction("Combine PDFs from primary and secondary folders", _load_combine_pdfs_runner),
+    UtilityAction("Combine PDFs with separator sheet", _load_combine_pdfs_with_separator_runner),
     UtilityAction("Convert DOCX to PDF (batch)", _load_docx_to_pdf_runner),
     UtilityAction("Convert Testsheet to PDF (batch)", _load_testsheet_to_pdf_runner),
     UtilityAction("Rename FLIR raw files numbering", _load_rename_flir_runner),

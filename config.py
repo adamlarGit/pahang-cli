@@ -52,6 +52,7 @@ TEMPLATES: dict[str, str] = {
     "tx_lv_sides": r"QUICK REPORT\DEFECT IR\tx-lv-sides.docx",
     "blackbox_overview": r"QUICK REPORT\DEFECT IR\blackbox-overview.docx",
     "battery_overview": r"QUICK REPORT\DEFECT IR\battery-overview.docx",
+    "separator_sheet": r"TESTSHEET SEPARATOR\separator_sheet.pdf",
 }
 
 # ─── Seed Files for Onboarding (source relative to GLOBAL_TEMPLATES_DIR -> target relative to base_path) ───

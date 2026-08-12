@@ -134,7 +134,7 @@ class ComDocumentConverter(DocumentConverter):
             logging.debug("Could not configure Adobe PDF printer: %s", exc)
 
     def _configure_target_page_setup(self, target: object) -> None:
-        """Enforce standardized PageSetup properties (`FitToPagesWide=1`, `FitToPagesTall=1`, `Zoom=False`)."""
+        """Enforce standardized PageSetup properties (`PaperSize=9`, `Orientation=2`, `FitToPagesWide=1`, `FitToPagesTall=1`, `Zoom=False`)."""
         if not self.optimize_page_setup:
             return
         try:
@@ -146,6 +146,8 @@ class ComDocumentConverter(DocumentConverter):
 
             for ws in sheets_to_process:
                 try:
+                    ws.PageSetup.PaperSize = 9  # xlPaperA4 (210 x 297 mm)
+                    ws.PageSetup.Orientation = 2  # xlLandscape
                     ws.PageSetup.Zoom = False
                     ws.PageSetup.FitToPagesWide = 1
                     ws.PageSetup.FitToPagesTall = 1
@@ -180,6 +182,17 @@ class ComDocumentConverter(DocumentConverter):
             f_out.write(buffer.getvalue())
         return output_pdf
 
+    def _open_workbook(self, excel_app: object, xlsx_path: Path) -> object:
+        """Open Excel workbook via COM with fallback to repair mode for openpyxl-modified files."""
+        abs_path = str(xlsx_path.resolve())
+        try:
+            return excel_app.Workbooks.Open(Filename=abs_path, UpdateLinks=0, ReadOnly=True)
+        except Exception as exc:
+            logging.debug("Standard Workbooks.Open failed for %s, trying CorruptLoad=xlRepairFile: %s", abs_path, exc)
+            return excel_app.Workbooks.Open(
+                abs_path, 0, True, None, None, None, True, None, None, False, False, None, False, None, 2
+            )
+
     def convert_testsheet_to_pdf(
         self,
         xlsx_path: Path,
@@ -187,60 +200,69 @@ class ComDocumentConverter(DocumentConverter):
         target_sheets: Sequence[str] | None = None,
     ) -> Path:
         """Convert testsheet workbook to PDF using COM automation."""
+        import pythoncom
         import win32com.client as win32
 
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
-        excel_app = win32.Dispatch("Excel.Application")
-        excel_app.Visible = False
-        excel_app.DisplayAlerts = False
-
+        pythoncom.CoInitialize()
+        excel_app = None
         wb = None
         try:
-            self._configure_adobe_printer(excel_app)
-            wb = excel_app.Workbooks.Open(str(xlsx_path.resolve()), ReadOnly=True)
-            worksheet_names = [ws.Name for ws in wb.Worksheets]
-            selected_names = select_and_sort_sheets(worksheet_names, target_sheets)
-            ws_map = {ws.Name: ws for ws in wb.Worksheets}
-            selected_sheets = [ws_map[name] for name in selected_names if name in ws_map]
+            excel_app = win32.DispatchEx("Excel.Application")
+            excel_app.Visible = False
+            excel_app.DisplayAlerts = False
 
-            if not selected_sheets:
-                self._configure_target_page_setup(wb)
-                wb.ExportAsFixedFormat(0, str(pdf_path.resolve()), 0, True, False)
-            elif len(selected_sheets) == 1:
-                ws = selected_sheets[0]
-                self._configure_target_page_setup(ws)
-                ws.ExportAsFixedFormat(0, str(pdf_path.resolve()), 0, True, False)
-            else:
-                temp_pdfs: list[Path] = []
-                try:
-                    for i, ws in enumerate(selected_sheets):
-                        self._configure_target_page_setup(ws)
-                        temp_pdf = pdf_path.parent / f".tmp_{pdf_path.stem}_sheet_{i}.pdf"
-                        ws.ExportAsFixedFormat(0, str(temp_pdf.resolve()), 0, True, False)
-                        temp_pdfs.append(temp_pdf)
+            try:
+                self._configure_adobe_printer(excel_app)
+                wb = self._open_workbook(excel_app, xlsx_path)
+                worksheet_names = [ws.Name for ws in wb.Worksheets]
+                selected_names = select_and_sort_sheets(worksheet_names, target_sheets)
+                ws_map = {ws.Name: ws for ws in wb.Worksheets}
+                selected_sheets = [ws_map[name] for name in selected_names if name in ws_map]
 
-                    self._merge_temp_pdfs(temp_pdfs, pdf_path)
-                finally:
-                    for temp_pdf in temp_pdfs:
-                        if temp_pdf.exists():
-                            try:
-                                temp_pdf.unlink()
-                            except Exception:
-                                pass
-            selected_sheets = None
-            ws_map = None
-        finally:
-            if wb is not None:
+                if not selected_sheets:
+                    self._configure_target_page_setup(wb)
+                    wb.ExportAsFixedFormat(0, str(pdf_path.resolve()), 0, True, False)
+                elif len(selected_sheets) == 1:
+                    ws = selected_sheets[0]
+                    self._configure_target_page_setup(ws)
+                    ws.ExportAsFixedFormat(0, str(pdf_path.resolve()), 0, True, False)
+                else:
+                    temp_pdfs: list[Path] = []
+                    try:
+                        for i, ws in enumerate(selected_sheets):
+                            self._configure_target_page_setup(ws)
+                            temp_pdf = pdf_path.parent / f".tmp_{pdf_path.stem}_sheet_{i}.pdf"
+                            ws.ExportAsFixedFormat(0, str(temp_pdf.resolve()), 0, True, False)
+                            temp_pdfs.append(temp_pdf)
+
+                        self._merge_temp_pdfs(temp_pdfs, pdf_path)
+                    finally:
+                        for temp_pdf in temp_pdfs:
+                            if temp_pdf.exists():
+                                try:
+                                    temp_pdf.unlink()
+                                except Exception:
+                                    pass
+                selected_sheets = None
+                ws_map = None
+            finally:
+                if wb is not None:
+                    try:
+                        wb.Close(SaveChanges=False)
+                    except Exception:
+                        pass
+                    wb = None
                 try:
-                    wb.Close(SaveChanges=False)
+                    excel_app.Quit()
                 except Exception:
                     pass
-                wb = None
+                excel_app = None
+        finally:
             try:
-                excel_app.Quit()
+                pythoncom.CoUninitialize()
             except Exception:
                 pass
-            excel_app = None
 
         if not pdf_path.exists():
             raise RuntimeError(f"COM export failed: {pdf_path} not found after export.")

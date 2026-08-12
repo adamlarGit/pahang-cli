@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from src.quick_report.cbm_defect_planner import CbmDefectPlanner
-from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.utils import sanitize_filename
 
@@ -88,26 +87,6 @@ class QuickReportTransformer:
 
         cbm_defect_family_plans = self._cbm_planner.plan(cbm_defects, environment)
 
-        family_template_paths_dict: dict[str, str] = {}
-        if cbm_defects:
-            for spec in QUICK_REPORT_FAMILY_SPECS:
-                family_defects = [
-                    d
-                    for d in cbm_defects
-                    if d.equipment.upper() in spec.equipment_values
-                ]
-                if not family_defects:
-                    continue
-
-                if spec.overview_template_key:
-                    t = environment.get_template(spec.overview_template_key)
-                    if t:
-                        family_template_paths_dict[spec.overview_template_key] = str(t)
-                for role in spec.detail_roles:
-                    t = environment.get_template(role.template_key)
-                    if t:
-                        family_template_paths_dict[role.template_key] = str(t)
-
         return QuickReportStationPlan(
             package=pkg,
             pe_info=pe_info,
@@ -126,7 +105,6 @@ class QuickReportTransformer:
             vi_defect_template=vi_defect_template,
             sticker_template=sticker_template,
             cbm_defect_family_plans=cbm_defect_family_plans,
-            family_template_paths=tuple(family_template_paths_dict.items()),
         )
 
     def _resolve_output_dir(

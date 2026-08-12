@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pahang CLI - Quick Report End-to-End Workflow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-secondary: #111827;
+            --bg-card: #1f2937;
+            --bg-card-hover: #2d3748;
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-violet: #8b5cf6;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --text-bright: #ffffff;
+            --border-color: #374151;
+            --glass-bg: rgba(31, 41, 55, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 3rem 2rem;
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(139, 92, 246, 0.15));
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(12px);
+            margin-bottom: 2.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 60%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .title-badge {
+            display: inline-block;
+            padding: 0.4rem 1rem;
+            background: rgba(6, 182, 212, 0.2);
+            color: var(--accent-cyan);
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--text-bright);
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #ffffff, var(--accent-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: relative;
+            z-index: 1;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            max-width: 800px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Navigation Controls */
+        .nav-tabs {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab-btn {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 0.75rem 1.25rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-btn:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-bright);
+            border-color: var(--accent-cyan);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            color: var(--text-bright);
+            border-color: transparent;
+            box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Pipeline Visual Container */
+        .pipeline-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .stage-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 1.75rem;
+            position: relative;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .stage-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-cyan);
+        }
+
+        .stage-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .stage-title-group {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .stage-number {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent-cyan);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+
+        .stage-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text-bright);
+        }
+
+        .module-badge {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(139, 92, 246, 0.15);
+            color: var(--accent-violet);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            padding: 0.3rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .stage-body {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .stage-body {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .desc-box p {
+            margin-bottom: 0.75rem;
+            color: #d1d5db;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin-top: 0.5rem;
+        }
+
+        .feature-list li {
+            position: relative;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: #9ca3af;
+            font-size: 0.95rem;
+        }
+
+        .feature-list li::before {
+            content: '⚡';
+            position: absolute;
+            left: 0;
+            color: var(--accent-cyan);
+            font-size: 0.85rem;
+        }
+
+        .code-box {
+            background: #090d16;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            color: #e5e7eb;
+            overflow-x: auto;
+        }
+
+        .code-box .kw { color: #f472b6; }
+        .code-box .fn { color: #60a5fa; }
+        .code-box .str { color: #34d399; }
+        .code-box .cm { color: #6b7280; font-style: italic; }
+
+        /* Grid Layouts for Assembly Parts */
+        .assembly-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.25rem;
+            margin-top: 1.5rem;
+        }
+
+        .part-card {
+            background: var(--bg-card);
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            padding: 1.25rem;
+            transition: all 0.3s ease;
+        }
+
+        .part-card:hover {
+            border-color: var(--accent-violet);
+            box-shadow: 0 8px 25px rgba(139, 92, 246, 0.15);
+        }
+
+        .part-number {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-emerald);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        .part-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-bright);
+            margin-bottom: 0.5rem;
+        }
+
+        .part-desc {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .part-template {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.78rem;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.4rem 0.6rem;
+            border-radius: 6px;
+            color: var(--accent-cyan);
+            word-break: break-all;
+        }
+
+        /* Flow Diagram SVG Styling */
+        .svg-flow-container {
+            width: 100%;
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            overflow-x: auto;
+        }
+
+        /* Callout Box */
+        .callout-box {
+            background: rgba(245, 158, 11, 0.1);
+            border-left: 4px solid var(--accent-amber);
+            padding: 1rem 1.25rem;
+            border-radius: 0 10px 10px 0;
+            margin: 1.5rem 0;
+            color: #fef3c7;
+            font-size: 0.92rem;
+        }
+
+        .callout-title {
+            font-weight: 700;
+            color: var(--accent-amber);
+            margin-bottom: 0.25rem;
+        }
+
+        /* File Links */
+        a.file-link {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            border-bottom: 1px dashed var(--accent-cyan);
+            transition: color 0.2s ease;
+        }
+
+        a.file-link:hover {
+            color: var(--text-bright);
+            border-bottom-style: solid;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border-color);
+            margin-top: 3rem;
+        }
+
+        /* Table styles */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+
+        .data-table th, .data-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table th {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+
+        .data-table tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title-badge">Pahang CLI Architecture Report</div>
+        <h1>Quick Report Generation Workflow</h1>
+        <p class="subtitle">Complete End-to-End Process Breakdown: 6-Stage ETL Engine, 7-Part Document Renderer, and Microsoft Word COM Assembly</p>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('overview')">📌 System Overview</button>
+        <button class="tab-btn" onclick="switchTab('etl-pipeline')">⚙️ 6-Stage ETL Engine</button>
+        <button class="tab-btn" onclick="switchTab('document-assembly')">📄 7-Part Docx Assembly</button>
+        <button class="tab-btn" onclick="switchTab('cbm-families')">⚡ CBM Defect Families</button>
+        <button class="tab-btn" onclick="switchTab('photo-compilation')">🖼️ Photo & Word COM Engine</button>
+    </div>
+
+    <!-- TAB 1: OVERVIEW -->
+    <div id="overview" class="tab-content active">
+        <div class="svg-flow-container">
+            <h3 style="margin-bottom: 1rem; color: var(--text-bright);">End-to-End Architectural Data Flow</h3>
+            <svg viewBox="0 0 1000 360" width="100%" height="320" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#06b6d4;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#ec4899;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#10b981;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+                    </linearGradient>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ca3af" />
+                    </marker>
+                </defs>
+
+                <!-- Input Sources -->
+                <rect x="20" y="30" width="160" height="60" rx="10" fill="#1f2937" stroke="#374151" stroke-width="2"/>
+                <text x="100" y="55" fill="#f3f4f6" font-size="12" font-weight="600" text-anchor="middle">Digital Testsheet</text>
+                <text x="100" y="73" fill="#9ca3af" font-size="10" text-anchor="middle">TESTSHEET/*.xlsx</text>
+
+                <rect x="20" y="110" width="160" height="60" rx="10" fill="#1f2937" stroke="#374151" stroke-width="2"/>
+                <text x="100" y="135" fill="#f3f4f6" font-size="12" font-weight="600" text-anchor="middle">ENGR Master Sheets</text>
+                <text x="100" y="153" fill="#9ca3af" font-size="10" text-anchor="middle">QR03 VI & QR03 CBA</text>
+
+                <rect x="20" y="190" width="160" height="60" rx="10" fill="#1f2937" stroke="#374151" stroke-width="2"/>
+                <text x="100" y="215" fill="#f3f4f6" font-size="12" font-weight="600" text-anchor="middle">Substation Photos</text>
+                <text x="100" y="233" fill="#9ca3af" font-size="10" text-anchor="middle">RAW MATERIAL/*</text>
+
+                <rect x="20" y="270" width="160" height="60" rx="10" fill="#1f2937" stroke="#374151" stroke-width="2"/>
+                <text x="100" y="295" fill="#f3f4f6" font-size="12" font-weight="600" text-anchor="middle">Word Templates</text>
+                <text x="100" y="313" fill="#9ca3af" font-size="10" text-anchor="middle">templates/QUICK REPORT/</text>
+
+                <!-- Arrows to Extractor -->
+                <line x1="180" y1="60" x2="240" y2="160" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+                <line x1="180" y1="140" x2="240" y2="160" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+                <line x1="180" y1="220" x2="240" y2="160" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Pipeline Stages -->
+                <rect x="250" y="120" width="140" height="80" rx="12" fill="url(#grad1)"/>
+                <text x="320" y="152" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">Extractor</text>
+                <text x="320" y="172" fill="#e0f2fe" font-size="10" text-anchor="middle">Read Metadata & Defects</text>
+
+                <line x1="390" y1="160" x2="440" y2="160" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <rect x="450" y="120" width="140" height="80" rx="12" fill="url(#grad1)"/>
+                <text x="520" y="152" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">Transformer</text>
+                <text x="520" y="172" fill="#e0f2fe" font-size="10" text-anchor="middle">Plan & Calculate Suffix</text>
+
+                <line x1="590" y1="160" x2="640" y2="160" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <rect x="650" y="120" width="150" height="80" rx="12" fill="url(#grad2)"/>
+                <text x="725" y="152" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">Composer (Render)</text>
+                <text x="725" y="172" fill="#fce7f3" font-size="10" text-anchor="middle">Render 7 Docx Parts</text>
+
+                <line x1="800" y1="160" x2="840" y2="160" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Final Output -->
+                <rect x="850" y="120" width="130" height="80" rx="12" fill="url(#grad3)"/>
+                <text x="915" y="150" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">Final Word Report</text>
+                <text x="915" y="168" fill="#d1fae5" font-size="10" text-anchor="middle">Word COM Merge</text>
+                <text x="915" y="184" fill="#a7f3d0" font-size="9" text-anchor="middle">PE. Substation (IR+US).docx</text>
+            </svg>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+            <div class="stage-card">
+                <h3 style="color: var(--accent-cyan); margin-bottom: 0.5rem;">🎯 Key Capabilities</h3>
+                <ul class="feature-list">
+                    <li>Multi-technology diagnostic binding (IR, US, TEV, Visual).</li>
+                    <li>Automatic 3-pair equipment layout chunking & photo aspect ratio fitting.</li>
+                    <li>Canonical defect status suffix generation: <code>(IR+US+TEV+VI)</code>.</li>
+                    <li>Resilient per-station batch processing with zero-loss error isolation.</li>
+                </ul>
+            </div>
+            <div class="stage-card">
+                <h3 style="color: var(--accent-violet); margin-bottom: 0.5rem;">📁 Workstation Directory Model</h3>
+                <ul class="feature-list">
+                    <li><strong>Source:</strong> <code>TESTSHEET/&lt;STATION&gt;/&lt;MONTH&gt;/&lt;DATE&gt;/</code></li>
+                    <li><strong>Photos:</strong> <code>RAW MATERIAL/&lt;STATION&gt;/&lt;MONTH&gt;/&lt;DATE&gt;/</code></li>
+                    <li><strong>Output:</strong> <code>QUICK REPORT/&lt;STATION&gt;/&lt;MONTH&gt;/&lt;DATE&gt;/</code></li>
+                    <li><strong>Filename:</strong> <code>001. PE BANJIR (IR+US+VI).docx</code></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: 6-STAGE ETL PIPELINE -->
+    <div id="etl-pipeline" class="tab-content">
+        <h2 style="color: var(--text-bright); margin-bottom: 1.5rem;">The 6-Stage ETL Engine</h2>
+
+        <div class="pipeline-container">
+            <!-- Stage 1 -->
+            <div class="stage-card">
+                <div class="stage-header">
+                    <div class="stage-title-group">
+                        <div class="stage-number">1</div>
+                        <div class="stage-title">User Selection & Request Initialization</div>
+                    </div>
+                    <span class="module-badge">src/project_workflow_actions.py</span>
+                </div>
+                <div class="stage-body">
+                    <div class="desc-box">
+                        <p>The user triggers Quick Report generation from the CLI menu <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/project_workflow_actions.py#L183">QuickReportAction</a>.</p>
+                        <ul class="feature-list">
+                            <li><strong>Folder Mode:</strong> Interactively select target date folder under <code>TESTSHEET/</code>.</li>
+                            <li><strong>Manual FL Mode:</strong> Input comma-separated Functional Locations.</li>
+                            <li><strong>Template Wiring:</strong> Automatically loads <code>MASTER_SUBSTATION_CONDITION.docx</code>.</li>
+                        </ul>
+                    </div>
+                    <div class="code-box">
+                        <span class="kw">request</span> = QuickReportRequest(<br>
+                        &nbsp;&nbsp;mode=QuickReportMode.FOLDER,<br>
+                        &nbsp;&nbsp;target_folders=(selected_path,),<br>
+                        &nbsp;&nbsp;substation_condition_template_path=cond_tmpl<br>
+                        )
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 2 -->
+            <div class="stage-card">
+                <div class="stage-header">
+                    <div class="stage-title-group">
+                        <div class="stage-number">2</div>
+                        <div class="stage-title">Package Discovery & Defect Extraction</div>
+                    </div>
+                    <span class="module-badge">src/quick_report/extractor.py</span>
+                </div>
+                <div class="stage-body">
+                    <div class="desc-box">
+                        <p>The <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/extractor.py#L18">QuickReportExtractor</a> performs pure Read I/O discovery across the workstation directory structure.</p>
+                        <ul class="feature-list">
+                            <li>Discovers digital testsheet packages via <code>SubstationTestsheetRepository</code>.</li>
+                            <li>Parses substation metadata (PE #, ERMS Name, Site Name, FL, Date, GPS, Ambient/Humidity).</li>
+                            <li>Queries <code>MasterQr03DefectRepository</code> for CBM defects (<code>QR03 CBA</code>) & Visual defects (<code>QR03 VI</code>).</li>
+                        </ul>
+                    </div>
+                    <div class="code-box">
+                        cbm_defects, vi_defects = <span class="fn">self.extractor.extract_defects</span>(<br>
+                        &nbsp;&nbsp;pkg, environment<br>
+                        )
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 3 -->
+            <div class="stage-card">
+                <div class="stage-header">
+                    <div class="stage-title-group">
+                        <div class="stage-number">3</div>
+                        <div class="stage-title">Domain Filtering & Precondition Audit</div>
+                    </div>
+                    <span class="module-badge">src/quick_report/filter.py</span>
+                </div>
+                <div class="stage-body">
+                    <div class="desc-box">
+                        <p>Filters discovered packages using <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/filter.py">QuickReportFilter</a> and validates required docx template preconditions.</p>
+                        <ul class="feature-list">
+                            <li>Verifies availability of <code>VI Front Page</code>, <code>Sticker Page</code>, and <code>Substation Condition</code> templates.</li>
+                            <li>Filters out incomplete packages or non-matching FLs.</li>
+                        </ul>
+                    </div>
+                    <div class="code-box">
+                        filtered_pkgs = <span class="fn">self.filter_stage.filter</span>(<br>
+                        &nbsp;&nbsp;packages, request<br>
+                        )
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 4 -->
+            <div class="stage-card">
+                <div class="stage-header">
+                    <div class="stage-title-group">
+                        <div class="stage-number">4</div>
+                        <div class="stage-title">Defect Suffix Calculation & Execution Planning</div>
+                    </div>
+                    <span class="module-badge">src/quick_report/transformer.py</span>
+                </div>
+                <div class="stage-body">
+                    <div class="desc-box">
+                        <p>Transforms raw extracted data into an immutable <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/transformer.py#L18">QuickReportStationPlan</a>.</p>
+                        <ul class="feature-list">
+                            <li><strong>Defect Suffix Rule:</strong> Calculates canonical suffix order <code>(IR+US+TEV+VI)</code> based on present defect findings.</li>
+                            <li><strong>Pahang Stem Naming:</strong> Constructs output filename omitting date: <code>{pe_number:03d}. {sanitized_name}{suffix}.docx</code>.</li>
+                            <li><strong>CBM Family Planner:</strong> Groups CBM defects into detail page plans using <code>CbmDefectPlanner</code>.</li>
+                        </ul>
+                    </div>
+                    <div class="code-box">
+                        plan = <span class="fn">self.transformer.transform</span>(<br>
+                        &nbsp;&nbsp;pkg, cbm_defects, vi_defects, env<br>
+                        )
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 5 -->
+            <div class="stage-card">
+                <div class="stage-header">
+                    <div class="stage-title-group">
+                        <div class="stage-number">5</div>
+                        <div class="stage-title">Multi-Part Document Render Stage</div>
+                    </div>
+                    <span class="module-badge">src/quick_report/composer.py</span>
+                </div>
+                <div class="stage-body">
+                    <div class="desc-box">
+                        <p>Renders each sub-document section into independent temporary <code>.docx</code> files inside <code>temp_parts/</code>.</p>
+                        <ul class="feature-list">
+                            <li>Executes modular render functions for Front Page, Summaries, CBM Families, Condition Grid, VI Cards, and Sticker Page.</li>
+                            <li>Passes sized images (e.g. <code>width=Mm(120)</code>) via <code>docxtpl.InlineImage</code>.</li>
+                        </ul>
+                    </div>
+                    <div class="code-box">
+                        parts = <span class="fn">self._generate_parts</span>(plan, temp_dir)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stage 6 -->
+            <div class="stage-card">
+                <div class="stage-header">
+                    <div class="stage-title-group">
+                        <div class="stage-number">6</div>
+                        <div class="stage-title">Document Compilation & Temporary Cleanup</div>
+                    </div>
+                    <span class="module-badge">src/quick_report/composer.py</span>
+                </div>
+                <div class="stage-body">
+                    <div class="desc-box">
+                        <p>Compiles individual docx parts into the final report via <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/composer.py#L136">_compile_document</a>.</p>
+                        <ul class="feature-list">
+                            <li>Uses <strong>Microsoft Word COM Automation</strong> (<code>win32com</code>) with programmatic page breaks and paragraph trimming.</li>
+                            <li>Falls back to <code>docxcompose.Composer</code> if Word COM is uninstalled/unavailable.</li>
+                            <li>Cleans up <code>temp_parts/</code> and triggers garbage collection.</li>
+                        </ul>
+                    </div>
+                    <div class="code-box">
+                        <span class="fn">self._compile_document</span>(parts, plan.final_output_path)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 3: DOCUMENT ASSEMBLY (7 PARTS) -->
+    <div id="document-assembly" class="tab-content">
+        <h2 style="color: var(--text-bright); margin-bottom: 0.5rem;">7-Part Document Assembly Sequence</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Quick Report documents are compiled sequentially part-by-part. Below is the complete 7-part composition specification.</p>
+
+        <div class="assembly-grid">
+            <div class="part-card">
+                <span class="part-number">Part 1</span>
+                <div class="part-title">Front Cover Page</div>
+                <div class="part-desc">Main metadata page with station name, PE number, ERMS FL, site FL, date (<code>DD MMM YYYY</code>), and technology scope rating (IR / IR+US / IR+US+TEV).</div>
+                <div class="part-template">templates/QUICK REPORT/1. FRONT PAGE...docx</div>
+            </div>
+
+            <div class="part-card">
+                <span class="part-number">Part 2A</span>
+                <div class="part-title">CBM Tech Defect Summary</div>
+                <div class="part-desc">Rendered only if CBM defects exist. Displays CBM technology summary table listing findings across IR, US, and TEV.</div>
+                <div class="part-template">templates/QUICK REPORT/CBM DEFECT SUMMARY.docx</div>
+            </div>
+
+            <div class="part-card">
+                <span class="part-number">Part 2B</span>
+                <div class="part-title">VI Defect Summary</div>
+                <div class="part-desc">Rendered only if VI defects exist. High-level summary table of all physical & visual defects found during inspection.</div>
+                <div class="part-template">templates/QUICK REPORT/2. VI SUMMARY...docx</div>
+            </div>
+
+            <div class="part-card">
+                <span class="part-number">Part 3</span>
+                <div class="part-title">CBM Defect Family Detail Pages</div>
+                <div class="part-desc">Equipment family overview and detailed individual defect cards for Switchgear, Transformers, LVDB, Black Box, and Battery Bank.</div>
+                <div class="part-template">templates/QUICK REPORT/DEFECT IR/*.docx</div>
+            </div>
+
+            <div class="part-card">
+                <span class="part-number">Part 4</span>
+                <div class="part-title">Substation Condition Pages</div>
+                <div class="part-desc">3-pair per page grid showing substation overview, signboard, switchgear, transformer, feeder pillar, RTU, battery charger, EFI, and oil level indicator photos.</div>
+                <div class="part-template">templates/QUICK REPORT/SUBSTATION CONFIGURATION/*.docx</div>
+            </div>
+
+            <div class="part-card">
+                <span class="part-number">Part 5</span>
+                <div class="part-title">VI Defect Card Pages</div>
+                <div class="part-desc">Individual visual inspection defect detail pages containing defect photos, precise location, severity, and remediation action.</div>
+                <div class="part-template">templates/QUICK REPORT/10. VISUAL DEFECT...docx</div>
+            </div>
+
+            <div class="part-card">
+                <span class="part-number" style="background: rgba(244, 63, 94, 0.2); color: var(--accent-rose);">Part 6 (Mandatory)</span>
+                <div class="part-title">Physical Sticker Placement Page</div>
+                <div class="part-desc">Mandatory final page providing designated zone for attaching physical station QR code / barcode stickers.</div>
+                <div class="part-template">templates/QUICK REPORT/STICKER PAGE.docx</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 4: CBM DEFECT FAMILIES -->
+    <div id="cbm-families" class="tab-content">
+        <h2 style="color: var(--text-bright); margin-bottom: 0.5rem;">CBM Defect Family Specifications</h2>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Defined in <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/cbm_family.py">cbm_family.py</a>, CBM defect records are partitioned by equipment category and diagnostic technology.</p>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Family Spec ID</th>
+                    <th>Output Label</th>
+                    <th>Equipment Values</th>
+                    <th>Supported Technologies</th>
+                    <th>Overview Template Key</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>fp_lvdb</code></td>
+                    <td>FP LVDB</td>
+                    <td>FP (D), FP (J), LVDB</td>
+                    <td>IR</td>
+                    <td><code>fp_overview</code></td>
+                </tr>
+                <tr>
+                    <td><code>swg</code></td>
+                    <td>SWG (Switchgear)</td>
+                    <td>RMU SF6, CABLE SWG, EARTHING</td>
+                    <td>IR, US, TEV</td>
+                    <td><code>swg_overview</code></td>
+                </tr>
+                <tr>
+                    <td><code>tx</code></td>
+                    <td>TX (Transformer)</td>
+                    <td>LTX/DTX, CABLE LTX/DTX</td>
+                    <td>IR, US</td>
+                    <td><code>tx_overview</code></td>
+                </tr>
+                <tr>
+                    <td><code>blackbox</code></td>
+                    <td>BLACK BOX</td>
+                    <td>BLACKBOX, BLACK BOX</td>
+                    <td>IR</td>
+                    <td><code>blackbox_overview</code></td>
+                </tr>
+                <tr>
+                    <td><code>battery</code></td>
+                    <td>BATTERY</td>
+                    <td>BATTERY BANK, BATTERY</td>
+                    <td>IR</td>
+                    <td><code>battery_overview</code></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- TAB 5: PHOTO & WORD COM ENGINE -->
+    <div id="photo-compilation" class="tab-content">
+        <h2 style="color: var(--text-bright); margin-bottom: 1rem;">Photo Embedding & Word COM Compilation Engine</h2>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div class="stage-card">
+                <h3 style="color: var(--accent-cyan); margin-bottom: 0.75rem;">📷 Photo Range Matching & Sizing</h3>
+                <p style="color: #d1d5db; font-size: 0.92rem; margin-bottom: 0.75rem;">
+                    Photos are extracted from <code>RAW MATERIAL/</code> using stem matching logic. <code>docxtpl.InlineImage</code> embeds images with explicit width constraints to automatically preserve original aspect ratio.
+                </p>
+                <ul class="feature-list">
+                    <li><strong>Front Page Photo:</strong> <code>width=Mm(120)</code></li>
+                    <li><strong>Defect Card Photo:</strong> <code>width=Mm(68)</code></li>
+                    <li><strong>Condition Pair Photo:</strong> <code>width=Mm(75)</code></li>
+                    <li><strong>Missing Photo Fallback:</strong> Injects non-blocking warning and default blank placeholder.</li>
+                </ul>
+            </div>
+
+            <div class="stage-card">
+                <h3 style="color: var(--accent-emerald); margin-bottom: 0.75rem;">🖥️ Word COM Compiler vs docxcompose</h3>
+                <p style="color: #d1d5db; font-size: 0.92rem; margin-bottom: 0.75rem;">
+                    Located in <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/composer.py#L136">_compile_document</a>, compilation prioritizes native Word COM.
+                </p>
+                <div class="callout-box" style="margin: 0.5rem 0;">
+                    <div class="callout-title">Win32 Word COM Engine</div>
+                    Executes <code>win32com.client.Dispatch("Word.Application")</code>. Opens parts, deletes empty trailing paragraphs from each part, inserts page break (<code>wdPageBreak=7</code>), pastes content, and saves.
+                </div>
+                <div class="callout-box" style="background: rgba(59, 130, 246, 0.1); border-left-color: var(--accent-blue); margin: 0.5rem 0;">
+                    <div class="callout-title">Fallback: docxcompose</div>
+                    If Word COM is not installed, uses <code>Composer(master_doc).append(part_doc)</code> programmatically in pure Python.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Pahang CLI Architecture Documentation • Generated for User Workflow Review
+    </footer>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+    </script>
+</body>
+</html>

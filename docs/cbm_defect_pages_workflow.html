@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBM Defect Pages Generation Workflow - Pahang CLI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0b0f19;
+            --bg-secondary: #111827;
+            --bg-card: #1f2937;
+            --bg-card-hover: #2d3748;
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-violet: #8b5cf6;
+            --accent-emerald: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --text-bright: #ffffff;
+            --border-color: #374151;
+            --glass-bg: rgba(31, 41, 55, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 3rem 2rem;
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(6, 182, 212, 0.2));
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(12px);
+            margin-bottom: 2.5rem;
+            position: relative;
+        }
+
+        .title-badge {
+            display: inline-block;
+            padding: 0.4rem 1rem;
+            background: rgba(139, 92, 246, 0.2);
+            color: var(--accent-violet);
+            border-radius: 50px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: var(--text-bright);
+            margin-bottom: 0.75rem;
+            background: linear-gradient(90deg, #ffffff, var(--accent-violet));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            max-width: 850px;
+            margin: 0 auto;
+        }
+
+        /* Nav Tabs */
+        .nav-tabs {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+            overflow-x: auto;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .tab-btn {
+            background: var(--bg-secondary);
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+            padding: 0.75rem 1.25rem;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .tab-btn:hover { background: var(--bg-card-hover); color: var(--text-bright); }
+        .tab-btn.active {
+            background: linear-gradient(135deg, var(--accent-violet), var(--accent-blue));
+            color: var(--text-bright);
+            border-color: transparent;
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        }
+
+        .tab-content { display: none; animation: fadeIn 0.4s ease forwards; }
+        .tab-content.active { display: block; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* SVG Flow Chart */
+        .svg-container {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            overflow-x: auto;
+        }
+
+        /* Cards & Grids */
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-bright);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .module-badge {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(6, 182, 212, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .code-block {
+            background: #090d16;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.82rem;
+            color: #e5e7eb;
+            overflow-x: auto;
+            margin-top: 0.75rem;
+        }
+
+        .code-block .kw { color: #f472b6; }
+        .code-block .fn { color: #60a5fa; }
+        .code-block .str { color: #34d399; }
+        .code-block .cm { color: #6b7280; font-style: italic; }
+
+        .feature-list { list-style: none; margin-top: 0.5rem; }
+        .feature-list li {
+            position: relative;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: #9ca3af;
+            font-size: 0.92rem;
+        }
+        .feature-list li::before {
+            content: '🔹';
+            position: absolute;
+            left: 0;
+            font-size: 0.8rem;
+        }
+
+        /* Data Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.88rem;
+        }
+        .data-table th, .data-table td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .data-table th {
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--accent-violet);
+            font-weight: 600;
+        }
+
+        a.file-link {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            border-bottom: 1px dashed var(--accent-cyan);
+        }
+        a.file-link:hover { color: var(--text-bright); border-bottom-style: solid; }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            border-top: 1px solid var(--border-color);
+            margin-top: 3rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="title-badge">Deep Architecture Analysis</div>
+        <h1>CBM Defect Pages Generation Workflow</h1>
+        <p class="subtitle">End-to-End Deep Dive into Data Extraction (QR03 CBA), 5 Equipment Family Specs, Dynamic Group Planning, Jinja Context Mapping & Word COM Rendering</p>
+    </header>
+
+    <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('cbm-flow')">🔄 End-to-End CBM Flow</button>
+        <button class="tab-btn" onclick="switchTab('extraction')">📊 QR03 CBA Extraction</button>
+        <button class="tab-btn" onclick="switchTab('family-specs')">⚙️ 5 Family Specifications</button>
+        <button class="tab-btn" onclick="switchTab('planner-builder')">📐 Planner & Page Builder</button>
+        <button class="tab-btn" onclick="switchTab('rendering-engine')">🎨 Jinja Context & Render Engine</button>
+    </div>
+
+    <!-- TAB 1: FLOW -->
+    <div id="cbm-flow" class="tab-content active">
+        <div class="svg-container">
+            <h3 style="margin-bottom: 1rem; color: var(--text-bright);">Detailed CBM Defect Generation Pipeline</h3>
+            <svg viewBox="0 0 1000 350" width="100%" height="320" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#8b5cf6;"/><stop offset="100%" style="stop-color:#3b82f6;"/>
+                    </linearGradient>
+                    <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#06b6d4;"/><stop offset="100%" style="stop-color:#10b981;"/>
+                    </linearGradient>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ca3af" />
+                    </marker>
+                </defs>
+
+                <!-- Stage 1 -->
+                <rect x="20" y="40" width="160" height="70" rx="10" fill="#1f2937" stroke="#374151" stroke-width="2"/>
+                <text x="100" y="70" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">ENGR Master Excel</text>
+                <text x="100" y="88" fill="#9ca3af" font-size="10" text-anchor="middle">Sheet 'QR03 CBA'</text>
+
+                <line x1="180" y1="75" x2="230" y2="75" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Stage 2 -->
+                <rect x="240" y="40" width="170" height="70" rx="10" fill="url(#g1)"/>
+                <text x="325" y="70" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">Defect Repository</text>
+                <text x="325" y="88" fill="#e0e7ff" font-size="10" text-anchor="middle">MasterQr03DefectRepository</text>
+
+                <line x1="410" y1="75" x2="460" y2="75" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Stage 3 -->
+                <rect x="470" y="40" width="170" height="70" rx="10" fill="url(#g1)"/>
+                <text x="555" y="70" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">CBM Defect Planner</text>
+                <text x="555" y="88" fill="#e0e7ff" font-size="10" text-anchor="middle">CbmDefectPlanner.plan()</text>
+
+                <line x1="640" y1="75" x2="690" y2="75" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Stage 4 -->
+                <rect x="700" y="40" width="170" height="70" rx="10" fill="url(#g2)"/>
+                <text x="785" y="70" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">Page Builder</text>
+                <text x="785" y="88" fill="#ecfdf5" font-size="10" text-anchor="middle">CbmDefectPageBuilder</text>
+
+                <!-- Down Line -->
+                <line x1="785" y1="110" x2="785" y2="160" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Stage 5 -->
+                <rect x="700" y="170" width="170" height="70" rx="10" fill="url(#g2)"/>
+                <text x="785" y="200" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">Docx Template Render</text>
+                <text x="785" y="218" fill="#ecfdf5" font-size="10" text-anchor="middle">PreservingUndefined Engine</text>
+
+                <line x1="700" y1="205" x2="650" y2="205" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Stage 6 -->
+                <rect x="470" y="170" width="170" height="70" rx="10" fill="#1f2937" stroke="#8b5cf6" stroke-width="2"/>
+                <text x="555" y="200" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">Temp Parts (.docx)</text>
+                <text x="555" y="218" fill="#9ca3af" font-size="10" text-anchor="middle">001_3 SWG OVERVIEW.docx</text>
+
+                <line x1="470" y1="205" x2="420" y2="205" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrow)"/>
+
+                <!-- Stage 7 -->
+                <rect x="240" y="170" width="170" height="70" rx="10" fill="#10b981"/>
+                <text x="325" y="200" fill="#fff" font-size="12" font-weight="700" text-anchor="middle">Word COM Assembly</text>
+                <text x="325" y="218" fill="#d1fae5" font-size="10" text-anchor="middle">QuickReportComposer.load()</text>
+            </svg>
+        </div>
+
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-title">📌 What is a CBM Defect Page?</div>
+                <p style="color: #d1d5db; font-size: 0.92rem;">
+                    Condition-Based Monitoring (CBM) defect pages document physical anomalies detected via Infrared Thermography (IR), Airborne Ultrasound (US), or Transient Earth Voltage (TEV). Unlike visual defects, CBM defects require specific equipment family grouping (e.g., Switchgear panels vs Transformer HV/LV sides) and technical diagnostic measurements.
+                </p>
+            </div>
+            <div class="card">
+                <div class="card-title">🎯 Core Architectural Principles</div>
+                <ul class="feature-list">
+                    <li><strong>Decoupled Planning:</strong> Logic plans page structure prior to rendering docx files.</li>
+                    <li><strong>Strict Schema Mapping:</strong> Each family maps defect fields into distinct Jinja namespace dictionaries.</li>
+                    <li><strong>Preserving Undefined:</strong> Placeholders without data remain visible tags without breaking the layout.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: EXTRACTION -->
+    <div id="extraction" class="tab-content">
+        <div class="card">
+            <div class="card-title">
+                <span>Excel Data Extraction from QR03 CBA</span>
+                <span class="module-badge">src/quick_report/defects.py</span>
+            </div>
+            <p style="color: #d1d5db; font-size: 0.92rem; margin-bottom: 1rem;">
+                Extracted via <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/defects.py#L114">MasterQr03DefectRepository</a> strictly from sheet <code>QR03 CBA</code> inside master ENGR Excel workbooks.
+            </p>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Excel Column Header</th>
+                        <th>CbmDefectRecord Field</th>
+                        <th>Post-Processing & Fallback Logic</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>FUNCTIONAL LOCATION</code> / <code>FL</code></td>
+                        <td>(Lookup Key)</td>
+                        <td>Normalized via <code>normalize_functional_location_input</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><code>EQUIPMENT</code></td>
+                        <td><code>equipment</code></td>
+                        <td>Stripped string (e.g. <code>RMU SF6</code>, <code>LTX/DTX</code>, <code>LVDB</code>).</td>
+                    </tr>
+                    <tr>
+                        <td><code>TECHNOLOGY</code> / <code>TECH</code></td>
+                        <td><code>technology</code></td>
+                        <td>Upper-cased technology string: <code>IR</code>, <code>US</code>, or <code>TEV</code>.</td>
+                    </tr>
+                    <tr>
+                        <td><code>BRAND</code> / <code>MODEL</code> / <code>RATING</code></td>
+                        <td><code>brand</code>, <code>model</code>, <code>rating</code></td>
+                        <td>Equipment manufacturer and rating metadata.</td>
+                    </tr>
+                    <tr>
+                        <td><code>DEFECT AREA</code> / <code>REMARKS</code></td>
+                        <td><code>defect_area</code>, <code>additional_remarks</code></td>
+                        <td>Specific location detail and additional technical observations.</td>
+                    </tr>
+                    <tr>
+                        <td><code>READING</code> / <code>IR READING</code> / <code>US READING</code></td>
+                        <td><code>ir_reading</code>, <code>us_reading</code>, <code>tev_reading</code></td>
+                        <td>Automatic post-init assignment: if <code>tech=="IR"</code> and <code>raw_measurement</code> exists, auto-populates <code>ir_reading</code>.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB 3: FAMILY SPECS -->
+    <div id="family-specs" class="tab-content">
+        <div class="card">
+            <div class="card-title">
+                <span>The 5 CBM Defect Family Specifications</span>
+                <span class="module-badge">src/quick_report/cbm_family.py</span>
+            </div>
+            <p style="color: #d1d5db; font-size: 0.92rem; margin-bottom: 1rem;">
+                Defined in <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/cbm_family.py#L35">QUICK_REPORT_FAMILY_SPECS</a>, these specifications partition CBM defects by equipment category and define the exact overview and detail role templates required.
+            </p>
+
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Family ID</th>
+                        <th>Output Label</th>
+                        <th>Matched Equipment Values</th>
+                        <th>Supported Technologies</th>
+                        <th>Detail Role Specs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>fp_lvdb</code></td>
+                        <td>FP LVDB</td>
+                        <td><code>FP (D)</code>, <code>FP (J)</code>, <code>LVDB</code></td>
+                        <td>IR</td>
+                        <td>Role <code>fp_detail</code> &rarr; Template <code>fp_individual_defect</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>swg</code></td>
+                        <td>SWG (Switchgear)</td>
+                        <td><code>RMU SF6</code>, <code>CABLE SWG</code>, <code>EARTHING</code></td>
+                        <td>IR, US, TEV</td>
+                        <td>Role <code>panel_area</code> &rarr; Template <code>swg_panel</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>tx</code></td>
+                        <td>TX (Transformer)</td>
+                        <td><code>LTX/DTX</code>, <code>CABLE LTX/DTX</code></td>
+                        <td>IR, US</td>
+                        <td>Role <code>tx_hv_side</code> (<code>CABLE LTX/DTX</code>)<br>Role <code>tx_lv_side</code> (<code>LTX/DTX</code>)</td>
+                    </tr>
+                    <tr>
+                        <td><code>blackbox</code></td>
+                        <td>BLACK BOX</td>
+                        <td><code>BLACKBOX</code>, <code>BLACK BOX</code></td>
+                        <td>IR</td>
+                        <td>Role <code>blackbox_detail</code> &rarr; Template <code>blackbox_overview</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>battery</code></td>
+                        <td>BATTERY</td>
+                        <td><code>BATTERY BANK</code>, <code>BATTERY</code></td>
+                        <td>IR</td>
+                        <td>Role <code>battery_detail</code> &rarr; Template <code>battery_overview</code></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB 4: PLANNER & BUILDER -->
+    <div id="planner-builder" class="tab-content">
+        <div class="grid-2">
+            <div class="card">
+                <div class="card-title">
+                    <span>1. CbmDefectPlanner</span>
+                    <span class="module-badge">cbm_defect_planner.py</span>
+                </div>
+                <p style="color: #d1d5db; font-size: 0.92rem;">
+                    Accepts raw defects for a substation and checks template availability before constructing an execution plan.
+                </p>
+                <ul class="feature-list">
+                    <li>Filters defects per family spec (case-insensitive equipment & tech match).</li>
+                    <li>Groups defects by specific equipment item name (e.g. <code>RMU SF6 Feeder 1</code>).</li>
+                    <li>Designates the first defect as the Overview record and maps sub-defects to detail roles.</li>
+                    <li>Returns immutable <code>CbmDefectFamilyPlan</code> objects.</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <span>2. CbmDefectPageBuilder</span>
+                    <span class="module-badge">cbm_defect_pages.py</span>
+                </div>
+                <p style="color: #d1d5db; font-size: 0.92rem;">
+                    Converts family plans into ordered, renderable page plans with generated docx filenames.
+                </p>
+                <ul class="feature-list">
+                    <li><strong>Overview Filename:</strong> <code>001_3 SWG OVERVIEW.docx</code></li>
+                    <li><strong>Detail Filename:</strong> <code>001_3 SWG RMU SF6_grp1_part1.docx</code></li>
+                    <li>Builds context per page combining substation <code>pe_info</code> and formatted family dictionary.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 5: RENDERING ENGINE -->
+    <div id="rendering-engine" class="tab-content">
+        <div class="card">
+            <div class="card-title">
+                <span>Jinja Context Builder & Preserving Undefined Engine</span>
+                <span class="module-badge">src/quick_report/cbm_render.py</span>
+            </div>
+
+            <div class="grid-2" style="margin-top: 1rem;">
+                <div>
+                    <h4 style="color: var(--accent-cyan); margin-bottom: 0.5rem;">Family Context Mapping Schema</h4>
+                    <p style="color: #d1d5db; font-size: 0.88rem; margin-bottom: 0.75rem;">
+                        <code>_build_family_render_context()</code> maps defect fields to family Jinja namespaces:
+                    </p>
+                    <div class="code-block">
+                        <span class="cm"># SWG Family Context Example</span><br>
+                        {<br>
+                        &nbsp;&nbsp;<span class="str">"swg"</span>: {<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"area"</span>: <span class="str">"BUSBAR/ SLIGHT OVERHEATING"</span>,<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"manufacturer"</span>: <span class="str">"TAMCO"</span>,<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"type"</span>: <span class="str">"RMU SF6"</span><br>
+                        &nbsp;&nbsp;},<br>
+                        &nbsp;&nbsp;<span class="str">"panel"</span>: {<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"name"</span>: <span class="str">"FEEDER 1"</span>,<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"ir"</span>: {<span class="str">"reading"</span>: <span class="str">"45.2"</span>},<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;<span class="str">"us"</span>: {<span class="str">"reading"</span>: <span class="str">"12"</span>, <span class="str">"char"</span>: <span class="str">"Continuous"</span>}<br>
+                        &nbsp;&nbsp;}<br>
+                        }
+                    </div>
+                </div>
+
+                <div>
+                    <h4 style="color: var(--accent-violet); margin-bottom: 0.5rem;">PreservingUndefined Resilience</h4>
+                    <p style="color: #d1d5db; font-size: 0.88rem; margin-bottom: 0.75rem;">
+                        Uses custom Jinja <code>Undefined</code> subclass <a class="file-link" href="file:///C:/Users/ADAM/Desktop/pahang-cli/src/quick_report/cbm_render.py#L19">PreservingUndefined</a>:
+                    </p>
+                    <ul class="feature-list">
+                        <li>If a Jinja tag (e.g. <code>{{ panel.breakerstatus }}</code>) has no data, it stays rendered as <code>{{ panel.breakerstatus }}</code> rather than crashing or disappearing.</li>
+                        <li>Explicit <code>None</code> or empty strings are automatically converted to <code>"-"</code>.</li>
+                        <li>Prevents Word document table layout corruption.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        Pahang CLI Architecture Documentation • CBM Defect Pages Generation Flow
+    </footer>
+
+    <script>
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+    </script>
+</body>
+</html>

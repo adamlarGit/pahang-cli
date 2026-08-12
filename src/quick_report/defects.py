@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 import pandas as pd
 
 from src.quick_report.utils import normalize_functional_location_input
@@ -42,6 +42,39 @@ class CbmDefectRecord:
     tev_char: str = ""
     raw_measurement: str = ""
     source_order: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "technology", (self.technology or "").strip().upper())
+        object.__setattr__(self, "equipment", (self.equipment or "").strip())
+        object.__setattr__(self, "brand", (self.brand or "").strip())
+        object.__setattr__(self, "model", (self.model or "").strip())
+        object.__setattr__(self, "rating", (self.rating or "").strip())
+        object.__setattr__(self, "defect_area", (self.defect_area or "").strip())
+        object.__setattr__(self, "additional_remarks", (self.additional_remarks or "").strip())
+        object.__setattr__(self, "ir_reading", (self.ir_reading or "").strip())
+        object.__setattr__(self, "us_reading", (self.us_reading or "").strip())
+        object.__setattr__(self, "us_char", (self.us_char or "").strip())
+        object.__setattr__(self, "tev_reading", (self.tev_reading or "").strip())
+        object.__setattr__(self, "tev_char", (self.tev_char or "").strip())
+        object.__setattr__(self, "raw_measurement", (self.raw_measurement or "").strip())
+
+        tech = self.technology
+        raw = self.raw_measurement
+        if tech == "IR":
+            if raw and not self.ir_reading:
+                object.__setattr__(self, "ir_reading", raw)
+            elif self.ir_reading and not raw:
+                object.__setattr__(self, "raw_measurement", self.ir_reading)
+        elif tech == "US":
+            if raw and not self.us_reading:
+                object.__setattr__(self, "us_reading", raw)
+            elif self.us_reading and not raw:
+                object.__setattr__(self, "raw_measurement", self.us_reading)
+        elif tech == "TEV":
+            if raw and not self.tev_reading:
+                object.__setattr__(self, "tev_reading", raw)
+            elif self.tev_reading and not raw:
+                object.__setattr__(self, "raw_measurement", self.tev_reading)
 
     def to_dict(self) -> dict:
         return {
@@ -220,47 +253,36 @@ class MasterQr03DefectRepository:
             us_char_col = next((c for c in df.columns if "US CHAR" in str(c).upper() or "US CHARACTER" in str(c).upper()), None)
             tev_char_col = next((c for c in df.columns if "TEV CHAR" in str(c).upper() or "TEV CHARACTER" in str(c).upper()), None)
 
+            def _clean_val(val: Any) -> str:
+                if val is None or pd.isna(val):
+                    return ""
+                s = str(val).strip()
+                return "" if s.lower() == "nan" else s
+
             defects: list[CbmDefectRecord] = []
             for idx, (_, row) in enumerate(matched_df.iterrows(), start=1):
-                tech = (
-                    str(
-                        row.get("TECHNOLOGY")
-                        or row.get("TECH")
-                        or row.get("DEFECT FROM")
-                        or ""
-                    )
-                    .strip()
-                    .upper()
+                tech = _clean_val(
+                    row.get("TECHNOLOGY")
+                    or row.get("TECH")
+                    or row.get("DEFECT FROM")
+                ).upper()
+                equipment = _clean_val(row.get("EQUIPMENT"))
+                brand = _clean_val(row.get("BRAND"))
+                model = _clean_val(row.get("MODEL"))
+                rating = _clean_val(row.get("RATING"))
+                defect_area = _clean_val(
+                    row.get("DEFECT AREA") or row.get("DEFECT_AREA")
                 )
-                equipment = str(row.get("EQUIPMENT") or "").strip()
-                brand = str(row.get("BRAND") or "").strip()
-                model = str(row.get("MODEL") or "").strip()
-                rating = str(row.get("RATING") or "").strip()
-                defect_area = str(
-                    row.get("DEFECT AREA") or row.get("DEFECT_AREA") or ""
-                ).strip()
-                additional_remarks = str(
-                    row.get("ADDITIONAL REMARKS") or row.get("REMARKS") or ""
-                ).strip()
-                reading = str(row.get("READING") or "").strip()
+                additional_remarks = _clean_val(
+                    row.get("ADDITIONAL REMARKS") or row.get("REMARKS")
+                )
+                reading = _clean_val(row.get("READING"))
 
-                ir_reading = (
-                    reading
-                    if tech == "IR"
-                    else str(row.get("IR READING") or "").strip()
-                )
-                us_reading = (
-                    reading
-                    if tech == "US"
-                    else str(row.get("US READING") or "").strip()
-                )
-                us_char = str(row.get(us_char_col) or "").strip() if us_char_col else ""
-                tev_reading = (
-                    reading
-                    if tech == "TEV"
-                    else str(row.get("TEV READING") or "").strip()
-                )
-                tev_char = str(row.get(tev_char_col) or "").strip() if tev_char_col else ""
+                ir_reading = _clean_val(row.get("IR READING"))
+                us_reading = _clean_val(row.get("US READING"))
+                us_char = _clean_val(row.get(us_char_col)) if us_char_col else ""
+                tev_reading = _clean_val(row.get("TEV READING"))
+                tev_char = _clean_val(row.get(tev_char_col)) if tev_char_col else ""
 
                 rec = CbmDefectRecord(
                     equipment=equipment,

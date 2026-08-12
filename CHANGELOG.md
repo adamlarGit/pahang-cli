@@ -5,9 +5,28 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-08-12
+
+### Added
+- **Combine PDFs With Separator Workflow**: Added `CombinePdfsWithSeparatorWorkflow` (`src/workflows/combine_pdfs_with_separator.py`) to merge PDF packages with blank separator pages.
+- **Signature Replacement & Diagonal Borders**: Added `ReplaceSignaturesWorkflow` (`src/workflows/replace_signatures.py`) and diagonal borders workflow (`src/workflows/diagonal_borders.py`).
+- **Standalone Utility Workflows & Unit Tests**: Added unit tests for PDF separators (`tests/test_combine_pdfs_with_separator.py`), converters (`tests/test_converters.py`), diagonal borders (`tests/test_diagonal_borders.py`), signature replacement (`tests/test_replace_signatures.py`), and Word COM composer (`tests/test_quick_report_composer_com.py`).
+- **Workflow Documentation & Visualizations**: Added workflow documentation and HTML interactive flowcharts (`docs/research_cli_comparison.md`, `docs/cbm_defect_pages_workflow.html`, `docs/quick_report_workflow.html`).
+
+### Fixed
+- **Word COM Document Compilation (`AttributeError: Open.Content`)**: Fixed document compilation failure during batch runs (e.g. substation KUANTAN) by strictly enforcing Word COM `word.Documents.Add()`, read-only `part_doc = word.Documents.Open(part_path, False, True)`, `part_doc.Content.Copy()`, `rng.InsertBreak(7)` section breaks, `rng.Paste()`, and `main_doc.SaveAs2(output_path)` per `docs/workflows/cbm_flir_activex_fix.md`.
+
+### Refactored
+- **Batch Word COM Session Reuse**: Updated `QuickReportWorkflow.execute()` to pre-initialize a single `Word.Application` COM session across the entire batch run, eliminating process startup overhead and asynchronous `Quit()` file lock conflicts (`PermissionError`).
+- **Dead Code Cleanup & No Silent Fallbacks**: Completely removed `docxcompose` dependency/imports and dead fallback branches from `QuickReportComposer` to maintain strict code hygiene and fail fast if `win32com` is missing or fails.
+
 ## [1.6.0] - 2026-08-03
 
 ### Refactored
+- **Typed Page Builders**: Introduced `CbmDefectPagePlan`, `CbmDefectPageBuilder`, `ViDefectPagePlan`, and `ViDefectPageBuilder` to decouple page order, filename formatting, and context building from DOCX rendering.
+- **Strict Record Invariants**: Enforced `CbmDefectRecord` field invariants in `__post_init__` (technology uppercasing, string trimming, bidirectional reading synchronization).
+- **Typed Summary Rows**: Added `CbmSummaryRow` and `ViSummaryRow` immutable dataclasses, making `prepare_tech_summary_rows` and `prepare_vi_summary_rows` strictly typed-only.
+- **Purged Legacy Dict Fallbacks**: Completely eliminated `_payload_get()`, `_get_field()`, and `hasattr`/`isinstance(d, dict)` fallback checks across rendering modules.
 - **Quick Report 6-Stage ETL Pipeline**: Refactored `QuickReportWorkflow` into a 6-stage ETL pipeline (`QuickReportExtractor`, `QuickReportFilter`, `QuickReportTransformer`, `CbmDefectPlanner`, `QuickReportComposer` Loader, `QuickReportWorkflow` orchestrator) following `etl_pipeline_refactoring_methodology.md`.
 - **End-to-End Typed Defect Records & Plans**: Data flows end-to-end as strongly typed `CbmDefectRecord`, `ViDefectRecord`, `CbmDefectGroup`, and `CbmDefectFamilyPlan` dataclasses, deferring `.to_dict()` conversions strictly to the template rendering boundary (`DocxTemplate.render()`).
 - **Pure CBM Defect Planner**: Created `CbmDefectPlanner` stage (`src/quick_report/cbm_defect_planner.py`) to match equipment items to family specs and template files in-memory without disk write I/O or Word rendering.
