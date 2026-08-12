@@ -107,7 +107,7 @@ class ViDefectRecord:
         return {
             "equipment": self.equipment,
             "defect_area": self.defect_area,
-            "additional_remarks": self.additional_remarks,
+            "remarks": self.additional_remarks,
         }
 
 

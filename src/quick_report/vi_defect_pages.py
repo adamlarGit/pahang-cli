@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, Any, Sequence
 from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docxtpl import DocxTemplate
 
-from src.quick_report.cbm_render import _render_docx_template
+from src.quick_report.cbm_render import _build_jinja_env
 from src.quick_report.models import ViDefectPagePlan
 
 if TYPE_CHECKING:
@@ -92,6 +93,14 @@ def build_vi_defect_page_context(pe_info: dict[str, Any], chunk: Sequence[ViDefe
         context[f"description{idx_slot}"] = item.defect_area
         context[f"remark{idx_slot}"] = item.additional_remarks
 
+    # Pad to DEFECTS_PER_PAGE with empty dicts for unused slots
+    empty_defect = {"equipment": "", "defect_area": "", "remarks": ""}
+    for idx_slot in range(len(chunk) + 1, DEFECTS_PER_PAGE + 1):
+        raw_chunk.append(empty_defect.copy())
+        context[f"equipment{idx_slot}"] = ""
+        context[f"description{idx_slot}"] = ""
+        context[f"remark{idx_slot}"] = ""
+
     context["defects"] = raw_chunk
     return context
 
@@ -154,7 +163,10 @@ def generate_vi_defect_pages(
 
     for plan in plans:
         output_path = out_dir / plan.output_filename
-        _render_docx_template(plan.template_path, output_path, plan.context)
+        doc = DocxTemplate(str(plan.template_path))
+        doc.render(plan.context, jinja_env=_build_jinja_env(), autoescape=True)
+        doc.save(str(output_path))
+        del doc
         _remove_empty_cell_borders(output_path, plan.active_defect_count)
         output_paths.append(output_path)
 

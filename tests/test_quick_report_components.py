@@ -317,6 +317,92 @@ def test_vi_defect_page_builder_pagination_and_plans(tmp_path: Path):
     assert plan2.context["equipment1"] == "equipment7"
     assert plan2.context["description1"] == "area7"
     assert plan2.context["remark1"] == "remark7"
+    assert len(plan2.context["defects"]) == 6
+    for i in range(2, 7):
+        assert plan2.context[f"equipment{i}"] == ""
+        assert plan2.context[f"description{i}"] == ""
+        assert plan2.context[f"remark{i}"] == ""
+
+
+def test_vi_defect_record_to_dict_uses_remarks_key():
+    rec = ViDefectRecord(
+        equipment="SWITCHGEAR",
+        defect_area="Rust",
+        additional_remarks="Corroded hinges",
+    )
+    assert rec.additional_remarks == "Corroded hinges"
+    d = rec.to_dict()
+    assert d == {
+        "equipment": "SWITCHGEAR",
+        "defect_area": "Rust",
+        "remarks": "Corroded hinges",
+    }
+    assert "additional_remarks" not in d
+
+
+def test_build_vi_defect_page_context_padding():
+    pe_info = {"substation": {"name_erms": "SUB A"}}
+    defects = [
+        ViDefectRecord(
+            equipment="SWG 1",
+            defect_area="Oil leak",
+            additional_remarks="Minor",
+        ),
+    ]
+
+    context = build_vi_defect_page_context(pe_info, defects)
+
+    assert len(context["defects"]) == 6
+    assert context["defects"][0] == {
+        "equipment": "SWG 1",
+        "defect_area": "Oil leak",
+        "remarks": "Minor",
+    }
+    for i in range(1, 6):
+        assert context["defects"][i] == {
+            "equipment": "",
+            "defect_area": "",
+            "remarks": "",
+        }
+
+    assert context["equipment1"] == "SWG 1"
+    assert context["description1"] == "Oil leak"
+    assert context["remark1"] == "Minor"
+
+    for slot in range(2, 7):
+        assert context[f"equipment{slot}"] == ""
+        assert context[f"description{slot}"] == ""
+        assert context[f"remark{slot}"] == ""
+
+
+def test_generate_vi_defect_pages_direct_rendering(tmp_path: Path):
+    import docx
+    from src.quick_report.vi_defect_pages import generate_vi_defect_pages
+
+    template_p = tmp_path / "vi_defect_template.docx"
+    doc = docx.Document()
+    doc.save(template_p)
+
+    defects = [
+        ViDefectRecord(
+            equipment="SWG 1",
+            defect_area="Door defect",
+            additional_remarks="Loose latch",
+        ),
+    ]
+    pe_info = {"substation": {"name_erms": "TEST SUB"}}
+
+    out_paths = generate_vi_defect_pages(
+        defects=defects,
+        template_path=template_p,
+        output_dir=tmp_path,
+        substation_number=1,
+        pe_info=pe_info,
+    )
+
+    assert len(out_paths) == 1
+    assert out_paths[0].exists()
+    assert out_paths[0].name == "001_6 VI DEFECT part1.docx"
 
 
 def test_generate_cbm_tech_summary_programmatic(tmp_path: Path):

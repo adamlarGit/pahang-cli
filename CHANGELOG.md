@@ -5,6 +5,17 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-08-13
+
+### Fixed
+- **Visual Inspection (VI) Defect Page Blank Rendering**: Updated `generate_vi_defect_pages()` to render directly via `DocxTemplate` using raw dictionary context (bypassing `_render_docx_template` and `QuickReportContext` string wrapping) so empty/null values render as clean blank cells instead of `"-"`.
+- **VI Defect Card Slot Padding & Key Alignment**: Updated `build_vi_defect_page_context()` to pad `context["defects"]` list to 6 items (`DEFECTS_PER_PAGE`) with empty dicts and populate flat slot variables (`equipment1..6`, `description1..6`, `remark1..6`). Updated `ViDefectRecord.to_dict()` to output key `"remarks"` mapping `additional_remarks` to match template tag `{{ defects.remarks }}`.
+- **Word COM Batch Process Exhaustion & Fail-Fast**: Hoisted single `Word.Application` COM session creation above the batch loop in `QuickReportWorkflow.execute()`, avoiding per-substation process churn, handle/thread exhaustion, and `Normal.dotm` lock race conditions. Added fail-fast check if COM fails to initialize, early exit for 0 packages, and `gc.collect()` after `Quit()` in `finally`.
+- **Date Formatting Standardization**: Standardized Quick Report date formatting to `DD MMM YYYY` (UPPERCASE, e.g. `12 AUG 2026`) for front page and `DD/MM/YYYY` (e.g. `12/08/2026`) for CBM defect pages in `src/core/normalizers.py`.
+
+### Refactored
+- **Composer COM Lifecycle Decoupling**: Removed `own_word` fallback path from `QuickReportComposer._compile_document()` so `word_app` is required, and purged unused `pythoncom`/`win32com` imports.
+
 ## [1.7.0] - 2026-08-12
 
 ### Added
