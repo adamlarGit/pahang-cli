@@ -20,4 +20,4 @@ Interactive CLI application for Pahang area PE inspection workflows, multi-proje
 
 - Python >= 3.11
 - `uv` package manager
-- openpyxl, pandas, questionary, python-docx, docxtpl, pypdf, pywin32
+- openpyxl, pandas, questionary, python-docx, docxtpl, docxcompose, pywin32
