@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from src.core.normalizers import format_date_cbm, format_date_front_page
+from src.core.normalizers import (
+    format_date_cbm,
+    format_date_front_page,
+    normalize_for_report,
+)
 from src.quick_report.cbm_defect_planner import CbmDefectPlanner
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.utils import sanitize_filename
@@ -60,11 +64,12 @@ class QuickReportTransformer:
                 "type": pkg.data.substation_type or "",
                 "substation_type": pkg.data.substation_type or "",
                 "building_type": pkg.data.building_type or "",
-                "ambient": pkg.data.ambient if pkg.data.ambient else "-",
-                "humidity": pkg.data.humidity if pkg.data.humidity else "-",
-                "time": pkg.data.time if pkg.data.time else "-",
+                "ambient": normalize_for_report(pkg.data.ambient),
+                "humidity": normalize_for_report(pkg.data.humidity),
+                "time": normalize_for_report(pkg.data.time),
             },
         }
+
 
         pe_number = pkg.substation_number
         sanitized_name = sanitize_filename(

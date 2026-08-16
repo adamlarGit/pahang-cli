@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
+import math
 import re
+from typing import Any
 
 
 MONTH_NAME_MAP = {
@@ -263,12 +265,204 @@ def parse_background_temp(val: object) -> str:
     """
     Extract numeric temperature value and append ' °C'. Returns '-' if empty or invalid.
     """
+    temp = extract_background_temperature(val)
+    if temp is None:
+        return "-"
+    if isinstance(val, int) and not isinstance(val, bool):
+        return f"{val} °C"
+    s_val = str(val).strip()
+    if temp.is_integer() and (s_val == str(int(temp)) or s_val.endswith(f"{int(temp)} °C") or s_val.endswith(f"{int(temp)}°C")):
+        return f"{int(temp)} °C"
+    return f"{temp} °C"
+
+
+_NULL_SENTINELS = frozenset({
+    "",
+    "-",
+    "--",
+    "---",
+    "none",
+    "null",
+    "nan",
+    "nat",
+    "n/a",
+    "na",
+    "#ref!",
+    "#value!",
+    "#n/a",
+    "#name?",
+    "#num!",
+    "#div/0!",
+})
+
+
+def _is_null_or_empty(val: Any) -> bool:
+    """Check if value represents an empty/null/missing/NaN entry."""
     if val is None:
-        return "-"
+        return True
+    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+        return True
+    if isinstance(val, str):
+        return val.strip().lower() in _NULL_SENTINELS
+    return False
+
+
+def normalize_for_csv(val: Any) -> str:
+    """Sanitize and normalize value for CSV ingestion target.
+    
+    Returns clean string representation or empty string "" for missing/empty/NaN values.
+    Never returns "-" or "NaN" or "None".
+    """
+    if _is_null_or_empty(val):
+        return ""
+    if isinstance(val, bool):
+        return str(val)
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, float):
+        return str(val)
+    if isinstance(val, (datetime, date)):
+        return format_iso8601(val)
     s = str(val).strip()
-    if not s or s == "-":
+    if s.lower() in _NULL_SENTINELS:
+        return ""
+    return s
+
+
+def normalize_for_excel(val: Any) -> Any:
+    """Convert value to native Python type (float, int, datetime.date, datetime.datetime, str, bool) or None for openpyxl cells."""
+    if _is_null_or_empty(val):
+        return None
+    if isinstance(val, (bool, int, date, datetime)):
+        return val
+    if isinstance(val, float):
+        return val
+    s = str(val).strip()
+    if s.lower() in _NULL_SENTINELS:
+        return None
+    # Check for integer string
+    if s.isdigit() or (s.startswith("-") and s[1:].isdigit()):
+        if len(s) > 1 and s.startswith("0"):
+            return s  # preserve strings with leading zeros like "064"
+        return int(s)
+    # Check for float string
+    try:
+        f_val = float(s)
+        if not (math.isnan(f_val) or math.isinf(f_val)):
+            if len(s) > 1 and s.startswith("0") and not s.startswith("0."):
+                return s
+            return f_val
+    except ValueError:
+        pass
+    return s
+
+
+def normalize_for_report(val: Any) -> str:
+    """Format value for Word/PDF report tables with '-' placeholders for missing/empty values."""
+    if _is_null_or_empty(val):
         return "-"
-    match = re.search(r"(\d+(?:\.\d+)?)", s)
+    if isinstance(val, bool):
+        return str(val)
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, float):
+        if val.is_integer():
+            return str(int(val))
+        return str(val)
+    if isinstance(val, (datetime, date)):
+        return format_date_cbm(val)
+    s = str(val).strip()
+    if s.lower() in _NULL_SENTINELS:
+        return "-"
+    if s.endswith(".0"):
+        prefix = s[:-2]
+        if prefix.isdigit() or (prefix.startswith("-") and prefix[1:].isdigit()):
+            return prefix
+    return s
+
+
+
+def format_iso8601(dt: Any, tz_offset: str = "+08:00") -> str:
+    """Convert datetime/date/string into standard ISO-8601 format (e.g. YYYY-MM-DDTHH:MM:SS+08:00 or YYYY-MM-DD)."""
+    if dt is None:
+        return ""
+    if isinstance(dt, datetime):
+        if dt.tzinfo is not None:
+            return dt.isoformat()
+        return f"{dt.strftime('%Y-%m-%dT%H:%M:%S')}{tz_offset}"
+    if isinstance(dt, date):
+        return dt.strftime("%Y-%m-%d")
+    
+    s = str(dt).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return ""
+    
+    # Try parsing combined datetime strings: YYYY-MM-DDTHH:MM:SS or YYYY-MM-DD HH:MM:SS
+    match_dt = re.match(
+        r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\.\d+)?(.*)$",
+        s,
+    )
+    if match_dt:
+        y, m, d_part, hh, mm, ss, extra = match_dt.groups()
+        ss_val = int(ss) if ss else 0
+        try:
+            parsed = datetime(int(y), int(m), int(d_part), int(hh), int(mm), ss_val)
+            if extra and re.match(r"^[+-]\d{2}:\d{2}$", extra.strip()):
+                return f"{parsed.strftime('%Y-%m-%dT%H:%M:%S')}{extra.strip()}"
+            return f"{parsed.strftime('%Y-%m-%dT%H:%M:%S')}{tz_offset}"
+        except ValueError:
+            return ""
+
+    # Try parsing date only strings
+    d_obj = _parse_date_object(s)
+    if d_obj is not None:
+        return d_obj.strftime("%Y-%m-%d")
+    
+    return ""
+
+
+def extract_background_temperature(text: Any) -> float | None:
+    """Extract background temperature numeric float from testsheet cell value."""
+    if text is None:
+        return None
+    if isinstance(text, (int, float)):
+        if isinstance(text, float) and (math.isnan(text) or math.isinf(text)):
+            return None
+        return float(text)
+    s = str(text).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return None
+    match = re.search(r"BACKGROUND\s*TEMP\s*:\s*(\d+(?:\.\d+)?)\s*°?\s*C?", s, re.IGNORECASE)
     if match:
-        return f"{match.group(1)} °C"
-    return "-"
+        try:
+            return float(match.group(1))
+        except ValueError:
+            pass
+    match_num = re.search(r"^(\d+(?:\.\d+)?)\s*°?\s*C?$", s, re.IGNORECASE)
+    if match_num:
+        try:
+            return float(match_num.group(1))
+        except ValueError:
+            pass
+    return None
+
+
+def normalize_fl_erms(location: object) -> str:
+    """Normalize location string to FL ERMS by inserting a slash after character 8 if length >= 8.
+
+    Examples:
+        'CKTN0001AAAA' -> 'CKTN0001/AAAA'
+        'CKTN/PCEJ01565' -> 'CKTN/PCE/J01565'
+        'CKTN/PCE/J01565' -> 'CKTN/PCE/J01565'
+        'CKTN0003/CCCC' -> 'CKTN0003/CCCC'
+    """
+    if location is None:
+        return ""
+    s = str(location).strip()
+    if not s or s.lower() in ("none", "nan", "location"):
+        return ""
+    if len(s) > 8:
+        if s[8] == "/":
+            return s
+        return s[:8] + "/" + s[8:]
+    return s

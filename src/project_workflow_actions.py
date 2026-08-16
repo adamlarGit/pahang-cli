@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Callable
 
 from src import cli_selectors
 from src.workflows.models import (
+    GenerateTestsheetFolderRequest,
     PopulateMode,
     PopulateTotalPeRequest,
     QuickReportMode,
@@ -57,6 +58,37 @@ class ProjectWorkflowAction:
             runner = self._runner_factory()
             return runner(environment)
         raise NotImplementedError("Subclasses must implement execute(environment)")
+
+
+class GenerateTestsheetFolderAction(ProjectWorkflowAction):
+    """CLI Presentation Adapter for generating TESTSHEET folder hierarchy."""
+
+    def execute(self, environment: ProjectEnvironment) -> object:
+        station = cli_selectors.select_or_create_testsheet_station(environment)
+        if station is None:
+            return None
+        month = cli_selectors.select_or_create_testsheet_month(environment, station)
+        if month is None:
+            return None
+        dates = cli_selectors.prompt_target_inspection_dates()
+        if dates is None:
+            return None
+        request = GenerateTestsheetFolderRequest(
+            station=station,
+            month=month,
+            target_dates=dates,
+            progress_sink=_cli_progress_sink,
+        )
+        service = WorkflowService()
+        result = service.run_generate_testsheet_folder(environment, request)
+        print(
+            f"Successfully generated folder structure for {result.station} / {result.month} "
+            f"({result.total_dates_processed} date{'s' if result.total_dates_processed != 1 else ''})."
+        )
+        if result.warnings:
+            for w in result.warnings:
+                print(f"[WARNING] {w}")
+        return result
 
 
 class PopulateTotalPeAction(ProjectWorkflowAction):
@@ -355,20 +387,92 @@ class WhatsAppReportAction(ProjectWorkflowAction):
         return result
 
 
-class UpdateDataMsmsAction(ProjectWorkflowAction):
+class PropagateWoAction(ProjectWorkflowAction):
+    """CLI Presentation Adapter for propagating WO numbers to TOTAL PE."""
+
     def execute(self, environment: ProjectEnvironment) -> object:
         service = WorkflowService()
-        return service.run_update_data_msms(environment)
+        result = service.run_propagate_wo(environment)
+        print(
+            f"Work Orders propagated: {result.updated_count} updated, "
+            f"{result.matched_count} matched, {result.already_populated_count} already populated."
+        )
+        return result
+
+
+UpdateDataMsmsAction = PropagateWoAction
+
+
+class ConsolidateMsmsAction(ProjectWorkflowAction):
+    """CLI Presentation Adapter for consolidating MSMS .xls files into DATA MSMS."""
+
+    def execute(self, environment: ProjectEnvironment) -> object:
+        service = WorkflowService()
+        result = service.run_consolidate_msms(environment)
+        print(
+            f"Files processed: {result.files_processed}, "
+            f"Rows appended: {result.rows_appended}, "
+            f"Duplicates skipped: {result.duplicates_skipped}"
+        )
+        return result
+
+
+class EnrichMsmsAction(ProjectWorkflowAction):
+    """CLI Presentation Adapter for enriching DATA MSMS with TOTAL PE metadata."""
+
+    def execute(self, environment: ProjectEnvironment) -> object:
+        service = WorkflowService()
+        result = service.run_enrich_msms(environment)
+        print(
+            f"Cells updated: {result.updated_cells_count}, "
+            f"Matched: {result.matched_count}, "
+            f"Unmatched: {result.unmatched_count}"
+        )
+        return result
+
+
+class IngestMsmsCsvAction(ProjectWorkflowAction):
+    """CLI Presentation Adapter for ingesting MSMS CSVs from RAW DATA into TO BE FILLED."""
+
+    def execute(self, environment: ProjectEnvironment) -> object:
+        service = WorkflowService()
+        result = service.run_ingest_msms_csv(environment)
+        print(
+            f"Files ingested: {result.files_ingested}, "
+            f"Duplicates skipped: {result.duplicates_skipped}"
+        )
+        return result
+
+
+class PopulateDataMsmsAction(ProjectWorkflowAction):
+    """CLI Presentation Adapter for populating MSMS CSVs from testsheets."""
+
+    def execute(self, environment: ProjectEnvironment) -> object:
+        service = WorkflowService()
+        result = service.run_populate_data_msms(environment)
+        print(
+            f"CSV files processed: {result.csv_files_processed}, "
+            f"Rows populated: {result.rows_populated}, "
+            f"Rows skipped: {result.rows_skipped_already_filled}"
+        )
+        return result
+
 
 PROJECT_WORKFLOW_ACTIONS: tuple[ProjectWorkflowAction, ...] = (
+    GenerateTestsheetFolderAction("Generate TESTSHEET Folder Structure"),
     PopulateTotalPeAction("Populate TOTAL PE (from testsheets)"),
     RawMaterialAction("Automate Raw Material Creation & Sorting (from Testsheets)"),
     UpdateQr02CbaAction("Update QR02 CBA (from testsheets)"),
     QuickReportAction("Generate Quick Report (Visual Report)"),
     PostProcessingPipelineAction("Run Full Substation Post-Processing Pipeline (1-Click)"),
     WhatsAppReportAction("Generate WhatsApp Report"),
-    UpdateDataMsmsAction("Update DATA_MSMS and TOTAL PE WO"),
+    ConsolidateMsmsAction("Consolidate MSMS (PYTHON/MSMS/*.xls -> DATA MSMS)"),
+    EnrichMsmsAction("Enrich MSMS (TOTAL PE -> DATA MSMS metadata)"),
+    PropagateWoAction("Propagate Work Orders (DATA MSMS -> TOTAL PE)"),
+    IngestMsmsCsvAction("Ingest MSMS CSVs (RAW DATA -> TO BE FILLED)"),
+    PopulateDataMsmsAction("Populate Data MSMS (Testsheets -> TO BE FILLED CSVs)"),
 )
+
 
 
 def get_project_workflow_actions() -> tuple[ProjectWorkflowAction, ...]:

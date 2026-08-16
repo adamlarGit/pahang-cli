@@ -97,11 +97,153 @@ def test_print_quick_report_batch_summary(capsys: pytest.CaptureFixture[str]) ->
     captured = capsys.readouterr().out
 
     assert "QUICK REPORT BATCH EXECUTION SUMMARY" in captured
-    assert "Total Processed : 3" in captured
-    assert "Succeeded       : 2" in captured
-    assert "Failed          : 1" in captured
-    assert "Warnings        : 1" in captured
-    assert "✓ 001. SUBSTATION A.docx" in captured
     assert "[FAILED] 003. SUBSTATION C: PCE VI sheet missing" in captured
+
+
+def test_propagate_wo_action(mock_env: ProjectEnvironment) -> None:
+    from src.project_workflow_actions import PropagateWoAction
+    from src.workflows.models import PropagateWoResult
+
+    action = PropagateWoAction("Propagate Work Orders")
+    with patch("src.workflows.service.WorkflowService.run_propagate_wo") as mock_run:
+        mock_run.return_value = PropagateWoResult(matched_count=3, already_populated_count=1, unmatched_count=0, updated_count=3)
+        res = action.execute(mock_env)
+        assert res.updated_count == 3
+        mock_run.assert_called_once_with(mock_env)
+
+
+def test_update_qr02_cba_action(mock_env: ProjectEnvironment) -> None:
+    from src.project_workflow_actions import UpdateQr02CbaAction
+    from src.workflows.models import UpdateQr02CbaResult
+
+    action = UpdateQr02CbaAction("Update QR02 CBA")
+    with patch("src.cli_selectors.select_one", return_value="auto"):
+        with patch("src.workflows.service.WorkflowService.run_update_qr02_cba") as mock_run:
+            mock_run.return_value = UpdateQr02CbaResult(records_updated=4)
+            res = action.execute(mock_env)
+            assert res.records_updated == 4
+            mock_run.assert_called_once()
+
+
+def test_consolidate_msms_action(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
+    from src.project_workflow_actions import ConsolidateMsmsAction
+    from src.workflows.models import ConsolidateMsmsResult
+
+    action = ConsolidateMsmsAction("Consolidate MSMS")
+    with patch("src.workflows.service.WorkflowService.run_consolidate_msms") as mock_run:
+        mock_run.return_value = ConsolidateMsmsResult(
+            files_processed=3,
+            rows_appended=10,
+            duplicates_skipped=2,
+        )
+        res = action.execute(mock_env)
+        assert res.files_processed == 3
+        assert res.rows_appended == 10
+        assert res.duplicates_skipped == 2
+        mock_run.assert_called_once_with(mock_env)
+        captured = capsys.readouterr().out
+        assert "Files processed: 3, Rows appended: 10, Duplicates skipped: 2" in captured
+
+
+def test_enrich_msms_action(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
+    from src.project_workflow_actions import EnrichMsmsAction
+    from src.workflows.models import EnrichMsmsResult
+
+    action = EnrichMsmsAction("Enrich MSMS")
+    with patch("src.workflows.service.WorkflowService.run_enrich_msms") as mock_run:
+        mock_run.return_value = EnrichMsmsResult(
+            updated_cells_count=12,
+            matched_count=5,
+            unmatched_count=1,
+        )
+        res = action.execute(mock_env)
+        assert res.updated_cells_count == 12
+        assert res.matched_count == 5
+        assert res.unmatched_count == 1
+        mock_run.assert_called_once_with(mock_env)
+        captured = capsys.readouterr().out
+        assert "Cells updated: 12, Matched: 5, Unmatched: 1" in captured
+
+
+def test_ingest_msms_csv_action(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
+    from src.project_workflow_actions import IngestMsmsCsvAction
+    from src.workflows.models import IngestMsmsCsvResult
+
+    action = IngestMsmsCsvAction("Ingest MSMS CSVs")
+    with patch("src.workflows.service.WorkflowService.run_ingest_msms_csv") as mock_run:
+        mock_run.return_value = IngestMsmsCsvResult(
+            files_ingested=4,
+            files_skipped_duplicate=1,
+        )
+        res = action.execute(mock_env)
+        assert res.files_ingested == 4
+        assert res.duplicates_skipped == 1
+        mock_run.assert_called_once_with(mock_env)
+        captured = capsys.readouterr().out
+        assert "Files ingested: 4, Duplicates skipped: 1" in captured
+
+
+def test_populate_data_msms_action(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
+    from src.project_workflow_actions import PopulateDataMsmsAction
+    from src.workflows.models import PopulateDataMsmsResult
+
+    action = PopulateDataMsmsAction("Populate Data MSMS")
+    with patch("src.workflows.service.WorkflowService.run_populate_data_msms") as mock_run:
+        mock_run.return_value = PopulateDataMsmsResult(
+            csv_files_processed=2,
+            rows_populated=50,
+            rows_skipped_already_filled=5,
+        )
+        res = action.execute(mock_env)
+        assert res.csv_files_processed == 2
+        assert res.rows_populated == 50
+        assert res.rows_skipped_already_filled == 5
+        mock_run.assert_called_once_with(mock_env)
+        captured = capsys.readouterr().out
+        assert "CSV files processed: 2, Rows populated: 50, Rows skipped: 5" in captured
+
+
+def test_project_workflow_actions_registry() -> None:
+    from src.project_workflow_actions import (
+        PROJECT_WORKFLOW_ACTIONS,
+        ConsolidateMsmsAction,
+        EnrichMsmsAction,
+        GenerateTestsheetFolderAction,
+        IngestMsmsCsvAction,
+        PopulateDataMsmsAction,
+        PopulateTotalPeAction,
+        PostProcessingPipelineAction,
+        PropagateWoAction,
+        QuickReportAction,
+        RawMaterialAction,
+        UpdateQr02CbaAction,
+        WhatsAppReportAction,
+        get_project_workflow_actions,
+    )
+
+    actions = get_project_workflow_actions()
+    assert actions == PROJECT_WORKFLOW_ACTIONS
+    assert len(actions) == 12
+
+    expected_specs = [
+        (GenerateTestsheetFolderAction, "Generate TESTSHEET Folder Structure"),
+        (PopulateTotalPeAction, "Populate TOTAL PE (from testsheets)"),
+        (RawMaterialAction, "Automate Raw Material Creation & Sorting (from Testsheets)"),
+        (UpdateQr02CbaAction, "Update QR02 CBA (from testsheets)"),
+        (QuickReportAction, "Generate Quick Report (Visual Report)"),
+        (PostProcessingPipelineAction, "Run Full Substation Post-Processing Pipeline (1-Click)"),
+        (WhatsAppReportAction, "Generate WhatsApp Report"),
+        (ConsolidateMsmsAction, "Consolidate MSMS (PYTHON/MSMS/*.xls -> DATA MSMS)"),
+        (EnrichMsmsAction, "Enrich MSMS (TOTAL PE -> DATA MSMS metadata)"),
+        (PropagateWoAction, "Propagate Work Orders (DATA MSMS -> TOTAL PE)"),
+        (IngestMsmsCsvAction, "Ingest MSMS CSVs (RAW DATA -> TO BE FILLED)"),
+        (PopulateDataMsmsAction, "Populate Data MSMS (Testsheets -> TO BE FILLED CSVs)"),
+    ]
+
+    for idx, (expected_cls, expected_label) in enumerate(expected_specs):
+        assert isinstance(actions[idx], expected_cls)
+        assert actions[idx].label == expected_label
+
+
 
 

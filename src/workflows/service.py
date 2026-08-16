@@ -5,8 +5,20 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from src.workflows.models import (
+    ConsolidateMsmsRequest,
+    ConsolidateMsmsResult,
+    EnrichMsmsRequest,
+    EnrichMsmsResult,
+    GenerateTestsheetFolderRequest,
+    GenerateTestsheetFolderResult,
+    IngestMsmsCsvRequest,
+    IngestMsmsCsvResult,
+    PopulateDataMsmsRequest,
+    PopulateDataMsmsResult,
     PopulateTotalPeRequest,
     PopulateTotalPeResult,
+    PropagateWoRequest,
+    PropagateWoResult,
     QuickReportRequest,
     QuickReportResult,
     RawMaterialRequest,
@@ -25,6 +37,19 @@ if TYPE_CHECKING:
 
 class WorkflowService:
     """Core workflow service executing project operations."""
+
+    def run_generate_testsheet_folder(
+        self,
+        environment: ProjectEnvironment,
+        request: GenerateTestsheetFolderRequest,
+    ) -> GenerateTestsheetFolderResult:
+        if request.progress_sink:
+            request.progress_sink(
+                f"Generating folder structure for {request.station} / {request.month}..."
+            )
+        from src.workflows.generate_testsheet_folder import GenerateTestsheetFolderStructureWorkflow
+
+        return GenerateTestsheetFolderStructureWorkflow().execute(environment, request)
 
     def run_populate_total_pe(
         self, environment: ProjectEnvironment, request: PopulateTotalPeRequest
@@ -60,11 +85,6 @@ class WorkflowService:
         workflow = QuickReportWorkflow()
         return workflow.execute(environment, request)
 
-    def run_update_data_msms(
-        self, environment: ProjectEnvironment
-    ) -> object:
-        from src.workflows.update_data_msms import run_update_data_msms
-        return run_update_data_msms(environment)
 
     def run_whatsapp(
         self, environment: ProjectEnvironment, request: WhatsAppReportRequest
@@ -74,6 +94,53 @@ class WorkflowService:
         from src.workflows.whatsapp import WhatsAppReportWorkflow
         workflow = WhatsAppReportWorkflow()
         return workflow.execute(environment, request)
+
+    def run_propagate_wo(
+        self, environment: ProjectEnvironment, request: PropagateWoRequest | None = None
+    ) -> PropagateWoResult:
+        if request and request.progress_sink:
+            request.progress_sink("Executing Propagate Work Orders workflow...")
+        from src.workflows.propagate_wo import PropagateWoWorkflow
+        workflow = PropagateWoWorkflow()
+        return workflow.execute(environment, request)
+
+    def run_consolidate_msms(
+        self, environment: ProjectEnvironment, request: ConsolidateMsmsRequest | None = None
+    ) -> ConsolidateMsmsResult:
+        if request and request.progress_sink:
+            request.progress_sink("Executing Consolidate MSMS workflow...")
+        from src.workflows.consolidate_msms import ConsolidateMsmsWorkflow
+        workflow = ConsolidateMsmsWorkflow()
+        return workflow.execute(environment, request)
+
+    def run_enrich_msms(
+        self, environment: ProjectEnvironment, request: EnrichMsmsRequest | None = None
+    ) -> EnrichMsmsResult:
+        if request and request.progress_sink:
+            request.progress_sink("Executing Enrich MSMS workflow...")
+        from src.workflows.enrich_msms import EnrichMsmsWorkflow
+        workflow = EnrichMsmsWorkflow()
+        return workflow.execute(environment, request)
+
+    def run_ingest_msms_csv(
+        self, environment: ProjectEnvironment, request: IngestMsmsCsvRequest | None = None
+    ) -> IngestMsmsCsvResult:
+        req = request or IngestMsmsCsvRequest()
+        if req.progress_sink:
+            req.progress_sink("Executing Ingest MSMS CSV workflow...")
+        from src.workflows.ingest_msms_csv import IngestMsmsCsvWorkflow
+        workflow = IngestMsmsCsvWorkflow()
+        return workflow.execute(environment, req)
+
+    def run_populate_data_msms(
+        self, environment: ProjectEnvironment, request: PopulateDataMsmsRequest | None = None
+    ) -> PopulateDataMsmsResult:
+        req = request or PopulateDataMsmsRequest()
+        if req.progress_sink:
+            req.progress_sink("Executing Populate Data MSMS workflow...")
+        from src.workflows.populate_data_msms import PopulateDataMsmsWorkflow
+        workflow = PopulateDataMsmsWorkflow()
+        return workflow.execute(environment, req)
 
     def run_postprocessing_pipeline(
         self, environment: ProjectEnvironment

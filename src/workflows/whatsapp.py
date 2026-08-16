@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 from docxtpl import DocxTemplate
 
+from src.core.normalizers import format_date_cbm, normalize_for_report
 from src.project.environment import ProjectEnvironment
 from src.project.storage import get_next_file_number
 from src.whatsapp.models import WhatsAppReportResources
@@ -20,20 +21,6 @@ QUALIFYING_DOCX_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-
-def _format_report_date(val: Any) -> str | None:
-    if pd.isna(val) or val is None or str(val).strip() == "":
-        return None
-    if hasattr(val, "strftime"):
-        return val.strftime("%d/%m/%Y")
-    s = str(val).strip().replace("-", "/")
-    parts = s.split("/")
-    if len(parts) == 3:
-        if len(parts[0]) == 4:
-            return f"{int(parts[2]):02d}/{int(parts[1]):02d}/{int(parts[0]):04d}"
-        elif len(parts[2]) == 4:
-            return f"{int(parts[0]):02d}/{int(parts[1]):02d}/{int(parts[2]):04d}"
-    return s
 
 
 @dataclass(frozen=True)
@@ -200,9 +187,7 @@ class WhatsAppReportFilter:
                 if pd.notna(row["SUBSTATION NAME"]) and str(row["SUBSTATION NAME"]).strip()
                 else stem_name.strip()
             )
-            wo_val = str(row["WO"]).strip() if pd.notna(row["WO"]) else "-"
-            if wo_val.endswith(".0"):
-                wo_val = wo_val[:-2]
+            wo_val = normalize_for_report(row["WO"])
             raw_date = row["DATE"] if pd.notna(row["DATE"]) else None
             fl_num = str(row["FL NUMBER"]).strip() if pd.notna(row["FL NUMBER"]) else ""
         else:
@@ -231,13 +216,14 @@ class WhatsAppReportTransformer:
                 "msms": t.msms,
             })
             if report_date is None and t.raw_date is not None:
-                formatted_dt = _format_report_date(t.raw_date)
-                if formatted_dt:
+                formatted_dt = format_date_cbm(t.raw_date)
+                if formatted_dt != "-":
                     report_date = formatted_dt
                     station_code = t.fl_number[:4] if len(t.fl_number) >= 4 else t.fl_number
                     station_name = resources.station_mapping.get(
                         station_code, f"UNKNOWN ({station_code})"
                     )
+
 
         if report_date is None:
             raise ValueError("No valid inspection dates found in PE reports")

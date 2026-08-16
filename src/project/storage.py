@@ -43,6 +43,12 @@ def extract_numerical_prefix(filename: str, split_char: str | None = None) -> in
     return int(match.group(1))
 
 
+def is_canonical_msms_csv_name(filename: str) -> bool:
+    """Check if filename matches canonical DD-MM-YYYY(_NNN).csv format."""
+    return bool(re.match(r"^(\d{2}-\d{2}-\d{4})(_\d{3})?\.csv$", filename, re.IGNORECASE))
+
+
+
 class WorkspaceStorage(ABC):
     """Abstract base class for project folder and file resolution."""
 
@@ -82,6 +88,42 @@ class WorkspaceStorage(ABC):
     @abstractmethod
     def get_data_msms_path(self) -> Path:
         """Return the DATA MSMS.xlsx file path."""
+
+    @abstractmethod
+    def get_msms_dir(self) -> Path:
+        """Return the PYTHON/MSMS directory path."""
+
+    @abstractmethod
+    def get_msms_raw_data_dir(self) -> Path:
+        """Return the PYTHON/MSMS/RAW DATA directory path."""
+
+    @abstractmethod
+    def get_msms_to_be_filled_dir(self) -> Path:
+        """Return the PYTHON/MSMS/TO BE FILLED directory path."""
+
+    @abstractmethod
+    def get_msms_completed_dir(self) -> Path:
+        """Return the PYTHON/MSMS/COMPLETED directory path."""
+
+    @abstractmethod
+    def get_python_msms_dir(self) -> Path:
+        """Return the PYTHON/MSMS directory path."""
+
+    @abstractmethod
+    def get_python_msms_completed_dir(self) -> Path:
+        """Return the PYTHON/MSMS/COMPLETED directory path."""
+
+    @abstractmethod
+    def list_msms_xls_files(self) -> list[Path]:
+        """Return matching scattered .xls files in PYTHON/MSMS."""
+
+    @abstractmethod
+    def list_msms_raw_csv_files(self) -> list[Path]:
+        """Return matching raw CSV files in PYTHON/MSMS/RAW DATA (or TO BE FILLED fallback)."""
+
+    @abstractmethod
+    def list_msms_to_be_filled_csv_files(self) -> list[Path]:
+        """Return matching CSV files in PYTHON/MSMS/TO BE FILLED."""
 
     @abstractmethod
     def get_whatsapp_dir(self) -> Path:
@@ -165,6 +207,53 @@ class LocalWorkspaceStorage(WorkspaceStorage):
 
     def get_data_msms_path(self) -> Path:
         return self.get_python_dir() / "DATA MSMS.xlsx"
+
+    def get_msms_dir(self) -> Path:
+        return self.get_python_dir() / "MSMS"
+
+    def get_msms_raw_data_dir(self) -> Path:
+        return self.get_msms_dir() / "RAW DATA"
+
+    def get_msms_to_be_filled_dir(self) -> Path:
+        return self.get_msms_dir() / "TO BE FILLED"
+
+    def get_msms_completed_dir(self) -> Path:
+        return self.get_msms_dir() / "COMPLETED"
+
+    def get_python_msms_dir(self) -> Path:
+        return self.get_msms_dir()
+
+    def get_python_msms_completed_dir(self) -> Path:
+        return self.get_msms_completed_dir()
+
+    def list_msms_xls_files(self) -> list[Path]:
+        msms_dir = self.get_msms_dir()
+        if not msms_dir.exists() or not msms_dir.is_dir():
+            return []
+        return sorted([p for p in msms_dir.glob("*.xls") if p.is_file()])
+
+    def list_msms_raw_csv_files(self) -> list[Path]:
+        raw_dir = self.get_msms_raw_data_dir()
+        if raw_dir.exists() and raw_dir.is_dir():
+            raw_files = sorted([p for p in raw_dir.glob("*.csv") if p.is_file()])
+            if raw_files:
+                return raw_files
+
+        to_be_filled_dir = self.get_msms_to_be_filled_dir()
+        if to_be_filled_dir.exists() and to_be_filled_dir.is_dir():
+            return sorted([
+                p for p in to_be_filled_dir.glob("*.csv")
+                if p.is_file() and not is_canonical_msms_csv_name(p.name)
+            ])
+
+        return []
+
+    def list_msms_to_be_filled_csv_files(self) -> list[Path]:
+        to_be_filled_dir = self.get_msms_to_be_filled_dir()
+        if not to_be_filled_dir.exists() or not to_be_filled_dir.is_dir():
+            return []
+        return sorted([p for p in to_be_filled_dir.glob("*.csv") if p.is_file()])
+
 
     def get_whatsapp_dir(self) -> Path:
         return self.get_python_dir() / "WHATSAPP"
@@ -272,6 +361,10 @@ class LocalWorkspaceStorage(WorkspaceStorage):
             self.get_quick_report_dir,
             self.get_engr_folder,
             self.get_whatsapp_dir,
+            self.get_msms_dir,
+            self.get_msms_raw_data_dir,
+            self.get_msms_to_be_filled_dir,
+            self.get_msms_completed_dir,
         ):
             dir_fn().mkdir(parents=True, exist_ok=True)
 
@@ -312,6 +405,10 @@ class LocalWorkspaceStorage(WorkspaceStorage):
             ("RAW MATERIAL Directory", self.get_raw_material_dir(), True),
             ("QUICK REPORT Directory", self.get_quick_report_dir(), True),
             ("ENGR FROM DRIVE Directory", self.get_engr_folder(), True),
+            ("MSMS Directory", self.get_msms_dir(), False),
+            ("MSMS RAW DATA Directory", self.get_msms_raw_data_dir(), False),
+            ("MSMS TO BE FILLED Directory", self.get_msms_to_be_filled_dir(), False),
+            ("MSMS COMPLETED Directory", self.get_msms_completed_dir(), False),
             ("Seed Data: TOTAL PE.xlsx", self.get_total_pe_path(), True),
             ("Seed Data: DATA MSMS.xlsx", self.get_data_msms_path(), True),
         ]

@@ -147,13 +147,13 @@ def _load_msms_runner() -> Callable[[], object]:
         from src.project.environment import get_or_create_utility_environment
         from src.workflows.service import WorkflowService
 
-        print("\n[Update DATA_MSMS and TOTAL PE WO]")
+        print("\n[Propagate Work Orders to TOTAL PE]")
         env = get_or_create_utility_environment()
         try:
             service = WorkflowService()
-            return service.run_update_data_msms(env)
+            return service.run_propagate_wo(env)
         except Exception as e:
-            print(f"Failed to run MSMS update: {e}")
+            print(f"Failed to run WO propagation: {e}")
             import traceback
             traceback.print_exc()
 
@@ -188,9 +188,10 @@ UTILITY_ACTIONS: tuple[UtilityAction, ...] = (
     UtilityAction("Apply diagonal borders to blank cells", _load_diagonal_runner),
     UtilityAction("Replace signature images in testsheets", _load_replace_images_runner),
     UtilityAction("Generate WhatsApp report (from Quick Reports)", _load_whatsapp_runner),
-    UtilityAction("Update DATA_MSMS and TOTAL PE WO", _load_msms_runner),
+    UtilityAction("Propagate Work Orders (DATA MSMS -> TOTAL PE)", _load_msms_runner),
     UtilityAction("Remove desktop.ini files (recursive)", _load_remove_desktop_ini_runner),
 )
+
 
 
 def get_utility_actions() -> tuple[UtilityAction, ...]:

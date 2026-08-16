@@ -9,10 +9,10 @@ import openpyxl
 import pandas as pd
 from openpyxl.utils import column_index_from_string
 
-from src.core.normalizers import normalize_date_str
+from src.core.normalizers import normalize_date_str, normalize_for_excel
 from src.testsheet.extractor import to_excel_date
 from src.testsheet.models import SubstationTestsheetPackage
-from src.msms.models import WorkbookUpdateMappings
+from src.msms.models import PropagateResult
 
 def col_to_index(col_letter: str) -> int:
     return column_index_from_string(col_letter) - 1
@@ -22,23 +22,6 @@ def read_col(df: pd.DataFrame, col_letter: str) -> pd.Series:
 
 def write_cell(ws: Any, row: int, col_letter: str, value: Any) -> None:
     ws[f"{col_letter}{row}"] = value
-
-def _resolve_named_column(dataframe: pd.DataFrame, header_names: Sequence[str], fallback_col_letter: str) -> str:
-    columns = dataframe.columns
-    normalized_headers = {
-        str(header).strip().lower(): header
-        for header in columns
-    }
-    for header_name in header_names:
-        actual_header = normalized_headers.get(header_name.strip().lower())
-        if actual_header is not None:
-            return actual_header
-            
-    fallback_idx = col_to_index(fallback_col_letter)
-    if fallback_idx < len(columns):
-        return columns[fallback_idx]
-        
-    raise KeyError(f"None of the headers {header_names} were found")
 
 
 
@@ -61,14 +44,10 @@ class TotalPeRepository(ABC):
         ...
 
     @abstractmethod
-    def update_from_engr_and_msms(
-        self,
-        total_pe_path: Path,
-        data_msms: pd.DataFrame,
-        engr_excel: pd.DataFrame,
-        workbook_mappings: WorkbookUpdateMappings,
-    ) -> None:
-        """Update TOTAL_PE with ENGR and MSMS data."""
+    def propagate_work_orders(
+        self, total_pe_path: Path, data_msms_path: Path, target_date: str | None = None
+    ) -> PropagateResult:
+        """Propagate WONUM from DATA MSMS.xlsx to Column F in TOTAL PE.xlsx."""
         ...
 
 
@@ -76,6 +55,7 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
     """Excel-backed repository for TOTAL PE workbook management."""
 
     @staticmethod
+
     def _get_real_dimensions(ws: openpyxl.worksheet.worksheet.Worksheet) -> tuple[int, int]:
         max_r = 1
         max_c = 1
@@ -237,28 +217,23 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
             if data is None:
                 continue
 
-            pe_no = data.substation_number
-            try:
-                pe_no = int(float(str(pe_no).strip()))
-            except (ValueError, TypeError):
-                pass
-
-            fl_num = data.fl_erms
-            sub_name = data.substation_name_erms
+            pe_no = normalize_for_excel(data.substation_number)
+            fl_num = normalize_for_excel(data.fl_erms)
+            sub_name = normalize_for_excel(data.substation_name_erms)
             dt_str = data.date_str or pkg.date_str
             norm_pkg_dt = normalize_date_str(dt_str)
-            type_c = data.substation_type
-            wo = data.wo_number
+            type_c = normalize_for_excel(data.substation_type)
+            wo = normalize_for_excel(data.wo_number)
 
             dt_obj = to_excel_date(dt_str)
             date_cell_val = dt_obj.date() if dt_obj is not None else norm_pkg_dt
 
             lookup_key = (str(pe_no), dt_str)
             norm_lookup_key = (str(pe_no), norm_pkg_dt)
-            padded_key = (f"{pe_no:03d}", dt_str)
-            norm_padded_key = (f"{pe_no:03d}", norm_pkg_dt)
-            sub_key = (sub_name.upper(), dt_str)
-            norm_sub_key = (sub_name.upper(), norm_pkg_dt)
+            padded_key = (f"{pe_no:03d}" if isinstance(pe_no, int) else str(pe_no), dt_str)
+            norm_padded_key = (f"{pe_no:03d}" if isinstance(pe_no, int) else str(pe_no), norm_pkg_dt)
+            sub_key = (str(sub_name).upper() if sub_name else "", dt_str)
+            norm_sub_key = (str(sub_name).upper() if sub_name else "", norm_pkg_dt)
 
             target_row = (
                 existing_rows.get(lookup_key)
@@ -301,103 +276,102 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
 
         return new_count, updated_count
 
-    def update_from_engr_and_msms(
-        self,
-        total_pe_path: Path,
-        data_msms: pd.DataFrame,
-        engr_excel: pd.DataFrame,
-        workbook_mappings: WorkbookUpdateMappings,
-    ) -> None:
-        import logging
-        logging.info("Processing TOTAL_PE rows...")
-        
+    def propagate_work_orders(
+        self, total_pe_path: Path, data_msms_path: Path, target_date: str | None = None
+    ) -> PropagateResult:
+        """Propagate WO numbers from DATA MSMS.xlsx to Column F in TOTAL PE.xlsx."""
         if not total_pe_path.exists():
-            logging.warning(f"TOTAL PE not found at {total_pe_path}")
-            return
-            
-        total_pe = pd.read_excel(total_pe_path, sheet_name="DataCycle1")
-        
-        msms_map = workbook_mappings.data_msms
-        engr_map = workbook_mappings.engr_excel
-        pe_map = workbook_mappings.total_pe
-        
-        pe_fl_idx = col_to_index(pe_map["functional_location"])
-        pe_substation_idx = col_to_index(pe_map["substation_name_erms"])
-        pe_date_idx = col_to_index(pe_map["date"])
-        pe_type_idx = col_to_index(pe_map["type"])
-        pe_wo_idx = col_to_index(pe_map["wo"])
-        
-        engr_fl_col = _resolve_named_column(
-            engr_excel,
-            ["FUNCTIONAL LOCATION (ERMS)", "FUNCTIONAL LOCATION"],
-            engr_map["functional_location"],
-        )
-        engr_substation_col = _resolve_named_column(
-            engr_excel,
-            ["SUBSTATION NAME (ERMS)", "SUBSTATION NAME"],
-            engr_map["substation_name_erms"],
-        )
-        engr_date_col = _resolve_named_column(
-            engr_excel,
-            ["CYCLE 1", "CYCLE 1 DATE", "SCAN DATE", "DATE"],
-            engr_map["date"],
-        )
-        engr_type_col = _resolve_named_column(
-            engr_excel,
-            ["TYPE", "BUILDING TYPE", "SUBSTATION TYPE"],
-            engr_map["type"],
-        )
-        
-        msms_wo_idx = col_to_index(msms_map["wo"])
-        
-        total_pe.iloc[:, pe_fl_idx] = total_pe.iloc[:, pe_fl_idx].astype(str).fillna("")
-        engr_excel[engr_fl_col] = engr_excel[engr_fl_col].astype(str).fillna("")
-        
-        for index, row in total_pe.iterrows():
-            current_fl = str(row.iloc[pe_fl_idx]).strip()
-            if not current_fl:
-                logging.warning(f"Skipping row {index + 2} due to empty FL NUMBER")
+            raise FileNotFoundError(f"TOTAL PE workbook not found at '{total_pe_path}'")
+        if not data_msms_path.exists():
+            raise FileNotFoundError(f"DATA MSMS workbook not found at '{data_msms_path}'")
+
+        # Read DATA MSMS.xlsx mapping fl_erms -> WO
+        wb_msms = openpyxl.load_workbook(data_msms_path, data_only=True)
+        ws_msms = wb_msms.active
+
+        fl_to_wo: dict[str, str] = {}
+        for r_idx in range(2, (ws_msms.max_row or 1) + 1):
+            wo_val = ws_msms.cell(r_idx, 1).value  # Col A: Work Order
+            fl_val = ws_msms.cell(r_idx, 5).value  # Col E: FL ERMS
+            loc_val = ws_msms.cell(r_idx, 2).value  # Col B: Location
+
+            wo_str = str(wo_val).strip() if wo_val is not None else ""
+            if not wo_str or wo_str.lower() in ("none", "nan"):
                 continue
-            
-            engr_match = engr_excel[engr_excel[engr_fl_col].astype(str).str.strip() == current_fl]
-            if not engr_match.empty:
-                engr_row = engr_match.iloc[0]
-                extracted_date = engr_row[engr_date_col]
-                if pd.isna(extracted_date) or extracted_date == "":
-                    logging.warning(f"Skipping row {index + 2} due to missing ENGR date")
+
+            for fl_candidate in (fl_val, loc_val):
+                if fl_candidate is not None:
+                    fl_str = str(fl_candidate).strip().upper()
+                    if fl_str and fl_str.lower() not in ("none", "nan"):
+                        fl_to_wo[fl_str] = wo_str
+                        fl_norm = fl_str.replace("/", "")
+                        if fl_norm:
+                            fl_to_wo[fl_norm] = wo_str
+        wb_msms.close()
+
+        # Open TOTAL PE with data_only=False to preserve all existing formulas and non-WO columns!
+        wb_pe = openpyxl.load_workbook(total_pe_path, data_only=False)
+        if "DataCycle1" not in wb_pe.sheetnames:
+            wb_pe.close()
+            raise RuntimeError(f"'DataCycle1' sheet missing in {total_pe_path}")
+
+        ws_pe = wb_pe["DataCycle1"]
+
+        matched_count = 0
+        already_populated_count = 0
+        unmatched_count = 0
+        unmatched_fls: list[str] = []
+        updated_count = 0
+
+        norm_target_date = normalize_date_str(target_date) if target_date else None
+
+        for r_idx in range(2, (ws_pe.max_row or 1) + 1):
+            # If target_date is given, check row date in Col D (4)
+            if target_date is not None:
+                row_date_val = ws_pe.cell(r_idx, 4).value
+                if row_date_val is None:
                     continue
-                
-                total_pe.iat[index, pe_substation_idx] = engr_row[engr_substation_col]
-                total_pe.iat[index, pe_date_idx] = extracted_date
-                total_pe.iat[index, pe_type_idx] = engr_row[engr_type_col]
-                
-                msms_match = data_msms[read_col(data_msms, msms_map["functional_location"]) == current_fl]
-                if not msms_match.empty:
-                    total_pe.iat[index, pe_wo_idx] = msms_match.iloc[0, msms_wo_idx]
-                else:
-                    logging.warning(f"No MSMS match for Work Order on row {index + 2}")
+                row_date_str = str(row_date_val).strip()
+                norm_row_date = normalize_date_str(row_date_str)
+                if norm_row_date != norm_target_date and row_date_str != target_date:
+                    continue
+
+            fl_val = ws_pe.cell(r_idx, 2).value  # Col B: FL NUMBER
+            if fl_val is None:
+                continue
+            fl_str = str(fl_val).strip().upper()
+            if not fl_str or fl_str.lower() in ("none", "nan"):
+                continue
+
+            # Check if Column F (6: WO) is already populated
+            current_wo_val = ws_pe.cell(r_idx, 6).value
+            if current_wo_val is not None:
+                current_wo_str = str(current_wo_val).strip()
+                if current_wo_str and current_wo_str.lower() not in ("none", "nan"):
+                    already_populated_count += 1
+                    continue
+
+            # Look up WO in fl_to_wo
+            wo_match = fl_to_wo.get(fl_str) or fl_to_wo.get(fl_str.replace("/", ""))
+            if wo_match:
+                ws_pe.cell(r_idx, 6, wo_match)  # Update ONLY Column F!
+                matched_count += 1
+                updated_count += 1
             else:
-                logging.warning(f"No ENGR match found for {current_fl} in row {index + 2}")
-                msms_match = data_msms[read_col(data_msms, msms_map["functional_location"]) == current_fl]
-                if not msms_match.empty:
-                    total_pe.iat[index, pe_wo_idx] = msms_match.iloc[0, msms_wo_idx]
-                    logging.info(f"Updated row {index + 2} with Work Order {total_pe.iat[index, pe_wo_idx]}")
-                else:
-                    logging.warning(f"No DATA_MSMS match found for {current_fl} in row {index + 2}")
-        
-        logging.info("Updating TOTAL_PE with Openpyxl...")
-        wb = openpyxl.load_workbook(total_pe_path)
-        ws = wb["DataCycle1"]
-        
-        for idx, row in total_pe.iterrows():
-            excel_row = idx + 2
-            write_cell(ws, excel_row, pe_map["substation_name_erms"], row.iloc[pe_substation_idx])
-            dt_obj = to_excel_date(row.iloc[pe_date_idx])
-            cell_date = ws[f"{pe_map['date']}{excel_row}"]
-            cell_date.value = dt_obj.date() if dt_obj is not None else normalize_date_str(row.iloc[pe_date_idx])
-            cell_date.number_format = "DD-MMM-YYYY"
-            write_cell(ws, excel_row, pe_map["type"], row.iloc[pe_type_idx])
-            write_cell(ws, excel_row, pe_map["wo"], row.iloc[pe_wo_idx])
-        
-        wb.save(total_pe_path)
-        logging.info("TOTAL_PE saved successfully using Openpyxl")
+                unmatched_count += 1
+                unmatched_fls.append(fl_str)
+
+        wb_pe.save(total_pe_path)
+        wb_pe.close()
+
+        return PropagateResult(
+            matched_count=matched_count,
+            already_populated_count=already_populated_count,
+            unmatched_count=unmatched_count,
+            unmatched_fls=tuple(unmatched_fls),
+            updated_count=updated_count,
+        )
+
+
+TotalPeRepo = TotalPeRepository
+

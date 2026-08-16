@@ -5,6 +5,25 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-08-17
+ 
+### Added
+- **Generate TESTSHEET Folder Structure Workflow**: Added 6-stage ETL compliant workflow (`GenerateTestsheetFolderStructureWorkflow` in `src/workflows/generate_testsheet_folder.py`) registered as Action #1 in the Project Workflow menu. Features preflight validation, station & month discovery, date normalization/best-effort filtering, path hierarchy transformation, and safe idempotent provisioning of `<DATE>/UNSORTED RAW DATA/` with `DG/`, `IR/`, and `US+TEV/` subfolders without touching `history.json`.
+- **Interactive Station & Month Hierarchy Selectors**: Added `select_or_create_testsheet_station`, `select_or_create_testsheet_month` (with automatic sequential indexing e.g. `01.`, `02.`), and `prompt_target_inspection_dates` with default today date and multi-date comma-separated parsing in `src/cli_selectors.py`.
+- **Modular MSMS Workflow Suite**: Added dedicated decomposed workflows in `src/workflows/`:
+  - `ConsolidateMsmsWorkflow`: Consolidates `PYTHON/MSMS/*.xls` workbooks into `DATA MSMS.xlsx`.
+  - `EnrichMsmsWorkflow`: Enriches `DATA MSMS.xlsx` with substation metadata from `TOTAL PE.xlsx`.
+  - `PropagateWoWorkflow`: Propagates Work Orders (WO) from `DATA MSMS.xlsx` back into `TOTAL PE.xlsx`.
+  - `IngestMsmsCsvWorkflow`: Ingests MSMS CSV exports from `RAW DATA/` into `TO BE FILLED/`.
+  - `PopulateDataMsmsWorkflow`: Populates `TO BE FILLED/` MSMS CSVs from testsheets.
+- **Unit of Work & Repository Infrastructure**: Added `TotalPeRepository` and `MsmsRepository` under `src/repositories/` alongside `src/msms/repository.py`.
+- **Canonical Testsheet Mapping**: Added `TestsheetMapper` in `src/testsheet/mapper.py` for canonical equipment and reading mappings.
+- **Dynamic Substation Condition Configuration Templates**: Added template docx configurations (`CS WITH TX.docx`, `CS WITHOUT TX.docx`, `OD 1 TX 1 FP 1 BATTERY.docx`) in `templates/QUICK REPORT/SUBSTATION CONFIGURATION/`.
+- **Comprehensive Unit & Integration Test Suites**: Added unit and E2E integration test suites covering domain models, pipeline stages, selectors, actions, MSMS operations, and workspace storage (`tests/test_generate_testsheet_folder_*.py`, `tests/test_consolidate_msms.py`, `tests/test_enrich_msms.py`, `tests/test_ingest_msms_csv.py`, `tests/test_populate_data_msms.py`, `tests/test_propagate_wo.py`, `tests/test_testsheet_mapper.py`, `tests/test_workspace_storage.py`).
+
+### Removed
+- **Monolithic MSMS Workflow**: Purged deprecated monolithic `src/workflows/update_data_msms.py`.
+
 ## [1.7.2] - 2026-08-13
 
 ### Fixed

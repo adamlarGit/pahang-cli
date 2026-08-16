@@ -121,3 +121,170 @@ class WhatsAppReportResult:
 
     substations_count: int = 0
     output_path: Path | None = None
+
+
+@dataclass(frozen=True)
+class PropagateWoRequest:
+    """Request model for Propagate Work Orders workflow."""
+
+    target_date: str | None = None
+    overwrite: bool = False
+    progress_sink: ProgressSink | None = None
+
+
+@dataclass(frozen=True)
+class PropagateWoResult:
+    """Result model for Propagate Work Orders workflow."""
+
+    matched_count: int = 0
+    already_populated_count: int = 0
+    unmatched_count: int = 0
+    unmatched_fls: tuple[str, ...] = ()
+    updated_count: int = 0
+
+
+@dataclass(frozen=True)
+class IngestMsmsCsvRequest:
+    """Request model for Ingest MSMS CSV workflow."""
+
+    progress_sink: ProgressSink | None = None
+
+
+@dataclass(frozen=True)
+class IngestMsmsCsvResult:
+    """Result model for Ingest MSMS CSV workflow."""
+
+    files_ingested: int = 0
+    files_skipped_duplicate: int = 0
+    ingested_files: Sequence[Path] = ()
+    skipped_files: Sequence[Path] = ()
+    warnings: Sequence[str] = ()
+    errors: Sequence[str] = ()
+
+    @property
+    def duplicates_skipped(self) -> int:
+        return self.files_skipped_duplicate
+
+
+@dataclass(frozen=True)
+class PopulateDataMsmsRequest:
+    """Request model for Populate Data MSMS workflow."""
+
+    mode: PopulateMode = PopulateMode.AUTO
+    target_folder_names: Sequence[str] = ()
+    overwrite: bool = False
+    progress_sink: ProgressSink | None = None
+
+
+@dataclass(frozen=True)
+class PopulateDataMsmsResult:
+    """Result model for Populate Data MSMS workflow."""
+
+    csv_files_processed: int = 0
+    total_rows_evaluated: int = 0
+    rows_populated: int = 0
+    rows_skipped_already_filled: int = 0
+    rows_skipped_no_testsheet: int = 0
+    unmapped_meters_count: int = 0
+    warnings: Sequence[str] = ()
+    errors: Sequence[str] = ()
+
+
+@dataclass(frozen=True)
+class ConsolidateMsmsRequest:
+    """Request model for Consolidate MSMS workflow."""
+
+    progress_sink: ProgressSink | None = None
+
+
+@dataclass(frozen=True)
+class ConsolidateMsmsResult:
+    """Result model for Consolidate MSMS workflow."""
+
+    files_processed: int = 0
+    rows_appended: int = 0
+    duplicates_skipped: int = 0
+    errors: Sequence[str] = ()
+    files_moved: Sequence[Path] = ()
+
+
+@dataclass(frozen=True)
+class EnrichMsmsRequest:
+    """Request model for Enrich MSMS workflow."""
+
+    progress_sink: ProgressSink | None = None
+
+
+@dataclass(frozen=True)
+class EnrichMsmsResult:
+    """Result model for Enrich MSMS workflow."""
+
+    matched_count: int = 0
+    unmatched_count: int = 0
+    unmatched_wos: Sequence[str] = ()
+    updated_cells_count: int = 0
+
+
+@dataclass(frozen=True)
+class GenerateTestsheetFolderRequest:
+    """Request model for Generate TESTSHEET Folder Structure workflow."""
+
+    station: str
+    month: str
+    target_dates: Sequence[str] = ()
+    progress_sink: ProgressSink | None = None
+
+
+@dataclass(frozen=True)
+class DateFolderPlan:
+    """Execution plan for a single date folder hierarchy."""
+
+    date_str: str
+    date_dir: Path
+    unsorted_dir: Path
+    tech_dirs: tuple[Path, ...] = ()
+
+    @property
+    def all_directories(self) -> tuple[Path, ...]:
+        return (self.date_dir, self.unsorted_dir, *self.tech_dirs)
+
+
+@dataclass(frozen=True)
+class GenerateTestsheetFolderPlan:
+    """Complete folder generation plan for a station and month."""
+
+    station: str
+    month: str
+    month_dir: Path
+    date_plans: tuple[DateFolderPlan, ...] = ()
+
+    @property
+    def all_directories_to_ensure(self) -> tuple[Path, ...]:
+        dirs: list[Path] = [self.month_dir]
+        for date_plan in self.date_plans:
+            dirs.extend(date_plan.all_directories)
+        return tuple(dirs)
+
+
+@dataclass(frozen=True)
+class GenerateTestsheetFolderResult:
+    """Result model for Generate TESTSHEET Folder Structure workflow."""
+
+    station: str
+    month: str
+    created_directories: Sequence[Path] = ()
+    existing_directories: Sequence[Path] = ()
+    total_dates_processed: int = 0
+    warnings: Sequence[str] = ()
+    errors: Sequence[str] = ()
+
+    @property
+    def created_count(self) -> int:
+        return len(self.created_directories)
+
+    @property
+    def is_successful(self) -> bool:
+        return len(self.errors) == 0 and self.total_dates_processed > 0
+
+
+

@@ -3,11 +3,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
+import re
 from types import SimpleNamespace
-from typing import Any, Callable, Generic, Iterable, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Sequence, TypeVar
 
+from src.core.normalizers import normalize_date_str
+
+if TYPE_CHECKING:
+    from src.project.environment import ProjectEnvironment
+
+STANDARD_MONTH_NAMES: tuple[str, ...] = (
+    "JANUARY",
+    "FEBRUARY",
+    "MARCH",
+    "APRIL",
+    "MAY",
+    "JUNE",
+    "JULY",
+    "AUGUST",
+    "SEPTEMBER",
+    "OCTOBER",
+    "NOVEMBER",
+    "DECEMBER",
+)
 
 T = TypeVar("T")
 
@@ -27,9 +48,6 @@ def _load_questionary() -> Any:
     except ImportError:
         return None
     return questionary
-
-
-import re
 
 
 def _with_shortcuts(options: Sequence[SelectOption[T]]) -> list[SelectOption[T]]:
@@ -593,3 +611,103 @@ def prompt_directory_path(
             continue
 
         return entered_path
+
+
+def select_or_create_testsheet_station(environment: ProjectEnvironment) -> str | None:
+    """Prompt the operator to select an existing TESTSHEET station or create a new one."""
+    testsheet_dir = environment.storage.get_testsheet_dir()
+    existing_stations: list[str] = []
+    if testsheet_dir.exists() and testsheet_dir.is_dir():
+        existing_stations = sorted(
+            [d.name for d in testsheet_dir.iterdir() if d.is_dir()],
+            key=lambda s: s.upper(),
+        )
+
+    options: list[SelectOption[str]] = [
+        SelectOption(station, station)
+        for station in existing_stations
+    ]
+    options.append(SelectOption("[+] Add New Station", "__new_station__"))
+    options.append(SelectOption("Cancel", "__cancel__", shortcut_key="c"))
+
+    selection = select_one("Select Station:", options)
+    if selection is None or selection == "__cancel__":
+        return None
+
+    if selection == "__new_station__":
+        try:
+            raw_name = input("Enter station name: ").strip()
+        except KeyboardInterrupt:
+            print()
+            return None
+
+        if not raw_name:
+            return None
+        return raw_name.upper()
+
+    return str(selection).upper()
+
+
+def select_or_create_testsheet_month(environment: ProjectEnvironment, station: str) -> str | None:
+    """Prompt the operator to select an existing month folder for a station or create a new one."""
+    testsheet_dir = environment.storage.get_testsheet_dir()
+    station_dir = testsheet_dir / station
+    existing_months: list[str] = []
+    if station_dir.exists() and station_dir.is_dir():
+        existing_months = sorted(
+            [d.name for d in station_dir.iterdir() if d.is_dir()]
+        )
+
+    options: list[SelectOption[str]] = [
+        SelectOption(m, m)
+        for m in existing_months
+    ]
+    options.append(SelectOption("[+] Add New Month", "__new_month__"))
+    options.append(SelectOption("Cancel", "__cancel__", shortcut_key="c"))
+
+    selection = select_one(f"Select Month for {station}:", options)
+    if selection is None or selection == "__cancel__":
+        return None
+
+    if selection == "__new_month__":
+        next_idx = len(existing_months) + 1
+        month_options = [
+            SelectOption(m, m)
+            for m in STANDARD_MONTH_NAMES
+        ]
+        month_options.append(SelectOption("Cancel", "__cancel__", shortcut_key="c"))
+
+        month_selection = select_one(f"Select Month Name (Index: {next_idx:02d}):", month_options)
+        if month_selection is None or month_selection == "__cancel__":
+            return None
+
+        return f"{next_idx:02d}. {month_selection}"
+
+    return str(selection)
+
+
+def prompt_target_inspection_dates(default_date: str | None = None) -> tuple[str, ...] | None:
+    """Prompt the operator for one or more target inspection dates."""
+    default_str = default_date if default_date is not None else datetime.now().strftime("%d-%m-%Y")
+    default_str = normalize_date_str(default_str)
+    prompt = f"Enter target date(s) (e.g. 10-08-2026 or 10-08-2026, 11-08-2026) [Default: {default_str}]: "
+
+    try:
+        raw = input(prompt).strip()
+    except KeyboardInterrupt:
+        print()
+        return None
+
+    if not raw:
+        return (default_str,)
+
+    if raw.lower() in ("c", "cancel"):
+        return None
+
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    normalized_dates = tuple(
+        normalize_date_str(p)
+        for p in parts
+        if normalize_date_str(p)
+    )
+    return normalized_dates

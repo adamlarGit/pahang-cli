@@ -167,8 +167,6 @@ def test_extractor_delegates_to_repositories(tmp_path: Path, sample_packages: li
             return {("1", "01-05-2026")}
         def upsert_packages(self, path: Path, packages: Sequence[SubstationTestsheetPackage]) -> tuple[int, int]:
             return 1, 0
-        def update_from_engr_and_msms(self, *args, **kwargs) -> None:
-            pass
 
     extractor = PopulateTotalPeExtractor(
         repository=DummyTestsheetRepo(),  # type: ignore[arg-type]
@@ -188,8 +186,7 @@ def test_loader_delegates_to_repository(tmp_path: Path, sample_packages: list[Su
             return set()
         def upsert_packages(self, path: Path, packages: Sequence[SubstationTestsheetPackage]) -> tuple[int, int]:
             return len(packages), 2
-        def update_from_engr_and_msms(self, *args, **kwargs) -> None:
-            pass
+
 
     loader = PopulateTotalPeLoader(total_pe_repository=DummyTotalPeRepo())  # type: ignore[arg-type]
     plan = PopulateTotalPePlan(total_pe_path=tmp_path / "TOTAL PE.xlsx", packages=tuple(sample_packages))
