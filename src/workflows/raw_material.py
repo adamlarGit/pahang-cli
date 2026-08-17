@@ -11,6 +11,7 @@ import openpyxl
 
 from src.core.normalizers import format_month_folder, normalize_date_str
 from src.project.environment import ProjectEnvironment
+from src.project.models import CameraConfig
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import PhotoRange, SubstationTestsheetPackage, TestsheetData
 from src.testsheet.repository import SubstationTestsheetRepository
@@ -275,6 +276,12 @@ class RawMaterialFilter:
         """Extract sequence number directly after technology prefix or trailing sequence."""
         name_upper = filename.upper()
         prefix_upper = prefix.upper()
+
+        if prefix_upper in ("P", "P1000") and re.match(r"^P(?:1000|10000)?\d+", name_upper):
+            m = re.match(r"^P(?:1000|10000)?0*(\d+)", name_upper)
+            if m:
+                return int(m.group(1))
+
         if not name_upper.startswith(prefix_upper):
             return None
 
@@ -287,6 +294,149 @@ class RawMaterialFilter:
             return int(digits[-1])
         return int(digits[0])
 
+    def filter_ir_photos(
+        self,
+        photos: Sequence[Path],
+        camera_config: CameraConfig | None,
+        photo_range: PhotoRange | None,
+        substation_folder_name: str,
+        warnings: list[str],
+    ) -> list[tuple[Path, int]]:
+        """Filter IR photos matching CameraConfig (single or dual_pair) and PhotoRange bounds."""
+        if camera_config is None:
+            camera_config = CameraConfig()
+
+        bounds = self._resolve_photo_range_bounds(photo_range, "IR", substation_folder_name, warnings)
+        if bounds is None:
+            return []
+
+        min_val, max_val = bounds
+        step = 1 if min_val <= max_val else -1
+        expected_nums = list(range(min_val, max_val + step, step))
+
+        matched_photos: list[tuple[Path, int]] = []
+        found_nums: set[int] = set()
+
+        if camera_config.ir_mode == "dual_pair":
+            ir_prefix = camera_config.ir_prefix
+            dc_prefix = camera_config.dc_prefix
+            dc_offset = camera_config.dc_offset
+            missing_warnings: list[str] = []
+
+            for num in expected_nums:
+                paired_num = num + dc_offset
+                ir_matched: list[Path] = []
+                dc_matched: list[Path] = []
+
+                for p in photos:
+                    p_ir_num = self.extract_photo_number(p.name, ir_prefix)
+                    if p_ir_num == num and p not in ir_matched:
+                        ir_matched.append(p)
+
+                    p_dc_num = self.extract_photo_number(p.name, dc_prefix)
+                    if p_dc_num == paired_num and p not in dc_matched:
+                        dc_matched.append(p)
+
+                num_matched = ir_matched + [p for p in dc_matched if p not in ir_matched]
+
+                if num_matched:
+                    found_nums.add(num)
+                    for p in num_matched:
+                        matched_photos.append((p, num))
+
+                if not ir_matched:
+                    missing_warnings.append(
+                        f"IR photo {ir_prefix}{num:04d} missing for PE {substation_folder_name}"
+                    )
+                if not dc_matched:
+                    missing_warnings.append(
+                        f"Visual DC photo {dc_prefix}{paired_num:04d} missing for PE {substation_folder_name}"
+                    )
+
+            if len(matched_photos) == 0:
+                warnings.append(
+                    f"PE {substation_folder_name}: No IR photos matched range [{min_val}-{max_val}] with prefix '{ir_prefix}'"
+                )
+            else:
+                warnings.extend(missing_warnings)
+        else:
+            ir_prefix = camera_config.ir_prefix
+            missing_warnings = []
+            for num in expected_nums:
+                num_matched: list[Path] = []
+                for p in photos:
+                    p_num = self.extract_photo_number(p.name, ir_prefix)
+                    if p_num == num and p not in num_matched:
+                        num_matched.append(p)
+
+                if num_matched:
+                    found_nums.add(num)
+                    for p in num_matched:
+                        matched_photos.append((p, num))
+                else:
+                    missing_warnings.append(
+                        f"IR photo {ir_prefix}{num:04d} missing for PE {substation_folder_name}"
+                    )
+
+            if len(matched_photos) == 0:
+                warnings.append(
+                    f"PE {substation_folder_name}: No IR photos matched range [{min_val}-{max_val}] with prefix '{ir_prefix}'"
+                )
+            else:
+                warnings.extend(missing_warnings)
+
+        return matched_photos
+
+    def filter_dg_photos(
+        self,
+        photos: Sequence[Path],
+        camera_config: CameraConfig | None,
+        photo_range: PhotoRange | None,
+        substation_folder_name: str,
+        warnings: list[str],
+    ) -> list[tuple[Path, int]]:
+        """Filter DG photos matching CameraConfig and PhotoRange bounds."""
+        if camera_config is None:
+            camera_config = CameraConfig()
+
+        bounds = self._resolve_photo_range_bounds(photo_range, "DG", substation_folder_name, warnings)
+        if bounds is None:
+            return []
+
+        min_val, max_val = bounds
+        step = 1 if min_val <= max_val else -1
+        expected_nums = list(range(min_val, max_val + step, step))
+
+        matched_photos: list[tuple[Path, int]] = []
+        found_nums: set[int] = set()
+        dg_prefix = camera_config.dg_prefix
+        missing_warnings: list[str] = []
+
+        for num in expected_nums:
+            num_matched: list[Path] = []
+            for p in photos:
+                p_num = self.extract_photo_number(p.name, dg_prefix)
+                if p_num == num and p not in num_matched:
+                    num_matched.append(p)
+
+            if num_matched:
+                found_nums.add(num)
+                for p in num_matched:
+                    matched_photos.append((p, num))
+            else:
+                missing_warnings.append(
+                    f"DG photo {dg_prefix}{num:04d} missing for PE {substation_folder_name}"
+                )
+
+        if len(matched_photos) == 0:
+            warnings.append(
+                f"PE {substation_folder_name}: No DG photos matched range [{min_val}-{max_val}] with prefix '{dg_prefix}'"
+            )
+        else:
+            warnings.extend(missing_warnings)
+
+        return matched_photos
+
     def filter_matching_photos(
         self,
         photos: Sequence[Path],
@@ -296,27 +446,22 @@ class RawMaterialFilter:
         substation_folder_name: str,
         warnings: list[str],
     ) -> list[tuple[Path, int]]:
-        """Filter photos matching prefix and PhotoRange bounds."""
-        bounds = self._resolve_photo_range_bounds(photo_range, tech_name, substation_folder_name, warnings)
-        if bounds is None:
-            return []
-
-        min_val, max_val = bounds
-        matched_photos, found_nums = self._match_photos_in_range(photos, prefix, min_val, max_val)
-
-        self._check_missing_photos(
-            expected_range=set(range(min_val, max_val + 1)),
-            found_nums=found_nums,
-            prefix=prefix,
-            tech_name=tech_name,
+        """Filter photos matching prefix and PhotoRange bounds (compatibility helper)."""
+        if tech_name.upper() == "IR":
+            return self.filter_ir_photos(
+                photos=photos,
+                camera_config=CameraConfig(ir_mode="single", ir_prefix=prefix),
+                photo_range=photo_range,
+                substation_folder_name=substation_folder_name,
+                warnings=warnings,
+            )
+        return self.filter_dg_photos(
+            photos=photos,
+            camera_config=CameraConfig(dg_prefix=prefix),
+            photo_range=photo_range,
             substation_folder_name=substation_folder_name,
-            matched_count=len(matched_photos),
-            min_val=min_val,
-            max_val=max_val,
             warnings=warnings,
         )
-
-        return matched_photos
 
     def _resolve_photo_range_bounds(
         self,
@@ -337,47 +482,6 @@ class RawMaterialFilter:
             return None
 
         return min(start_num, end_num), max(start_num, end_num)
-
-    def _match_photos_in_range(
-        self,
-        photos: Sequence[Path],
-        prefix: str,
-        min_val: int,
-        max_val: int,
-    ) -> tuple[list[tuple[Path, int]], set[int]]:
-        found_nums: set[int] = set()
-        matched_photos: list[tuple[Path, int]] = []
-
-        for p_file in photos:
-            num = self.extract_photo_number(p_file.name, prefix)
-            if num is not None and min_val <= num <= max_val:
-                matched_photos.append((p_file, num))
-                found_nums.add(num)
-
-        return matched_photos, found_nums
-
-    def _check_missing_photos(
-        self,
-        expected_range: set[int],
-        found_nums: set[int],
-        prefix: str,
-        tech_name: str,
-        substation_folder_name: str,
-        matched_count: int,
-        min_val: int,
-        max_val: int,
-        warnings: list[str],
-    ) -> None:
-        missing_nums = sorted(expected_range - found_nums)
-        if matched_count == 0:
-            warnings.append(
-                f"PE {substation_folder_name}: No {tech_name} photos matched range [{min_val}-{max_val}] with prefix '{prefix}'"
-            )
-        elif missing_nums:
-            for missing_no in missing_nums:
-                warnings.append(
-                    f"{tech_name} photo {prefix}{missing_no:04d} missing for PE {substation_folder_name}"
-                )
 
 
 class RawMaterialTransformer:
@@ -537,6 +641,8 @@ class RawMaterialWorkflow:
         existing_tuples = self.extractor.load_pe_alignment_data(total_pe_path)
         self.filter_stage.verify_pe_alignment(packages, existing_tuples)
 
+        camera_config = environment.get_camera_config()
+
         substations_count = 0
         total_ir_copied = 0
         total_dg_copied = 0
@@ -545,7 +651,9 @@ class RawMaterialWorkflow:
 
         for pkg in packages:
             substations_count += 1
-            ir_copied, dg_copied = self._process_package(environment, request, pkg, warnings)
+            ir_copied, dg_copied = self._process_package(
+                environment, request, pkg, warnings, camera_config=camera_config
+            )
             total_ir_copied += ir_copied
             total_dg_copied += dg_copied
 
@@ -560,27 +668,29 @@ class RawMaterialWorkflow:
         request: RawMaterialRequest,
         pkg: SubstationTestsheetPackage,
         warnings: list[str],
+        camera_config: CameraConfig | None = None,
     ) -> tuple[int, int]:
+        if camera_config is None:
+            camera_config = environment.get_camera_config()
+
         extracted = self.extractor.extract_package_data(pkg, warnings)
 
         photo_ranges = extracted.testsheet_data.photo_ranges if extracted.testsheet_data else None
         ir_range = photo_ranges.ir if photo_ranges else None
         dg_range = photo_ranges.dg if photo_ranges else None
 
-        filtered_ir = self.filter_stage.filter_matching_photos(
+        filtered_ir = self.filter_stage.filter_ir_photos(
             photos=extracted.ir_photos,
-            prefix="FLIR",
+            camera_config=camera_config,
             photo_range=ir_range,
-            tech_name="IR",
             substation_folder_name=extracted.substation_folder_name,
             warnings=warnings,
         )
 
-        filtered_dg = self.filter_stage.filter_matching_photos(
+        filtered_dg = self.filter_stage.filter_dg_photos(
             photos=extracted.dg_photos,
-            prefix="IMG_",
+            camera_config=camera_config,
             photo_range=dg_range,
-            tech_name="DG",
             substation_folder_name=extracted.substation_folder_name,
             warnings=warnings,
         )

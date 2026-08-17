@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from src.project.environment import ProjectEnvironment
-from src.project.models import ProjectMetadata
+from src.project.models import CameraConfig, ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
 from src.testsheet.models import PhotoRange, SubstationTestsheetPackage
 from src.workflows.raw_material import (
@@ -188,3 +188,97 @@ def test_transformer_build_plan(mock_env: ProjectEnvironment, tmp_path: Path) ->
     dg_inst = [i for i in plan.copy_instructions if i.tech_name == "DG"][0]
     assert dg_inst.dest_path == expected_base / "DG" / "IMG_20260724_0042.jpg"
     assert dg_inst.photo_number == 42
+
+
+def test_filter_ir_photos_dual_pair_mode() -> None:
+    filter_stage = RawMaterialFilter()
+    warnings: list[str] = []
+    cam_cfg = CameraConfig(
+        ir_mode="dual_pair",
+        ir_prefix="IR_",
+        dc_prefix="DC_",
+        dc_offset=1,
+        dg_prefix="IMG_",
+    )
+
+    photos = [
+        Path("/tmp/IR_0001.jpg"),
+        Path("/tmp/DC_0002.jpg"),
+        Path("/tmp/IR_0002.jpg"),
+        Path("/tmp/DC_0003.jpg"),
+        Path("/tmp/IR_0099.jpg"),
+        Path("/tmp/DC_0100.jpg"),
+    ]
+    photo_range = PhotoRange(start_num=1, end_num=2)
+
+    matched = filter_stage.filter_ir_photos(
+        photos=photos,
+        camera_config=cam_cfg,
+        photo_range=photo_range,
+        substation_folder_name="001",
+        warnings=warnings,
+    )
+
+    assert len(matched) == 4
+    matched_paths = [p for p, _ in matched]
+    assert Path("/tmp/IR_0001.jpg") in matched_paths
+    assert Path("/tmp/DC_0002.jpg") in matched_paths
+    assert Path("/tmp/IR_0002.jpg") in matched_paths
+    assert Path("/tmp/DC_0003.jpg") in matched_paths
+    assert len(warnings) == 0
+
+
+def test_filter_ir_photos_dual_pair_missing_warning() -> None:
+    filter_stage = RawMaterialFilter()
+    warnings: list[str] = []
+    cam_cfg = CameraConfig(
+        ir_mode="dual_pair",
+        ir_prefix="IR_",
+        dc_prefix="DC_",
+        dc_offset=1,
+    )
+
+    # Missing DC_0002 for IR 1, and missing IR 2 entirely
+    photos = [
+        Path("/tmp/IR_0001.jpg"),
+    ]
+    photo_range = PhotoRange(start_num=1, end_num=2)
+
+    matched = filter_stage.filter_ir_photos(
+        photos=photos,
+        camera_config=cam_cfg,
+        photo_range=photo_range,
+        substation_folder_name="001",
+        warnings=warnings,
+    )
+
+    assert len(matched) == 1
+    assert any("IR photo for number 2 (IR_2*)" in w or "IR_0002" in w or "missing" in w.lower() for w in warnings)
+
+
+def test_filter_dg_photos_p_series_and_custom_prefix() -> None:
+    filter_stage = RawMaterialFilter()
+    warnings: list[str] = []
+    cam_cfg = CameraConfig(dg_prefix="P")
+
+    photos = [
+        Path("/tmp/P1000042.JPG"),
+        Path("/tmp/P1000043.JPG"),
+        Path("/tmp/P1000099.JPG"),
+    ]
+    photo_range = PhotoRange(start_num=42, end_num=43)
+
+    matched = filter_stage.filter_dg_photos(
+        photos=photos,
+        camera_config=cam_cfg,
+        photo_range=photo_range,
+        substation_folder_name="001",
+        warnings=warnings,
+    )
+
+    assert len(matched) == 2
+    matched_paths = [p for p, _ in matched]
+    assert Path("/tmp/P1000042.JPG") in matched_paths
+    assert Path("/tmp/P1000043.JPG") in matched_paths
+    assert len(warnings) == 0
+

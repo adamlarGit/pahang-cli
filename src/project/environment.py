@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import config
-from src.project.models import ProjectMetadata
+from src.project.models import CameraConfig, ProjectMetadata
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
 
@@ -13,11 +13,17 @@ from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
 class ProjectEnvironment:
     """Composite facade combining project metadata and workspace storage."""
 
-    def __init__(self, metadata: ProjectMetadata, storage: WorkspaceStorage) -> None:
+    def __init__(
+        self,
+        metadata: ProjectMetadata,
+        storage: WorkspaceStorage,
+        repository: ProjectRepository | None = None,
+    ) -> None:
         if not isinstance(metadata, ProjectMetadata) or not isinstance(storage, WorkspaceStorage):
             raise TypeError("ProjectEnvironment requires explicitly injected ProjectMetadata and WorkspaceStorage instances.")
         self.metadata = metadata
         self.storage = storage
+        self._repository = repository
 
     @property
     def project_key(self) -> str:
@@ -146,6 +152,35 @@ class ProjectEnvironment:
     def resolve_template_path(self, key: str) -> Path:
         return self.storage.resolve_template_path(key)
 
+    @property
+    def repository(self) -> ProjectRepository:
+        if self._repository is not None:
+            return self._repository
+        config_path = self.base_path / "project_config.json"
+        return JsonFileProjectRepository(config_path)
+
+    def get_camera_config(self) -> CameraConfig:
+        config_path = self.base_path / "project_config.json"
+        if config_path.exists():
+            data = JsonFileProjectRepository._read_json(config_path)
+            raw_cfg = data.get("camera_config", data if "ir_mode" in data else None)
+            if raw_cfg and isinstance(raw_cfg, dict):
+                return CameraConfig.from_dict(raw_cfg)
+        if self._repository is not None:
+            return self._repository.get_camera_config()
+        return JsonFileProjectRepository().get_camera_config()
+
+    def save_camera_config(self, camera_config: CameraConfig) -> None:
+        config_path = self.base_path / "project_config.json"
+        data = JsonFileProjectRepository._read_json(config_path)
+        data["camera_config"] = camera_config.to_dict()
+        JsonFileProjectRepository._write_json(config_path, data)
+        if self._repository is not None:
+            try:
+                self._repository.save_camera_config(camera_config)
+            except Exception:
+                pass
+
 
 def create_project_environment(
     project_key: str,
@@ -166,7 +201,7 @@ def create_project_environment(
     if hasattr(storage, "_initialize_project_workspace"):
         storage._initialize_project_workspace()
 
-    environment = ProjectEnvironment(metadata=metadata, storage=storage)
+    environment = ProjectEnvironment(metadata=metadata, storage=storage, repository=repository)
     if validate:
         environment.validate()
     return environment

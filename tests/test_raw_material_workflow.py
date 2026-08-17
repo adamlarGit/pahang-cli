@@ -8,7 +8,7 @@ import pytest
 
 from src.workflows.populate_total_pe import PopulateTotalPeWorkflow
 from src.project.environment import ProjectEnvironment
-from src.project.models import ProjectMetadata
+from src.project.models import CameraConfig, ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
 from src.workflows.raw_material import RawMaterialWorkflow
 from src.workflows.models import PopulateMode, PopulateTotalPeRequest, RawMaterialRequest
@@ -165,3 +165,81 @@ def test_extract_photo_number_trailing_sequence() -> None:
     filter_stage = RawMaterialWorkflow().filter_stage
     assert filter_stage.extract_photo_number("IMG_20260724_0042.jpg", "IMG") == 42
     assert filter_stage.extract_photo_number("FLIR0123.jpg", "FLIR") == 123
+
+
+def test_raw_material_workflow_dual_pair_camera_config(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    date_dir = tmp_path / "TESTSHEET" / "RAUB" / "01. MAY" / "01-05-2026"
+    date_dir.mkdir(parents=True)
+    unsorted_dir = date_dir / "UNSORTED RAW DATA"
+    unsorted_dir.mkdir()
+
+    # Create synthetic testsheet
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "RAW DATA"
+    ws.cell(1, 1, "PE NO")
+    ws.cell(1, 2, 1)
+    ws.cell(2, 1, "SUBSTATION NAME")
+    ws.cell(2, 2, "SSU CHEROH")
+    ws.cell(3, 1, "FL NUMBER")
+    ws.cell(3, 2, "CRAU-S001")
+    ws.cell(4, 1, "DATE")
+    ws.cell(4, 2, "01-05-2026")
+    ws.cell(8, 1, "IR START")
+    ws.cell(8, 2, 1)
+    ws.cell(8, 3, "IR END")
+    ws.cell(8, 4, 2)
+    ws.cell(9, 1, "DG START")
+    ws.cell(9, 2, 10)
+    ws.cell(9, 3, "DG END")
+    ws.cell(9, 4, 11)
+    wb.save(date_dir / "001. SSU CHEROH.xlsx")
+    wb.close()
+
+    # Create TOTAL PE.xlsx
+    total_pe_path = mock_env.storage.get_total_pe_path()
+    mock_env.storage.ensure_directory(total_pe_path.parent)
+    wb_pe = openpyxl.Workbook()
+    ws_pe = wb_pe.active
+    ws_pe.title = "DataCycle1"
+    ws_pe.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    wb_pe.save(total_pe_path)
+    wb_pe.close()
+
+    PopulateTotalPeWorkflow().execute(mock_env, PopulateTotalPeRequest(mode=PopulateMode.AUTO))
+
+    # Add dual pair IR/DC photos and P-series DG photos to UNSORTED RAW DATA
+    (unsorted_dir / "IR_0001.jpg").touch()
+    (unsorted_dir / "DC_0002.jpg").touch()
+    (unsorted_dir / "IR_0002.jpg").touch()
+    (unsorted_dir / "DC_0003.jpg").touch()
+    (unsorted_dir / "P1000010.JPG").touch()
+    (unsorted_dir / "P1000011.JPG").touch()
+
+    # Configure CameraConfig in mock_env repository or project_config.json
+    cam_cfg = CameraConfig(
+        ir_mode="dual_pair",
+        ir_prefix="IR_",
+        dc_prefix="DC_",
+        dc_offset=1,
+        dg_prefix="P",
+    )
+    mock_env.save_camera_config(cam_cfg)
+
+    workflow = RawMaterialWorkflow()
+    request = RawMaterialRequest(output_path=date_dir)
+    result = workflow.execute(mock_env, request)
+
+    assert result.substations_count == 1
+    assert result.summary.ir_copied_count == 4  # 2 IR + 2 DC
+    assert result.summary.dg_copied_count == 2
+    assert len(result.warnings) == 0
+
+    raw_mat_pe_dir = mock_env.storage.get_raw_material_dir() / "RAUB" / "01. MAY" / "01-05-2026" / "001" / "RAW DATA"
+    assert (raw_mat_pe_dir / "IR" / "IR_0001.jpg").exists()
+    assert (raw_mat_pe_dir / "IR" / "DC_0002.jpg").exists()
+    assert (raw_mat_pe_dir / "IR" / "IR_0002.jpg").exists()
+    assert (raw_mat_pe_dir / "IR" / "DC_0003.jpg").exists()
+    assert (raw_mat_pe_dir / "DG" / "P1000010.JPG").exists()
+    assert (raw_mat_pe_dir / "DG" / "P1000011.JPG").exists()
+

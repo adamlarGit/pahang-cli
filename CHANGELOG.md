@@ -5,6 +5,13 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-08-17
+
+### Fixed
+- **Camera Photo Pattern Integration in Raw Material Workflow**: Wired `CameraConfig` from `ProjectEnvironment` into `RawMaterialWorkflow` and `RawMaterialFilter`, resolving an issue where Raw Material creation & photo sorting ignored active camera configurations and fell back to hardcoded `FLIR` and `IMG_` prefixes.
+- **Dual IR/DC Pair & Custom DG Prefix Photo Filtering**: Implemented `filter_ir_photos` supporting `dual_pair` mode (`IR_` thermal + paired `DC_` visual photo with offset) and `filter_dg_photos` supporting P-series (`P1000`/`P`) and custom prefixes.
+- **ProjectEnvironment Camera Configuration Facade**: Added `get_camera_config()` and `save_camera_config()` methods to `ProjectEnvironment` to seamlessly synchronize project workspace camera settings.
+
 ## [1.8.1] - 2026-08-17
 
 ### Fixed
