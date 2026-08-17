@@ -1,6 +1,5 @@
-"""Unit tests for document converters and COM PageSetup configuration."""
-
-from unittest.mock import MagicMock
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from src.postprocessing.converters import ComDocumentConverter, FakeDocumentConverter
 
@@ -51,3 +50,76 @@ def test_fake_document_converter(tmp_path) -> None:
 
     assert result.exists()
     assert len(converter.convert_testsheet_calls) == 1
+
+    docx_path = tmp_path / "test.docx"
+    docx_pdf_path = tmp_path / "test_docx.pdf"
+    docx_path.write_bytes(b"dummy_docx")
+    docx_result = converter.convert_docx_to_pdf(docx_path, docx_pdf_path)
+
+    assert docx_result.exists()
+    assert len(converter.convert_docx_calls) == 1
+
+
+def test_convert_docx_to_pdf_with_provided_word_app(tmp_path) -> None:
+    """Test that ComDocumentConverter reuses provided word_app without quitting it."""
+    converter = ComDocumentConverter()
+    docx_path = tmp_path / "sample.docx"
+    pdf_path = tmp_path / "sample.pdf"
+    docx_path.write_bytes(b"docx_content")
+
+    mock_word = MagicMock()
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+
+    def fake_save_as(path, FileFormat):
+        Path(path).write_bytes(b"%PDF-mock")
+
+    mock_doc.SaveAs2.side_effect = fake_save_as
+
+    result = converter.convert_docx_to_pdf(docx_path, pdf_path, word_app=mock_word)
+
+    assert result == pdf_path
+    assert pdf_path.exists()
+    mock_word.Documents.Open.assert_called_once_with(str(docx_path.resolve()))
+    mock_doc.SaveAs2.assert_called_once_with(str(pdf_path.resolve()), FileFormat=17)
+    mock_doc.Close.assert_called_once_with(SaveChanges=False)
+    # word_app must NOT be quit when passed in
+    mock_word.Quit.assert_not_called()
+
+
+@patch("pythoncom.CoUninitialize")
+@patch("pythoncom.CoInitialize")
+@patch("win32com.client.DispatchEx")
+def test_convert_docx_to_pdf_standalone_lifecycle(
+    mock_dispatch_ex: MagicMock,
+    mock_co_init: MagicMock,
+    mock_co_uninit: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """Test that ComDocumentConverter initializes and quits Word when word_app is None."""
+    converter = ComDocumentConverter()
+    docx_path = tmp_path / "standalone.docx"
+    pdf_path = tmp_path / "standalone.pdf"
+    docx_path.write_bytes(b"content")
+
+    mock_word = MagicMock()
+    mock_doc = MagicMock()
+    mock_dispatch_ex.return_value = mock_word
+    mock_word.Documents.Open.return_value = mock_doc
+
+    def fake_save_as(path, FileFormat):
+        Path(path).write_bytes(b"%PDF-standalone")
+
+    mock_doc.SaveAs2.side_effect = fake_save_as
+
+    result = converter.convert_docx_to_pdf(docx_path, pdf_path)
+
+    assert result == pdf_path
+    assert pdf_path.exists()
+    mock_co_init.assert_called_once()
+    mock_dispatch_ex.assert_called_once_with("Word.Application")
+    mock_word.Quit.assert_called_once()
+    mock_co_uninit.assert_called_once()
+
+
+

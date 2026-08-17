@@ -5,6 +5,14 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.3] - 2026-08-18
+
+### Fixed
+- **Word COM Batch RPC Crash (`0x800706BA: The RPC server is unavailable`)**: Hoisted single `Word.Application` COM session initialization above the batch conversion loop in `convert_docx_folder_to_pdf()` (`src/workflows/docx_to_pdf.py`), eliminating per-file `Quit()` process churn, Running Object Table (ROT) race conditions, and RPC disconnect crashes.
+- **Batch Excel COM Session Hoisting**: Hoisted `Excel.Application` COM session management in `convert_testsheet_folder_to_pdf()` (`src/workflows/testsheet_to_pdf.py`) with unified `pythoncom.CoInitialize` / `CoUninitialize` and `excel_app.Quit()` in `finally:`.
+- **Converter Interface Session Decoupling**: Updated `DocumentConverter.convert_docx_to_pdf()` and `convert_testsheet_to_pdf()` in `src/postprocessing/converters.py` to accept optional `word_app` and `excel_app` parameters for zero-overhead batch session reuse while maintaining safe isolated execution for standalone one-off calls.
+- **Pytest Discovery Hygiene & Unit Tests**: Added `__test__ = False` on summary dataclasses and created dedicated unit test suites `tests/test_docx_to_pdf.py` and `tests/test_testsheet_to_pdf.py`.
+
 ## [1.8.2] - 2026-08-17
 
 ### Fixed

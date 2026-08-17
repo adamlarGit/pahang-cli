@@ -76,12 +76,18 @@ class DocumentConverter(ABC):
         xlsx_path: Path,
         pdf_path: Path,
         target_sheets: Sequence[str] | None = None,
+        excel_app: object | None = None,
     ) -> Path:
         """Convert an Excel testsheet workbook to a PDF file."""
         ...
 
     @abstractmethod
-    def convert_docx_to_pdf(self, docx_path: Path, pdf_path: Path) -> Path:
+    def convert_docx_to_pdf(
+        self,
+        docx_path: Path,
+        pdf_path: Path,
+        word_app: object | None = None,
+    ) -> Path:
         """Convert a Word document (`.docx`) to a PDF file."""
         ...
 
@@ -198,84 +204,101 @@ class ComDocumentConverter(DocumentConverter):
         xlsx_path: Path,
         pdf_path: Path,
         target_sheets: Sequence[str] | None = None,
+        excel_app: object | None = None,
     ) -> Path:
         """Convert testsheet workbook to PDF using COM automation."""
         import pythoncom
         import win32com.client as win32
 
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
-        pythoncom.CoInitialize()
-        excel_app = None
-        wb = None
-        try:
+        owns_excel = excel_app is None
+        co_initialized = False
+
+        if owns_excel:
+            pythoncom.CoInitialize()
+            co_initialized = True
             excel_app = win32.DispatchEx("Excel.Application")
             excel_app.Visible = False
             excel_app.DisplayAlerts = False
 
-            try:
-                self._configure_adobe_printer(excel_app)
-                wb = self._open_workbook(excel_app, xlsx_path)
-                worksheet_names = [ws.Name for ws in wb.Worksheets]
-                selected_names = select_and_sort_sheets(worksheet_names, target_sheets)
-                ws_map = {ws.Name: ws for ws in wb.Worksheets}
-                selected_sheets = [ws_map[name] for name in selected_names if name in ws_map]
+        wb = None
+        try:
+            self._configure_adobe_printer(excel_app)
+            wb = self._open_workbook(excel_app, xlsx_path)
+            worksheet_names = [ws.Name for ws in wb.Worksheets]
+            selected_names = select_and_sort_sheets(worksheet_names, target_sheets)
+            ws_map = {ws.Name: ws for ws in wb.Worksheets}
+            selected_sheets = [ws_map[name] for name in selected_names if name in ws_map]
 
-                if not selected_sheets:
-                    self._configure_target_page_setup(wb)
-                    wb.ExportAsFixedFormat(0, str(pdf_path.resolve()), 0, True, False)
-                elif len(selected_sheets) == 1:
-                    ws = selected_sheets[0]
-                    self._configure_target_page_setup(ws)
-                    ws.ExportAsFixedFormat(0, str(pdf_path.resolve()), 0, True, False)
-                else:
-                    temp_pdfs: list[Path] = []
-                    try:
-                        for i, ws in enumerate(selected_sheets):
-                            self._configure_target_page_setup(ws)
-                            temp_pdf = pdf_path.parent / f".tmp_{pdf_path.stem}_sheet_{i}.pdf"
-                            ws.ExportAsFixedFormat(0, str(temp_pdf.resolve()), 0, True, False)
-                            temp_pdfs.append(temp_pdf)
+            if not selected_sheets:
+                self._configure_target_page_setup(wb)
+                wb.ExportAsFixedFormat(0, str(pdf_path.resolve()), 0, True, False)
+            elif len(selected_sheets) == 1:
+                ws = selected_sheets[0]
+                self._configure_target_page_setup(ws)
+                ws.ExportAsFixedFormat(0, str(pdf_path.resolve()), 0, True, False)
+            else:
+                temp_pdfs: list[Path] = []
+                try:
+                    for i, ws in enumerate(selected_sheets):
+                        self._configure_target_page_setup(ws)
+                        temp_pdf = pdf_path.parent / f".tmp_{pdf_path.stem}_sheet_{i}.pdf"
+                        ws.ExportAsFixedFormat(0, str(temp_pdf.resolve()), 0, True, False)
+                        temp_pdfs.append(temp_pdf)
 
-                        self._merge_temp_pdfs(temp_pdfs, pdf_path)
-                    finally:
-                        for temp_pdf in temp_pdfs:
-                            if temp_pdf.exists():
-                                try:
-                                    temp_pdf.unlink()
-                                except Exception:
-                                    pass
-                selected_sheets = None
-                ws_map = None
-            finally:
-                if wb is not None:
-                    try:
-                        wb.Close(SaveChanges=False)
-                    except Exception:
-                        pass
-                    wb = None
+                    self._merge_temp_pdfs(temp_pdfs, pdf_path)
+                finally:
+                    for temp_pdf in temp_pdfs:
+                        if temp_pdf.exists():
+                            try:
+                                temp_pdf.unlink()
+                            except Exception:
+                                pass
+            selected_sheets = None
+            ws_map = None
+        finally:
+            if wb is not None:
+                try:
+                    wb.Close(SaveChanges=False)
+                except Exception:
+                    pass
+                wb = None
+            if owns_excel and excel_app is not None:
                 try:
                     excel_app.Quit()
                 except Exception:
                     pass
                 excel_app = None
-        finally:
-            try:
-                pythoncom.CoUninitialize()
-            except Exception:
-                pass
+            if co_initialized:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
 
         if not pdf_path.exists():
             raise RuntimeError(f"COM export failed: {pdf_path} not found after export.")
         return pdf_path
 
-    def convert_docx_to_pdf(self, docx_path: Path, pdf_path: Path) -> Path:
+    def convert_docx_to_pdf(
+        self,
+        docx_path: Path,
+        pdf_path: Path,
+        word_app: object | None = None,
+    ) -> Path:
         """Convert Word document to PDF using COM SaveAs2."""
+        import pythoncom
         import win32com.client as win32
 
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
-        word_app = win32.Dispatch("Word.Application")
-        word_app.Visible = False
-        word_app.DisplayAlerts = 0
+        owns_word = word_app is None
+        co_initialized = False
+
+        if owns_word:
+            pythoncom.CoInitialize()
+            co_initialized = True
+            word_app = win32.DispatchEx("Word.Application")
+            word_app.Visible = False
+            word_app.DisplayAlerts = 0
 
         doc = None
         try:
@@ -288,11 +311,17 @@ class ComDocumentConverter(DocumentConverter):
                 except Exception:
                     pass
                 doc = None
-            try:
-                word_app.Quit()
-            except Exception:
-                pass
-            word_app = None
+            if owns_word and word_app is not None:
+                try:
+                    word_app.Quit()
+                except Exception:
+                    pass
+                word_app = None
+            if co_initialized:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
 
         if not pdf_path.exists():
             raise RuntimeError(f"COM export failed: {pdf_path} not found after export.")
@@ -348,6 +377,7 @@ class FakeDocumentConverter(DocumentConverter):
         xlsx_path: Path,
         pdf_path: Path,
         target_sheets: Sequence[str] | None = None,
+        excel_app: object | None = None,
     ) -> Path:
         """Record the call and write valid mock PDF content to `pdf_path`."""
         self.convert_testsheet_calls.append((xlsx_path, pdf_path, target_sheets))
@@ -363,7 +393,12 @@ class FakeDocumentConverter(DocumentConverter):
 
         return pdf_path
 
-    def convert_docx_to_pdf(self, docx_path: Path, pdf_path: Path) -> Path:
+    def convert_docx_to_pdf(
+        self,
+        docx_path: Path,
+        pdf_path: Path,
+        word_app: object | None = None,
+    ) -> Path:
         """Record the call and write valid mock PDF content to `pdf_path`."""
         self.convert_docx_calls.append((docx_path, pdf_path))
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
