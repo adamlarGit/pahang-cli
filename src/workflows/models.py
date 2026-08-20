@@ -61,9 +61,11 @@ class RawMaterialResult:
     substations_count: int = 0
     ir_copied_count: int = 0
     dg_copied_count: int = 0
+    us_tev_extracted_count: int = 0
     warnings: Sequence[str] = ()
     errors: Sequence[str] = ()
     summary: AutomatedRawMaterialSummary | Any | None = None
+
 
 
 @dataclass(frozen=True)

@@ -155,11 +155,16 @@ class RawMaterialAction(ProjectWorkflowAction):
         service = WorkflowService()
         result = service.run_raw_material(environment, request)
         print(f"Processed substations count: {result.substations_count}")
+        if result.summary:
+            print(f"  - IR photos copied: {result.summary.ir_copied_count}")
+            print(f"  - DG photos copied: {result.summary.dg_copied_count}")
+            print(f"  - US+TEV surveys extracted: {result.summary.us_tev_extracted_count}")
         if result.warnings:
             print(f"Warnings ({len(result.warnings)}):")
             for w in result.warnings:
                 print(f"  - {w}")
         return result
+
 
 
 class UpdateQr02CbaAction(ProjectWorkflowAction):

@@ -31,9 +31,9 @@ def test_combine_pdfs_with_separator_success(tmp_path: Path):
     create_dummy_pdf(separator_pdf, page_count=1)
 
     # Create 3 numbered PDFs (1 page each)
-    pdf1 = create_dummy_pdf(target_dir / "001_alpha.pdf", page_count=1)
-    pdf2 = create_dummy_pdf(target_dir / "02_beta.pdf", page_count=1)
-    pdf3 = create_dummy_pdf(target_dir / "003_gamma.pdf", page_count=1)
+    create_dummy_pdf(target_dir / "001_alpha.pdf", page_count=1)
+    create_dummy_pdf(target_dir / "02_beta.pdf", page_count=1)
+    create_dummy_pdf(target_dir / "003_gamma.pdf", page_count=1)
 
     summary = combine_pdfs_with_separator(
         target_folder=target_dir,
@@ -84,3 +84,29 @@ def test_combine_pdfs_with_separator_empty_folder(tmp_path: Path):
             separator_path=separator_pdf,
             progress_sink=None,
         )
+
+
+def test_combine_pdfs_with_separator_ten_files_order(tmp_path: Path):
+    """Test combining 10+ distinct PDFs with separator sheet ensuring no page replacement occurs."""
+    target_dir = tmp_path / "testsheets"
+    target_dir.mkdir()
+
+    separator_pdf = tmp_path / "separator.pdf"
+    create_dummy_pdf(separator_pdf, page_count=1)
+
+    for i in range(1, 11):
+        filename = f"{i:03d}_substation_{i}.pdf"
+        create_dummy_pdf(target_dir / filename, page_count=2)
+
+    summary = combine_pdfs_with_separator(
+        target_folder=target_dir,
+        separator_path=separator_pdf,
+        progress_sink=None,
+    )
+
+    assert summary.merged_count == 10
+    assert summary.output_pdf_path.exists()
+    reader = PdfReader(summary.output_pdf_path)
+    # 10 PDFs * 2 pages + 9 separators * 1 page = 29 pages
+    assert len(reader.pages) == 29
+

@@ -5,7 +5,20 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-08-20
+
+### Added
+- **Automated US+TEV Survey Extraction in Raw Material Workflow**: Added automated discovery, tokenized PE matching, and extraction of EA Technology UltraTEV Plus2 survey `.zip` archives from `UNSORTED RAW DATA/US+TEV/` into `RAW MATERIAL/<STATION>/<MONTH>/<DATE>/<PE>/RAW DATA/US+TEV/<ZIP_STEM>/`.
+- **Strict Tokenized PE Archive Matching (`UsTevArchiveMatching`)**: Implemented robust regex token matching across filename delimiters (`_083-`, `_083_`, `083-`, `083_`, `_083.`, `_083`), with automatic exclusion of `*_Archive.zip` backup bundles.
+- **Strict Archive Cardinality & Resilience Policies (`UsTevCardinalityPolicy`, `UsTevResiliencePolicy`, `UsTevIdempotencyPolicy`)**: Enforces 1-to-1 archive pairing per PE (raising `RuntimeError` on ambiguous duplicates), provisions empty directories with non-blocking warnings on missing archives, and guarantees clean directory wipe-and-reextract on re-runs.
+- **US+TEV Execution Telemetry & CLI Summary**: Added `us_tev_extracted_count` to `AutomatedRawMaterialSummary` and `RawMaterialResult`, alongside enhanced CLI summary reporting.
+
+### Fixed
+- **Combine PDFs With Separator Stream Exhaustion**: Refactored `combine_pdfs_with_separator()` to use `PyPDF2.PdfMerger` instead of raw `PdfReader`/`PdfWriter` stream loops, eliminating open stream handle leaks and preventing page truncation during large 10+ PDF merge batches.
+
+
 ## [1.8.3] - 2026-08-18
+
 
 ### Fixed
 - **Word COM Batch RPC Crash (`0x800706BA: The RPC server is unavailable`)**: Hoisted single `Word.Application` COM session initialization above the batch conversion loop in `convert_docx_folder_to_pdf()` (`src/workflows/docx_to_pdf.py`), eliminating per-file `Quit()` process churn, Running Object Table (ROT) race conditions, and RPC disconnect crashes.

@@ -216,6 +216,11 @@ def test_raw_material_workflow_dual_pair_camera_config(mock_env: ProjectEnvironm
     (unsorted_dir / "P1000010.JPG").touch()
     (unsorted_dir / "P1000011.JPG").touch()
 
+    import zipfile
+    (unsorted_dir / "US+TEV").mkdir()
+    with zipfile.ZipFile(unsorted_dir / "US+TEV" / "20260501T090000_001-SSU-CHEROH.zip", "w") as z:
+        z.writestr("index.html", "<html>Test</html>")
+
     # Configure CameraConfig in mock_env repository or project_config.json
     cam_cfg = CameraConfig(
         ir_mode="dual_pair",
@@ -233,6 +238,7 @@ def test_raw_material_workflow_dual_pair_camera_config(mock_env: ProjectEnvironm
     assert result.substations_count == 1
     assert result.summary.ir_copied_count == 4  # 2 IR + 2 DC
     assert result.summary.dg_copied_count == 2
+    assert result.summary.us_tev_extracted_count == 1
     assert len(result.warnings) == 0
 
     raw_mat_pe_dir = mock_env.storage.get_raw_material_dir() / "RAUB" / "01. MAY" / "01-05-2026" / "001" / "RAW DATA"
@@ -242,4 +248,162 @@ def test_raw_material_workflow_dual_pair_camera_config(mock_env: ProjectEnvironm
     assert (raw_mat_pe_dir / "IR" / "DC_0003.jpg").exists()
     assert (raw_mat_pe_dir / "DG" / "P1000010.JPG").exists()
     assert (raw_mat_pe_dir / "DG" / "P1000011.JPG").exists()
+    assert (raw_mat_pe_dir / "US+TEV" / "20260501T090000_001-SSU-CHEROH" / "index.html").exists()
+
+
+
+def test_raw_material_workflow_with_us_tev_sorting(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    import zipfile
+
+    date_dir = tmp_path / "TESTSHEET" / "KUANTAN" / "01. AUGUST" / "15-08-2026"
+    date_dir.mkdir(parents=True)
+    unsorted_dir = date_dir / "UNSORTED RAW DATA"
+    unsorted_dir.mkdir()
+    unsorted_ustev_dir = unsorted_dir / "US+TEV"
+    unsorted_ustev_dir.mkdir()
+
+    # Create synthetic testsheet
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "RAW DATA"
+    ws.cell(1, 1, "PE NO")
+    ws.cell(1, 2, 83)
+    ws.cell(2, 1, "SUBSTATION NAME")
+    ws.cell(2, 2, "MEDAN WARISAN 2")
+    ws.cell(3, 1, "FL NUMBER")
+    ws.cell(3, 2, "CKTN-S083")
+    ws.cell(4, 1, "DATE")
+    ws.cell(4, 2, "15-08-2026")
+    ws.cell(8, 1, "IR START")
+    ws.cell(8, 2, 10)
+    ws.cell(8, 3, "IR END")
+    ws.cell(8, 4, 11)
+    ws.cell(9, 1, "DG START")
+    ws.cell(9, 2, 100)
+    ws.cell(9, 3, "DG END")
+    ws.cell(9, 4, 101)
+    wb.save(date_dir / "083. MEDAN WARISAN 2.xlsx")
+    wb.close()
+
+    # Create TOTAL PE.xlsx
+    total_pe_path = mock_env.storage.get_total_pe_path()
+    mock_env.storage.ensure_directory(total_pe_path.parent)
+    wb_pe = openpyxl.Workbook()
+    ws_pe = wb_pe.active
+    ws_pe.title = "DataCycle1"
+    ws_pe.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    wb_pe.save(total_pe_path)
+    wb_pe.close()
+
+    PopulateTotalPeWorkflow().execute(mock_env, PopulateTotalPeRequest(mode=PopulateMode.AUTO))
+
+    # Add raw photos and US+TEV zip
+    (unsorted_dir / "FLIR0010.jpg").touch()
+    (unsorted_dir / "FLIR0011.jpg").touch()
+    (unsorted_dir / "IMG_0100.jpg").touch()
+    (unsorted_dir / "IMG_0101.jpg").touch()
+
+    zip_name = "20260815T094744_083-MEDAN-WARISAN-2.zip"
+    with zipfile.ZipFile(unsorted_ustev_dir / zip_name, "w") as z:
+        z.writestr("index.html", "<html>Test</html>")
+        z.writestr("survey_metadata.js", "var survey_metadata = {};")
+        z.writestr("SWG/feeder.html", "<html>Feeder</html>")
+
+    progress_messages: list[str] = []
+    workflow = RawMaterialWorkflow()
+    request = RawMaterialRequest(output_path=date_dir, progress_sink=progress_messages.append)
+    result = workflow.execute(mock_env, request)
+
+    assert result.substations_count == 1
+    assert result.summary.ir_copied_count == 2
+    assert result.summary.dg_copied_count == 2
+    assert result.summary.us_tev_extracted_count == 1
+    assert result.us_tev_extracted_count == 1
+    assert len(result.warnings) == 0
+
+    # Verify extracted directory under RAW MATERIAL/KUANTAN/01. AUGUST/15-08-2026/083/RAW DATA/US+TEV/20260815T094744_083-MEDAN-WARISAN-2
+    extracted_pe_dir = (
+        mock_env.storage.get_raw_material_dir()
+        / "KUANTAN"
+        / "01. AUGUST"
+        / "15-08-2026"
+        / "083"
+        / "RAW DATA"
+        / "US+TEV"
+        / "20260815T094744_083-MEDAN-WARISAN-2"
+    )
+    assert (extracted_pe_dir / "index.html").exists()
+    assert (extracted_pe_dir / "survey_metadata.js").exists()
+    assert (extracted_pe_dir / "SWG" / "feeder.html").exists()
+
+    # Verify progress message format
+    assert any("1 US+TEV survey extracted" in msg for msg in progress_messages)
+
+
+def test_raw_material_workflow_resilience_missing_us_tev(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    date_dir = tmp_path / "TESTSHEET" / "KUANTAN" / "01. AUGUST" / "15-08-2026"
+    date_dir.mkdir(parents=True)
+    unsorted_dir = date_dir / "UNSORTED RAW DATA"
+    unsorted_dir.mkdir()
+
+    # Create synthetic testsheet
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "RAW DATA"
+    ws.cell(1, 1, "PE NO")
+    ws.cell(1, 2, 88)
+    ws.cell(2, 1, "SUBSTATION NAME")
+    ws.cell(2, 2, "HOSPITAL OUTDOOR")
+    ws.cell(3, 1, "FL NUMBER")
+    ws.cell(3, 2, "CKTN-S088")
+    ws.cell(4, 1, "DATE")
+    ws.cell(4, 2, "15-08-2026")
+    ws.cell(8, 1, "IR START")
+    ws.cell(8, 2, 10)
+    ws.cell(8, 3, "IR END")
+    ws.cell(8, 4, 11)
+    ws.cell(9, 1, "DG START")
+    ws.cell(9, 2, 100)
+    ws.cell(9, 3, "DG END")
+    ws.cell(9, 4, 101)
+    wb.save(date_dir / "088. HOSPITAL(OUTDOOR) (IR).xlsx")
+    wb.close()
+
+    # Create TOTAL PE.xlsx
+    total_pe_path = mock_env.storage.get_total_pe_path()
+    mock_env.storage.ensure_directory(total_pe_path.parent)
+    wb_pe = openpyxl.Workbook()
+    ws_pe = wb_pe.active
+    ws_pe.title = "DataCycle1"
+    ws_pe.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    wb_pe.save(total_pe_path)
+    wb_pe.close()
+
+    PopulateTotalPeWorkflow().execute(mock_env, PopulateTotalPeRequest(mode=PopulateMode.AUTO))
+
+    # Add raw photos but NO US+TEV zip
+    (unsorted_dir / "FLIR0010.jpg").touch()
+    (unsorted_dir / "FLIR0011.jpg").touch()
+    (unsorted_dir / "IMG_0100.jpg").touch()
+    (unsorted_dir / "IMG_0101.jpg").touch()
+
+    workflow = RawMaterialWorkflow()
+    request = RawMaterialRequest(output_path=date_dir)
+    result = workflow.execute(mock_env, request)
+
+    assert result.substations_count == 1
+    assert result.summary.ir_copied_count == 2
+    assert result.summary.dg_copied_count == 2
+    assert result.summary.us_tev_extracted_count == 0
+    assert result.us_tev_extracted_count == 0
+
+    # Non-blocking warning logged
+    assert len(result.warnings) == 1
+    assert "No US+TEV archive found" in result.warnings[0]
+
+    # Empty US+TEV directory still provisioned
+    raw_mat_pe_dir = mock_env.storage.get_raw_material_dir() / "KUANTAN" / "01. AUGUST" / "15-08-2026" / "088" / "RAW DATA"
+    assert (raw_mat_pe_dir / "US+TEV").exists()
+
+
 

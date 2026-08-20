@@ -11,8 +11,13 @@ from src.project.storage import LocalWorkspaceStorage
 from src.testsheet.models import PhotoRange, SubstationTestsheetPackage
 from src.workflows.raw_material import (
     CopyInstruction,
+    ExtractInstruction,
+    ExtractedPackageData,
+    RawMaterialExtractor,
     RawMaterialFilter,
+    RawMaterialLoader,
     RawMaterialTransformer,
+    TransformationPlan,
 )
 
 
@@ -281,4 +286,168 @@ def test_filter_dg_photos_p_series_and_custom_prefix() -> None:
     assert Path("/tmp/P1000042.JPG") in matched_paths
     assert Path("/tmp/P1000043.JPG") in matched_paths
     assert len(warnings) == 0
+
+
+def test_extractor_scans_us_tev_archives(tmp_path: Path) -> None:
+    extractor = RawMaterialExtractor()
+    unsorted_dir = tmp_path / "UNSORTED RAW DATA"
+    us_tev_dir = unsorted_dir / "US+TEV"
+    us_tev_dir.mkdir(parents=True)
+
+    zip_file = us_tev_dir / "20260815T094744_083-MEDAN-WARISAN-2.zip"
+    zip_file.touch()
+
+    pkg = SubstationTestsheetPackage(
+        substation_number=83,
+        station="KUANTAN",
+        month="01. AUGUST",
+        date_str="15-08-2026",
+        testsheet_path=tmp_path / "083. MEDAN WARISAN 2.xlsx",
+        unsorted_raw_data_dir=unsorted_dir,
+    )
+
+    warnings: list[str] = []
+    extracted = extractor.extract_package_data(pkg, warnings)
+
+    assert hasattr(extracted, "us_tev_archives")
+    assert zip_file in extracted.us_tev_archives
+
+
+def test_filter_us_tev_archive_success_matching() -> None:
+    filter_stage = RawMaterialFilter()
+    warnings: list[str] = []
+
+    archives = [
+        Path("/tmp/20260815T094744_083-MEDAN-WARISAN-2.zip"),
+        Path("/tmp/20260815T100204_084-MEDAN-WARISAN-1.zip"),
+        Path("/tmp/20260815T120154_089-UIA.zip"),
+    ]
+
+    matched_83 = filter_stage.filter_us_tev_archive(archives, 83, warnings)
+    assert matched_83 == Path("/tmp/20260815T094744_083-MEDAN-WARISAN-2.zip")
+
+    matched_89 = filter_stage.filter_us_tev_archive(archives, 89, warnings)
+    assert matched_89 == Path("/tmp/20260815T120154_089-UIA.zip")
+    assert len(warnings) == 0
+
+
+def test_filter_us_tev_archive_ignores_archive_suffix() -> None:
+    filter_stage = RawMaterialFilter()
+    warnings: list[str] = []
+
+    archives = [
+        Path("/tmp/20260804T092211_001_KG-RPS-ASLI-BILUT.zip"),
+        Path("/tmp/20260804T092211_KG-RPS-ASLI-BILUT_Archive.zip"),
+    ]
+
+    matched = filter_stage.filter_us_tev_archive(archives, 1, warnings)
+    assert matched == Path("/tmp/20260804T092211_001_KG-RPS-ASLI-BILUT.zip")
+    assert len(warnings) == 0
+
+
+def test_filter_us_tev_archive_cardinality_failure() -> None:
+    filter_stage = RawMaterialFilter()
+    warnings: list[str] = []
+
+    archives = [
+        Path("/tmp/20260804T092211_001_KG-RPS-ASLI-BILUT.zip"),
+        Path("/tmp/20260804T092211_001_KG-RPS-ASLI-BILUT_EXTRA.zip"),
+    ]
+
+    with pytest.raises(RuntimeError, match="Multiple US\\+TEV archives matched PE 001"):
+        filter_stage.filter_us_tev_archive(archives, 1, warnings)
+
+
+def test_filter_us_tev_archive_missing_resilience_warning() -> None:
+    filter_stage = RawMaterialFilter()
+    warnings: list[str] = []
+
+    archives = [
+        Path("/tmp/20260815T094744_083-MEDAN-WARISAN-2.zip"),
+    ]
+
+    matched = filter_stage.filter_us_tev_archive(archives, 88, warnings)
+    assert matched is None
+    assert any("No US+TEV archive found" in w and "088" in w for w in warnings)
+
+
+def test_transformer_build_plan_with_us_tev(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    transformer = RawMaterialTransformer()
+
+    pkg = SubstationTestsheetPackage(
+        substation_number=83,
+        station="KUANTAN",
+        month="01. AUGUST",
+        date_str="15-08-2026",
+        testsheet_path=tmp_path / "083. MEDAN WARISAN 2.xlsx",
+        unsorted_raw_data_dir=tmp_path / "UNSORTED RAW DATA",
+    )
+
+    filtered_ir = [(tmp_path / "FLIR0010.jpg", 10)]
+    filtered_dg = [(tmp_path / "IMG_0100.jpg", 100)]
+    matched_us_tev = tmp_path / "20260815T094744_083-MEDAN-WARISAN-2.zip"
+
+    plan = transformer.build_plan(
+        environment=mock_env,
+        package=pkg,
+        filtered_ir=filtered_ir,
+        filtered_dg=filtered_dg,
+        matched_us_tev=matched_us_tev,
+    )
+
+    assert plan.us_tev_count == 1
+    assert len(plan.extract_instructions) == 1
+    extract_inst = plan.extract_instructions[0]
+    assert extract_inst.source_archive == matched_us_tev
+    expected_dest = mock_env.storage.get_raw_material_dir() / "KUANTAN" / "01. AUGUST" / "15-08-2026" / "083" / "RAW DATA" / "US+TEV" / "20260815T094744_083-MEDAN-WARISAN-2"
+    assert extract_inst.dest_dir == expected_dest
+    assert extract_inst.substation_folder_name == "083"
+
+
+def test_loader_executes_extraction_and_idempotent_overwrite(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    import zipfile
+
+    loader = RawMaterialLoader()
+
+    # Create dummy zip file
+    zip_path = tmp_path / "sample_survey.zip"
+    with zipfile.ZipFile(zip_path, "w") as z:
+        z.writestr("index.html", "<html>Test</html>")
+        z.writestr("survey_metadata.js", "var survey_metadata = {};")
+        z.writestr("SWG/feeder.html", "<html>Feeder</html>")
+
+    dest_dir = tmp_path / "RAW MATERIAL" / "KUANTAN" / "01. AUGUST" / "15-08-2026" / "083" / "RAW DATA" / "US+TEV" / "sample_survey"
+    dest_dir.mkdir(parents=True)
+    (dest_dir / "old_stale.txt").write_text("stale data", encoding="utf-8")
+
+    plan = TransformationPlan(
+        directories_to_create=(dest_dir.parent,),
+        copy_instructions=(),
+        extract_instructions=(
+            ExtractInstruction(
+                source_archive=zip_path,
+                dest_dir=dest_dir,
+                substation_folder_name="083",
+            ),
+        ),
+        substation_folder_name="083",
+        ir_count=0,
+        dg_count=0,
+        us_tev_count=1,
+    )
+
+    counts = loader.execute_plan(mock_env, plan)
+    assert counts == (0, 0, 1)
+
+    # Verify old stale file is gone (clean overwrite)
+    assert not (dest_dir / "old_stale.txt").exists()
+
+    # Verify unzipped assets exist
+    assert (dest_dir / "index.html").exists()
+    assert (dest_dir / "survey_metadata.js").exists()
+    assert (dest_dir / "SWG" / "feeder.html").exists()
+
+
+
+
 

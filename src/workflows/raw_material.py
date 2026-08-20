@@ -7,6 +7,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
+import zipfile
 import openpyxl
 
 from src.core.normalizers import format_month_folder, normalize_date_str
@@ -25,8 +26,10 @@ class AutomatedRawMaterialSummary:
     substations_count: int = 0
     ir_copied_count: int = 0
     dg_copied_count: int = 0
+    us_tev_extracted_count: int = 0
     warnings: tuple[str, ...] = ()
     errors: tuple[str, ...] = ()
+
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,7 @@ class ExtractedPackageData:
     ir_photos: tuple[Path, ...]
     dg_photos: tuple[Path, ...]
     substation_folder_name: str
+    us_tev_archives: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,15 @@ class CopyInstruction:
 
 
 @dataclass(frozen=True)
+class ExtractInstruction:
+    """Specification for unzipping a US+TEV archive to a destination directory."""
+
+    source_archive: Path
+    dest_dir: Path
+    substation_folder_name: str
+
+
+@dataclass(frozen=True)
 class TransformationPlan:
     """Destination path resolution and copy plan for a package."""
 
@@ -60,6 +73,8 @@ class TransformationPlan:
     substation_folder_name: str
     ir_count: int
     dg_count: int
+    extract_instructions: tuple[ExtractInstruction, ...] = ()
+    us_tev_count: int = 0
 
 
 class RawMaterialPreflightGuard:
@@ -201,12 +216,14 @@ class RawMaterialExtractor:
             )
 
         ir_photos, dg_photos = self._scan_photos(unsorted_dir)
+        us_tev_archives = tuple(self._scan_us_tev_archives(unsorted_dir))
         return ExtractedPackageData(
             package=pkg,
             testsheet_data=data,
             ir_photos=ir_photos,
             dg_photos=dg_photos,
             substation_folder_name=substation_folder_name,
+            us_tev_archives=us_tev_archives,
         )
 
     def _load_testsheet_data(
@@ -228,11 +245,21 @@ class RawMaterialExtractor:
         dg_photos = tuple(self._scan_directory_for_images(dg_source_dir))
         return ir_photos, dg_photos
 
+    def _scan_us_tev_archives(self, unsorted_dir: Path) -> list[Path]:
+        us_tev_source_dir = unsorted_dir / "US+TEV" if (unsorted_dir / "US+TEV").exists() else unsorted_dir
+        if not us_tev_source_dir.exists():
+            return []
+        return [
+            p for p in us_tev_source_dir.iterdir()
+            if p.is_file() and p.suffix.lower() == ".zip"
+        ]
+
     def _scan_directory_for_images(self, directory: Path) -> list[Path]:
         return [
             p for p in directory.rglob("*")
             if p.is_file() and p.suffix.lower() in [".jpg", ".jpeg", ".png"]
         ]
+
 
 
 class RawMaterialFilter:
@@ -483,6 +510,39 @@ class RawMaterialFilter:
 
         return min(start_num, end_num), max(start_num, end_num)
 
+    def filter_us_tev_archive(
+        self,
+        archives: Sequence[Path],
+        substation_number: int,
+        warnings: list[str],
+    ) -> Path | None:
+        """Filter and match a single US+TEV archive for a substation PE."""
+        substation_folder_name = f"{substation_number:03d}"
+        num_patterns = [
+            re.compile(rf"(?:^|[\W_]){substation_number:03d}(?:[\W_]|$)", re.IGNORECASE),
+            re.compile(rf"(?:^|[\W_]){substation_number}(?:[\W_]|$)", re.IGNORECASE),
+        ]
+
+        matched: list[Path] = []
+        for archive in archives:
+            stem = archive.stem
+            if stem.lower().endswith(("_archive", ".archive")):
+                continue
+            if any(pattern.search(stem) for pattern in num_patterns):
+                if archive not in matched:
+                    matched.append(archive)
+
+        if len(matched) > 1:
+            raise RuntimeError(
+                f"Multiple US+TEV archives matched PE {substation_folder_name}: {[m.name for m in matched]}"
+            )
+
+        if not matched:
+            warnings.append(f"PE {substation_folder_name}: No US+TEV archive found in unsorted raw data.")
+            return None
+
+        return matched[0]
+
 
 class RawMaterialTransformer:
     """Pure destination path resolution and CopyInstruction plan construction stage."""
@@ -493,8 +553,9 @@ class RawMaterialTransformer:
         package: SubstationTestsheetPackage,
         filtered_ir: Sequence[tuple[Path, int]],
         filtered_dg: Sequence[tuple[Path, int]],
+        matched_us_tev: Path | None = None,
     ) -> TransformationPlan:
-        """Construct transformation plan containing destination paths and copy instructions."""
+        """Construct transformation plan containing destination paths, copy instructions, and extract instructions."""
         substation_folder_name = f"{package.substation_number:03d}"
         substation_dest_dir = self._resolve_substation_dest_dir(environment, package, substation_folder_name)
 
@@ -509,13 +570,29 @@ class RawMaterialTransformer:
             *self._create_copy_instructions(filtered_dg, dg_dest_dir, "DG", substation_folder_name),
         )
 
+        extract_instructions: list[ExtractInstruction] = []
+        us_tev_count = 0
+        if matched_us_tev is not None:
+            extract_dest_dir = us_tev_dest_dir / matched_us_tev.stem
+            extract_instructions.append(
+                ExtractInstruction(
+                    source_archive=matched_us_tev,
+                    dest_dir=extract_dest_dir,
+                    substation_folder_name=substation_folder_name,
+                )
+            )
+            us_tev_count = 1
+
         return TransformationPlan(
             directories_to_create=directories_to_create,
             copy_instructions=tuple(copy_instructions),
+            extract_instructions=tuple(extract_instructions),
             substation_folder_name=substation_folder_name,
             ir_count=len(filtered_ir),
             dg_count=len(filtered_dg),
+            us_tev_count=us_tev_count,
         )
+
 
     def _resolve_substation_dest_dir(
         self,
@@ -554,15 +631,16 @@ class RawMaterialTransformer:
 
 
 class RawMaterialLoader:
-    """Pure disk provisioning and shutil.copy2 execution stage."""
+    """Pure disk provisioning, shutil.copy2 execution, and archive extraction stage."""
 
     def execute_plan(
         self, environment: ProjectEnvironment, plan: TransformationPlan
-    ) -> tuple[int, int]:
-        """Provision directories on disk and execute photo copy instructions."""
+    ) -> tuple[int, int, int]:
+        """Provision directories on disk, copy photos, and extract US+TEV archives."""
         self._provision_directories(environment, plan.directories_to_create)
         self._copy_files(plan.copy_instructions)
-        return plan.ir_count, plan.dg_count
+        self._extract_archives(plan.extract_instructions)
+        return plan.ir_count, plan.dg_count, plan.us_tev_count
 
     def _provision_directories(
         self, environment: ProjectEnvironment, directories: Sequence[Path]
@@ -574,6 +652,15 @@ class RawMaterialLoader:
         for instruction in instructions:
             shutil.copy2(instruction.source_path, instruction.dest_path)
 
+    def _extract_archives(self, instructions: Sequence[ExtractInstruction]) -> None:
+        for instruction in instructions:
+            if instruction.dest_dir.exists():
+                shutil.rmtree(instruction.dest_dir)
+            instruction.dest_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(instruction.source_archive, "r") as z:
+                z.extractall(instruction.dest_dir)
+
+
 
 class RawMaterialAuditor:
     """Verification and History Logging stage."""
@@ -583,6 +670,7 @@ class RawMaterialAuditor:
         substations_count: int,
         total_ir_copied: int,
         total_dg_copied: int,
+        total_us_tev_extracted: int,
         warnings: list[str],
         errors: list[str],
     ) -> tuple[AutomatedRawMaterialSummary, RawMaterialResult]:
@@ -591,6 +679,7 @@ class RawMaterialAuditor:
             substations_count=substations_count,
             ir_copied_count=total_ir_copied,
             dg_copied_count=total_dg_copied,
+            us_tev_extracted_count=total_us_tev_extracted,
             warnings=tuple(warnings),
             errors=tuple(errors),
         )
@@ -599,6 +688,7 @@ class RawMaterialAuditor:
             substations_count=substations_count,
             ir_copied_count=total_ir_copied,
             dg_copied_count=total_dg_copied,
+            us_tev_extracted_count=total_us_tev_extracted,
             summary=summary,
             warnings=tuple(warnings),
             errors=tuple(errors),
@@ -607,7 +697,7 @@ class RawMaterialAuditor:
 
 
 class RawMaterialWorkflow:
-    """Orchestrates TOTAL PE validation, folder provisioning, and photo sorting.
+    """Orchestrates TOTAL PE validation, folder provisioning, photo sorting, and US+TEV extraction.
 
     Resilience Policy: best-effort
         Collect warnings and errors per package while processing remaining items.
@@ -646,19 +736,26 @@ class RawMaterialWorkflow:
         substations_count = 0
         total_ir_copied = 0
         total_dg_copied = 0
+        total_us_tev_extracted = 0
         warnings: list[str] = []
         errors: list[str] = []
 
         for pkg in packages:
             substations_count += 1
-            ir_copied, dg_copied = self._process_package(
+            ir_copied, dg_copied, us_tev_extracted = self._process_package(
                 environment, request, pkg, warnings, camera_config=camera_config
             )
             total_ir_copied += ir_copied
             total_dg_copied += dg_copied
+            total_us_tev_extracted += us_tev_extracted
 
         _, result = self.auditor.audit(
-            substations_count, total_ir_copied, total_dg_copied, warnings, errors
+            substations_count,
+            total_ir_copied,
+            total_dg_copied,
+            total_us_tev_extracted,
+            warnings,
+            errors,
         )
         return result
 
@@ -669,7 +766,7 @@ class RawMaterialWorkflow:
         pkg: SubstationTestsheetPackage,
         warnings: list[str],
         camera_config: CameraConfig | None = None,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int, int]:
         if camera_config is None:
             camera_config = environment.get_camera_config()
 
@@ -695,18 +792,28 @@ class RawMaterialWorkflow:
             warnings=warnings,
         )
 
+        matched_us_tev = self.filter_stage.filter_us_tev_archive(
+            archives=extracted.us_tev_archives,
+            substation_number=pkg.substation_number,
+            warnings=warnings,
+        )
+
         plan = self.transformer.build_plan(
             environment=environment,
             package=pkg,
             filtered_ir=filtered_ir,
             filtered_dg=filtered_dg,
+            matched_us_tev=matched_us_tev,
         )
 
-        ir_copied, dg_copied = self.loader.execute_plan(environment, plan)
+        ir_copied, dg_copied, us_tev_extracted = self.loader.execute_plan(environment, plan)
 
         if request.progress_sink:
             request.progress_sink(
-                f"Processed PE {extracted.substation_folder_name}: {ir_copied} IR photos, {dg_copied} DG photos copied."
+                f"Processed PE {extracted.substation_folder_name}: "
+                f"{ir_copied} IR photos, {dg_copied} DG photos copied, "
+                f"{us_tev_extracted} US+TEV survey extracted."
             )
 
-        return ir_copied, dg_copied
+        return ir_copied, dg_copied, us_tev_extracted
+

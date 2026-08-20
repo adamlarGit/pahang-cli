@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import io
 import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from PyPDF2 import PdfReader, PdfWriter
+from PyPDF2 import PdfMerger
 
 from src.workflows.progress import ProgressSink, QuantityProgressTracker
 
@@ -65,37 +64,19 @@ def combine_pdfs_with_separator(
     output_pdf_path = output_dir / output_filename
 
     tracker = QuantityProgressTracker(total=len(numbered_files), sink=progress_sink)
-    writer = PdfWriter()
+    merger = PdfMerger()
 
-    with open(separator, "rb") as f_sep:
-        sep_reader = PdfReader(f_sep)
-        sep_pages = list(sep_reader.pages)
+    try:
+        for idx, (num_val, pdf_path) in enumerate(numbered_files, start=1):
+            tracker.emit(idx, f"Processing PDF #{idx}: {pdf_path.name}")
+            if idx > 1:
+                merger.append(str(separator))
+            merger.append(str(pdf_path))
 
-        open_streams = []
-        try:
-            for idx, (num_val, pdf_path) in enumerate(numbered_files, start=1):
-                tracker.emit(idx, f"Processing PDF #{idx}: {pdf_path.name}")
-                if idx > 1:
-                    for s_page in sep_pages:
-                        writer.add_page(s_page)
-
-                stream = open(pdf_path, "rb")
-                open_streams.append(stream)
-                reader = PdfReader(stream)
-                for page in reader.pages:
-                    writer.add_page(page)
-
-            buffer = io.BytesIO()
-            writer.write(buffer)
-        finally:
-            for stream in open_streams:
-                try:
-                    stream.close()
-                except Exception:
-                    pass
-
-    with open(output_pdf_path, "wb") as f_out:
-        f_out.write(buffer.getvalue())
+        with open(output_pdf_path, "wb") as f_out:
+            merger.write(f_out)
+    finally:
+        merger.close()
 
     merged_count = len(numbered_files)
     tracker.complete(
