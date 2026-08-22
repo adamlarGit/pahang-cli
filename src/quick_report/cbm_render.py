@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import gc
 from pathlib import Path
-from typing import Any
 
 from docxtpl import DocxTemplate
 from jinja2 import Environment, Undefined
 
 from src.quick_report.cbm_family import QuickReportFamilySpec
 from src.quick_report.defects import CbmDefectRecord
-from src.quick_report.utils import sanitize_filename
 
 _MISSING = object()
 

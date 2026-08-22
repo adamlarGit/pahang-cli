@@ -15,6 +15,7 @@ def _is_pce_testsheet_sheet(ws_name: str) -> bool:
     """Check if a worksheet name corresponds to a PCE Testsheet sheet."""
     name = ws_name.strip().lower()
     return (
+
         name == "pce testsheet"
         or name.startswith("pce testsheet ")
         or name.startswith("pce testsheet(")
@@ -111,33 +112,41 @@ class ComDocumentConverter(DocumentConverter):
         self.try_adobe_printer = try_adobe_printer
 
     def _configure_adobe_printer(self, excel_app: object) -> None:
-        """Attempt to switch `ActivePrinter` to 'Adobe PDF' if installed."""
-        if not self.try_adobe_printer:
-            return
+        """Configure printer for Excel COM automation."""
+        self._configure_uniform_printer(excel_app)
+
+    def _configure_uniform_printer(self, excel_app: object) -> None:
+        """Configure ActivePrinter to a standardized virtual PDF printer (e.g. Microsoft Print to PDF) to ensure uniform sheet scaling."""
         try:
             current_printer = str(getattr(excel_app, "ActivePrinter", ""))
-            if "adobe pdf" not in current_printer.lower():
-                import winreg
-                with winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    r"Software\Microsoft\Windows NT\CurrentVersion\Devices",
-                ) as key:
-                    i = 0
-                    while True:
-                        try:
-                            name, val, _ = winreg.EnumValue(key, i)
-                            if "adobe pdf" in name.lower():
-                                parts = str(val).split(",")
-                                if len(parts) >= 2:
-                                    port = parts[1].strip()
-                                    target_printer = f"{name} on {port}"
-                                    excel_app.ActivePrinter = target_printer
-                                    break
-                            i += 1
-                        except OSError:
-                            break
+            preferred_printers = ["microsoft print to pdf", "microsoft xps document writer"]
+            if any(p in current_printer.lower() for p in preferred_printers):
+                return
+
+            import winreg
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows NT\CurrentVersion\Devices",
+            ) as key:
+                devices = {}
+                i = 0
+                while True:
+                    try:
+                        name, val, _ = winreg.EnumValue(key, i)
+                        parts = str(val).split(",")
+                        port = parts[1].strip() if len(parts) >= 2 else ""
+                        devices[name.lower()] = f"{name} on {port}"
+                        i += 1
+                    except OSError:
+                        break
+
+                for pref in preferred_printers:
+                    for dev_name, full_spec in devices.items():
+                        if pref in dev_name:
+                            excel_app.ActivePrinter = full_spec
+                            return
         except Exception as exc:
-            logging.debug("Could not configure Adobe PDF printer: %s", exc)
+            logging.debug("Could not configure uniform printer: %s", exc)
 
     def _configure_target_page_setup(self, target: object) -> None:
         """Enforce standardized PageSetup properties (`PaperSize=9`, `Orientation=2`, `FitToPagesWide=1`, `FitToPagesTall=1`, `Zoom=False`)."""
@@ -223,8 +232,8 @@ class ComDocumentConverter(DocumentConverter):
 
         wb = None
         try:
-            self._configure_adobe_printer(excel_app)
             wb = self._open_workbook(excel_app, xlsx_path)
+            self._configure_uniform_printer(excel_app)
             worksheet_names = [ws.Name for ws in wb.Worksheets]
             selected_names = select_and_sort_sheets(worksheet_names, target_sheets)
             ws_map = {ws.Name: ws for ws in wb.Worksheets}
@@ -256,6 +265,7 @@ class ComDocumentConverter(DocumentConverter):
                                 pass
             selected_sheets = None
             ws_map = None
+
         finally:
             if wb is not None:
                 try:
@@ -386,7 +396,7 @@ class FakeDocumentConverter(DocumentConverter):
         writer = PdfWriter()
         page_count = len(target_sheets) if target_sheets is not None and len(target_sheets) > 0 else 1
         for _ in range(page_count):
-            writer.add_blank_page(width=612, height=792)
+            writer.add_blank_page(width=792, height=612)
 
         with open(pdf_path, "wb") as f:
             writer.write(f)

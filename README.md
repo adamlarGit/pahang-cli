@@ -11,7 +11,7 @@ Interactive CLI application for Pahang area PE inspection workflows, multi-proje
 
 - **Camera Photo Pattern Presets**: Configure single (`FLIR`/`IR_`) or dual pair (`IR_`/`DC_`) IR/visual camera patterns and DG prefixes per project.
 - **Update QR02 CBA**: Extracts testsheet metadata (`PCE Testsheet`, `PCE VI`) and upserts per-station ENGR `QR02 CBA` Excel worksheets with atomic transactions and exact FL matching.
-- **Generate Quick Report**: Interactively select 3-tier inspection date folders (`<STATION>/<MONTH>/<DATE>/`) and compile 7-part docx visual reports directly into counterpart `QUICK REPORT/<STATION>/<MONTH>/<DATE>/` directory trees with canonical `(IR+US+TEV+VI)` defect suffixes.
+- **Generate Quick Report**: Interactively select 3-tier inspection date folders (`<STATION>/<MONTH>/<DATE>/`) and compile 7-part docx visual reports directly into counterpart `QUICK REPORT/<STATION>/<MONTH>/<DATE>/` directory trees with dynamic equipment condition pairs, room-based fire safety layouts, and canonical `(IR+US+TEV+VI)` defect suffixes.
 - **Generate WhatsApp Report**: Interactively select quick report batches to generate formatted WhatsApp inspection summary text files and station reports.
 - **Substation Post-Processing Pipeline**: 1-Click automated post-processing pipeline for substation deliverables combining signature replacement, diagonal borders, and PDF export/merging.
 - **MSMS Suite & Work Order Sync**: Dedicated modular workflows to consolidate MSMS spreadsheets, enrich DATA MSMS with TOTAL PE metadata, propagate Work Orders (WO), ingest raw CSVs, and populate data MSMS records.

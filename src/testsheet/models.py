@@ -43,6 +43,112 @@ class RawPhotoRanges:
 
 
 @dataclass(frozen=True)
+class SwitchgearPanelSpec:
+    """Specification for an individual switchgear panel/bay."""
+
+    panel_no: int = 1
+    panel_feeder_no: str = ""
+    name: str = ""
+    panel_type: str = ""
+    serial_no: str = ""
+    status: str = ""
+    load_amp: str = ""
+    cable_type: str = ""
+    heater_amp: str = ""
+
+
+@dataclass(frozen=True)
+class SwitchgearSpec:
+    """Specification for a switchgear board/tank and its associated panels."""
+
+    switchgear_type: str = ""
+    manufacturer: str = ""
+    model: str = ""
+    manufactured_year: str = ""
+    rating: str = ""
+    serial_no: str = ""
+    panels: tuple[SwitchgearPanelSpec, ...] = ()
+
+
+@dataclass(frozen=True)
+class TransformerSpec:
+    """Specification for a power distribution transformer."""
+
+    tx_id: str = "Tx 1"
+    rating_kva: str = ""
+    construction_year: str = ""
+    manufacturer: str = ""
+    serial_no: str = ""
+    type: str = ""
+
+
+@dataclass(frozen=True)
+class LVDBSpec:
+    """Specification for a Low Voltage Distribution Board (LVDB) or Feeder Pillar (FP)."""
+
+    name: str = "LVDB 1"
+    label: str = "LVDB"
+    source: str = "TX1"
+    manufacturer: str = ""
+    serial_no: str = ""
+    rating: str = ""
+
+
+@dataclass(frozen=True)
+class BatteryBankSpec:
+    """Specification for a DC battery bank system."""
+
+    name: str = "BATTERY BANK 1"
+    manufacturer: str = ""
+    model: str = ""
+    serial_no: str = ""
+
+
+@dataclass(frozen=True)
+class FireExtinguisherSpec:
+    """Specification for substation fire safety equipment."""
+
+    has_fire_extinguisher: bool = False
+    expiry_date: str = ""
+    status: str = ""
+
+
+@dataclass(frozen=True)
+class SubstationEquipmentPackage:
+    """Composite container bundling equipment specifications across all 5 domain categories."""
+
+    switchgears: tuple[SwitchgearSpec, ...] = ()
+    transformers: tuple[TransformerSpec, ...] = ()
+    lvdb_specs: tuple[LVDBSpec, ...] = ()
+    battery_banks: tuple[BatteryBankSpec, ...] = ()
+    fire_extinguisher: FireExtinguisherSpec = FireExtinguisherSpec()
+    has_battery_charger: bool = False
+    has_rtu: bool = False
+    has_sf6: bool = False
+    has_efi: bool = False
+
+    @property
+    def switchgear(self) -> SwitchgearSpec:
+        """Return the primary switchgear unit or a default SwitchgearSpec."""
+        return self.switchgears[0] if self.switchgears else SwitchgearSpec()
+
+    @property
+    def transformer_count(self) -> int:
+        """Return the total number of transformers."""
+        return len(self.transformers)
+
+    @property
+    def lvdb_count(self) -> int:
+        """Return the total number of LVDB / Feeder Pillar units."""
+        return len(self.lvdb_specs)
+
+    @property
+    def has_switchgear(self) -> bool:
+        """Return True if at least one switchgear is configured."""
+        return len(self.switchgears) > 0
+
+
+@dataclass(frozen=True)
 class TestsheetData:
     """Extracted data from a substation testsheet Excel workbook."""
 
@@ -64,6 +170,7 @@ class TestsheetData:
     humidity: str = "-"
     time: str = "-"
     cycle_1: datetime | None = None
+    equipment: SubstationEquipmentPackage = SubstationEquipmentPackage()
 
 
 @dataclass(frozen=True)

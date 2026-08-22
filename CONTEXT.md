@@ -82,6 +82,72 @@ Best-effort handling policy when a substation has no matching US+TEV archive in 
 ### UsTevIdempotencyPolicy
 Clean-overwrite policy for US+TEV destination folders. When extracting a zip archive into `RAW DATA/US+TEV/<ZIP_STEM>/`, if the target `<ZIP_STEM>` directory already exists, it is purged and re-extracted cleanly from source to prevent stale file artifacts.
 
+### SwitchgearSpec & SwitchgearPanelSpec
+The canonical switchgear domain model in `src/testsheet/models.py`.
+- **Switchgear-Level Specs**: `switchgear_type` (e.g. `AIS`, `GIS`, `RMU`, `SF6`, `VCB`, `OCB`, `MRMU`), `manufacturer`, `model`, `manufactured_year`, `rating` (e.g. `12kV`, `630A` — attached strictly at the switchgear board level, not per panel), `serial_no` (overall board/tank serial number), and `panels: tuple[SwitchgearPanelSpec, ...]`.
+- **Multi-Switchgear Support**: `PCE VI` Rows 11–13 hold Switchgear 1, and Rows 14–16 hold Switchgear 2. `SubstationEquipmentPackage` stores `switchgears: tuple[SwitchgearSpec, ...]`.
+- **Panel-Level Specs (`SwitchgearPanelSpec`)**: Every switchgear is composed of attached panels/bays. Each panel maintains its own `panel_no` (1..N physical order), `panel_feeder_no` (SCADA panel numbering), `name` (feeder/panel label such as `INCOMING 1`, `TX 1`, `BUS COUPLER`), `panel_type` (`VCB`, `LBS`, `SWITCH`, `TEE-OFF`), `serial_no` (individual breaker serial number if distinct), `status` (`CLOSE`, `TRIP`, `OPEN`), `load_amp` (operating current in Amperes, e.g. `120A`), `cable_type` (e.g. `XLPE 3C 240mm2`), and `heater_amp` (anti-condensation heater current in Amperes, e.g. `0.5A`).
+
+### SubstationEquipmentPackage
+The top-level composite equipment domain entity attached to `TestsheetData.equipment`. Bundles all 5 equipment categories:
+1. **Environment & Metadata**: `building_type`, `substation_type`.
+2. **Switchgear**: `switchgears: tuple[SwitchgearSpec, ...]` (with `switchgear` property pointing to primary unit for backwards compatibility).
+3. **Transformers**: `transformers: tuple[TransformerSpec, ...]` (`tx_id`, `rating_kva`, `construction_year`, `manufacturer`, `serial_no`, `type`). Supports 0 TX (SSU), 1 TX, 2 TX, or up to 4 TX.
+4. **LVDB / Feeder Pillar**: `lvdb_specs: tuple[LVDBSpec, ...]` (`name`, `label`, `source`, `manufacturer`, `serial_no`, `rating`).
+5. **Auxiliary & Safety**: `battery_banks: tuple[BatteryBankSpec, ...]`, `fire_extinguisher: FireExtinguisherSpec`, `has_battery_charger`, `has_rtu`, `has_sf6`, `has_efi`.
+
+### LvdbExtractionAndClassificationPolicy
+Classification and naming policy for LVDB / Feeder Pillar:
+- **Detection**: Inspect `R48`/`R52` on `PCE Testsheet`. If prefix is `FP` $\to$ Feeder Pillar (`"FEEDER PILLAR"`). If prefix is `LVDB` $\to$ LVDB (`"LVDB"`).
+- **Active Unit Detection**: Unit is active if an IR photo number is present in `S49`/`S53`, or non-empty manufacturer/serial/rating fields exist.
+- **Naming Rule**:
+  - Single active unit $\to$ `("FEEDER PILLAR", "FEEDER PILLAR NAMEPLATE")` or `("LVDB", "LVDB NAMEPLATE")`.
+  - Multiple active units $\to$ `Label + Source`: e.g. `("LVDB TX1", "LVDB TX1 NAMEPLATE")` or `("FEEDER PILLAR TX1", "FEEDER PILLAR TX1 NAMEPLATE")` (falling back to sequential index if source is blank).
+
+### TransformerExtractionPolicy
+Extraction and counting policy for transformers from `PCE VI`:
+- **Authoritative Quantity Cell (`C17`)**: The `No of Transformer` cell (`C17`) on `PCE VI` is authoritative.
+  - If `C17` has an integer `1..4`, up to that exact quantity of transformer rows are parsed.
+  - If `C17` is `N/A`, `0`, empty, or contains non-accessible remarks (e.g. `NOT ACCESSIBLE`), `transformer_count` is 0 and empty tuple `()` is produced.
+- **Coordinates on `PCE VI` (Rows 18–21 for Tx 1..4)**:
+  - Column `D`: Transformer Type (`type`, e.g. `HERMETICALLY SEALED`, `CONSERVATOR`)
+  - Column `F`: Rating (`rating_kva`, already formatted with `kVA`, e.g. `1000kVA`, `750kVA`, `500kVA`)
+  - Column `I`: Construction Year (`construction_year`)
+  - Column `K`: Manufacturer (`manufacturer`)
+  - Column `O`: Serial Number (`serial_no`)
+- **Accessibility / False-Positive Guard**: If a Tx row or `C17` indicates `NOT ACCESSIBLE`, it is excluded from active testable transformers to prevent false positives in Quick Report condition pages and downstream workflows.
+
+### MissingValuePresentationPolicy
+Clear separation between data representation and document presentation:
+- **Extractor & Domain Model Representation (Stage 2)**: Missing, empty, or unparseable spreadsheet cells are normalized to empty string `""` (or `None` for optional typed dates/integers) within immutable domain models. Non-fatal extraction warnings are logged where applicable.
+- **Document Presentation Representation (Stage 4/5)**: The transformation and rendering stage converts empty string `""` (or missing values) into human-readable dash `"-"` in Jinja template rendering contexts for DOCX / PDF outputs.
+
+### SubstationConditionPairBuilderPolicy
+Canonical 2-column condition page generation rules for Quick Report Word output:
+- **Singular vs Plural Naming**:
+  - 1 Switchgear: `("SWITCHGEAR", "SWITCHGEAR NAMEPLATE")`
+  - 2 Switchgears: `("SWITCHGEAR 1", "SWITCHGEAR 1 NAMEPLATE")` and `("SWITCHGEAR 2", "SWITCHGEAR 2 NAMEPLATE")`
+  - 0 Switchgear: Omitted.
+  - 1 Transformer: `("TRANSFORMER", "TRANSFORMER NAMEPLATE")`
+  - Multiple Transformers: `(f"TRANSFORMER {i}", f"TRANSFORMER {i} NAMEPLATE")`
+  - 0 Transformer (SSU): Omitted.
+  - 1 LVDB / FP: `("LVDB", "LVDB NAMEPLATE")` or `("FEEDER PILLAR", "FEEDER PILLAR NAMEPLATE")`
+  - Multiple LVDB / FP: `(f"{label} {source}", f"{label} {source} NAMEPLATE")`
+- **Auxiliary & Safety**:
+  - Battery Charger: `("BATTERY CHARGER", "BATTERY CHARGER NAMEPLATE")` for 1 unit; `("BATTERY CHARGER 1", ...)` and `("BATTERY CHARGER 2", ...)` for 2 units. Omitted if 0 units.
+  - RTU: `("RTU", "RTU NAMEPLATE")` (if present).
+  - Fire Extinguisher: Included for `INDOOR` & `ATTACH BUILDING`. Omitted for `OUTDOOR` & `COMPACT` (CS).
+- **Indicator Stream Packing**:
+  - Dual SF6: `("SF6 INDICATOR 1", "SF6 INDICATOR 2")`
+  - Single items (`EFI`, single `SF6 INDICATOR`, odd `TRANSFORMER OIL LEVEL INDICATOR`) are streamed and zipped in pairs.
+  - Dual Tx Oil Level: `("TRANSFORMER 1 OIL LEVEL INDICATOR", "TRANSFORMER 2 OIL LEVEL INDICATOR")`
+  - 0 Tx Oil Level: Omitted.
+  - Unmatched trailing odd items render as a half-pair `(item, "")` with right-cell borders stripped cleanly via `_remove_empty_cell_borders_sub_cond()`.
+
+
+
+
+
 
 
 

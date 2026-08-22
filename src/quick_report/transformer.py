@@ -12,6 +12,7 @@ from src.core.normalizers import (
 )
 from src.quick_report.cbm_defect_planner import CbmDefectPlanner
 from src.quick_report.models import QuickReportStationPlan
+from src.quick_report.substation_condition import build_substation_condition_pairs
 from src.quick_report.utils import sanitize_filename
 
 if TYPE_CHECKING:
@@ -149,16 +150,4 @@ class QuickReportTransformer:
         self, pkg: SubstationTestsheetPackage | None = None
     ) -> list[tuple[str, str]]:
         """Build active 2-column pairs for the substation condition page."""
-        if not pkg or not getattr(pkg, "data", None):
-            return [("SUBSTATION OVERVIEW", "SIGNBOARD")]
-        return [
-            ("SUBSTATION OVERVIEW", "SIGNBOARD"),
-            ("SWITCHGEAR 1", "SWITCHGEAR 1 NAMEPLATE"),
-            ("TRANSFORMER 1", "TRANSFORMER 1 NAMEPLATE"),
-            ("FEEDER PILLAR 1", "FEEDER PILLAR 1 NAMEPLATE"),
-            ("BATTERY CHARGER", "BATTERY CHARGER NAMEPLATE"),
-            ("RTU", "RTU NAMEPLATE"),
-            ("EFI", "SF6 GAS INDICATOR"),
-            ("FIRE EXTINGUISHER", "FIRE EXTINGUISHER EXPIRY DATE"),
-            ("TRANSFORMER OIL LEVEL INDICATOR", "TRANSFORMER OIL LEVEL INDICATOR"),
-        ]
+        return build_substation_condition_pairs(pkg)

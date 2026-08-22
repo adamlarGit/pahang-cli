@@ -21,20 +21,18 @@ Design and build a canonical, reusable substation equipment package model (`src/
 
 ## Decisions so far
 
-<!-- none yet -->
+- [Ticket 082: Reusable Substation Equipment Package Domain Models](082-testsheet-equipment-package-domain-models.md) — Defined immutable `SubstationEquipmentPackage`, `SwitchgearSpec` with `SwitchgearPanelSpec` (SCADA `panel_feeder_no`, `status`, `load_amp`, `heater_amp`), `TransformerSpec` (`type`), `LVDBSpec` (`label`, `source`), `BatteryBankSpec`, and `FireExtinguisherSpec`.
+- [Ticket 083: Testsheet Equipment Package OpenPyXL Extractor](083-testsheet-equipment-package-extractor.md) — Specified 6 single-responsibility extractor methods in `TestsheetExtractor`: switchgear & panels across rollovers, authoritative `C17` Tx extraction, LVDB active detection via `S49`/`S53` IR photo cells, multi-battery scan (rows 59–65), fire extinguisher building guard & expiry date, and missing value representation policy (`""` in models, `"-"` in documents).
+- [Ticket 084: Dynamic Substation Condition Pairs Transformer](084-dynamic-substation-condition-pairs-transformer.md) — Specified dynamic stream-packing 2-column condition pair builder algorithm: singular naming for single equipment (`SWITCHGEAR`, `TRANSFORMER`), multi-equipment indexing (`1..N`), stream-zipping of indicators (`EFI`, `SF6 INDICATOR`, `OIL LEVEL INDICATOR`), fire extinguisher inclusion for `INDOOR`/`ATTACH` and omission for `OUTDOOR`/`COMPACT`, and half-pair border stripping.
+- [Ticket 085: Substation Equipment Condition E2E Verification & Test Suite](085-substation-equipment-condition-e2e-verification.md) — Specified canonical FP vs LVDB classification & condition headers (`FEEDER PILLAR TX1` / `LVDB TX1`), switchgear 1 & 2 extraction (`PCE VI` Rows 11–16), 5-variant test matrix (1 TX Indoor, 2 TX Attach, 0 TX SSU, CS Compact, Dual SWG), and 3-tier test suite architecture.
 
 ## Open Tickets (Frontier)
 
-- [Ticket 082: Reusable Substation Equipment Package Domain Models](file:///.issues/082-testsheet-equipment-package-domain-models.md) — Open (Unblocked)
-- [Ticket 083: Testsheet Equipment Package OpenPyXL Extractor](file:///.issues/083-testsheet-equipment-package-extractor.md) — Open (Blocked by Ticket 082)
-- [Ticket 084: Dynamic Substation Condition Pairs Transformer](file:///.issues/084-dynamic-substation-condition-pairs-transformer.md) — Open (Blocked by Ticket 082, Ticket 083)
-- [Ticket 085: Substation Equipment Condition E2E Verification & Test Suite](file:///.issues/085-substation-equipment-condition-e2e-verification.md) — Open (Blocked by Ticket 084)
+*None — All map tickets resolved and ready for implementation.*
 
 ## Not yet specified
 
-- **Multi-Switchgear Unit Extraction**: Detailed extraction rules for substations containing 2 or more separate switchgear brand/model installations in a single PE.
 - **Cross-Workflow Model Sharing**: Reusing `SubstationEquipmentPackage` in `WhatsAppReportWorkflow` and `UpdateDataMsmsWorkflow`.
-- **DOCX Layout Visual Regression**: Verification of 3-pair page chunking and cell border removal for arbitrary N-pair outputs.
 
 ## Out of scope
 

@@ -5,6 +5,26 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-08-22
+
+### Added
+- **Substation Equipment Package Domain Models**: Implemented immutable dataclasses `SwitchgearSpec`, `SwitchgearPanelSpec`, `TransformerSpec`, `LVDBSpec`, `BatteryBankSpec`, `FireExtinguisherSpec`, and composite `SubstationEquipmentPackage` in `src/testsheet/models.py`.
+- **Comprehensive Testsheet Equipment Extractor**: Single-responsibility OpenPyXL extractor helper methods in `src/testsheet/extractor.py` extracting switchgears (with multi-sheet panel extraction), transformers (authoritative `C17`), active LVDB/FP slots, DC battery banks, and auxiliary flags.
+- **Dedicated Room-Based Fire Extinguisher Presentation**: Dynamic per-room fire extinguisher pairs (`FIRE EXTINGUISHER\n(SWITCHGEAR ROOM)`, `FIRE EXTINGUISHER\n(TX ROOM)` / `TX1 ROOM` / `TX2 ROOM`) across Indoor/Attach substations with automatic suppression on Outdoor and CS Compact substations.
+- **Dynamic 2-Column Condition Pair Stream Packing**: Implemented dynamic stream packing in `src/quick_report/substation_condition.py` and `QuickReportTransformer` generating canonical condition pair sequences across all substation variants.
+- **Substation Condition Table Border Stripping**: Advanced 8-row table border stripping in `_remove_empty_cell_borders_sub_cond()` eliminating leftover border lines on trailing unused card slots, spacer rows, spacer columns, and half-pairs.
+- **Comprehensive Test Suites**: Added unit and integration test suites covering equipment domain models, testsheet extractor, condition transformer, and docx generation (`tests/test_testsheet_equipment_models.py`, `tests/test_testsheet_equipment_extractor.py`, `tests/test_substation_condition_transformer.py`, `tests/test_substation_condition_docx.py`).
+
+### Changed
+- **Card Header Vertical Centering**: Programmatically and structurally added `<w:vAlign w:val="center"/>` across all substation configuration templates and rendered condition pages.
+- **Auxiliary Flags & RTU Detection Logic**: Fine-tuned EFI (supporting both Good and Not Good defect indicators with N/A / MISSING guards), SF6 gas pressure indicators, and linked RTU presence to battery bank installations with Compact / CS substation exceptions.
+
+### Fixed
+- **Document Converter Status & File Path Propagation**: Fixed `convert_docx_to_pdf()` in `src/postprocessing/converters.py` to properly handle renamed output PDF filenames and propagate updated `OutputFile` paths back to callers.
+
+### Removed
+- **Dead Code & Legacy Branches**: Purged unused imports, obsolete static condition branches, and redundant variables across `src/quick_report/` and test suites.
+
 ## [1.9.0] - 2026-08-20
 
 ### Added

@@ -365,6 +365,17 @@ def test_master_qr03_defect_repository_with_excel(tmp_path: Path):
 
 def test_build_substation_condition_pairs():
     """Verify equipment pair building in QuickReportTransformer."""
+    from src.testsheet.models import (
+        BatteryBankSpec,
+        FireExtinguisherSpec,
+        LVDBSpec,
+        SubstationEquipmentPackage,
+        SubstationTestsheetPackage,
+        SwitchgearSpec,
+        TestsheetData,
+        TransformerSpec,
+    )
+
     transformer = QuickReportTransformer()
 
     # None / Empty pkg fallback
@@ -372,20 +383,45 @@ def test_build_substation_condition_pairs():
         ("SUBSTATION OVERVIEW", "SIGNBOARD")
     ]
 
-    pkg = MagicMock()
-    pkg.data.substation_type = "MRMU SF6"
+    eq = SubstationEquipmentPackage(
+        switchgears=(SwitchgearSpec(switchgear_type="GIS"),),
+        transformers=(TransformerSpec(tx_id="Tx 1"),),
+        lvdb_specs=(LVDBSpec(name="FP 1", label="FP"),),
+        battery_banks=(BatteryBankSpec(name="BATTERY BANK 1"),),
+        fire_extinguisher=FireExtinguisherSpec(has_fire_extinguisher=True),
+        has_battery_charger=True,
+        has_rtu=True,
+        has_sf6=True,
+        has_efi=True,
+    )
+    data = TestsheetData(
+        substation_number=1,
+        substation_name_erms="PE TEST",
+        building_type="INDOOR",
+        substation_type="MRMU SF6",
+        equipment=eq,
+    )
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=Path("dummy.xlsx"),
+        unsorted_raw_data_dir=Path("dummy_raw"),
+        station="TEST",
+        month="08. AUGUST",
+        date_str="12-08-2026",
+        substation_number=1,
+        data=data,
+    )
 
     pairs = transformer._build_substation_condition_pairs(pkg)
     labels = [p[0] for p in pairs]
 
     assert "SUBSTATION OVERVIEW" in labels
-    assert "SWITCHGEAR 1" in labels
-    assert "TRANSFORMER 1" in labels
-    assert "FEEDER PILLAR 1" in labels
+    assert "SWITCHGEAR" in labels
+    assert "TRANSFORMER" in labels
+    assert "FEEDER PILLAR" in labels
     assert "BATTERY CHARGER" in labels
     assert "RTU" in labels
-    assert "EFI" in labels
-    assert "FIRE EXTINGUISHER" in labels
+    assert "FIRE EXTINGUISHER\n(SWITCHGEAR ROOM)" in labels
+    assert "FIRE EXTINGUISHER\n(TX ROOM)" in labels
     assert "TRANSFORMER OIL LEVEL INDICATOR" in labels
 
 

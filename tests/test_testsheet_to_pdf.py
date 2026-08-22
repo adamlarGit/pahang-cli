@@ -53,11 +53,20 @@ def test_convert_testsheet_folder_to_pdf_fake_converter(tmp_path: Path) -> None:
     assert not (tmp_path / "~$001. Testsheet A.pdf").exists()
     assert len(sink_messages) >= 3
 
+    # Assert that converted mock PDFs have uniform page dimensions
+    from PyPDF2 import PdfReader
+    for out_name in ["001. Testsheet A.pdf", "002. Testsheet B.pdf"]:
+        reader = PdfReader(str(tmp_path / out_name))
+        for page in reader.pages:
+            assert round(float(page.mediabox.width), 2) == 792.0
+            assert round(float(page.mediabox.height), 2) == 612.0
+
 
 @patch("src.workflows.testsheet_to_pdf.pythoncom")
 @patch("src.workflows.testsheet_to_pdf.win32com.client.DispatchEx")
 def test_convert_testsheet_folder_to_pdf_com_session_lifecycle(
     mock_dispatch_ex: MagicMock,
+
     mock_pythoncom: MagicMock,
     tmp_path: Path,
 ) -> None:

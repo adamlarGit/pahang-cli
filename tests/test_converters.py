@@ -122,4 +122,48 @@ def test_convert_docx_to_pdf_standalone_lifecycle(
     mock_co_uninit.assert_called_once()
 
 
+def test_merge_temp_pdfs_combines_pages(tmp_path: Path) -> None:
+    """Test that _merge_temp_pdfs cleanly combines multiple PDF pages into one output file."""
+    from PyPDF2 import PdfReader, PdfWriter
 
+    pdf1 = tmp_path / "sheet_1.pdf"
+    pdf2 = tmp_path / "sheet_2.pdf"
+    out_pdf = tmp_path / "merged.pdf"
+
+    w1 = PdfWriter()
+    w1.add_blank_page(width=792.0, height=612.0)
+    with open(pdf1, "wb") as f:
+        w1.write(f)
+
+    w2 = PdfWriter()
+    w2.add_blank_page(width=792.0, height=612.0)
+    with open(pdf2, "wb") as f:
+        w2.write(f)
+
+    converter = ComDocumentConverter()
+    converter._merge_temp_pdfs([pdf1, pdf2], out_pdf)
+
+    reader = PdfReader(str(out_pdf))
+    assert len(reader.pages) == 2
+    for page in reader.pages:
+        assert round(float(page.mediabox.width), 2) == 792.0
+        assert round(float(page.mediabox.height), 2) == 612.0
+
+
+def test_configure_uniform_printer_sets_standard_printer() -> None:
+    """Test that _configure_uniform_printer assigns standard printer if current printer is Adobe PDF."""
+    converter = ComDocumentConverter()
+    mock_app = MagicMock()
+    mock_app.ActivePrinter = "Adobe PDF on Ne07:"
+
+    with patch("winreg.OpenKey"), patch(
+        "winreg.EnumValue",
+        side_effect=[
+            ("Adobe PDF", "winspool,Ne07:", None),
+            ("Microsoft Print to PDF", "winspool,Ne02:", None),
+            OSError("No more data"),
+        ],
+    ):
+        converter._configure_uniform_printer(mock_app)
+
+    assert mock_app.ActivePrinter == "Microsoft Print to PDF on Ne02:"
