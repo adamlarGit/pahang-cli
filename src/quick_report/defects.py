@@ -14,6 +14,14 @@ if TYPE_CHECKING:
     from src.project.storage import WorkspaceStorage
 
 
+def _clean_val(val: Any) -> str:
+    """Normalize a pandas cell value to a clean string, converting NaN/None to empty string."""
+    if val is None or pd.isna(val):
+        return ""
+    s = str(val).strip()
+    return "" if s.lower() == "nan" else s
+
+
 @dataclass(frozen=True)
 class CbmDefectRecord:
     """Normalized CBM (IR/US/TEV) defect record.
@@ -44,19 +52,19 @@ class CbmDefectRecord:
     source_order: int = 0
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "technology", (self.technology or "").strip().upper())
-        object.__setattr__(self, "equipment", (self.equipment or "").strip())
-        object.__setattr__(self, "brand", (self.brand or "").strip())
-        object.__setattr__(self, "model", (self.model or "").strip())
-        object.__setattr__(self, "rating", (self.rating or "").strip())
-        object.__setattr__(self, "defect_area", (self.defect_area or "").strip())
-        object.__setattr__(self, "additional_remarks", (self.additional_remarks or "").strip())
-        object.__setattr__(self, "ir_reading", (self.ir_reading or "").strip())
-        object.__setattr__(self, "us_reading", (self.us_reading or "").strip())
-        object.__setattr__(self, "us_char", (self.us_char or "").strip())
-        object.__setattr__(self, "tev_reading", (self.tev_reading or "").strip())
-        object.__setattr__(self, "tev_char", (self.tev_char or "").strip())
-        object.__setattr__(self, "raw_measurement", (self.raw_measurement or "").strip())
+        object.__setattr__(self, "technology", _clean_val(self.technology).upper())
+        object.__setattr__(self, "equipment", _clean_val(self.equipment))
+        object.__setattr__(self, "brand", _clean_val(self.brand))
+        object.__setattr__(self, "model", _clean_val(self.model))
+        object.__setattr__(self, "rating", _clean_val(self.rating))
+        object.__setattr__(self, "defect_area", _clean_val(self.defect_area))
+        object.__setattr__(self, "additional_remarks", _clean_val(self.additional_remarks))
+        object.__setattr__(self, "ir_reading", _clean_val(self.ir_reading))
+        object.__setattr__(self, "us_reading", _clean_val(self.us_reading))
+        object.__setattr__(self, "us_char", _clean_val(self.us_char))
+        object.__setattr__(self, "tev_reading", _clean_val(self.tev_reading))
+        object.__setattr__(self, "tev_char", _clean_val(self.tev_char))
+        object.__setattr__(self, "raw_measurement", _clean_val(self.raw_measurement))
 
         tech = self.technology
         raw = self.raw_measurement
@@ -102,6 +110,11 @@ class ViDefectRecord:
     equipment: str = ""
     defect_area: str = ""
     additional_remarks: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "equipment", _clean_val(self.equipment))
+        object.__setattr__(self, "defect_area", _clean_val(self.defect_area))
+        object.__setattr__(self, "additional_remarks", _clean_val(self.additional_remarks))
 
     def to_dict(self) -> dict:
         return {
@@ -253,12 +266,6 @@ class MasterQr03DefectRepository:
             us_char_col = next((c for c in df.columns if "US CHAR" in str(c).upper() or "US CHARACTER" in str(c).upper()), None)
             tev_char_col = next((c for c in df.columns if "TEV CHAR" in str(c).upper() or "TEV CHARACTER" in str(c).upper()), None)
 
-            def _clean_val(val: Any) -> str:
-                if val is None or pd.isna(val):
-                    return ""
-                s = str(val).strip()
-                return "" if s.lower() == "nan" else s
-
             defects: list[CbmDefectRecord] = []
             for idx, (_, row) in enumerate(matched_df.iterrows(), start=1):
                 tech = _clean_val(
@@ -324,13 +331,13 @@ class MasterQr03DefectRepository:
             defects: list[ViDefectRecord] = []
             for _, row in matched_df.iterrows():
                 rec = ViDefectRecord(
-                    equipment=str(row.get("EQUIPMENT") or "").strip(),
-                    defect_area=str(
-                        row.get("DEFECT AREA") or row.get("DEFECT_AREA") or ""
-                    ).strip(),
-                    additional_remarks=str(
-                        row.get("ADDITIONAL REMARKS") or row.get("REMARKS") or ""
-                    ).strip(),
+                    equipment=_clean_val(row.get("EQUIPMENT")),
+                    defect_area=_clean_val(
+                        row.get("DEFECT AREA") or row.get("DEFECT_AREA")
+                    ),
+                    additional_remarks=_clean_val(
+                        row.get("ADDITIONAL REMARKS") or row.get("REMARKS")
+                    ),
                 )
                 defects.append(rec)
 

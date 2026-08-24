@@ -5,6 +5,12 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.1] - 2026-08-25
+
+### Fixed
+- **VI Defect NaN Leak**: Empty Excel cells in QR03 VI produced `"nan"` strings in VI summary and VI defect Word output pages. Root cause: `numpy.nan` is truthy, so `str(val or "")` bypassed the fallback. Extracted `_clean_val()` to module-level with explicit `pd.isna()` guard, shared by both CBM and VI extraction paths.
+- **CbmDefectRecord Latent NaN Hole**: `__post_init__` used `(self.field or "").strip()` which also wouldn't catch NaN if constructed directly. Replaced with `_clean_val()` for defense in depth.
+
 ## [1.10.0] - 2026-08-22
 
 ### Added
