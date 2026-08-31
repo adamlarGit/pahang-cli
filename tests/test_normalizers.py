@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-import pytest
 
 from src.core.normalizers import (
     extract_background_temperature,
@@ -193,6 +192,14 @@ def test_normalize_for_csv_null_and_empty() -> None:
 
 def test_normalize_for_csv_numbers_and_types() -> None:
     assert normalize_for_csv(23.2) == "23.2"
+    assert normalize_for_csv(41.05) == "41.1"
+    assert normalize_for_csv(32.55) == "32.6"
+    assert normalize_for_csv(35.33) == "35.3"
+    assert normalize_for_csv(36.55) == "36.6"
+    assert normalize_for_csv(0.10000000000000142) == "0.1"
+    assert normalize_for_csv(3.1000000000000014) == "3.1"
+    assert normalize_for_csv(28.0) == "28.0"
+    assert normalize_for_csv(0.0) == "0.0"
     assert normalize_for_csv(0) == "0"
     assert normalize_for_csv(42) == "42"
     assert normalize_for_csv(True) == "True"

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, time
 from pathlib import Path
 import openpyxl
 import pandas as pd
@@ -11,23 +11,17 @@ import pytest
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
-from src.quick_report.defects import MasterQr03DefectRepository, ViDefectRecord
+from src.quick_report.defects import ViDefectRecord
 
 pytest.importorskip("src.workflows.populate_data_msms")
 
 from src.workflows.models import (
     PopulateDataMsmsRequest,
-    PopulateDataMsmsResult,
     PopulateMode,
 )
 
 from src.workflows.populate_data_msms import (
-    PopulateDataMsmsAuditor,
-    PopulateDataMsmsExtractor,
-    PopulateDataMsmsFilter,
-    PopulateDataMsmsLoader,
     PopulateDataMsmsPreflightGuard,
-    PopulateDataMsmsTransformer,
     PopulateDataMsmsWorkflow,
     match_vi_defect,
     parse_testsheet_datetime,
@@ -542,4 +536,121 @@ def test_populate_data_msms_from_python_to_be_filled(mock_env: ProjectEnvironmen
     df = pd.read_csv(csv_path, dtype=str).fillna("")
     assert df.iloc[0]["TNBNEWREADING"] in ("42", "42.0")
     assert df.iloc[0]["ACTSTART"] == "2026-06-09T10:00:00+08:00"
+
+
+def test_populate_data_msms_feeder_pillar_synthesis(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    # 1. Setup testsheet with LVDB 1 and LVDB 2 feeder details
+    date_dir = tmp_path / "TESTSHEET" / "TEMERLOH" / "06. JUNE" / "09-06-2026"
+    date_dir.mkdir(parents=True, exist_ok=True)
+    (date_dir / "UNSORTED RAW DATA").mkdir(exist_ok=True)
+
+    ts_wb = openpyxl.Workbook()
+    ws_ts = ts_wb.active
+    ws_ts.title = "PCE Testsheet"
+    ws_ts["W5"] = "CCHL/PCEJ00099"
+    ws_ts["C5"] = "TEST SUBSTATION"
+    ws_ts["P4"] = "09-06-2026"
+    ws_ts["P5"] = 1000
+    ws_ts["S5"] = 1030
+
+    # LVDB 1 (Row 44 config, Row 45 cable type, R50 avg temp)
+    ws_ts["D44"] = "TX1"
+    ws_ts["D45"] = "XLPE"           # IN1 active
+    ws_ts["I44"] = "FEEDER 1"
+    ws_ts["I45"] = "PILC"           # OT1 active
+    ws_ts["J44"] = "SPARE WAY"
+    ws_ts["J45"] = "SPARE"          # OT2 spare/inactive
+    ws_ts["K44"] = "-"
+    ws_ts["K45"] = "-"              # OT3 inactive
+    ws_ts["R50"] = "AVG 28.0"       # LVDB 1 base temp (string formatted as in real testsheets)
+
+    # LVDB 2 (Row 46 config, Row 47 cable type, R54 avg temp)
+    ws_ts["D46"] = "TX2"
+    ws_ts["D47"] = "BUSBAR"         # IN1 active
+    ws_ts["I46"] = "FEEDER 2"
+    ws_ts["I47"] = "ABC"            # OT1 active
+    ws_ts["R54"] = "AVG 29.5"       # LVDB 2 base temp (string formatted as in real testsheets)
+
+    ts_path = date_dir / "099. TEST SUBSTATION.xlsx"
+    ts_wb.save(ts_path)
+    ts_wb.close()
+
+    # 2. Setup TOTAL PE.xlsx
+    total_pe_path = mock_env.storage.get_total_pe_path()
+    mock_env.storage.ensure_directory(total_pe_path.parent)
+    wb_pe = openpyxl.Workbook()
+    ws_pe = wb_pe.active
+    ws_pe.title = "DataCycle1"
+    ws_pe.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    ws_pe.append([99, "CCHL/PCEJ00099", "TEST SUBSTATION", "09-06-2026", "PE", "200000000099", "CBM"])
+    wb_pe.save(total_pe_path)
+    wb_pe.close()
+
+    # 3. Setup CSV in TO BE FILLED
+    to_be_filled_dir = mock_env.storage.get_msms_to_be_filled_dir()
+    mock_env.storage.ensure_directory(to_be_filled_dir)
+    csv_path = to_be_filled_dir / "09-06-2026_001.csv"
+
+    csv_rows = [
+        "WONUM,TNBLOCATION,METERNAME,METER.DESCRIPTION,TNBNEWREADING,TNBNEWREADINGDATE,ACTSTART,ACTFINISH,TNBCOMMENTS\n",
+        # FP1 Incomer 1 (Active -> Should be populated)
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_FPIN1_AVG_PE13R,PCE: TH FP IN1: Avg Temp,,,,,\n",
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_FPIN1_MAX_PE13R,PCE: TH FP IN1: Max Temp,,,,,\n",
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_FPIN1_REF_PE13R,PCE: TH FP IN1: Ref Temp,,,,,\n",
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_FPIN1_DEL_PE13R,PCE: TH FP IN1: Temp Diff,,,,,\n",
+        # FP1 Outgoing 1 (Active -> Should be populated)
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_FPOT1_AVG_PE13R,PCE: TH FP OT1: Avg Temp,,,,,\n",
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_FPOT1_DEL_PE13R,PCE: TH FP OT1: Temp Diff,,,,,\n",
+        # FP1 Outgoing 2 (SPARE -> Must remain blank)
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_FPOT2_AVG_PE13R,PCE: TH FP OT2: Avg Temp,,,,,\n",
+        # FP1 Outgoing 3 (Dash '-' -> Must remain blank)
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_FPOT3_AVG_PE13R,PCE: TH FP OT3: Avg Temp,,,,,\n",
+        # FP1 Earth (Must remain blank)
+        "200000000099,CCHL/PCEJ00099/FP/FP1,TH_EARTH_AVG_PE13R,PCE: TH FP Earth: Avg Temp,,,,,\n",
+        # FP2 Incomer 1 (Active -> Should be populated)
+        "200000000099,CCHL/PCEJ00099/FP/FP2,TH_FPIN1_AVG_PE13R,PCE: TH FP2 IN1: Avg Temp,,,,,\n",
+    ]
+    csv_path.write_text("".join(csv_rows), encoding="utf-8")
+
+    # 4. Execute workflow
+    workflow = PopulateDataMsmsWorkflow()
+    req = PopulateDataMsmsRequest(mode=PopulateMode.AUTO)
+    result = workflow.execute(mock_env, req)
+    assert result.rows_populated > 0
+    assert not result.errors
+
+    # 5. Verify results
+    df = pd.read_csv(csv_path, dtype=str).fillna("")
+
+    # FP1 IN1
+    fp1_in1_avg = df[df["METERNAME"] == "TH_FPIN1_AVG_PE13R"].iloc[0]
+    assert fp1_in1_avg["TNBNEWREADING"] != ""
+    assert 27.5 <= float(fp1_in1_avg["TNBNEWREADING"]) <= 28.5
+    assert fp1_in1_avg["ACTSTART"] == "2026-06-09T10:00:00+08:00"
+
+    fp1_in1_max = float(df[df["METERNAME"] == "TH_FPIN1_MAX_PE13R"].iloc[0]["TNBNEWREADING"])
+    fp1_in1_ref = float(df[df["METERNAME"] == "TH_FPIN1_REF_PE13R"].iloc[0]["TNBNEWREADING"])
+    fp1_in1_del = float(df[df["METERNAME"] == "TH_FPIN1_DEL_PE13R"].iloc[0]["TNBNEWREADING"])
+    assert round(fp1_in1_max - fp1_in1_ref, 1) == fp1_in1_del
+    assert fp1_in1_del < 1.0
+
+    # FP1 OT1
+    fp1_ot1_avg = df[df["METERNAME"] == "TH_FPOT1_AVG_PE13R"].iloc[0]
+    assert fp1_ot1_avg["TNBNEWREADING"] != ""
+
+    # Inactive feeders must be blank
+    fp1_ot2_avg = df[df["METERNAME"] == "TH_FPOT2_AVG_PE13R"].iloc[0]
+    assert fp1_ot2_avg["TNBNEWREADING"] == ""
+
+    fp1_ot3_avg = df[df["METERNAME"] == "TH_FPOT3_AVG_PE13R"].iloc[0]
+    assert fp1_ot3_avg["TNBNEWREADING"] == ""
+
+    fp1_earth = df[df["METERNAME"] == "TH_EARTH_AVG_PE13R"].iloc[0]
+    assert fp1_earth["TNBNEWREADING"] == ""
+
+    # FP2 IN1 (board avg was 29.5)
+    fp2_in1_avg = df[(df["TNBLOCATION"].str.endswith("/FP/FP2")) & (df["METERNAME"] == "TH_FPIN1_AVG_PE13R")].iloc[0]
+    assert fp2_in1_avg["TNBNEWREADING"] != ""
+    assert 29.0 <= float(fp2_in1_avg["TNBNEWREADING"]) <= 30.0
+
 

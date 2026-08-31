@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
-from datetime import date, datetime, time
+from datetime import datetime, time
 import logging
 from pathlib import Path
 import re
@@ -19,13 +19,19 @@ import openpyxl
 from src.core.normalizers import (
     _parse_date_object,
     extract_background_temperature,
-    format_iso8601,
     normalize_date_str,
     normalize_for_csv,
 )
 from src.project.environment import ProjectEnvironment
 from src.quick_report.defects import MasterQr03DefectRepository, ViDefectRecord
-from src.testsheet.mapper import TestsheetReadingMapper
+from src.testsheet.feeder_thermal import (
+    FEEDER_CHANNEL_COLUMNS,
+    extract_board_average_temperature,
+    is_active_feeder_cable,
+    parse_feeder_meter,
+    synthesize_feeder_thermal_readings,
+)
+from src.testsheet.mapper import TestsheetReadingMapper, parse_equipment_index
 from src.testsheet.models import SubstationTestsheetPackage
 from src.testsheet.repository import SubstationTestsheetRepository
 from src.workflows.models import (
@@ -217,7 +223,6 @@ class PopulateDataMsmsExtractor:
         """Extract TOTAL PE lookup, testsheet packages, and CSV paths."""
         total_pe_path = environment.storage.get_total_pe_path()
         testsheet_dir = environment.storage.get_testsheet_dir()
-        to_be_filled_dir = environment.storage.get_msms_to_be_filled_dir()
 
         # 1. Read TOTAL PE (DataCycle1)
         wb_pe = openpyxl.load_workbook(total_pe_path, data_only=True)
@@ -484,10 +489,60 @@ class PopulateDataMsmsTransformer:
                 row["ACTFINISH"] = act_finish
             return CsvRowEvaluation(row_dict=row, is_populated=True)
 
-        # 3. Numeric GAUGE meters
+        # 3. Feeder Pillar (LVDB / FP) Thermal Synthesis
+        feeder_parsed = parse_feeder_meter(meter_name)
+        if feeder_parsed is not None and "PCE Testsheet" in wb.sheetnames:
+            feeder_channel, metric_suffix = feeder_parsed
+            ws_ts = wb["PCE Testsheet"]
+
+            # Determine whether equipment is FP1 or FP2
+            fp_idx = 1
+            if tnb_loc:
+                try:
+                    cat, idx = parse_equipment_index(tnb_loc)
+                    if cat == "FP":
+                        fp_idx = idx
+                except ValueError:
+                    pass
+
+            # Cable type row: 45 for FP1, 47 for FP2
+            # Board average cell: R50 for FP1, R54 for FP2
+            col_letter = FEEDER_CHANNEL_COLUMNS.get(feeder_channel)
+            if col_letter:
+                cable_row = 45 if fp_idx == 1 else 47
+                cable_val = ws_ts[f"{col_letter}{cable_row}"].value
+
+                if is_active_feeder_cable(cable_val):
+                    board_temp_cell = "R50" if fp_idx == 1 else "R54"
+                    board_temp_val = ws_ts[board_temp_cell].value
+                    board_temp = extract_board_average_temperature(board_temp_val)
+
+                    if board_temp is not None:
+                        sub_type = pkg.data.substation_type if (pkg.data and pkg.data.substation_type) else ""
+                        seed_key = f"{fl_erms}:{wo_num}:{tnb_loc}"
+                        synth_readings = synthesize_feeder_thermal_readings(
+                            board_avg_temp=board_temp,
+                            feeder_id=feeder_channel,
+                            substation_type=sub_type,
+                            seed_key=seed_key,
+                        )
+                        reading_val = synth_readings.get(metric_suffix)
+                        if reading_val is not None:
+                            row["TNBNEWREADING"] = normalize_for_csv(reading_val)
+                            row["TNBNEWREADINGDATE"] = reading_date
+                            if "ACTSTART" in row and act_start:
+                                row["ACTSTART"] = act_start
+                            if "ACTFINISH" in row and act_finish:
+                                row["ACTFINISH"] = act_finish
+                            return CsvRowEvaluation(row_dict=row, is_populated=True)
+
+            # Inactive, spare, or unconfigured feeder stays blank
+            return CsvRowEvaluation(row_dict=row, is_populated=False)
+
+        # 4. Numeric GAUGE meters
         target = self.mapper.get_target(meter_name, tnb_loc)
         if target is None:
-            # Stub meter (e.g. Feeder Pillar or LV compartment)
+            # Stub meter (e.g. Earth meters or LV compartment)
             return CsvRowEvaluation(row_dict=row, is_unmapped_meter=True)
 
         sheet_name, cell_coord = target

@@ -333,16 +333,43 @@ TX index from TNBLOCATION `/TX/DTX1` → TX1 (rows 33-37), `/TX/DTX2` → TX2 (r
 
 ### 4D. LV Distribution Board / Feeder Pillar (`TNBLOCATION = .../FP/FP1`, `.../FP/FP2`)
 
-The `PCE Testsheet` (rows 43–65) records equipment configuration and nameplate specs for LVDB/FP, but **does not capture numeric thermal inspection measurements**.
+The `PCE Testsheet` captures LVDB / Feeder Pillar electrical network topology, cable configurations, and average board temperatures across Rows 44–55:
+- **LVDB / FP 1**: Rows 44 (Config / Destination) & 45 (Cable Type / Active Marker) | Thermal Reading Source: **`R50`**
+- **LVDB / FP 2**: Rows 46 (Config / Destination) & 47 (Cable Type / Active Marker) | Thermal Reading Source: **`R54`**
 
-#### 1. Thermal Meters (All 64 Meters $\to$ Stubs)
-All numeric thermal meters under `/FP/FP1` and `/FP/FP2` are marked as **stubs** (`is_stub=True`). In the output CSV, `TNBNEWREADING` and `TNBNEWREADINGDATE` remain completely blank/empty (`""`):
+#### 1. Incomer & Outgoing Feeder Physical Column Coordinates
 
-- **Incomer 1–3 Thermal (12 meters)**: `TH_FPIN1_AVG_*`, `TH_FPIN1_MAX_*`, `TH_FPIN1_REF_*`, `TH_FPIN1_DEL_*`, `TH_FPIN2_*`, `TH_FPIN3_*`
-- **Outgoing 1–12 Thermal (48 meters)**: `TH_FPOT1_*` through `TH_FPOT12_*` (AVG, MAX, REF, DEL)
-- **Earthing Thermal (4 meters)**: `TH_EARTH_AVG_*`, `TH_EARTH_MAX_*`, `TH_EARTH_REF_*`, `TH_EARTH_DEL_*`
+| Feeder Channel | Feeder Name / Config | Cable Type (Active Gate) | Target MSMS Meter Base | Thermal Reading Cell |
+|---|:---:|:---:|---|:---:|
+| **Incomer 1 (IN1)** | `D44` (FP1) / `D46` (FP2) | **`D45`** (FP1) / **`D47`** (FP2) | `TH_FPIN1_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Incomer 2 (IN2)** | `E44` (FP1) / `E46` (FP2) | **`E45`** (FP1) / **`E47`** (FP2) | `TH_FPIN2_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Incomer 3 (IN3)** | `G44` (FP1) / `G46` (FP2) | **`G45`** (FP1) / **`G47`** (FP2) | `TH_FPIN3_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 1 (OT1)** | `I44` (FP1) / `I46` (FP2) | **`I45`** (FP1) / **`I47`** (FP2) | `TH_FPOT1_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 2 (OT2)** | `J44` (FP1) / `J46` (FP2) | **`J45`** (FP1) / **`J47`** (FP2) | `TH_FPOT2_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 3 (OT3)** | `K44` (FP1) / `K46` (FP2) | **`K45`** (FP1) / **`K47`** (FP2) | `TH_FPOT3_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 4 (OT4)** | `L44` (FP1) / `L46` (FP2) | **`L45`** (FP1) / **`L47`** (FP2) | `TH_FPOT4_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 5 (OT5)** | `M44` (FP1) / `M46` (FP2) | **`M45`** (FP1) / **`M47`** (FP2) | `TH_FPOT5_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 6 (OT6)** | `N44` (FP1) / `N46` (FP2) | **`N45`** (FP1) / **`N47`** (FP2) | `TH_FPOT6_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 7 (OT7)** | `O44` (FP1) / `O46` (FP2) | **`O45`** (FP1) / **`O47`** (FP2) | `TH_FPOT7_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 8 (OT8)** | `P44` (FP1) / `P46` (FP2) | **`P45`** (FP1) / **`P47`** (FP2) | `TH_FPOT8_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 9 (OT9)** | `Q44` (FP1) / `Q46` (FP2) | **`Q45`** (FP1) / **`Q47`** (FP2) | `TH_FPOT9_*` | **`R50`** (FP1) / **`R54`** (FP2) |
+| **Outgoing 10 (OT10)**| `R44` (FP1) / `R46` (FP2) | **`R45`** (FP1) / **`R47`** (FP2) | `TH_FPOT10_*` | **`R50`** (FP1) / **`R54`** (FP2) |
 
-#### 2. Visual Inspection Checks
+#### 2. Active Feeder Gating Rules & Thermal Synthesis
+- An Incomer or Outgoing feeder is considered **active** if its corresponding cell in Row 45 (for LVDB 1) or Row 47 (for LVDB 2) contains a non-empty cable insulation type (e.g., `XLPE`, `PILC`, `ABC`, `BUSBAR`).
+- A feeder is considered **inactive / unused / spare** if the cell is empty/blank, `-`, `SPARE`, or `N/A`.
+- If inactive or spare, the target thermal meter in the MSMS CSV remains completely blank (`""`).
+- When active, the feeder's 4 thermal readings (`AVG`, `MAX`, `REF`, `DEL`) are synthesized from the base board average temperature at `R50` (LVDB 1) or `R54` (LVDB 2):
+  - **Indoor / Attached Substation** (`PE`, `ATTACH`, `INDOOR`): Base jitter $\in [-0.5, +0.5]^\circ\text{C}$.
+  - **Outdoor / Compact / PAT Substation** (`CS`, `PAT`, `POLE`, `OUTDOOR`, `_PE13O`): Base jitter $\in [-1.0, +1.0]^\circ\text{C}$.
+  - $T_{\text{avg}} = \text{round}(T_{\text{board}} + \text{jitter}, 1)$
+  - $\Delta T$ is generated strictly between $0.2^\circ\text{C}$ and $0.8^\circ\text{C}$ (ensuring $\Delta T < 1.0^\circ\text{C}$ always).
+  - $T_{\text{ref}} = \text{round}(T_{\text{avg}} - \Delta T / 2, 1)$
+  - $T_{\text{max}} = \text{round}(T_{\text{ref}} + \Delta T, 1)$
+  - Invariants: $\Delta T = T_{\text{max}} - T_{\text{ref}}$ is exact, and $\Delta T < 1.0^\circ\text{C}$.
+- `TH_EARTH_*` and outgoings beyond populated channels remain blank (`""`).
+
+#### 3. Visual Inspection Checks
 The 4 characteristic inspection checks under Feeder Pillar (`VI11_FP_PLOCK_RMU`, `VI11_FP_LVDBGUARD_RMU`, `VI11_FP_LINK/FUSE_RMU`, `VI11_FP_TDI_RMU`) are resolved via the structured `QR03 VI` defect list (see Section 4E).
 
 ---

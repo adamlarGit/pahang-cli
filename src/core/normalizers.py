@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
+from decimal import Decimal, ROUND_HALF_UP
 import math
 import re
 from typing import Any
@@ -320,7 +321,8 @@ def normalize_for_csv(val: Any) -> str:
     if isinstance(val, int):
         return str(val)
     if isinstance(val, float):
-        return str(val)
+        d = Decimal(str(round(val, 6)))
+        return str(d.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
     if isinstance(val, (datetime, date)):
         return format_iso8601(val)
     s = str(val).strip()

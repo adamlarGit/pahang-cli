@@ -14,7 +14,7 @@ Interactive CLI application for Pahang area PE inspection workflows, multi-proje
 - **Generate Quick Report**: Interactively select 3-tier inspection date folders (`<STATION>/<MONTH>/<DATE>/`) and compile 7-part docx visual reports directly into counterpart `QUICK REPORT/<STATION>/<MONTH>/<DATE>/` directory trees with dynamic equipment condition pairs, room-based fire safety layouts, and canonical `(IR+US+TEV+VI)` defect suffixes.
 - **Generate WhatsApp Report**: Interactively select quick report batches to generate formatted WhatsApp inspection summary text files and station reports.
 - **Substation Post-Processing Pipeline**: 1-Click automated post-processing pipeline for substation deliverables combining signature replacement, diagonal borders, and PDF export/merging.
-- **MSMS Suite & Work Order Sync**: Dedicated modular workflows to consolidate MSMS spreadsheets, enrich DATA MSMS with TOTAL PE metadata, propagate Work Orders (WO), ingest raw CSVs, and populate data MSMS records.
+- **MSMS Suite & Work Order Sync**: Dedicated modular workflows to consolidate MSMS spreadsheets, enrich DATA MSMS with TOTAL PE metadata, propagate Work Orders (WO), ingest raw CSVs, and populate data MSMS records from testsheets with active Feeder Pillar thermal synthesis, 1-decimal-place quantization, and interactive overwrite controls.
 - **Standalone Utility Actions**: Batch DOCX/Testsheet to PDF conversion, PDF merging, diagonal cell borders, signature replacement, FLIR photo renaming, MSMS sync, and recursive `desktop.ini` removal.
 
 ## Requirements

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Callable
 from src import cli_selectors
 from src.workflows.models import (
     GenerateTestsheetFolderRequest,
+    PopulateDataMsmsRequest,
     PopulateMode,
     PopulateTotalPeRequest,
     QuickReportMode,
@@ -453,14 +454,61 @@ class PopulateDataMsmsAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for populating MSMS CSVs from testsheets."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
+        options = [
+            cli_selectors.SelectOption("Auto (process new/unprocessed only)", "auto"),
+            cli_selectors.SelectOption("All (re-process all CSV files)", "all"),
+            cli_selectors.SelectOption("Select specific folder", "select"),
+            cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"),
+        ]
+        mode_str = cli_selectors.select_one("Populate Data MSMS - Processing Mode", options)
+        if mode_str in ("__cancel__", None):
+            print("Processing cancelled.")
+            return None
+
+        overwrite = False
+        target_folder_names: tuple[str, ...] = ()
+        if mode_str == "select":
+            selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
+            if selected_path is None:
+                print("Processing cancelled.")
+                return None
+            target_folder_names = (selected_path.name, str(selected_path))
+            pop_mode = PopulateMode.SPECIFIC_FOLDERS
+            overwrite_prompt = cli_selectors.confirm("Overwrite already filled readings in selected folder?", default=False)
+            if overwrite_prompt is True:
+                overwrite = True
+        elif mode_str == "all":
+            pop_mode = PopulateMode.ALL
+            overwrite_prompt = cli_selectors.confirm("Overwrite already filled readings in all files?", default=False)
+            if overwrite_prompt is True:
+                overwrite = True
+        else:
+            pop_mode = PopulateMode.AUTO
+
+        request = PopulateDataMsmsRequest(
+            mode=pop_mode,
+            target_folder_names=target_folder_names,
+            overwrite=overwrite,
+            progress_sink=_cli_progress_sink,
+        )
+
         service = WorkflowService()
-        result = service.run_populate_data_msms(environment)
+        result = service.run_populate_data_msms(environment, request)
         print(
             f"CSV files processed: {result.csv_files_processed}, "
             f"Rows populated: {result.rows_populated}, "
             f"Rows skipped: {result.rows_skipped_already_filled}"
         )
+        if result.warnings:
+            print(f"Warnings ({len(result.warnings)}):")
+            for w in result.warnings:
+                print(f"  - {w}")
+        if result.errors:
+            print(f"Errors ({len(result.errors)}):")
+            for e in result.errors:
+                print(f"  - {e}")
         return result
+
 
 
 PROJECT_WORKFLOW_ACTIONS: tuple[ProjectWorkflowAction, ...] = (

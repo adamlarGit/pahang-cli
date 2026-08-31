@@ -5,6 +5,17 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-08-31
+
+### Added
+- **Feeder Pillar Thermal Synthesis (`src/testsheet/feeder_thermal.py`)**: Deterministic thermal synthesis engine for active Feeder Pillar incomers and outgoings using SHA-256 context hashing, indoor ($\pm 0.5^\circ\text{C}$) / outdoor ($\pm 1.0^\circ\text{C}$) jitter, and invariant delta-T ($\Delta T = T_{\text{max}} - T_{\text{ref}} < 1.0^\circ\text{C}$).
+- **Active Feeder Cable Gating**: Checks cable type row 45 (FP1) or row 47 (FP2) for active insulation types (`XLPE`, `PILC`, `ABC`, `BUSBAR`, `B/B`), cleanly rejecting inactive sentinels (`SPARE`, `-`, `N/A`, `TIADA`) and leaving unpopulated ways blank.
+- **Robust Testsheet Temperature Parsing**: Implemented regex extractor `extract_board_average_temperature()` handling testsheet string formats (`'AVG 28.5'`, `'AVG 34.5'`, `'27.2 °C'`) and native floats from cells `R50`/`R54`.
+- **Interactive CLI Controls for Populate Data MSMS**: Added mode selection (`Auto`, `All`, `Select specific folder`) and interactive `Overwrite already filled readings? (y/N)` confirmation to Option 12 in `src/project_workflow_actions.py`.
+
+### Changed
+- **Single Decimal Place Quantization (`normalize_for_csv`)**: Enforced exact 1-decimal-place rounding via `Decimal.quantize(ROUND_HALF_UP)` for all numeric float readings in CSV output, eliminating floating point binary precision artifacts (e.g. `0.10000000000000142` $\to$ `0.1`) and formula averages (`39.45` $\to$ `39.5`).
+
 ## [1.10.1] - 2026-08-25
 
 ### Fixed

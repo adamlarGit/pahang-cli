@@ -50,6 +50,7 @@ Refactor the MSMS and Total PE workflows into cleanly separated, independently i
 - [Implement Propagate Work Orders Workflow](013-implement-propagate-wo.md) — Implemented 6-stage ETL `PropagateWoWorkflow` propagating WO mappings to `TOTAL PE.xlsx` Col F with strict formula and column preservation. 19 unit tests passing.
 - [Implement Ingest MSMS CSV & Populate Data MSMS Workflows](014-implement-ingest-and-populate-msms.md) — Implemented 6-stage ETL `IngestMsmsCsvWorkflow` (multi-pattern date parser, SHA-256 dedup, canonical renaming) and `PopulateDataMsmsWorkflow` (testsheet coordinate resolution, QR03 VI defect matching, in-place CSV updates). 13 unit tests passing.
 - [Deprecate Legacy update_data_msms, Rewire Workflows to Normalizers & Purge Dead Code](015-deprecate-and-cleanup.md) — Rewired existing workflows to `src/core/normalizers.py`, deleted legacy `update_data_msms.py` and obsolete methods, resolved CLI action bindings, and verified full 270-test regression suite.
+- [LVDB / Feeder Pillar Mapping & Thermal Synthesis Design](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/msms-total-pe-refactoring/research/007-canonical-testsheet-mapper.md) — Incomers 1–3 mapped from Cols D, E, G; Outgoings 1–10 mapped from Cols I–R (Rows 44/45 for LVDB 1, Rows 46/47 for LVDB 2). Non-empty cable insulation type (`XLPE`, `PILC`, `ABC`, `BUSBAR`) gates active status; inactive/spare (`-`, `SPARE`, `N/A`, blank) remain empty; active channels synthesize `AVG`, `MAX`, `REF`, and `DEL` based on base board average temperature at `R50` (LVDB 1) or `R54` (LVDB 2) with indoor ($\pm 0.5^\circ\text{C}$) / outdoor ($\pm 1.0^\circ\text{C}$) jitter and invariant $\Delta T < 1.0^\circ\text{C}$.
 
 ## Execution Tickets
 
@@ -59,6 +60,7 @@ Refactor the MSMS and Total PE workflows into cleanly separated, independently i
 4. ~[Implement Propagate Work Orders Workflow](013-implement-propagate-wo.md)~ — **CLOSED**
 5. ~[Implement Ingest MSMS CSV & Populate Data MSMS Workflows](014-implement-ingest-and-populate-msms.md)~ — **CLOSED**
 6. ~[Deprecate Legacy update_data_msms, Rewire Workflows to Normalizers & Purge Dead Code](015-deprecate-and-cleanup.md)~ — **CLOSED**
+7. ~[Implement Feeder Pillar Thermal Synthesis & Active Feeder Gating](016-implement-feeder-pillar-thermal-synthesis.md)~ — **CLOSED**
 
 ## Refactoring Status: COMPLETE
 

@@ -46,6 +46,12 @@ Complete inventory exported to [research/006-metername-mapping-table.md](file://
   2. `TV_S11_*` / `US_S11_*` / `US_DTX_*`: TEV & Ultrasound numeric GAUGE readings mapped from `PCE Testsheet`.
   3. `VI11_SG_*` / `VI11_TX_*` / `VI11_SUB_*` / `VI11_SEC_*` / `VI11_FP_*`: Visual Inspection CHARACTERISTIC boolean (`YES`/`NO`) readings mapped from `PCE VI` checklist rows (B23:B45).
   4. `BG_ROOM_*`: Room environment GAUGE readings mapped from `PCE Testsheet` cell P6 (TEV), S6 (Humidity), W6 (Ambient Temp).
+- **LVDB / Feeder Pillar Column Mapping & Active Gating**:
+  - Incomer 1–3 (`TH_FPIN1..3_*`): Columns `D`, `E`, `G` (Row 44/46 config, Row 45/47 cable type).
+  - Outgoing 1–10 (`TH_FPOT1..10_*`): Columns `I` through `R` (Row 44/46 config, Row 45/47 cable type).
+  - Active check: Non-empty cable insulation type in Row 45 (LVDB 1) or Row 47 (LVDB 2) — e.g., `XLPE`, `PILC`, `ABC`, `BUSBAR`.
+  - Inactive / Unused / Spare: Empty/blank cell, `-`, `SPARE`, or `N/A`. Inactive feeder rows remain completely blank (`""`).
+  - Thermal Synthesis: For active feeders, synthesize `AVG`, `MAX`, `REF`, and `DEL` based on board average temperature from `R50` (LVDB 1) or `R54` (LVDB 2), with substation jitter and $\Delta T < 1.0^\circ\text{C}$.
 - **Substation Variant Suffixes**:
   - `_PE13R`: RMU Switchgear variant
   - `_PE13V`: VCB Switchgear variant
@@ -59,4 +65,5 @@ Complete inventory exported to [research/006-metername-mapping-table.md](file://
   - `ACTSTART` = `Date (P4)` + `Time In (P5)`
   - `ACTFINISH` = `Date (P4)` + `Time Out (S5)`
   - `TNBNEWREADINGDATE` = Execution timestamp (ISO-8601 string format).
+
 

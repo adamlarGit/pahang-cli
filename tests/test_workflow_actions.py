@@ -183,24 +183,76 @@ def test_ingest_msms_csv_action(mock_env: ProjectEnvironment, capsys: pytest.Cap
         assert "Files ingested: 4, Duplicates skipped: 1" in captured
 
 
-def test_populate_data_msms_action(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
+def test_populate_data_msms_action_auto(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
     from src.project_workflow_actions import PopulateDataMsmsAction
-    from src.workflows.models import PopulateDataMsmsResult
+    from src.workflows.models import PopulateDataMsmsResult, PopulateMode
 
     action = PopulateDataMsmsAction("Populate Data MSMS")
-    with patch("src.workflows.service.WorkflowService.run_populate_data_msms") as mock_run:
-        mock_run.return_value = PopulateDataMsmsResult(
-            csv_files_processed=2,
-            rows_populated=50,
-            rows_skipped_already_filled=5,
-        )
+    with patch("src.cli_selectors.select_one", return_value="auto"):
+        with patch("src.workflows.service.WorkflowService.run_populate_data_msms") as mock_run:
+            mock_run.return_value = PopulateDataMsmsResult(
+                csv_files_processed=2,
+                rows_populated=50,
+                rows_skipped_already_filled=5,
+            )
+            res = action.execute(mock_env)
+            assert res.csv_files_processed == 2
+            assert res.rows_populated == 50
+            assert res.rows_skipped_already_filled == 5
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args
+            req = call_args[0][1]
+            assert req.mode == PopulateMode.AUTO
+            assert req.overwrite is False
+            captured = capsys.readouterr().out
+            assert "CSV files processed: 2, Rows populated: 50, Rows skipped: 5" in captured
+
+
+def test_populate_data_msms_action_all_with_overwrite(mock_env: ProjectEnvironment) -> None:
+    from src.project_workflow_actions import PopulateDataMsmsAction
+    from src.workflows.models import PopulateDataMsmsResult, PopulateMode
+
+    action = PopulateDataMsmsAction("Populate Data MSMS")
+    with patch("src.cli_selectors.select_one", return_value="all"):
+        with patch("src.cli_selectors.confirm", return_value=True):
+            with patch("src.workflows.service.WorkflowService.run_populate_data_msms") as mock_run:
+                mock_run.return_value = PopulateDataMsmsResult(csv_files_processed=3, rows_populated=100)
+                res = action.execute(mock_env)
+                assert res.rows_populated == 100
+                call_args = mock_run.call_args
+                req = call_args[0][1]
+                assert req.mode == PopulateMode.ALL
+                assert req.overwrite is True
+
+
+def test_populate_data_msms_action_select_folder(mock_env: ProjectEnvironment) -> None:
+    from src.project_workflow_actions import PopulateDataMsmsAction
+    from src.workflows.models import PopulateDataMsmsResult, PopulateMode
+
+    action = PopulateDataMsmsAction("Populate Data MSMS")
+    selected_path = Path("C:/data/TESTSHEET/KUANTAN/01. AUGUST/18-08-2026")
+    with patch("src.cli_selectors.select_one", return_value="select"):
+        with patch("src.cli_selectors.select_pahang_date_folder", return_value=selected_path):
+            with patch("src.cli_selectors.confirm", return_value=False):
+                with patch("src.workflows.service.WorkflowService.run_populate_data_msms") as mock_run:
+                    mock_run.return_value = PopulateDataMsmsResult(csv_files_processed=1, rows_populated=20)
+                    res = action.execute(mock_env)
+                    assert res.rows_populated == 20
+                    call_args = mock_run.call_args
+                    req = call_args[0][1]
+                    assert req.mode == PopulateMode.SPECIFIC_FOLDERS
+                    assert req.target_folder_names == ("18-08-2026", str(selected_path))
+                    assert req.overwrite is False
+
+
+def test_populate_data_msms_action_cancel(mock_env: ProjectEnvironment) -> None:
+    from src.project_workflow_actions import PopulateDataMsmsAction
+
+    action = PopulateDataMsmsAction("Populate Data MSMS")
+    with patch("src.cli_selectors.select_one", return_value="__cancel__"):
         res = action.execute(mock_env)
-        assert res.csv_files_processed == 2
-        assert res.rows_populated == 50
-        assert res.rows_skipped_already_filled == 5
-        mock_run.assert_called_once_with(mock_env)
-        captured = capsys.readouterr().out
-        assert "CSV files processed: 2, Rows populated: 50, Rows skipped: 5" in captured
+        assert res is None
+
 
 
 def test_project_workflow_actions_registry() -> None:
