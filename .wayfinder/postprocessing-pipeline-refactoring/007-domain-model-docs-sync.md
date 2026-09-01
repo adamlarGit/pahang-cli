@@ -1,5 +1,5 @@
 <!-- label: wayfinder:task -->
-<!-- status: open -->
+<!-- status: closed -->
 <!-- blocked-by: 006 -->
 # 007: Domain Model & Documentation Sync
 

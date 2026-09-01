@@ -6,6 +6,7 @@ import io
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+from types import TracebackType
 from typing import Sequence
 
 from PyPDF2 import PdfReader, PdfWriter
@@ -15,7 +16,6 @@ def _is_pce_testsheet_sheet(ws_name: str) -> bool:
     """Check if a worksheet name corresponds to a PCE Testsheet sheet."""
     name = ws_name.strip().lower()
     return (
-
         name == "pce testsheet"
         or name.startswith("pce testsheet ")
         or name.startswith("pce testsheet(")
@@ -68,6 +68,157 @@ def select_and_sort_sheets(
     return testsheet_names + vi_names
 
 
+def configure_uniform_printer(excel_app: object) -> None:
+    """Configure ActivePrinter to a standardized virtual PDF printer (e.g. Microsoft Print to PDF) to ensure uniform sheet scaling."""
+    try:
+        current_printer = str(getattr(excel_app, "ActivePrinter", ""))
+        preferred_printers = ["microsoft print to pdf", "microsoft xps document writer"]
+        if any(p in current_printer.lower() for p in preferred_printers):
+            return
+
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows NT\CurrentVersion\Devices",
+        ) as key:
+            devices = {}
+            i = 0
+            while True:
+                try:
+                    name, val, _ = winreg.EnumValue(key, i)
+                    parts = str(val).split(",")
+                    port = parts[1].strip() if len(parts) >= 2 else ""
+                    devices[name.lower()] = f"{name} on {port}"
+                    i += 1
+                except OSError:
+                    break
+
+            for pref in preferred_printers:
+                for dev_name, full_spec in devices.items():
+                    if pref in dev_name:
+                        excel_app.ActivePrinter = full_spec
+                        return
+    except Exception as exc:
+        logging.debug("Could not configure uniform printer: %s", exc)
+
+
+class BatchComSession:
+    """Context manager managing the shared lifecycle of Word and Excel COM applications."""
+
+    def __init__(
+        self,
+        word_app: object | None = None,
+        excel_app: object | None = None,
+        configure_printer: bool = True,
+        suppress_errors: bool = False,
+    ) -> None:
+        self.word_app = word_app
+        self.excel_app = excel_app
+        self.configure_printer = configure_printer
+        self.suppress_errors = suppress_errors
+        self._co_initialized: bool = False
+        self._closed: bool = False
+
+    def __enter__(self) -> BatchComSession:
+        self.open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+    def open(self) -> BatchComSession:
+        """Initialize COM and start Word/Excel applications if not already provided."""
+        if self.word_app is not None and self.excel_app is not None:
+            return self
+
+        try:
+            import pythoncom
+            import win32com.client as win32
+
+            pythoncom.CoInitialize()
+            self._co_initialized = True
+
+            if self.word_app is None:
+                word = win32.DispatchEx("Word.Application")
+                word.Visible = False
+                word.DisplayAlerts = 0
+                self.word_app = word
+
+            if self.excel_app is None:
+                excel = win32.DispatchEx("Excel.Application")
+                excel.Visible = False
+                excel.DisplayAlerts = False
+                if self.configure_printer:
+                    configure_uniform_printer(excel)
+                self.excel_app = excel
+
+        except Exception as exc:
+            logging.warning("Could not initialize COM session: %s", exc)
+            self.close()
+            if not self.suppress_errors:
+                raise
+        return self
+
+    def close(self) -> None:
+        """Gracefully quit COM applications, release references, and uninitialize COM."""
+        if self._closed:
+            return
+        self._closed = True
+
+        # Cleanup Excel
+        if self.excel_app is not None:
+            excel = self.excel_app
+            self.excel_app = None
+            try:
+                excel.Quit()
+            except Exception as exc:
+                logging.debug("Error quitting Excel COM: %s", exc)
+            finally:
+                del excel
+
+        # Cleanup Word
+        if self.word_app is not None:
+            word = self.word_app
+            self.word_app = None
+            try:
+                word.Quit()
+            except Exception as exc:
+                logging.debug("Error quitting Word COM: %s", exc)
+            finally:
+                del word
+
+        # Cleanup COM runtime
+        if self._co_initialized:
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+            except Exception as exc:
+                logging.debug("Error uninitializing pythoncom: %s", exc)
+            finally:
+                self._co_initialized = False
+
+
+def batch_com_session(
+    word_app: object | None = None,
+    excel_app: object | None = None,
+    configure_printer: bool = True,
+    suppress_errors: bool = False,
+) -> BatchComSession:
+    """Create and return a BatchComSession context manager."""
+    return BatchComSession(
+        word_app=word_app,
+        excel_app=excel_app,
+        configure_printer=configure_printer,
+        suppress_errors=suppress_errors,
+    )
+
+
 class DocumentConverter(ABC):
     """Abstract base class defining the document converter contract."""
 
@@ -78,6 +229,7 @@ class DocumentConverter(ABC):
         pdf_path: Path,
         target_sheets: Sequence[str] | None = None,
         excel_app: object | None = None,
+        session: BatchComSession | None = None,
     ) -> Path:
         """Convert an Excel testsheet workbook to a PDF file."""
         ...
@@ -88,6 +240,7 @@ class DocumentConverter(ABC):
         docx_path: Path,
         pdf_path: Path,
         word_app: object | None = None,
+        session: BatchComSession | None = None,
     ) -> Path:
         """Convert a Word document (`.docx`) to a PDF file."""
         ...
@@ -117,36 +270,7 @@ class ComDocumentConverter(DocumentConverter):
 
     def _configure_uniform_printer(self, excel_app: object) -> None:
         """Configure ActivePrinter to a standardized virtual PDF printer (e.g. Microsoft Print to PDF) to ensure uniform sheet scaling."""
-        try:
-            current_printer = str(getattr(excel_app, "ActivePrinter", ""))
-            preferred_printers = ["microsoft print to pdf", "microsoft xps document writer"]
-            if any(p in current_printer.lower() for p in preferred_printers):
-                return
-
-            import winreg
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows NT\CurrentVersion\Devices",
-            ) as key:
-                devices = {}
-                i = 0
-                while True:
-                    try:
-                        name, val, _ = winreg.EnumValue(key, i)
-                        parts = str(val).split(",")
-                        port = parts[1].strip() if len(parts) >= 2 else ""
-                        devices[name.lower()] = f"{name} on {port}"
-                        i += 1
-                    except OSError:
-                        break
-
-                for pref in preferred_printers:
-                    for dev_name, full_spec in devices.items():
-                        if pref in dev_name:
-                            excel_app.ActivePrinter = full_spec
-                            return
-        except Exception as exc:
-            logging.debug("Could not configure uniform printer: %s", exc)
+        configure_uniform_printer(excel_app)
 
     def _configure_target_page_setup(self, target: object) -> None:
         """Enforce standardized PageSetup properties (`PaperSize=9`, `Orientation=2`, `FitToPagesWide=1`, `FitToPagesTall=1`, `Zoom=False`)."""
@@ -214,8 +338,12 @@ class ComDocumentConverter(DocumentConverter):
         pdf_path: Path,
         target_sheets: Sequence[str] | None = None,
         excel_app: object | None = None,
+        session: BatchComSession | None = None,
     ) -> Path:
         """Convert testsheet workbook to PDF using COM automation."""
+        if session is not None and excel_app is None:
+            excel_app = session.excel_app
+
         import pythoncom
         import win32com.client as win32
 
@@ -294,8 +422,12 @@ class ComDocumentConverter(DocumentConverter):
         docx_path: Path,
         pdf_path: Path,
         word_app: object | None = None,
+        session: BatchComSession | None = None,
     ) -> Path:
         """Convert Word document to PDF using COM SaveAs2."""
+        if session is not None and word_app is None:
+            word_app = session.word_app
+
         import pythoncom
         import win32com.client as win32
 
@@ -388,6 +520,7 @@ class FakeDocumentConverter(DocumentConverter):
         pdf_path: Path,
         target_sheets: Sequence[str] | None = None,
         excel_app: object | None = None,
+        session: BatchComSession | None = None,
     ) -> Path:
         """Record the call and write valid mock PDF content to `pdf_path`."""
         self.convert_testsheet_calls.append((xlsx_path, pdf_path, target_sheets))
@@ -408,6 +541,7 @@ class FakeDocumentConverter(DocumentConverter):
         docx_path: Path,
         pdf_path: Path,
         word_app: object | None = None,
+        session: BatchComSession | None = None,
     ) -> Path:
         """Record the call and write valid mock PDF content to `pdf_path`."""
         self.convert_docx_calls.append((docx_path, pdf_path))

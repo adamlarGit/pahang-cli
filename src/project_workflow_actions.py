@@ -11,8 +11,12 @@ from src.workflows.models import (
     PopulateDataMsmsRequest,
     PopulateMode,
     PopulateTotalPeRequest,
+    PostProcessingMode,
+    PostProcessingRequest,
+    PostProcessingSummary,
     QuickReportMode,
     QuickReportRequest,
+    QuickReportResult,
     RawMaterialRequest,
     UpdateQr02CbaRequest,
     WhatsAppReportRequest,
@@ -20,6 +24,7 @@ from src.workflows.models import (
 from src.workflows.service import WorkflowService
 
 if TYPE_CHECKING:
+    from src.postprocessing.converters import DocumentConverter
     from src.project.environment import ProjectEnvironment
 
 
@@ -309,9 +314,166 @@ VisualReportAction = QuickReportAction
 class PostProcessingPipelineAction(ProjectWorkflowAction):
     """CLI Presentation Adapter for full substation post-processing pipeline."""
 
+    def __init__(
+        self,
+        label: str,
+        runner_factory: Callable[[], Callable[[ProjectEnvironment], object]] | None = None,
+        workflow_service: WorkflowService | None = None,
+        converter: DocumentConverter | None = None,
+    ) -> None:
+        super().__init__(label, runner_factory=runner_factory)
+        self.workflow_service = workflow_service
+        self.converter = converter
+
     def execute(self, environment: ProjectEnvironment) -> object:
-        service = WorkflowService()
-        return service.run_postprocessing_pipeline(environment)
+        # 1. Scope Selection
+        scope_options = [
+            cli_selectors.SelectOption("By Date Folder (Process all substations in a date folder)", "by_date"),
+            cli_selectors.SelectOption("By Substation / FL (Select specific substations)", "by_fl"),
+            cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"),
+        ]
+        scope_choice = cli_selectors.select_one("Post-Processing Pipeline - Scope Selection", scope_options)
+        if scope_choice in ("__cancel__", None):
+            print("Processing cancelled.")
+            return None
+
+        target_dates: tuple[str, ...] = ()
+        target_fls: tuple[str, ...] = ()
+        generate_whatsapp: bool = False
+
+        if scope_choice == "by_date":
+            mode = PostProcessingMode.BY_DATE
+            selected_date_folder = cli_selectors.select_pahang_date_folder(environment=environment)
+            if selected_date_folder is None:
+                print("Processing cancelled.")
+                return None
+            target_dates = (selected_date_folder.name,)
+        else:
+            mode = PostProcessingMode.BY_FL
+            from src.workflows.postprocessing_pipeline import discover_substation_packages
+
+            packages = discover_substation_packages(environment)
+            if packages:
+                options = [
+                    cli_selectors.SelectOption(
+                        f"{p.station_name} [{p.fl_erms}] ({p.date_folder})",
+                        p.fl_erms if p.fl_erms else p.station_name,
+                    )
+                    for p in packages
+                ]
+                selected_fls = cli_selectors.select_multiple("Select substations to process", options)
+                if not selected_fls:
+                    print("Processing cancelled.")
+                    return None
+                target_fls = tuple(selected_fls)
+            else:
+                print("Enter comma-separated Functional Locations or Station Names:")
+                raw = input("Substations: ").strip()
+                if not raw:
+                    print("Processing cancelled.")
+                    return None
+                target_fls = tuple(p.strip() for p in raw.split(",") if p.strip())
+
+        # 2. Digital Signatures Selection
+        apply_signatures_prompt = cli_selectors.confirm("Apply digital signatures?", default=True)
+        if apply_signatures_prompt is None:
+            print("Processing cancelled.")
+            return None
+
+        vendor_sign_path: Path | None = None
+        tnb_sign_path: Path | None = None
+
+        if apply_signatures_prompt is True:
+            from src.workflows.replace_signatures import _select_signature_path
+
+            sign_dir = environment.get_sign_dir()
+            vendor_path, vendor_key = _select_signature_path(
+                "Select vendor signature person (Tested by / {{signvendor}}):",
+                sign_dir,
+            )
+            if vendor_key in ("__cancel__", None):
+                print("Processing cancelled.")
+                return None
+
+            tnb_default = vendor_key if vendor_key not in ("__none__", "__custom__") else None
+            tnb_path, tnb_key = _select_signature_path(
+                "Select TNB signature person (TNB Supervisor / {{signtnb}}):",
+                sign_dir,
+                default_folder=tnb_default,
+            )
+            if tnb_key in ("__cancel__", None):
+                print("Processing cancelled.")
+                return None
+
+            vendor_sign_path = vendor_path
+            tnb_sign_path = tnb_path
+
+        # 3. WhatsApp Report Prompt (BY_DATE mode only)
+        if mode == PostProcessingMode.BY_DATE:
+            generate_whatsapp_prompt = cli_selectors.confirm("Generate WhatsApp daily report?", default=True)
+            if generate_whatsapp_prompt is None:
+                print("Processing cancelled.")
+                return None
+            generate_whatsapp = generate_whatsapp_prompt
+        else:
+            generate_whatsapp = False
+
+        # 4. Dispatch Request
+        request = PostProcessingRequest(
+            mode=mode,
+            target_dates=target_dates,
+            target_fls=target_fls,
+            apply_signatures=apply_signatures_prompt,
+            vendor_signature_path=vendor_sign_path,
+            tnb_signature_path=tnb_sign_path,
+            generate_whatsapp=generate_whatsapp,
+            converter=self.converter,
+            progress_sink=_cli_progress_sink,
+        )
+
+        service = self.workflow_service or WorkflowService()
+        summary = service.run_postprocessing_pipeline(environment, request)
+        _print_postprocessing_summary(summary)
+        return summary
+
+
+def _print_postprocessing_summary(summary: PostProcessingSummary | None) -> None:
+    """Display clean formatted CLI summary box for post-processing pipeline execution."""
+    if summary is None:
+        return
+
+    total_queued = summary.total_target_count
+    total_succeeded = len(summary.processed_packages)
+    total_failed = len(summary.failed_packages)
+    total_warnings = len(summary.warnings)
+    duration_str = f"{summary.duration_seconds:.2f}s"
+
+    print("\n  =======================================================")
+    print("    📌 1-CLICK POST-PROCESSING PIPELINE SUMMARY")
+    print("  =======================================================")
+    print(f"    Total Queued    : {total_queued}")
+    print(f"    Succeeded       : {total_succeeded}")
+    print(f"    Failed          : {total_failed}")
+    print(f"    Warnings        : {total_warnings}")
+    print(f"    Duration        : {duration_str}")
+    print("  =======================================================")
+
+    if summary.final_deliverables:
+        print("\n    📄 FINAL DELIVERABLES:")
+        for path in summary.final_deliverables:
+            print(f"      ✓ {path.name}")
+
+    if summary.warnings:
+        print("\n    ⚠️ WARNINGS:")
+        for warning in summary.warnings:
+            print(f"      - {warning}")
+
+    if summary.failed_packages:
+        print("\n    ❌ FAILED SUBSTATIONS:")
+        for failure in summary.failed_packages:
+            print(f"      - [FAILED] {failure.package.station_name}: {failure.error}")
+
+    print("  =======================================================\n")
 
 
 def _select_whatsapp_report_batch(root_dir: Path) -> Path | None:

@@ -5,6 +5,23 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-09-01
+
+### Added
+- **6-Stage 1-Click Post-Processing Pipeline (`src/workflows/postprocessing_pipeline.py`)**: Lean orchestrator coordinating pre-flight integrity validation, renaming sync, WhatsApp reporting, testsheet digital signature stamping / `mode="none"` placeholder sanitization, blank cell diagonal borders, and in-place deliverable PDF merging into `QUICK REPORT/<DATE>/<STEM>.pdf`.
+- **Pre-Flight Integrity Validator (`src/workflows/postprocessing_preflight.py`)**: Fail-fast validation ensuring symmetric item counts between `QUICK REPORT/`, `TESTSHEET/` (`.xlsx` only, strictly ignoring subdirectories like `UNSORTED RAW DATA/`, `processed_testsheet/`, `pdf/`), and `RAW MATERIAL/` across 3-tier Pahang workspaces (`<STATION>/<MONTH>/<DATE>/`).
+- **Shared Batch COM Session Context Manager (`src/postprocessing/converters.py`)**: `BatchComSession` managing single-initialization Word and Excel COM application lifecycles with uniform virtual PDF printer configuration and guaranteed `try...finally` cleanup.
+- **Smart Target-Type Renaming Filter (`src/workflows/rename_files.py`)**: Enhanced `rename_files_match` with automatic content sniffing and explicit `target_type` parameters (`testsheet` vs `raw_material`), isolating auxiliary folders and loose files.
+- **Per-Substation Batch Error Resilience & Summary Box**: Per-substation error isolation allowing unaffected substations to complete while logging failures, outputting a structured CLI audit summary with metrics and execution timer.
+- **Comprehensive Test Suites**: Added 48 new unit and E2E integration tests in `tests/test_com_session.py`, `tests/test_postprocessing_preflight.py`, `tests/test_postprocessing_orchestrator.py`, `tests/test_postprocessing_cli_adapter.py`, `tests/test_postprocessing_pipeline_e2e.py`, and `tests/test_rename_files.py`.
+
+### Changed
+- **Testsheet Immutability**: Preserves raw inspection workbooks in `TESTSHEET/<DATE>/` as immutable sources of truth, writing modified working copies strictly to `TESTSHEET/<DATE>/processed_testsheet/`.
+- **Ubiquitous Domain Glossary (`CONTEXT.md`)**: Synchronized new domain concepts (`PostProcessingPipelineWorkflow`, `PreFlightValidationPolicy`, `BatchComSession`, `TestsheetImmutabilityPolicy`, `SubstationIsolatedBatchResiliencePolicy`, `SignaturePlaceholderSanitizationPolicy`).
+
+### Removed
+- **Dead Code Cleanup**: Purged obsolete converter wrappers, duplicate helpers, and unused imports across workflows.
+
 ## [1.12.1] - 2026-09-01
 
 ### Changed

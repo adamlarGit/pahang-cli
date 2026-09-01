@@ -186,3 +186,18 @@ class SubstationTestsheetPackage:
     date_str: str
     substation_number: int
     data: TestsheetData | None = None
+
+
+@dataclass(frozen=True)
+class SubstationPackage:
+    """Discovered pair of testsheet (.xlsx) and quick report (.docx) for a substation."""
+
+    __test__ = False
+
+    testsheet_xlsx: Path
+    quick_report_docx: Path
+    date_folder: str = ""
+    station_name: str = ""
+    fl_erms: str = ""
+    substation_number: int = 0
+

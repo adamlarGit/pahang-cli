@@ -17,7 +17,10 @@ from src.workflows.models import (
     PopulateDataMsmsResult,
     PopulateTotalPeRequest,
     PopulateTotalPeResult,
+    PostProcessingRequest,
+    PostProcessingSummary,
     PropagateWoRequest,
+
     PropagateWoResult,
     QuickReportRequest,
     QuickReportResult,
@@ -143,7 +146,12 @@ class WorkflowService:
         return workflow.execute(environment, req)
 
     def run_postprocessing_pipeline(
-        self, environment: ProjectEnvironment
-    ) -> object:
-        from src.workflows.postprocessing_pipeline import run_postprocessing_pipeline
-        return run_postprocessing_pipeline(environment)
+        self,
+        environment: ProjectEnvironment,
+        request: PostProcessingRequest | None = None,
+    ) -> PostProcessingSummary:
+        from src.workflows.postprocessing_pipeline import PostProcessingPipelineWorkflow
+
+        workflow = PostProcessingPipelineWorkflow()
+        return workflow.execute(environment, request)
+

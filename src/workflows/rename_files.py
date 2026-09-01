@@ -22,8 +22,13 @@ class RenameFilesSummary:
     renamed: tuple[RenamePair, ...]
 
 
-def rename_files_match(input_directory: str | Path, output_directory: str | Path) -> RenameFilesSummary:
-    """Rename files in output directory to match names from input directory sorted by numerical prefix."""
+def rename_files_match(
+    input_directory: str | Path,
+    output_directory: str | Path,
+    *,
+    target_type: str | None = None,
+) -> RenameFilesSummary:
+    """Rename files or folders in output directory to match names from input directory sorted by numerical prefix."""
     input_dir = Path(input_directory).expanduser().resolve()
     output_dir = Path(output_directory).expanduser().resolve()
 
@@ -41,35 +46,56 @@ def rename_files_match(input_directory: str | Path, output_directory: str | Path
             except ValueError:
                 return (999999, filename.lower())
 
-    output_items = sorted(
-        (
-            path.name
-            for path in output_dir.iterdir()
-            if (path.is_file() or path.is_dir())
-            and not path.name.startswith("~$")
-            and not path.name.startswith(".")
-            and not path.name.startswith("processed_")
-        ),
-        key=sort_key,
-    )
-    input_candidates = [
-        path.name
-        for path in input_dir.iterdir()
-        if (path.is_file() or path.is_dir())
-        and not path.name.startswith("~$")
-        and not path.name.startswith(".")
+    norm_target = (target_type or "").strip().lower()
+
+    output_xlsx_files = [
+        p.name
+        for p in output_dir.iterdir()
+        if p.is_file()
+        and p.suffix.lower() == ".xlsx"
+        and not p.name.startswith(("~$", "."))
+    ]
+    output_subdirectories = [
+        p.name
+        for p in output_dir.iterdir()
+        if p.is_dir()
+        and not p.name.startswith(("~$", ".", "processed_"))
     ]
 
-    if any(p.lower().endswith(".xlsx") for p in output_items) or any((output_dir / p).is_dir() for p in output_items):
-        docx_candidates = [p for p in input_candidates if p.lower().endswith(".docx")]
-        if docx_candidates:
-            input_candidates = docx_candidates
+    if norm_target in ("xlsx", "testsheet", "testsheets") or (not norm_target and output_xlsx_files):
+        # Testsheet mode: strictly rename .xlsx files, ignoring subdirectories (UNSORTED RAW DATA, processed_testsheet, pdf, etc.)
+        output_items = sorted(output_xlsx_files, key=sort_key)
+    elif norm_target in ("dir", "directory", "directories", "raw_material", "raw_materials") or (not norm_target and output_subdirectories and not output_xlsx_files):
+        # Raw material / directory mode: strictly rename subdirectories, ignoring loose files
+        output_items = sorted(output_subdirectories, key=sort_key)
+    else:
+        # Fallback generic mode
+        output_items = sorted(
+            [
+                p.name
+                for p in output_dir.iterdir()
+                if (p.is_file() or p.is_dir())
+                and not p.name.startswith(("~$", ".", "processed_"))
+            ],
+            key=sort_key,
+        )
 
-    input_files = sorted(input_candidates, key=sort_key)
+    all_input_items = [
+        p.name
+        for p in input_dir.iterdir()
+        if (p.is_file() or p.is_dir())
+        and not p.name.startswith(("~$", "."))
+    ]
+    input_docx_files = [p for p in all_input_items if p.lower().endswith(".docx")]
+
+    if input_docx_files and (output_xlsx_files or output_subdirectories):
+        input_files = sorted(input_docx_files, key=sort_key)
+    else:
+        input_files = sorted(all_input_items, key=sort_key)
 
     if len(input_files) != len(output_items):
         raise ValueError(
-            f"Quantity mismatch: Input directory has {len(input_files)} item(s), but Output directory has {len(output_items)} item(s) (including files and folders). "
+            f"Quantity mismatch: Input directory has {len(input_files)} item(s), but Output directory has {len(output_items)} item(s). "
             f"Exact quantity match is required before renaming."
         )
 

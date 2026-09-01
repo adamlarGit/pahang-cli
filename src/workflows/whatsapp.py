@@ -331,3 +331,15 @@ class WhatsAppReportWorkflow:
 
         result = self.auditor.audit(plan, load_output)
         return result
+
+
+def run_generate_whatsapp_report(
+    env: ProjectEnvironment,
+    report_dir: Path | str,
+    progress_sink: ProgressSink | None = None,
+) -> WhatsAppReportResult:
+    """Execute WhatsApp report generation workflow for a specific date/report folder."""
+    workflow = WhatsAppReportWorkflow()
+    request = WhatsAppReportRequest(report_dir=Path(report_dir), progress_sink=progress_sink)
+    return workflow.execute(env, request)
+

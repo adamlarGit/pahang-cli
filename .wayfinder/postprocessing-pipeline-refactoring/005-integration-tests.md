@@ -1,5 +1,5 @@
 <!-- label: wayfinder:task -->
-<!-- status: open -->
+<!-- status: closed -->
 <!-- blocked-by: 004 -->
 # 005: End-to-End Integration Test Suite
 

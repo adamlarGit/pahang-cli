@@ -35,13 +35,14 @@ Refactor the **1-Click Substation Post-Processing Pipeline** into a robust, main
 
 ## Execution Tickets
 
-1. [001: Pre-Flight Integrity Validator & File Filter](001-pre-flight-validator.md) — Open (Frontier)
-2. [002: Shared COM Session Context Manager](002-shared-com-session.md) — Open (Frontier)
-3. [003: Lean Post-Processing Orchestrator Service](003-orchestrator-service.md) — Open (Blocked by 001, 002)
-4. [004: CLI Presentation Adapter & Audit Summary Box](004-cli-presentation-adapter.md) — Open (Blocked by 003)
-5. [005: End-to-End Integration Test Suite](005-integration-tests.md) — Open (Blocked by 004)
-6. [006: Dead Code Cleanup & Redundant Logic Removal](006-dead-code-cleanup.md) — Open (Blocked by 005)
-7. [007: Domain Model & Documentation Sync](007-domain-model-docs-sync.md) — Open (Blocked by 006)
+1. [001: Pre-Flight Integrity Validator & File Filter](001-pre-flight-validator.md) — Closed
+2. [002: Shared COM Session Context Manager](002-shared-com-session.md) — Closed
+3. [003: Lean Post-Processing Orchestrator Service](003-orchestrator-service.md) — Closed
+4. [004: CLI Presentation Adapter & Audit Summary Box](004-cli-presentation-adapter.md) — Closed
+5. [005: End-to-End Integration Test Suite](005-integration-tests.md) — Closed
+
+6. [006: Dead Code Cleanup & Redundant Logic Removal](006-dead-code-cleanup.md) — Closed
+7. [007: Domain Model & Documentation Sync](007-domain-model-docs-sync.md) — Closed
 
 ## Out of scope
 

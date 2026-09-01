@@ -144,17 +144,20 @@ Canonical 2-column condition page generation rules for Quick Report Word output:
   - 0 Tx Oil Level: Omitted.
   - Unmatched trailing odd items render as a half-pair `(item, "")` with right-cell borders stripped cleanly via `_remove_empty_cell_borders_sub_cond()`.
 
+### PostProcessingPipelineWorkflow
+The 6-stage orchestration service in `src/workflows/postprocessing_pipeline.py` managing the post-processing lifecycle under DRY principles. Orchestrates discovery, target scoping, pre-flight file integrity validation, date-level folder renaming synchronization, WhatsApp daily reporting (`by_date` mode), and per-substation deliverable document generation (signature stamping/sanitization, blank cell diagonal borders, COM PDF conversion, and deliverable PDF compilation) into client deliverable packages.
 
+### PreFlightValidationPolicy
+Strict fail-fast file count integrity validation policy (`src/workflows/postprocessing_preflight.py`) enforced prior to running post-processing. Requires exact 1:1 matching counts between valid Quick Report Word documents (`.docx`), Excel testsheet workbooks (`.xlsx` only, strictly ignoring auxiliary subdirectories like `processed_testsheet/`, `UNSORTED RAW DATA/`, and temporary lock files `~$`), and Raw Material substation folders across the target daily date directory (`<DD-MM-YYYY>`). Halts execution immediately with diagnostic mismatch reporting if directories are missing, empty, or have divergent item counts.
 
+### BatchComSession
+The shared COM application lifecycle context manager in `src/postprocessing/converters.py` (`batch_com_session()`) managing active instances of Microsoft Word and Excel COM servers across a post-processing batch run. Guarantees single-initialization and disposal per batch, standardizes virtual PDF printer configuration (`ActivePrinter`) for uniform sheet scaling, suppresses interactive alerts, and guarantees deterministic process termination via `try...finally` teardown.
 
+### TestsheetImmutabilityPolicy
+The data integrity policy governing testsheet modifications during post-processing. Raw inspection workbooks in `TESTSHEET/<DATE>/<STEM>.xlsx` are treated as immutable sources of truth and are never overwritten directly. All post-processing alterations (signature insertion or sanitization, blank cell diagonal line drawing) are written exclusively to working copies located in `TESTSHEET/<DATE>/processed_testsheet/<STEM>.xlsx`.
 
+### SubstationIsolatedBatchResiliencePolicy
+Per-substation error isolation policy during batch document post-processing. Failures encountered while converting, signing, or merging documents for an individual substation are trapped, logged, and collected into failure records (`PostProcessingFailure`), allowing remaining valid substations in the queue to continue processing to completion. Final batch status and all individual errors are consolidated into the immutable `PostProcessingSummary`.
 
-
-
-
-
-
-
-
-
-
+### SignaturePlaceholderSanitizationPolicy
+The clean placeholder sanitization policy implemented in `src/workflows/replace_signatures.py` when digital signature stamping is omitted or disabled (`mode="none"`). Ensures template tags `{{signvendor}}` and `{{signtnb}}` are cleanly stripped from testsheet cells without inserting image drawings, clearing cell values to prepare pristine blank signature boxes for manual wet-ink physical signing while preventing raw curly-brace template tags from appearing on client deliverables.

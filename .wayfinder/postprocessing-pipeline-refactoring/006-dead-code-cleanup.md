@@ -1,5 +1,5 @@
 <!-- label: wayfinder:task -->
-<!-- status: open -->
+<!-- status: closed -->
 <!-- blocked-by: 005 -->
 # 006: Dead Code Cleanup & Redundant Logic Removal
 

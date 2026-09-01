@@ -1,5 +1,5 @@
 <!-- label: wayfinder:task -->
-<!-- status: open -->
+<!-- status: closed -->
 <!-- blocked-by: none -->
 # 001: Pre-Flight Integrity Validator & File Filter
 
@@ -28,3 +28,11 @@ During pre-flight validation for a target date folder (e.g. `01-05-2026`):
    - Mismatch failure: Raising `PreFlightValidationError` when testsheet count != quick report count.
 2. **Green**: Implement the pre-flight validator function in `src/workflows/postprocessing_pipeline.py` (or a dedicated validator module).
 3. **Refactor**: Ensure clean logging and typed return models.
+
+## Resolution
+
+- Implemented `validate_postprocessing_preflight(env, date_folder)` along with `filter_valid_quick_reports`, `filter_valid_testsheets`, and `filter_valid_raw_materials` in `src/workflows/postprocessing_preflight.py`.
+- Defined `PreFlightValidationError` and `PreFlightValidationResult` models.
+- Auxiliary directories (`processed_testsheet/`, `UNSORTED RAW DATA/`, `pdf/`, etc.) and lock files (`~$*.xlsx`, `~$*.docx`) are strictly isolated and excluded.
+- Re-exported in `src/workflows/postprocessing_pipeline.py`.
+- Created comprehensive test suite in `tests/test_postprocessing_preflight.py` (11 unit tests passing cleanly).

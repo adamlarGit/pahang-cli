@@ -63,7 +63,7 @@ def replace_pce_images(
     print(f"Loading Excel file: {path} (Mode: {mode}) ...")
     wb = openpyxl.load_workbook(str(path))
 
-    if mode == "placeholder":
+    if mode.lower() in ("placeholder", "none"):
         for ws in wb.worksheets:
             placeholders_replaced = 0
             for row in ws.iter_rows():

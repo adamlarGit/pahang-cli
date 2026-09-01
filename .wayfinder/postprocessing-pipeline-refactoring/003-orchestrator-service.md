@@ -1,5 +1,5 @@
 <!-- label: wayfinder:task -->
-<!-- status: open -->
+<!-- status: closed -->
 <!-- blocked-by: 001, 002 -->
 # 003: Lean Post-Processing Orchestrator Service
 
@@ -37,3 +37,13 @@ How should the post-processing service coordinate existing domain modules into a
    - Verify per-substation error isolation.
 2. **Green**: Implement orchestrator in `src/workflows/postprocessing_pipeline.py` and register in `WorkflowService`.
 3. **Refactor**: Clean up and remove duplicated code.
+
+## Resolution Summary
+
+- Implemented `PostProcessingPipelineWorkflow` orchestrator in [`src/workflows/postprocessing_pipeline.py`](file:///C:/Users/ADAM/Desktop/pahang-cli/src/workflows/postprocessing_pipeline.py) and registered in `WorkflowService.run_postprocessing_pipeline`.
+- Defined request and result contracts (`PostProcessingRequest`, `PostProcessingSummary`, `PostProcessingMode`, `PostProcessingFailure`) in [`src/workflows/models.py`](file:///C:/Users/ADAM/Desktop/pahang-cli/src/workflows/models.py).
+- Implemented `LocalTestsheetPackageRepository` with `find_packages()` in [`src/testsheet/repository.py`](file:///C:/Users/ADAM/Desktop/pahang-cli/src/testsheet/repository.py) and `SubstationPackage` in [`src/testsheet/models.py`](file:///C:/Users/ADAM/Desktop/pahang-cli/src/testsheet/models.py).
+- Updated `replace_pce_images()` in [`src/workflows/replace_signatures.py`](file:///C:/Users/ADAM/Desktop/pahang-cli/src/workflows/replace_signatures.py) to support `mode="none"` for clean placeholder stripping when signatures are disabled.
+- Added `run_generate_whatsapp_report()` convenience helper in [`src/workflows/whatsapp.py`](file:///C:/Users/ADAM/Desktop/pahang-cli/src/workflows/whatsapp.py).
+- Implemented comprehensive unit test suite in [`tests/test_postprocessing_orchestrator.py`](file:///C:/Users/ADAM/Desktop/pahang-cli/tests/test_postprocessing_orchestrator.py) verifying happy path (by date and by FL), pre-flight fail-fast, testsheet immutability, signature placeholder sanitization, and per-substation error isolation (all 6 tests passing, 499 total repo tests passing).
+

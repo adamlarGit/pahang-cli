@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 if TYPE_CHECKING:
+    from src.postprocessing.converters import DocumentConverter
+    from src.testsheet.models import SubstationPackage
     from src.workflows.raw_material import AutomatedRawMaterialSummary
+
 
 ProgressSink = Callable[..., None]
 
@@ -287,6 +290,58 @@ class GenerateTestsheetFolderResult:
     @property
     def is_successful(self) -> bool:
         return len(self.errors) == 0 and self.total_dates_processed > 0
+
+
+class PostProcessingMode(Enum):
+    """Selection mode enum for Post-Processing Pipeline."""
+
+    BY_DATE = "by_date"
+    BY_FL = "by_fl"
+
+
+@dataclass(frozen=True)
+class PostProcessingRequest:
+    """Request model for 1-Click Substation Post-Processing Pipeline."""
+
+    mode: PostProcessingMode = PostProcessingMode.BY_DATE
+    target_dates: Sequence[str] = ()
+    target_fls: Sequence[str] = ()
+    target_packages: Sequence[SubstationPackage] = ()
+    apply_signatures: bool = False
+    vendor_signature_path: Path | None = None
+    tnb_signature_path: Path | None = None
+    generate_whatsapp: bool = False
+    converter: DocumentConverter | None = None
+    progress_sink: ProgressSink | None = None
+
+
+@dataclass(frozen=True)
+class PostProcessingFailure:
+    """Record of a failed substation during post-processing."""
+
+    package: SubstationPackage
+    error: str
+
+
+@dataclass(frozen=True)
+class PostProcessingSummary:
+    """Summary of completed post-processing executions."""
+
+    processed_packages: tuple[SubstationPackage, ...] = ()
+    final_deliverables: tuple[Path, ...] = ()
+    failed_packages: tuple[PostProcessingFailure, ...] = ()
+    warnings: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
+    duration_seconds: float = 0.0
+
+    @property
+    def total_target_count(self) -> int:
+        return len(self.processed_packages) + len(self.failed_packages)
+
+    @property
+    def is_successful(self) -> bool:
+        return len(self.failed_packages) == 0 and len(self.errors) == 0 and len(self.processed_packages) > 0
+
 
 
 

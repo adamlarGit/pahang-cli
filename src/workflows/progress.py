@@ -6,7 +6,7 @@ counter tracking, and sink emission, eliminating percentage-based progress acros
 
 from __future__ import annotations
 
-from typing import Callable, Any
+from typing import Callable
 
 # ProgressSink callback definition: accepts a progress message string
 ProgressSink = Callable[..., None]

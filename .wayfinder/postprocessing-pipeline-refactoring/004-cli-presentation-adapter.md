@@ -1,5 +1,5 @@
 <!-- label: wayfinder:task -->
-<!-- status: open -->
+<!-- status: closed -->
 <!-- blocked-by: 003 -->
 # 004: CLI Presentation Adapter & Audit Summary Box
 
