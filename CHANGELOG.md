@@ -5,6 +5,22 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-09-01
+
+### Added
+- **Dynamic Multi-Technology CBM Template Resolution**: Integrated `ProjectEnvironment.get_template()` and `WorkspaceStorage.get_cbm_defect_template()` to resolve technology template directories (`DEFECT IR`, `DEFECT IR US`, `DEFECT IR US TEV`) and summary templates (`CBM DEFECT IR SUMMARY.docx`, `CBM DEFECT IR+US SUMMARY.docx`, `CBM DEFECT IR+US+TEV SUMMARY.docx`) dynamically based on project technology set, with fail-fast `FileNotFoundError` validation.
+- **Aligned CBM Defect Ingestion (`MasterQr03DefectRepository`)**: Aligned `CbmDefectRecord` and QR03 CBA extraction across standard and fallback columns to extract `equipment_id`, `criticality`, `us_char`, `tev_char`, and exact measurement values.
+- **Canonical Equipment Taxonomy & Multi-Tech Defect Planner**: Expanded `QUICK_REPORT_FAMILY_SPECS` with canonical equipment aliases across 5 core families (`swg`, `tx`, `fp_lvdb`, `battery`, `blackbox`). Implemented multi-technology defect merging on `(item_key, defect_area)` and smart HV/LV side routing for transformers in `CbmDefectPlanner`.
+- **Enriched Part 2 CBM Technical Summary Table**: Added multi-line apparatus labels (`format_summary_equipment`), combined `DEFECT AREA/ ADDITIONAL REMARKS` formatting, and US characteristic severity mapping.
+- **Part 4 CBM Detail Pages & Testsheet Metadata Enrichment**: Enriched detail page render contexts with testsheet equipment specifications (switchgear panel name/feeder code splitting, transformer `HERMETICALLY SEAL` model expansion and rating extraction, LVDB model normalization), guaranteed `"-"` fallbacks, and zero raw Jinja tag leaks.
+- **Strict 2-Digit Intermediate Part Ordering**: Standardized all 7 report part prefixes to 2-digit ordered format (`001_01_` through `001_07_`) in `composer.py` and across all page builders.
+
+### Changed
+- **Config & Storage Standardization**: Standardized `CBM_DEFECT_TEMPLATES` mapping in `config.py` and updated `LocalWorkspaceStorage._initialize_project_workspace` to copy all CBM defect template directories.
+
+### Removed
+- **Dead Code Cleanup**: Purged unused helper functions (`_placeholder_literal`, legacy summary keys) and obsolete fallback branches across `src/quick_report/`.
+
 ## [1.11.0] - 2026-08-31
 
 ### Added

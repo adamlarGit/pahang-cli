@@ -24,7 +24,7 @@ def generate_sticker_page(pe_info: dict, template_path: str | Path, output_dir: 
     context = build_sticker_page_context(pe_info)
     doc.render(_preserve_blank_render_values(context), jinja_env=_build_jinja_env(), autoescape=True)
     
-    out_path = Path(output_dir) / f"{substation_number:03d}_7 STICKER PAGE.docx"
+    out_path = Path(output_dir) / f"{substation_number:03d}_07_sticker_page.docx"
     doc.save(out_path)
     
     return out_path

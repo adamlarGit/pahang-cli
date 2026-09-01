@@ -34,6 +34,8 @@ class CbmDefectRecord:
     - tev_reading: TEV dB reading (from READING if tech==TEV, else TEV READING column).
     - tev_char: TEV waveform characteristic.
     - additional_remarks: From ADDITIONAL REMARKS or REMARKS Excel column.
+    - equipment_id: Equipment identifier / panel / feeder / tx identifier.
+    - criticality: Defect severity / criticality level (e.g. HIGH, MEDIUM, LOW, CRITICAL).
     """
 
     equipment: str = ""
@@ -49,6 +51,8 @@ class CbmDefectRecord:
     tev_reading: str = ""
     tev_char: str = ""
     raw_measurement: str = ""
+    equipment_id: str = ""
+    criticality: str = ""
     source_order: int = 0
 
     def __post_init__(self) -> None:
@@ -65,6 +69,8 @@ class CbmDefectRecord:
         object.__setattr__(self, "tev_reading", _clean_val(self.tev_reading))
         object.__setattr__(self, "tev_char", _clean_val(self.tev_char))
         object.__setattr__(self, "raw_measurement", _clean_val(self.raw_measurement))
+        object.__setattr__(self, "equipment_id", _clean_val(self.equipment_id))
+        object.__setattr__(self, "criticality", _clean_val(self.criticality))
 
         tech = self.technology
         raw = self.raw_measurement
@@ -99,6 +105,8 @@ class CbmDefectRecord:
             "tev_reading": self.tev_reading,
             "tev_char": self.tev_char,
             "raw_measurement": self.raw_measurement,
+            "equipment_id": self.equipment_id,
+            "criticality": self.criticality,
             "source_order": self.source_order,
         }
 
@@ -262,34 +270,97 @@ class MasterQr03DefectRepository:
             if matched_df.empty:
                 continue
 
-            # Fuzzy column finders
-            us_char_col = next((c for c in df.columns if "US CHAR" in str(c).upper() or "US CHARACTER" in str(c).upper()), None)
-            tev_char_col = next((c for c in df.columns if "TEV CHAR" in str(c).upper() or "TEV CHARACTER" in str(c).upper()), None)
+            # Build normalized column map: uppercase/stripped key -> original col name
+            col_map: dict[str, Any] = {}
+            for c in df.columns:
+                c_str = str(c).strip().upper()
+                col_map[c_str] = c
+                col_map[c_str.replace(" ", "_")] = c
+                col_map[c_str.replace("_", " ")] = c
+
+            # Fuzzy column finders for characteristics & defect type
+            us_char_col = next(
+                (
+                    c
+                    for c in df.columns
+                    if "US CHAR" in str(c).upper() or "US CHARACTER" in str(c).upper()
+                ),
+                None,
+            )
+            tev_char_col = next(
+                (
+                    c
+                    for c in df.columns
+                    if "TEV CHAR" in str(c).upper() or "TEV CHARACTER" in str(c).upper()
+                ),
+                None,
+            )
+            defect_type_col = next(
+                (
+                    c
+                    for c in df.columns
+                    if "DEFECT TYPE" in str(c).upper() or "DEFECT_TYPE" in str(c).upper()
+                ),
+                None,
+            )
 
             defects: list[CbmDefectRecord] = []
             for idx, (_, row) in enumerate(matched_df.iterrows(), start=1):
-                tech = _clean_val(
-                    row.get("TECHNOLOGY")
-                    or row.get("TECH")
-                    or row.get("DEFECT FROM")
-                ).upper()
-                equipment = _clean_val(row.get("EQUIPMENT"))
-                brand = _clean_val(row.get("BRAND"))
-                model = _clean_val(row.get("MODEL"))
-                rating = _clean_val(row.get("RATING"))
-                defect_area = _clean_val(
-                    row.get("DEFECT AREA") or row.get("DEFECT_AREA")
-                )
-                additional_remarks = _clean_val(
-                    row.get("ADDITIONAL REMARKS") or row.get("REMARKS")
-                )
-                reading = _clean_val(row.get("READING"))
+                def _get_val(*candidate_keys: str) -> str:
+                    for key in candidate_keys:
+                        k_norm = key.strip().upper()
+                        if k_norm in col_map:
+                            val = _clean_val(row.get(col_map[k_norm]))
+                            if val:
+                                return val
+                    return ""
 
-                ir_reading = _clean_val(row.get("IR READING"))
-                us_reading = _clean_val(row.get("US READING"))
-                us_char = _clean_val(row.get(us_char_col)) if us_char_col else ""
-                tev_reading = _clean_val(row.get("TEV READING"))
-                tev_char = _clean_val(row.get(tev_char_col)) if tev_char_col else ""
+                tech = _get_val("DEFECT FROM", "TECHNOLOGY", "TECH").upper()
+                equipment = _get_val("EQUIPMENT", "EQUIPMENT NAME", "EQUIPMENT_NAME")
+                equipment_id = _get_val("EQUIPMENT ID", "EQUIPMENT_ID", "ID")
+                criticality = _get_val("CRITICALITY", "STATUS")
+                brand = _get_val("BRAND")
+                model = _get_val("MODEL")
+                rating = _get_val("RATING")
+                defect_area = _get_val("DEFECT AREA", "DEFECT_AREA", "AREA")
+                additional_remarks = _get_val(
+                    "ADDITIONAL REMARKS", "REMARKS", "ADDITIONAL_REMARKS", "REMARK"
+                )
+                reading = _get_val(
+                    "READING",
+                    "RAW READING",
+                    "RAW_READING",
+                    "RAW MEASUREMENT",
+                    "RAW_MEASUREMENT",
+                )
+
+                ir_reading = _get_val("IR READING", "IR_READING")
+                us_reading = _get_val("US READING", "US_READING")
+                tev_reading = _get_val("TEV READING", "TEV_READING")
+
+                us_char = (
+                    _clean_val(row.get(us_char_col))
+                    if us_char_col
+                    else _get_val("US CHAR", "US CHARACTER", "US_CHAR", "US_CHARACTER")
+                )
+                if not us_char and tech == "US":
+                    us_char = (
+                        _clean_val(row.get(defect_type_col))
+                        if defect_type_col
+                        else _get_val("DEFECT TYPE", "DEFECT_TYPE", "DEFECT")
+                    )
+
+                tev_char = (
+                    _clean_val(row.get(tev_char_col))
+                    if tev_char_col
+                    else _get_val("TEV CHAR", "TEV CHARACTER", "TEV_CHAR", "TEV_CHARACTER")
+                )
+                if not tev_char and tech == "TEV":
+                    tev_char = (
+                        _clean_val(row.get(defect_type_col))
+                        if defect_type_col
+                        else _get_val("DEFECT TYPE", "DEFECT_TYPE", "DEFECT")
+                    )
 
                 rec = CbmDefectRecord(
                     equipment=equipment,
@@ -305,6 +376,8 @@ class MasterQr03DefectRepository:
                     tev_reading=tev_reading,
                     tev_char=tev_char,
                     raw_measurement=reading,
+                    equipment_id=equipment_id,
+                    criticality=criticality,
                     source_order=idx,
                 )
                 defects.append(rec)

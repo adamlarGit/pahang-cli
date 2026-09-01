@@ -100,7 +100,7 @@ class ViDefectPageBuilder:
 
         for part_number, chunk in enumerate(chunks, start=1):
             context = build_vi_defect_page_context(pe_info, chunk)
-            output_filename = f"{substation_number:03d}_6 VI DEFECT part{part_number}.docx"
+            output_filename = f"{substation_number:03d}_06_vi_defect_part{part_number}.docx"
             plans.append(
                 ViDefectPagePlan(
                     template_path=template_p,

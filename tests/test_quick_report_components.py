@@ -7,7 +7,7 @@ from src.quick_report.cbm_summary import (
     format_temperature_reading,
     prepare_tech_summary_rows,
 )
-from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
+from src.quick_report.defects import CbmDefectRecord, MasterQr03DefectRepository, ViDefectRecord
 from src.quick_report.models import ViDefectPagePlan, ViSummaryRow
 from src.quick_report.vi_defect_pages import ViDefectPageBuilder, build_vi_defect_page_context
 from src.quick_report.vi_summary import build_vi_summary_context, prepare_vi_summary_rows
@@ -108,6 +108,179 @@ def test_prepare_tech_summary_rows_different_areas():
     assert len(rows) == 2
 
 
+def test_prepare_tech_summary_rows_ir_only():
+    defects = [
+        CbmDefectRecord(
+            equipment="TX 1",
+            defect_area="HV Bushing",
+            additional_remarks="",
+            technology="IR",
+            ir_reading="55.4",
+        )
+    ]
+    rows = prepare_tech_summary_rows(defects)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r.equipment == "TX 1"
+    assert r.defect_area == "HV Bushing"
+    assert r.ir_abs == "55.4 °C"
+    assert r.ir_delta == "-"
+    assert r.us_dB == "-"
+    assert r.tev_dB == "-"
+    assert r.severity == ""
+    assert r.status == ""
+    assert r.ir_reading == "55.4 °C"
+    assert r.us_reading == "-"
+    assert r.tev_reading == "-"
+
+
+def test_prepare_tech_summary_rows_us_only_with_char():
+    defects = [
+        CbmDefectRecord(
+            equipment="SWG 01",
+            defect_area="Cable Termination",
+            additional_remarks="Phase R",
+            technology="US",
+            us_reading="18.5",
+            us_char="TRACKING",
+        )
+    ]
+    rows = prepare_tech_summary_rows(defects)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r.equipment == "SWG 01"
+    assert r.defect_area == "Cable Termination/ Phase R"
+    assert r.remarks == "Phase R"
+    assert r.ir_abs == "-"
+    assert r.ir_delta == "-"
+    assert r.us_dB == "18.5dB"
+    assert r.tev_dB == "-"
+    assert r.severity == "TRACKING"
+    assert r.status == "TRACKING"
+    assert r.ir_reading == "-"
+    assert r.us_reading == "18.5dB"
+    assert r.tev_reading == "-"
+
+
+def test_prepare_tech_summary_rows_tev_only():
+    defects = [
+        CbmDefectRecord(
+            equipment="RMU SF6",
+            defect_area="Busbar",
+            technology="TEV",
+            tev_reading="26.0",
+            tev_char="SURFACE",
+        )
+    ]
+    rows = prepare_tech_summary_rows(defects)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r.equipment == "RMU SF6"
+    assert r.defect_area == "Busbar"
+    assert r.ir_abs == "-"
+    assert r.ir_delta == "-"
+    assert r.us_dB == "-"
+    assert r.tev_dB == "26dB"
+    assert r.severity == ""
+    assert r.status == ""
+    assert r.ir_reading == "-"
+    assert r.us_reading == "-"
+    assert r.tev_reading == "26dB"
+
+
+def test_prepare_tech_summary_rows_multitech_merged():
+    defects = [
+        CbmDefectRecord(
+            equipment="RMU 01",
+            defect_area="Cable Box",
+            additional_remarks="Phase Y",
+            technology="IR",
+            ir_reading="62.1",
+            brand="ABB",
+            model="SafeRing",
+            rating="630A",
+        ),
+        CbmDefectRecord(
+            equipment="RMU 01",
+            defect_area="Cable Box",
+            additional_remarks="Phase Y",
+            technology="US",
+            us_reading="14.0",
+            us_char="CORONA",
+        ),
+        CbmDefectRecord(
+            equipment="RMU 01",
+            defect_area="Cable Box",
+            additional_remarks="Phase Y",
+            technology="TEV",
+            tev_reading="28.5",
+        ),
+    ]
+    rows = prepare_tech_summary_rows(defects)
+    assert len(rows) == 1
+    r = rows[0]
+    assert r.equipment == "RMU 01"
+    assert r.defect_area == "Cable Box/ Phase Y"
+    assert r.remarks == "Phase Y"
+    assert r.brand == "ABB"
+    assert r.model == "SafeRing"
+    assert r.rating == "630A"
+    assert r.ir_abs == "62.1 °C"
+    assert r.ir_delta == "-"
+    assert r.us_dB == "14dB"
+    assert r.tev_dB == "28.5dB"
+    assert r.severity == "CORONA"
+    assert r.status == "CORONA"
+    assert r.ir_reading == "62.1 °C"
+    assert r.us_reading == "14dB"
+    assert r.tev_reading == "28.5dB"
+
+
+def test_prepare_tech_summary_rows_case_insensitive_and_non_matching():
+    defects = [
+        CbmDefectRecord(
+            equipment="Switchgear A",
+            defect_area="Panel 1",
+            additional_remarks="Hotspot",
+            technology="IR",
+            ir_reading="50",
+        ),
+        CbmDefectRecord(
+            equipment="switchgear a",
+            defect_area="panel 1",
+            additional_remarks="hotspot",
+            technology="US",
+            us_reading="10",
+            us_char="ARCING",
+        ),
+        CbmDefectRecord(
+            equipment="OVERHEAD LINE",
+            defect_area="Conductor",
+            additional_remarks="Sagging",
+            technology="IR",
+            ir_reading="40",
+        ),
+    ]
+    rows = prepare_tech_summary_rows(defects)
+    assert len(rows) == 2
+    r0 = rows[0]
+    assert r0.equipment == "Switchgear A"
+    assert r0.defect_area == "Panel 1/ Hotspot"
+    assert r0.remarks == "Hotspot"
+    assert r0.ir_abs == "50 °C"
+    assert r0.us_dB == "10dB"
+    assert r0.severity == "ARCING"
+
+    r1 = rows[1]
+    assert r1.equipment == "OVERHEAD LINE"
+    assert r1.defect_area == "Conductor/ Sagging"
+    assert r1.remarks == "Sagging"
+    assert r1.ir_abs == "40 °C"
+    assert r1.us_dB == "-"
+    assert r1.tev_dB == "-"
+    assert r1.severity == ""
+
+
 def test_cbm_defect_record_normalization():
     # 1. Technology upper-casing and string whitespace stripping
     rec = CbmDefectRecord(
@@ -119,6 +292,8 @@ def test_cbm_defect_record_normalization():
         defect_area="  Body  ",
         additional_remarks="  Hotspot  ",
         raw_measurement="  55.4  ",
+        equipment_id="  SWG 01  ",
+        criticality="  CRITICAL  ",
     )
     assert rec.technology == "IR"
     assert rec.equipment == "TX 1"
@@ -127,6 +302,8 @@ def test_cbm_defect_record_normalization():
     assert rec.rating == "11kV"
     assert rec.defect_area == "Body"
     assert rec.additional_remarks == "Hotspot"
+    assert rec.equipment_id == "SWG 01"
+    assert rec.criticality == "CRITICAL"
     # Invariant: IR reading populated from raw_measurement
     assert rec.raw_measurement == "55.4"
     assert rec.ir_reading == "55.4"
@@ -154,6 +331,52 @@ def test_cbm_defect_record_normalization():
     rec_tev2 = CbmDefectRecord(technology="TEV", tev_reading="30.0")
     assert rec_tev2.raw_measurement == "30.0"
 
+    # 5. equipment_id and criticality None/empty normalization
+    rec_defaults = CbmDefectRecord()
+    assert rec_defaults.equipment_id == ""
+    assert rec_defaults.criticality == ""
+
+
+def test_cbm_defect_record_to_dict():
+    rec = CbmDefectRecord(
+        equipment="RMU SF6",
+        technology="US",
+        brand="Schneider",
+        model="RM6",
+        rating="11kV",
+        defect_area="Cable Box",
+        additional_remarks="Corona discharge",
+        ir_reading="",
+        us_reading="24.5",
+        us_char="CORONA",
+        tev_reading="",
+        tev_char="",
+        raw_measurement="24.5",
+        equipment_id="PANEL 2",
+        criticality="HIGH",
+        source_order=3,
+    )
+    d = rec.to_dict()
+    assert d == {
+        "equipment": "RMU SF6",
+        "technology": "US",
+        "brand": "Schneider",
+        "model": "RM6",
+        "rating": "11kV",
+        "defect_area": "Cable Box",
+        "additional_remarks": "Corona discharge",
+        "ir_reading": "",
+        "us_reading": "24.5",
+        "us_char": "CORONA",
+        "tev_reading": "",
+        "tev_char": "",
+        "raw_measurement": "24.5",
+        "equipment_id": "PANEL 2",
+        "criticality": "HIGH",
+        "source_order": 3,
+    }
+
+
 
 
 def test_environment_front_page_template_resolution():
@@ -178,26 +401,131 @@ def test_environment_front_page_template_resolution():
     assert env_tev.get_vi_front_page_template() == Path("/templates/vi_front_page_ir_us_tev.docx")
 
 
-def test_environment_cbm_summary_template_resolution():
+def test_environment_get_cbm_defect_folder_name():
     from unittest.mock import MagicMock
     from src.project.environment import ProjectEnvironment
     from src.project.models import ProjectMetadata
     from src.project.storage import WorkspaceStorage
 
+    storage = MagicMock(spec=WorkspaceStorage)
+
     def make_env(techs):
         meta = ProjectMetadata("k", "n", "po", "st", "11kV", "2026", "c1", techs, "p")
-        storage = MagicMock(spec=WorkspaceStorage)
-        storage.get_template.side_effect = lambda k: Path(f"/templates/{k}.docx")
         return ProjectEnvironment(meta, storage)
 
-    env_ir = make_env(("IR",))
-    assert env_ir.get_cbm_summary_template() == Path("/templates/cbm_summary_ir.docx")
+    assert make_env(("IR",)).get_cbm_defect_folder_name() == "DEFECT IR"
+    assert make_env(("ir",)).get_cbm_defect_folder_name() == "DEFECT IR"
+    assert make_env(("IR", "US")).get_cbm_defect_folder_name() == "DEFECT IR US"
+    assert make_env(("ir", "us")).get_cbm_defect_folder_name() == "DEFECT IR US"
+    assert make_env(("IR", "US", "TEV")).get_cbm_defect_folder_name() == "DEFECT IR US TEV"
+    assert make_env(("ir", "us", "tev")).get_cbm_defect_folder_name() == "DEFECT IR US TEV"
+    assert make_env(("TEV",)).get_cbm_defect_folder_name() == "DEFECT IR US TEV"
 
-    env_us = make_env(("IR", "US"))
-    assert env_us.get_cbm_summary_template() == Path("/templates/cbm_summary_ir_us.docx")
 
-    env_tev = make_env(("IR", "US", "TEV"))
-    assert env_tev.get_cbm_summary_template() == Path("/templates/cbm_summary_ir_us_tev.docx")
+def test_environment_dynamic_cbm_defect_template_resolution_single_tech(tmp_path: Path):
+    from src.project.environment import ProjectEnvironment
+    from src.project.models import ProjectMetadata
+    from src.project.storage import LocalWorkspaceStorage
+
+    storage = LocalWorkspaceStorage(tmp_path)
+    meta = ProjectMetadata("k", "n", "po", "st", "11kV", "2026", "c1", ("IR",), str(tmp_path))
+    env = ProjectEnvironment(meta, storage)
+
+    defect_ir_dir = tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR"
+    defect_ir_dir.mkdir(parents=True, exist_ok=True)
+    fp_tpl = defect_ir_dir / "fp-overview.docx"
+    fp_tpl.touch()
+
+    assert env.get_template("fp_overview") == fp_tpl
+    assert env.resolve_template_path("fp_overview") == fp_tpl
+
+
+def test_environment_dynamic_cbm_defect_template_resolution_dual_tech(tmp_path: Path):
+    from src.project.environment import ProjectEnvironment
+    from src.project.models import ProjectMetadata
+    from src.project.storage import LocalWorkspaceStorage
+
+    storage = LocalWorkspaceStorage(tmp_path)
+    meta = ProjectMetadata("k", "n", "po", "st", "11kV", "2026", "c1", ("IR", "US"), str(tmp_path))
+    env = ProjectEnvironment(meta, storage)
+
+    # 1. Fails fast if DEFECT IR US folder is missing
+    with pytest.raises(FileNotFoundError, match="Required CBM defect template directory 'DEFECT IR US' is missing"):
+        env.get_template("swg_overview")
+
+    # 2. Resolves successfully when folder and template exist
+    defect_ir_us_dir = tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR US"
+    defect_ir_us_dir.mkdir(parents=True, exist_ok=True)
+    swg_tpl = defect_ir_us_dir / "swg-overview.docx"
+    swg_tpl.touch()
+
+    assert env.get_template("swg_overview") == swg_tpl
+    assert env.resolve_template_path("swg_overview") == swg_tpl
+
+
+def test_environment_dynamic_cbm_defect_template_resolution_triple_tech(tmp_path: Path):
+    from src.project.environment import ProjectEnvironment
+    from src.project.models import ProjectMetadata
+    from src.project.storage import LocalWorkspaceStorage
+
+    storage = LocalWorkspaceStorage(tmp_path)
+    meta = ProjectMetadata("k", "n", "po", "st", "11kV", "2026", "c1", ("IR", "US", "TEV"), str(tmp_path))
+    env = ProjectEnvironment(meta, storage)
+
+    # 1. Fails fast if DEFECT IR US TEV folder is missing
+    with pytest.raises(FileNotFoundError, match="Required CBM defect template directory 'DEFECT IR US TEV' is missing"):
+        env.get_template("tx_overview")
+
+    # 2. Resolves successfully when folder and template exist
+    defect_ir_us_tev_dir = tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR US TEV"
+    defect_ir_us_tev_dir.mkdir(parents=True, exist_ok=True)
+    tx_tpl = defect_ir_us_tev_dir / "tx-overview.docx"
+    tx_tpl.touch()
+
+    assert env.get_template("tx_overview") == tx_tpl
+    assert env.resolve_template_path("tx_overview") == tx_tpl
+
+
+def test_environment_dynamic_cbm_defect_template_missing_file_fails_fast(tmp_path: Path):
+    from src.project.environment import ProjectEnvironment
+    from src.project.models import ProjectMetadata
+    from src.project.storage import LocalWorkspaceStorage
+
+    storage = LocalWorkspaceStorage(tmp_path)
+    meta = ProjectMetadata("k", "n", "po", "st", "11kV", "2026", "c1", ("IR",), str(tmp_path))
+    env = ProjectEnvironment(meta, storage)
+
+    # Folder exists but file does not
+    defect_ir_dir = tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR"
+    defect_ir_dir.mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(FileNotFoundError, match="Required CBM defect template 'fp-overview.docx' is missing"):
+        env.get_template("fp_overview")
+
+
+def test_environment_cbm_summary_template_resolution_with_local_storage(tmp_path: Path):
+    from src.project.environment import ProjectEnvironment
+    from src.project.models import ProjectMetadata
+    from src.project.storage import LocalWorkspaceStorage
+
+    qr_dir = tmp_path / "templates" / "QUICK REPORT"
+    qr_dir.mkdir(parents=True, exist_ok=True)
+    ir_sum = qr_dir / "CBM DEFECT IR SUMMARY.docx"
+    ir_us_sum = qr_dir / "CBM DEFECT IR+US SUMMARY.docx"
+    ir_us_tev_sum = qr_dir / "CBM DEFECT IR+US+TEV SUMMARY.docx"
+    ir_sum.touch()
+    ir_us_sum.touch()
+    ir_us_tev_sum.touch()
+
+    storage = LocalWorkspaceStorage(tmp_path)
+
+    env_ir = ProjectEnvironment(ProjectMetadata("k", "n", "po", "st", "11kV", "2026", "c1", ("IR",), str(tmp_path)), storage)
+    env_us = ProjectEnvironment(ProjectMetadata("k", "n", "po", "st", "11kV", "2026", "c1", ("IR", "US"), str(tmp_path)), storage)
+    env_tev = ProjectEnvironment(ProjectMetadata("k", "n", "po", "st", "11kV", "2026", "c1", ("IR", "US", "TEV"), str(tmp_path)), storage)
+
+    assert env_ir.get_cbm_summary_template() == ir_sum
+    assert env_us.get_cbm_summary_template() == ir_us_sum
+    assert env_tev.get_cbm_summary_template() == ir_us_tev_sum
 
 
 def test_generate_vi_summary_programmatic(tmp_path: Path):
@@ -301,7 +629,7 @@ def test_vi_defect_page_builder_pagination_and_plans(tmp_path: Path):
     plan1 = plans[0]
     assert isinstance(plan1, ViDefectPagePlan)
     assert plan1.template_path == template_p
-    assert plan1.output_filename == "001_6 VI DEFECT part1.docx"
+    assert plan1.output_filename == "001_06_vi_defect_part1.docx"
     assert plan1.active_defect_count == 6
     for i in range(1, 7):
         assert plan1.context[f"equipment{i}"] == f"equipment{i}"
@@ -312,7 +640,7 @@ def test_vi_defect_page_builder_pagination_and_plans(tmp_path: Path):
     plan2 = plans[1]
     assert isinstance(plan2, ViDefectPagePlan)
     assert plan2.template_path == template_p
-    assert plan2.output_filename == "001_6 VI DEFECT part2.docx"
+    assert plan2.output_filename == "001_06_vi_defect_part2.docx"
     assert plan2.active_defect_count == 1
     assert plan2.context["equipment1"] == "equipment7"
     assert plan2.context["description1"] == "area7"
@@ -402,7 +730,7 @@ def test_generate_vi_defect_pages_direct_rendering(tmp_path: Path):
 
     assert len(out_paths) == 1
     assert out_paths[0].exists()
-    assert out_paths[0].name == "001_6 VI DEFECT part1.docx"
+    assert out_paths[0].name == "001_06_vi_defect_part1.docx"
 
 
 def test_generate_cbm_tech_summary_programmatic(tmp_path: Path):
@@ -443,6 +771,55 @@ def test_generate_cbm_tech_summary_programmatic(tmp_path: Path):
     pPr = t.rows[1].cells[0].paragraphs[0]._p.get_or_add_pPr()
     assert pPr.find("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}jc") is not None
     assert pPr.find("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}spacing") is not None
+
+
+def test_generate_cbm_tech_summary_multitech_template(tmp_path: Path):
+    import docx
+    from src.quick_report.cbm_summary import generate_cbm_tech_summary
+
+    template_p = Path("templates/QUICK REPORT/CBM DEFECT IR+US+TEV SUMMARY.docx")
+    pe_info = {"substation": {"name_erms": "TEST SUB"}}
+    defects = [
+        CbmDefectRecord(
+            equipment="RMU 01",
+            defect_area="Cable Box",
+            additional_remarks="Phase Y",
+            technology="IR",
+            ir_reading="62.1",
+        ),
+        CbmDefectRecord(
+            equipment="RMU 01",
+            defect_area="Cable Box",
+            additional_remarks="Phase Y",
+            technology="US",
+            us_reading="14.0",
+            us_char="CORONA",
+        ),
+        CbmDefectRecord(
+            equipment="RMU 01",
+            defect_area="Cable Box",
+            additional_remarks="Phase Y",
+            technology="TEV",
+            tev_reading="28.5",
+        ),
+    ]
+
+    out_path = generate_cbm_tech_summary(pe_info, defects, template_p, tmp_path, 1)
+    assert out_path.exists()
+
+    rendered_doc = docx.Document(out_path)
+    assert len(rendered_doc.tables) == 1
+    t = rendered_doc.tables[0]
+    assert len(t.rows) == 2  # 1 header + 1 data row
+
+    r1_texts = [c.text.strip() for c in t.rows[1].cells]
+    assert r1_texts[0] == "1"
+    assert r1_texts[1] == "RMU 01"
+    assert r1_texts[2] == "Cable Box/ Phase Y"
+    assert r1_texts[3] == "62.1 °C"
+    assert r1_texts[4] == "-"
+    assert r1_texts[5] == "14dB"
+    assert r1_texts[6] == "28.5dB"
 
 
 def test_cbm_defect_planner(tmp_path: Path):
@@ -612,8 +989,8 @@ def test_generate_cbm_defect_pages_typed_plan_processing(tmp_path: Path):
 
     assert len(paths) == 2
     assert mock_render.call_count == 2
-    assert "101_3 SWG OVERVIEW.docx" in paths[0].name
-    assert "101_3 SWG RMU SF6.docx" in paths[1].name
+    assert "101_04_SWG_OVERVIEW.docx" in paths[0].name
+    assert "101_04_SWG_RMU SF6.docx" in paths[1].name
 
 
 def test_cbm_defect_page_builder_single_group(tmp_path: Path):
@@ -669,7 +1046,7 @@ def test_cbm_defect_page_builder_single_group(tmp_path: Path):
     # Overview Page Plan
     overview_plan = page_plans[0]
     assert overview_plan.template_path == overview_t
-    assert overview_plan.output_filename == "001_3 SWG OVERVIEW.docx"
+    assert overview_plan.output_filename == "001_04_SWG_OVERVIEW.docx"
     assert overview_plan.context["substation"] == {"name_erms": "PE TEST"}
     assert overview_plan.context["swg"]["area"] == "OVERVIEW"
     assert overview_plan.context["swg"]["type"] == "RMU SF6"
@@ -678,7 +1055,7 @@ def test_cbm_defect_page_builder_single_group(tmp_path: Path):
     # Detail Page Plan
     detail_plan = page_plans[1]
     assert detail_plan.template_path == panel_t
-    assert detail_plan.output_filename == "001_3 SWG RMU SF6.docx"
+    assert detail_plan.output_filename == "001_04_SWG_RMU SF6.docx"
     assert detail_plan.context["swg"]["area"] == "Cable Compartment/ Hotspot"
     assert detail_plan.context["panel"]["ir"]["reading"] == "55.0"
 
@@ -739,11 +1116,11 @@ def test_cbm_defect_page_builder_multi_group_and_part_suffixes(tmp_path: Path):
 
     filenames = [p.output_filename for p in page_plans]
     expected_filenames = [
-        "005_3 SWG OVERVIEW_grp1.docx",
-        "005_3 SWG RMU SF6_grp1_part1.docx",
-        "005_3 SWG RMU SF6_grp1_part2.docx",
-        "005_3 SWG OVERVIEW_grp2.docx",
-        "005_3 SWG RMU SF6_grp2.docx",
+        "005_04_SWG_OVERVIEW_grp1.docx",
+        "005_04_SWG_RMU SF6_grp1_part1.docx",
+        "005_04_SWG_RMU SF6_grp1_part2.docx",
+        "005_04_SWG_OVERVIEW_grp2.docx",
+        "005_04_SWG_RMU SF6_grp2.docx",
     ]
     assert filenames == expected_filenames
 
@@ -778,5 +1155,1085 @@ def test_cbm_defect_page_builder_empty_or_missing_templates(tmp_path: Path):
         substation_number=1,
     )
     assert plans == []
+
+
+def test_master_qr03_fetch_cbm_defects_alignment_standard_columns(tmp_path: Path):
+    """Verify fetch_cbm_defects extracts equipment_id, criticality, us_char, tev_char from standard columns."""
+    import pandas as pd
+
+    cba_df = pd.DataFrame(
+        [
+            {
+                "FUNCTIONAL LOCATION": "F/L 12345",
+                "EQUIPMENT": "RMU SF6",
+                "EQUIPMENT ID": "SWG 01",
+                "TECHNOLOGY": "IR",
+                "CRITICALITY": "HIGH",
+                "BRAND": "ABB",
+                "MODEL": "SafePlus",
+                "RATING": "11kV",
+                "DEFECT AREA": "Cable Compartment",
+                "ADDITIONAL REMARKS": "Hotspot detected",
+                "READING": "65.5",
+                "US CHAR": "",
+                "TEV CHAR": "",
+            },
+            {
+                "FUNCTIONAL LOCATION": "F/L 12345",
+                "EQUIPMENT": "RMU SF6",
+                "EQUIPMENT ID": "SWG 02",
+                "TECHNOLOGY": "US",
+                "CRITICALITY": "MEDIUM",
+                "BRAND": "ABB",
+                "MODEL": "SafePlus",
+                "RATING": "11kV",
+                "DEFECT AREA": "Busbar",
+                "ADDITIONAL REMARKS": "Tracking noise",
+                "READING": "22.0",
+                "US CHAR": "TRACKING",
+                "TEV CHAR": "",
+            },
+            {
+                "FUNCTIONAL LOCATION": "F/L 12345",
+                "EQUIPMENT": "LTX/DTX",
+                "EQUIPMENT ID": "TX 1",
+                "TECHNOLOGY": "TEV",
+                "CRITICALITY": "LOW",
+                "BRAND": "Tamini",
+                "MODEL": "ONAN",
+                "RATING": "11/.415kV",
+                "DEFECT AREA": "HV Bushing",
+                "ADDITIONAL REMARKS": "Discharge activity",
+                "READING": "18.5",
+                "US CHAR": "",
+                "TEV CHAR": "CONTINUOUS",
+            },
+        ]
+    )
+    vi_df = pd.DataFrame([{"FUNCTIONAL LOCATION": "F/L 12345", "EQUIPMENT": "SWG", "DEFECT AREA": "Door", "REMARKS": "None"}])
+
+    engr_path = tmp_path / "ENGR-CBA-TEST.xlsx"
+    with pd.ExcelWriter(engr_path, engine="openpyxl") as writer:
+        cba_df.to_excel(writer, sheet_name="QR03 CBA", index=False)
+        vi_df.to_excel(writer, sheet_name="QR03 VI", index=False)
+
+    repo = MasterQr03DefectRepository(tmp_path)
+    defects = repo.fetch_cbm_defects("12345")
+
+    assert len(defects) == 3
+
+    # IR Defect
+    ir_def = defects[0]
+    assert ir_def.equipment == "RMU SF6"
+    assert ir_def.equipment_id == "SWG 01"
+    assert ir_def.technology == "IR"
+    assert ir_def.criticality == "HIGH"
+    assert ir_def.raw_measurement == "65.5"
+    assert ir_def.ir_reading == "65.5"
+    assert ir_def.us_reading == ""
+    assert ir_def.tev_reading == ""
+
+    # US Defect
+    us_def = defects[1]
+    assert us_def.equipment == "RMU SF6"
+    assert us_def.equipment_id == "SWG 02"
+    assert us_def.technology == "US"
+    assert us_def.criticality == "MEDIUM"
+    assert us_def.raw_measurement == "22.0"
+    assert us_def.us_reading == "22.0"
+    assert us_def.us_char == "TRACKING"
+
+    # TEV Defect
+    tev_def = defects[2]
+    assert tev_def.equipment == "LTX/DTX"
+    assert tev_def.equipment_id == "TX 1"
+    assert tev_def.technology == "TEV"
+    assert tev_def.criticality == "LOW"
+    assert tev_def.raw_measurement == "18.5"
+    assert tev_def.tev_reading == "18.5"
+    assert tev_def.tev_char == "CONTINUOUS"
+
+
+def test_master_qr03_fetch_cbm_defects_alignment_fallback_columns(tmp_path: Path):
+    """Verify fetch_cbm_defects handles fallback columns: EQUIPMENT_ID/ID, DEFECT FROM/TECH, STATUS, DEFECT TYPE."""
+    import pandas as pd
+
+    cba_df = pd.DataFrame(
+        [
+            {
+                "FL": "PE-9999",
+                "EQUIPMENT": "RMU SF6",
+                "EQUIPMENT_ID": "P1",
+                "DEFECT FROM": "US",
+                "STATUS": "CRITICAL",
+                "BRAND": "Schneider",
+                "MODEL": "RM6",
+                "RATING": "11kV",
+                "DEFECT_AREA": "Cable Box",
+                "REMARKS": "Discharge sound",
+                "US READING": "28.4",
+                "DEFECT TYPE": "CORONA",
+            },
+            {
+                "FL": "PE-9999",
+                "EQUIPMENT": "LTX/DTX",
+                "ID": "TX2",
+                "TECH": "TEV",
+                "STATUS": "HIGH",
+                "BRAND": "Wilson",
+                "MODEL": "1000kVA",
+                "RATING": "11/.415kV",
+                "DEFECT AREA": "LV Bushing",
+                "REMARKS": "High TEV level",
+                "TEV READING": "31.2",
+                "DEFECT TYPE": "SURFACE",
+            },
+            {
+                "FL": "PE-9999",
+                "EQUIPMENT": "FP (D)",
+                "ID": "FP TX1",
+                "DEFECT FROM": "IR",
+                "STATUS": "LOW",
+                "BRAND": "Tamco",
+                "MODEL": "DIN",
+                "RATING": "415V",
+                "DEFECT AREA": "Fuse Base",
+                "REMARKS": "Loose connection",
+                "IR READING": "58.2",
+                "DEFECT TYPE": "HOTSPOT",
+            },
+        ]
+    )
+    vi_df = pd.DataFrame([{"FL": "PE-9999", "EQUIPMENT": "FP (D)", "DEFECT AREA": "Cover", "REMARKS": "None"}])
+
+    engr_path = tmp_path / "ENGR-CBA-FALLBACK-TEST.xlsx"
+    with pd.ExcelWriter(engr_path, engine="openpyxl") as writer:
+        cba_df.to_excel(writer, sheet_name="QR03 CBA", index=False)
+        vi_df.to_excel(writer, sheet_name="QR03 VI", index=False)
+
+    repo = MasterQr03DefectRepository(tmp_path)
+    defects = repo.fetch_cbm_defects("PE-9999")
+
+    assert len(defects) == 3
+
+    # Row 1: US defect with EQUIPMENT_ID, DEFECT FROM, STATUS, DEFECT TYPE fallback
+    d1 = defects[0]
+    assert d1.equipment == "RMU SF6"
+    assert d1.equipment_id == "P1"
+    assert d1.technology == "US"
+    assert d1.criticality == "CRITICAL"
+    assert d1.us_char == "CORONA"
+    assert d1.us_reading == "28.4"
+    assert d1.raw_measurement == "28.4"
+
+    # Row 2: TEV defect with ID, TECH, STATUS, DEFECT TYPE fallback
+    d2 = defects[1]
+    assert d2.equipment == "LTX/DTX"
+    assert d2.equipment_id == "TX2"
+    assert d2.technology == "TEV"
+    assert d2.criticality == "HIGH"
+    assert d2.tev_char == "SURFACE"
+    assert d2.tev_reading == "31.2"
+    assert d2.raw_measurement == "31.2"
+
+    # Row 3: IR defect with ID, DEFECT FROM, STATUS; DEFECT TYPE does not populate us_char/tev_char
+    d3 = defects[2]
+    assert d3.equipment == "FP (D)"
+    assert d3.equipment_id == "FP TX1"
+    assert d3.technology == "IR"
+    assert d3.criticality == "LOW"
+    assert d3.us_char == ""
+    assert d3.tev_char == ""
+    assert d3.ir_reading == "58.2"
+    assert d3.raw_measurement == "58.2"
+
+
+def test_master_qr03_fetch_cbm_defects_case_and_whitespace_insensitivity(tmp_path: Path):
+    """Verify column matching is resilient to case variations and leading/trailing whitespace."""
+    import pandas as pd
+
+    cba_df = pd.DataFrame(
+        [
+            {
+                " functional location ": "PE-8888",
+                " equipment ": "RMU SF6",
+                " Equipment ID ": "SWG-PANEL-3",
+                " defect from ": "us",
+                " status ": "MEDIUM",
+                " Us Character ": "ARCING",
+                " reading ": "19.5",
+            }
+        ]
+    )
+    vi_df = pd.DataFrame([{" functional location ": "PE-8888", " equipment ": "RMU SF6", " defect area ": "Door"}])
+
+    engr_path = tmp_path / "ENGR-CASE-TEST.xlsx"
+    with pd.ExcelWriter(engr_path, engine="openpyxl") as writer:
+        cba_df.to_excel(writer, sheet_name="QR03 CBA", index=False)
+        vi_df.to_excel(writer, sheet_name="QR03 VI", index=False)
+
+    repo = MasterQr03DefectRepository(tmp_path)
+    defects = repo.fetch_cbm_defects("PE-8888")
+
+    assert len(defects) == 1
+    d = defects[0]
+    assert d.equipment == "RMU SF6"
+    assert d.equipment_id == "SWG-PANEL-3"
+    assert d.technology == "US"
+    assert d.criticality == "MEDIUM"
+    assert d.us_char == "ARCING"
+    assert d.us_reading == "19.5"
+
+
+def test_cbm_family_specs_canonical_aliasing_and_technologies():
+    """Verify QUICK_REPORT_FAMILY_SPECS contains canonical aliased values and IR/US/TEV support."""
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+
+    # 1. SWG
+    swg = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
+    assert swg.technologies == ("IR", "US", "TEV")
+    assert swg.overview_template_key == "swg_overview"
+    assert swg.equipment_values == (
+        "RMU SF6",
+        "RMU OIL",
+        "VCB 11kV",
+        "VCB 33kV",
+        "MRMU",
+        "CABLE SWG",
+        "EARTHING",
+        "SWITCHGEAR",
+        "GIS 33kV",
+    )
+    assert len(swg.detail_roles) == 1
+    assert swg.detail_roles[0].id == "panel_area"
+    assert swg.detail_roles[0].template_key == "swg_panel"
+    assert swg.detail_roles[0].technologies == ("IR", "US", "TEV")
+    assert swg.detail_roles[0].equipment_values == swg.equipment_values
+
+    # 2. TX
+    tx = QUICK_REPORT_FAMILY_SPECS_BY_ID["tx"]
+    assert tx.technologies == ("IR", "US", "TEV")
+    assert tx.overview_template_key == "tx_overview"
+    assert tx.equipment_values == (
+        "LTX/DTX",
+        "CABLE LTX/DTX",
+        "PTX",
+        "CABLE PTX",
+        "TRANSFORMER",
+    )
+    assert len(tx.detail_roles) == 2
+    hv_role = next(r for r in tx.detail_roles if r.id == "tx_hv_side")
+    lv_role = next(r for r in tx.detail_roles if r.id == "tx_lv_side")
+    assert hv_role.template_key == "tx_hv_sides"
+    assert hv_role.technologies == ("IR", "US", "TEV")
+    assert hv_role.equipment_values == tx.equipment_values
+    assert lv_role.template_key == "tx_lv_sides"
+    assert lv_role.technologies == ("IR", "US", "TEV")
+    assert lv_role.equipment_values == tx.equipment_values
+
+    # 3. FP_LVDB
+    fp = QUICK_REPORT_FAMILY_SPECS_BY_ID["fp_lvdb"]
+    assert fp.technologies == ("IR", "US", "TEV")
+    assert fp.overview_template_key == "fp_overview"
+    assert fp.equipment_values == (
+        "FP (D)",
+        "FP (J)",
+        "LVDB",
+        "CABLE LVDB/FP",
+        "FP",
+    )
+    assert len(fp.detail_roles) == 1
+    assert fp.detail_roles[0].id == "fp_detail"
+    assert fp.detail_roles[0].template_key == "fp_individual_defect"
+    assert fp.detail_roles[0].technologies == ("IR", "US", "TEV")
+    assert fp.detail_roles[0].equipment_values == fp.equipment_values
+
+    # 4. BATTERY
+    battery = QUICK_REPORT_FAMILY_SPECS_BY_ID["battery"]
+    assert battery.technologies == ("IR", "US", "TEV")
+    assert battery.overview_template_key == "battery_overview"
+    assert battery.equipment_values == (
+        "BATTERY CHARGER",
+        "BATTERY BANK",
+        "BATTERY",
+    )
+    assert len(battery.detail_roles) == 1
+    assert battery.detail_roles[0].id == "battery_detail"
+    assert battery.detail_roles[0].template_key == "battery_overview"
+    assert battery.detail_roles[0].technologies == ("IR", "US", "TEV")
+    assert battery.detail_roles[0].equipment_values == battery.equipment_values
+
+    # 5. BLACKBOX
+    blackbox = QUICK_REPORT_FAMILY_SPECS_BY_ID["blackbox"]
+    assert blackbox.technologies == ("IR", "US", "TEV")
+    assert blackbox.overview_template_key == "blackbox_overview"
+    assert blackbox.equipment_values == ("BLACK BOX", "BLACKBOX")
+    assert len(blackbox.detail_roles) == 1
+    assert blackbox.detail_roles[0].id == "blackbox_detail"
+    assert blackbox.detail_roles[0].template_key == "blackbox_overview"
+    assert blackbox.detail_roles[0].technologies == ("IR", "US", "TEV")
+    assert blackbox.detail_roles[0].equipment_values == blackbox.equipment_values
+
+
+def test_cbm_defect_planner_canonical_aliasing_matching(tmp_path: Path):
+    """Verify CbmDefectPlanner matches canonical aliased equipment names to families."""
+    from unittest.mock import MagicMock
+    from src.quick_report.cbm_defect_planner import CbmDefectPlanner
+
+    # Create dummy templates
+    template_names = [
+        "swg_overview", "swg_panel",
+        "tx_overview", "tx_hv_sides", "tx_lv_sides",
+        "fp_overview", "fp_individual_defect",
+        "battery_overview",
+        "blackbox_overview",
+    ]
+    template_map = {}
+    for name in template_names:
+        p = tmp_path / f"{name}.docx"
+        p.touch()
+        template_map[name] = p
+
+    env = MagicMock()
+    env.get_template.side_effect = lambda k: template_map.get(k)
+
+    planner = CbmDefectPlanner()
+
+    defects = [
+        CbmDefectRecord(equipment="VCB 11kV", technology="IR", defect_area="Cable Box"),
+        CbmDefectRecord(equipment="MRMU", technology="US", defect_area="Busbar"),
+        CbmDefectRecord(equipment="GIS 33kV", technology="TEV", defect_area="Chamber"),
+        CbmDefectRecord(equipment="PTX", technology="IR", defect_area="HV Bushing"),
+        CbmDefectRecord(equipment="CABLE PTX", technology="US", defect_area="Terminations"),
+        CbmDefectRecord(equipment="FP (J)", technology="IR", defect_area="Fuse Base"),
+        CbmDefectRecord(equipment="CABLE LVDB/FP", technology="IR", defect_area="Cable Joint"),
+        CbmDefectRecord(equipment="BATTERY CHARGER", technology="IR", defect_area="Diode"),
+        CbmDefectRecord(equipment="BLACK BOX", technology="IR", defect_area="Enclosure"),
+    ]
+
+    plans = planner.plan(defects, env)
+    family_ids = [p.spec.id for p in plans]
+
+    assert "swg" in family_ids
+    assert "tx" in family_ids
+    assert "fp_lvdb" in family_ids
+    assert "battery" in family_ids
+    assert "blackbox" in family_ids
+
+    # Verify SWG group contains VCB 11kV, MRMU, GIS 33kV
+    swg_plan = next(p for p in plans if p.spec.id == "swg")
+    swg_defects = [d.equipment for g in swg_plan.groups for d in g.defects]
+    assert "VCB 11kV" in swg_defects
+    assert "MRMU" in swg_defects
+    assert "GIS 33kV" in swg_defects
+
+    # Verify TX group contains PTX, CABLE PTX
+    tx_plan = next(p for p in plans if p.spec.id == "tx")
+    tx_defects = [d.equipment for g in tx_plan.groups for d in g.defects]
+    assert "PTX" in tx_defects
+    assert "CABLE PTX" in tx_defects
+
+
+def test_cbm_defect_planner_physical_apparatus_grouping_by_item_key(tmp_path: Path):
+    """Verify defects are grouped by physical apparatus (item_key derived from equipment_id or equipment)."""
+    from unittest.mock import MagicMock
+    from src.quick_report.cbm_defect_planner import CbmDefectPlanner
+
+    template_map = {
+        "swg_overview": tmp_path / "swg_overview.docx",
+        "swg_panel": tmp_path / "swg_panel.docx",
+    }
+    for p in template_map.values():
+        p.touch()
+
+    env = MagicMock()
+    env.get_template.side_effect = lambda k: template_map.get(k)
+
+    planner = CbmDefectPlanner()
+
+    # Defects for 2 distinct switchgear panels, plus 1 defect without equipment_id
+    defects = [
+        CbmDefectRecord(equipment="RMU SF6", equipment_id="PANEL 1", defect_area="Cable Box", technology="IR"),
+        CbmDefectRecord(equipment="RMU SF6", equipment_id="PANEL 1", defect_area="Busbar", technology="US"),
+        CbmDefectRecord(equipment="RMU SF6", equipment_id="PANEL 2", defect_area="Cable Box", technology="IR"),
+        CbmDefectRecord(equipment="RMU SF6", equipment_id="", defect_area="Earth Switch", technology="IR"),
+    ]
+
+    plans = planner.plan(defects, env)
+    assert len(plans) == 1
+    swg_plan = plans[0]
+
+    # Should have 3 apparatus groups: "PANEL 1", "PANEL 2", "RMU SF6"
+    group_keys = [g.item_key for g in swg_plan.groups]
+    assert group_keys == ["PANEL 1", "PANEL 2", "RMU SF6"]
+
+    # PANEL 1 has 2 defects (different areas, so not merged)
+    panel1_group = next(g for g in swg_plan.groups if g.item_key == "PANEL 1")
+    assert len(panel1_group.defects) == 2
+
+    # PANEL 2 has 1 defect
+    panel2_group = next(g for g in swg_plan.groups if g.item_key == "PANEL 2")
+    assert len(panel2_group.defects) == 1
+
+    # Empty equipment_id group has item_key="RMU SF6"
+    fallback_group = next(g for g in swg_plan.groups if g.item_key == "RMU SF6")
+    assert len(fallback_group.defects) == 1
+
+
+def test_cbm_defect_planner_multi_technology_merging_same_item_and_area(tmp_path: Path):
+    """Verify multiple defects sharing (item_key, defect_area) merge readings into one unified record."""
+    from unittest.mock import MagicMock
+    from src.quick_report.cbm_defect_planner import CbmDefectPlanner
+
+    template_map = {
+        "swg_overview": tmp_path / "swg_overview.docx",
+        "swg_panel": tmp_path / "swg_panel.docx",
+    }
+    for p in template_map.values():
+        p.touch()
+
+    env = MagicMock()
+    env.get_template.side_effect = lambda k: template_map.get(k)
+
+    planner = CbmDefectPlanner()
+
+    defects = [
+        CbmDefectRecord(
+            equipment="RMU SF6",
+            equipment_id="PANEL 1",
+            defect_area="Cable Compartment",
+            technology="IR",
+            ir_reading="58.5",
+            criticality="LOW",
+            additional_remarks="Thermal hotspot",
+            source_order=1,
+        ),
+        CbmDefectRecord(
+            equipment="RMU SF6",
+            equipment_id="PANEL 1",
+            defect_area="cable compartment",  # Case-insensitive match
+            technology="US",
+            us_reading="25.0",
+            us_char="CORONA",
+            criticality="CRITICAL",
+            additional_remarks="Corona sound",
+            source_order=2,
+        ),
+        CbmDefectRecord(
+            equipment="RMU SF6",
+            equipment_id="PANEL 1",
+            defect_area="Cable Compartment",
+            technology="TEV",
+            tev_reading="33.5",
+            tev_char="CONTINUOUS",
+            criticality="HIGH",
+            source_order=3,
+        ),
+    ]
+
+    plans = planner.plan(defects, env)
+    assert len(plans) == 1
+    swg_plan = plans[0]
+    assert len(swg_plan.groups) == 1
+
+    group = swg_plan.groups[0]
+    assert group.item_key == "PANEL 1"
+    # Merged to exactly 1 unified defect
+    assert len(group.defects) == 1
+
+    merged = group.defects[0]
+    assert merged.equipment == "RMU SF6"
+    assert merged.equipment_id == "PANEL 1"
+    assert merged.defect_area == "Cable Compartment"
+    assert merged.ir_reading == "58.5"
+    assert merged.us_reading == "25.0"
+    assert merged.us_char == "CORONA"
+    assert merged.tev_reading == "33.5"
+    assert merged.tev_char == "CONTINUOUS"
+    # Criticality merged to highest severity: CRITICAL
+    assert merged.criticality == "CRITICAL"
+    # Source order preserved from earliest: 1
+    assert merged.source_order == 1
+
+    # Verify detail_groups has the merged record
+    assert len(group.detail_groups) == 1
+    assert group.detail_groups[0].defects == (merged,)
+
+
+def test_cbm_defect_planner_different_defect_areas_not_merged(tmp_path: Path):
+    """Verify defects on same apparatus with distinct defect areas remain separate records."""
+    from unittest.mock import MagicMock
+    from src.quick_report.cbm_defect_planner import CbmDefectPlanner
+
+    template_map = {
+        "swg_overview": tmp_path / "swg_overview.docx",
+        "swg_panel": tmp_path / "swg_panel.docx",
+    }
+    for p in template_map.values():
+        p.touch()
+
+    env = MagicMock()
+    env.get_template.side_effect = lambda k: template_map.get(k)
+
+    planner = CbmDefectPlanner()
+
+    defects = [
+        CbmDefectRecord(
+            equipment="RMU SF6",
+            equipment_id="PANEL 1",
+            defect_area="Cable Compartment",
+            technology="IR",
+            ir_reading="58.5",
+        ),
+        CbmDefectRecord(
+            equipment="RMU SF6",
+            equipment_id="PANEL 1",
+            defect_area="Busbar Chamber",
+            technology="US",
+            us_reading="22.0",
+        ),
+    ]
+
+    plans = planner.plan(defects, env)
+    assert len(plans) == 1
+    group = plans[0].groups[0]
+    assert len(group.defects) == 2
+    areas = [d.defect_area for d in group.defects]
+    assert "Cable Compartment" in areas
+    assert "Busbar Chamber" in areas
+
+
+def test_cbm_defect_planner_tx_smart_routing(tmp_path: Path):
+    """Verify TX smart routing routes to tx_hv_side vs tx_lv_side according to area/id/equipment rules."""
+    from unittest.mock import MagicMock
+    from src.quick_report.cbm_defect_planner import CbmDefectPlanner
+
+    template_map = {
+        "tx_overview": tmp_path / "tx_overview.docx",
+        "tx_hv_sides": tmp_path / "tx_hv_sides.docx",
+        "tx_lv_sides": tmp_path / "tx_lv_sides.docx",
+    }
+    for p in template_map.values():
+        p.touch()
+
+    env = MagicMock()
+    env.get_template.side_effect = lambda k: template_map.get(k)
+
+    planner = CbmDefectPlanner()
+
+    # Test cases for TX routing:
+    # 1. HV Bushing -> tx_hv_side
+    # 2. 11kV Termination -> tx_hv_side
+    # 3. 33kV Bushing -> tx_hv_side
+    # 4. equipment_id with HV -> tx_hv_side
+    # 5. LV Cable Box -> tx_lv_side
+    # 6. 415V Terminations -> tx_lv_side
+    # 7. equipment_id with LV -> tx_lv_side
+    # 8. Fallback CABLE -> tx_hv_side
+    # 9. Fallback non-CABLE -> tx_lv_side
+    defects = [
+        CbmDefectRecord(equipment="LTX/DTX", equipment_id="TX 1", defect_area="HV Bushing", technology="IR"),
+        CbmDefectRecord(equipment="TRANSFORMER", equipment_id="TX 2", defect_area="11kV Termination", technology="IR"),
+        CbmDefectRecord(equipment="PTX", equipment_id="TX 3", defect_area="33kV Bushing", technology="IR"),
+        CbmDefectRecord(equipment="LTX/DTX", equipment_id="TX 4 (HV)", defect_area="General Defect", technology="IR"),
+        CbmDefectRecord(equipment="LTX/DTX", equipment_id="TX 5", defect_area="LV Cable Box", technology="IR"),
+        CbmDefectRecord(equipment="TRANSFORMER", equipment_id="TX 6", defect_area="415V Terminations", technology="IR"),
+        CbmDefectRecord(equipment="PTX", equipment_id="TX 7 LV", defect_area="General Defect", technology="IR"),
+        CbmDefectRecord(equipment="CABLE LTX/DTX", equipment_id="TX 8", defect_area="Oil Leak", technology="IR"),
+        CbmDefectRecord(equipment="CABLE PTX", equipment_id="TX 9", defect_area="Corrosion", technology="IR"),
+        CbmDefectRecord(equipment="LTX/DTX", equipment_id="TX 10", defect_area="Tank Body Rust", technology="IR"),
+        CbmDefectRecord(equipment="PTX", equipment_id="TX 11", defect_area="Radiator Leak", technology="IR"),
+        CbmDefectRecord(equipment="TRANSFORMER", equipment_id="TX 12", defect_area="Silica Gel", technology="IR"),
+    ]
+
+    plans = planner.plan(defects, env)
+    assert len(plans) == 1
+    tx_plan = plans[0]
+
+    groups_by_key = {g.item_key: g for g in tx_plan.groups}
+
+    def get_routed_role(item_key: str) -> str:
+        grp = groups_by_key[item_key]
+        for dg in grp.detail_groups:
+            if dg.defects:
+                return dg.role_id
+        return ""
+
+    # HV routing assertions
+    assert get_routed_role("TX 1") == "tx_hv_side"
+    assert get_routed_role("TX 2") == "tx_hv_side"
+    assert get_routed_role("TX 3") == "tx_hv_side"
+    assert get_routed_role("TX 4 (HV)") == "tx_hv_side"
+    assert get_routed_role("TX 8") == "tx_hv_side"   # CABLE LTX/DTX fallback
+    assert get_routed_role("TX 9") == "tx_hv_side"   # CABLE PTX fallback
+
+    # LV routing assertions
+    assert get_routed_role("TX 5") == "tx_lv_side"
+    assert get_routed_role("TX 6") == "tx_lv_side"
+    assert get_routed_role("TX 7 LV") == "tx_lv_side"
+    assert get_routed_role("TX 10") == "tx_lv_side"  # LTX/DTX fallback
+    assert get_routed_role("TX 11") == "tx_lv_side"  # PTX fallback
+    assert get_routed_role("TX 12") == "tx_lv_side"  # TRANSFORMER fallback
+
+
+def test_cbm_defect_planner_non_matching_equipment_skipping_with_log(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    """Verify non-matching equipment (e.g. switchyard/overhead) is skipped with an explicit logger info message."""
+    import logging
+    from unittest.mock import MagicMock
+    from src.quick_report.cbm_defect_planner import CbmDefectPlanner
+
+    env = MagicMock()
+    planner = CbmDefectPlanner()
+
+    non_matching = [
+        CbmDefectRecord(equipment="OVERHEAD LINE", defect_area="Conductor", technology="IR"),
+        CbmDefectRecord(equipment="SWITCHYARD", defect_area="Isolator", technology="US"),
+        CbmDefectRecord(equipment="LIGHTNING ARRESTER", defect_area="Surge Counter", technology="IR"),
+    ]
+
+    with caplog.at_level(logging.INFO):
+        plans = planner.plan(non_matching, env)
+
+
+def test_format_detail_area_formatting():
+    from src.quick_report.cbm_render import _format_detail_area
+
+    # 1. Overview returns "OVERVIEW"
+    assert _format_detail_area("Cable Box", "Hotspot", overview=True) == "OVERVIEW"
+    assert _format_detail_area("", "", overview=True) == "OVERVIEW"
+
+    # 2. Defect area + remarks formatted verbatim as "{area}/ {remarks}"
+    assert _format_detail_area("Cable Compartment", "Phase R Hotspot", overview=False) == "Cable Compartment/ Phase R Hotspot"
+    assert _format_detail_area("HV Bushing", "Discharge noise", overview=False) == "HV Bushing/ Discharge noise"
+
+    # 3. Only defect area
+    assert _format_detail_area("Cable Compartment", "", overview=False) == "Cable Compartment"
+    assert _format_detail_area("Cable Compartment", None, overview=False) == "Cable Compartment"
+    assert _format_detail_area("Cable Compartment", "   ", overview=False) == "Cable Compartment"
+
+    # 4. Only remarks
+    assert _format_detail_area("", "Hotspot", overview=False) == "Hotspot"
+    assert _format_detail_area(None, "Hotspot", overview=False) == "Hotspot"
+
+    # 5. Empty / None fallback
+    assert _format_detail_area("", "", overview=False) == "-"
+    assert _format_detail_area(None, None, overview=False) == "-"
+
+
+def test_swg_render_context_with_testsheet_match():
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import (
+        SubstationEquipmentPackage,
+        SwitchgearPanelSpec,
+        SwitchgearSpec,
+    )
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
+    panel_1 = SwitchgearPanelSpec(
+        panel_no=1,
+        panel_feeder_no="1",
+        name="TX 1",
+        status="CLOSE",
+        load_amp="120A",
+        cable_type="XLPE 300mm",
+        heater_amp="0.5A",
+        serial_no="PNL-SN-001",
+    )
+    swg_spec = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="Schneider",
+        model="RM6",
+        rating="11kV",
+        serial_no="SN-SWG-001",
+        panels=(panel_1,),
+    )
+    equipment_pkg = SubstationEquipmentPackage(switchgears=(swg_spec,))
+    pe_info = {"equipment_specs": equipment_pkg, "substation": {"name_erms": "PE TEST"}}
+
+    rec = CbmDefectRecord(
+        equipment="RMU SF6",
+        equipment_id="PANEL 1",
+        technology="IR",
+        defect_area="Cable Compartment",
+        additional_remarks="Phase R Hotspot",
+        ir_reading="55.2",
+    )
+
+    ctx = _build_family_render_context(
+        spec,
+        rec,
+        overview=False,
+        item_key="PANEL 1",
+        item_suffix="PANEL 1",
+        pe_info=pe_info,
+    )
+
+    assert ctx["swg"]["area"] == "Cable Compartment/ Phase R Hotspot"
+    assert ctx["swg"]["manufacturer"] == "Schneider"
+    assert ctx["swg"]["model"] == "RM6"
+    assert ctx["swg"]["rating"] == "11kV"
+    assert ctx["swg"]["serialnumber"] == "SN-SWG-001"
+    assert ctx["swg"]["type"] == "RMU SF6"
+
+    assert ctx["panel"]["name"] == "PANEL 1"
+    assert ctx["panel"]["linknumber"] == "PANEL 1"
+    assert ctx["panel"]["area"] == "Cable Compartment/ Phase R Hotspot"
+    assert ctx["panel"]["loadamp"] == "120A"
+    assert ctx["panel"]["heateramp"] == "0.5A"
+    assert ctx["panel"]["breakerstatus"] == "CLOSE"
+    assert ctx["panel"]["cabletype"] == "XLPE 300mm"
+    assert ctx["panel"]["serialnumber"] == "PNL-SN-001"
+    assert ctx["panel"]["busbarposition"] == "-"
+    assert ctx["panel"]["ir"]["reading"] == "55.2"
+    assert ctx["panel"]["us"]["reading"] == "-"
+    assert ctx["panel"]["us"]["char"] == "-"
+    assert ctx["panel"]["tev"]["reading"] == "-"
+    assert ctx["panel"]["tev"]["char"] == "-"
+
+
+def test_swg_render_context_without_testsheet_fallback_dash():
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
+    rec = CbmDefectRecord(
+        equipment="CABLE SWG",
+        equipment_id="PANEL 2",
+        technology="US",
+        defect_area="Cable Box",
+        additional_remarks="",
+        us_reading="24.0",
+        us_char="TRACKING",
+    )
+
+    ctx = _build_family_render_context(
+        spec,
+        rec,
+        overview=False,
+        item_key="PANEL 2",
+        pe_info={},
+    )
+
+    assert ctx["swg"]["area"] == "Cable Box"
+    assert ctx["swg"]["manufacturer"] == "-"
+    assert ctx["swg"]["model"] == "-"
+    assert ctx["swg"]["rating"] == "-"
+    assert ctx["swg"]["serialnumber"] == "-"
+    assert ctx["swg"]["type"] == "CABLE SWG"
+
+    assert ctx["panel"]["name"] == "PANEL 2"
+    assert ctx["panel"]["linknumber"] == "PANEL 2"
+    assert ctx["panel"]["area"] == "Cable Box"
+    assert ctx["panel"]["loadamp"] == "-"
+    assert ctx["panel"]["heateramp"] == "-"
+    assert ctx["panel"]["breakerstatus"] == "-"
+    assert ctx["panel"]["cabletype"] == "CABLE SWG"
+    assert ctx["panel"]["serialnumber"] == "-"
+    assert ctx["panel"]["busbarposition"] == "-"
+    assert ctx["panel"]["ir"]["reading"] == "-"
+    assert ctx["panel"]["us"]["reading"] == "24.0"
+    assert ctx["panel"]["us"]["char"] == "TRACKING"
+    assert ctx["panel"]["tev"]["reading"] == "-"
+    assert ctx["panel"]["tev"]["char"] == "-"
+
+
+def test_tx_render_context_with_and_without_testsheet():
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import SubstationEquipmentPackage, TransformerSpec
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["tx"]
+    tx_spec = TransformerSpec(
+        tx_id="Tx 1",
+        rating_kva="1000kVA",
+        manufacturer="Tamini",
+        type="ONAN",
+        serial_no="TX-SN-999",
+    )
+    equipment_pkg = SubstationEquipmentPackage(transformers=(tx_spec,))
+    pe_info = {
+        "equipment_specs": equipment_pkg,
+        "substation": {"building_type": "ATTACHED", "name_erms": "PE TEST"},
+    }
+
+    rec = CbmDefectRecord(
+        equipment="LTX/DTX",
+        equipment_id="TX 1",
+        technology="US",
+        defect_area="HV Bushing",
+        additional_remarks="Corona sound",
+        us_reading="18.5",
+        us_char="CORONA",
+    )
+
+    ctx = _build_family_render_context(
+        spec,
+        rec,
+        overview=False,
+        item_key="TX 1",
+        pe_info=pe_info,
+    )
+
+    assert ctx["tx"]["number"] == "TX 1"
+    assert ctx["tx"]["location"] == "HV - SIDE"
+    assert ctx["tx"]["area"] == "HV Bushing/ Corona sound"
+    assert ctx["tx"]["manufacturer"] == "Tamini"
+    assert ctx["tx"]["model"] == "ONAN"
+    assert ctx["tx"]["rating"] == "1000kVA"
+    assert ctx["tx"]["serialnumber"] == "TX-SN-999"
+    assert ctx["tx"]["cabletype"] == "-"
+    assert ctx["tx"]["ir"]["reading"] == "-"
+    assert ctx["tx"]["us"]["reading"] == "18.5"
+    assert ctx["tx"]["us"]["char"] == "CORONA"
+    assert ctx["tx"]["tev"]["reading"] == "-"
+    assert ctx["tx"]["tev"]["char"] == "-"
+
+    # Without testsheet
+    ctx_empty = _build_family_render_context(spec, rec, overview=False, item_key="TX 1", pe_info={})
+    assert ctx_empty["tx"]["number"] == "TX 1"
+    assert ctx_empty["tx"]["location"] == "HV - SIDE"
+    assert ctx_empty["tx"]["manufacturer"] == "-"
+    assert ctx_empty["tx"]["model"] == "-"
+    assert ctx_empty["tx"]["rating"] == "-"
+    assert ctx_empty["tx"]["serialnumber"] == "-"
+
+
+def test_fp_lvdb_render_context_splitting_and_testsheet():
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import LVDBSpec, SubstationEquipmentPackage
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["fp_lvdb"]
+    lv_spec = LVDBSpec(
+        name="LVDB 1",
+        label="FP",
+        source="TX1",
+        manufacturer="Tamco",
+        serial_no="FP-SN-123",
+        rating="415V",
+    )
+    equipment_pkg = SubstationEquipmentPackage(lvdb_specs=(lv_spec,))
+    pe_info = {"equipment_specs": equipment_pkg, "substation": {"name_erms": "PE TEST"}}
+
+    # With split "FP TX1 - OUTGOING F5"
+    rec_split = CbmDefectRecord(
+        equipment="FP (D)",
+        equipment_id="FP TX1 - OUTGOING F5",
+        technology="IR",
+        defect_area="Fuse Base",
+        additional_remarks="Hotspot",
+        ir_reading="60.1",
+    )
+    ctx_split = _build_family_render_context(
+        spec, rec_split, overview=False, item_key="FP TX1 - OUTGOING F5", pe_info=pe_info
+    )
+    assert ctx_split["fp"]["labelsource"] == "FP TX1"
+    assert ctx_split["fp"]["feederno"] == "OUTGOING F5"
+    assert ctx_split["fp"]["area"] == "Fuse Base/ Hotspot"
+    assert ctx_split["fp"]["manufacturer"] == "Tamco"
+    assert ctx_split["fp"]["rating"] == "415V"
+    assert ctx_split["fp"]["serialnumber"] == "FP-SN-123"
+    assert ctx_split["fp"]["ir"]["reading"] == "60.1"
+    assert ctx_split["fp"]["us"]["reading"] == "-"
+    assert ctx_split["fp"]["tev"]["reading"] == "-"
+
+    # Without split
+    rec_nosplit = CbmDefectRecord(
+        equipment="FP (D)",
+        equipment_id="FP TX1",
+        technology="IR",
+        defect_area="Fuse Base",
+    )
+    ctx_nosplit = _build_family_render_context(
+        spec, rec_nosplit, overview=False, item_key="FP TX1", pe_info=pe_info
+    )
+    assert ctx_nosplit["fp"]["labelsource"] == "FP TX1"
+    assert ctx_nosplit["fp"]["feederno"] == "-"
+
+
+def test_blackbox_render_context_number_and_location_detection():
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["blackbox"]
+    rec = CbmDefectRecord(
+        equipment="BLACK BOX",
+        equipment_id="BLACK BOX 2",
+        defect_area="LEFT SIDE TERMINAL",
+        additional_remarks="Loose wire",
+        technology="TEV",
+        tev_reading="24.0",
+        tev_char="SURFACE",
+    )
+
+    ctx = _build_family_render_context(
+        spec,
+        rec,
+        overview=False,
+        item_key="BLACK BOX 2",
+        pe_info={},
+    )
+
+    assert ctx["bbox"]["number"] == "2"
+    assert ctx["bbox"]["location"] == "LEFT"
+    assert ctx["bbox"]["area"] == "LEFT SIDE TERMINAL/ Loose wire"
+    assert ctx["bbox"]["tev"]["reading"] == "24.0"
+    assert ctx["bbox"]["tev"]["char"] == "SURFACE"
+    assert ctx["bbox"]["ir"]["reading"] == "-"
+    assert ctx["bbox"]["us"]["reading"] == "-"
+
+
+def test_battery_render_context_with_testsheet():
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import BatteryBankSpec, SubstationEquipmentPackage
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["battery"]
+    batt_spec = BatteryBankSpec(
+        name="BATTERY BANK 1",
+        manufacturer="Chloride",
+        model="Powersafe",
+        serial_no="BATT-007",
+    )
+    equipment_pkg = SubstationEquipmentPackage(battery_banks=(batt_spec,))
+    pe_info = {"equipment_specs": equipment_pkg, "substation": {"name_erms": "PE TEST"}}
+
+    rec = CbmDefectRecord(
+        equipment="BATTERY BANK",
+        equipment_id="BATTERY BANK 1",
+        technology="IR",
+        defect_area="Terminal Post",
+        additional_remarks="Phase R",
+        ir_reading="45.0",
+    )
+
+    ctx = _build_family_render_context(
+        spec,
+        rec,
+        overview=False,
+        item_key="BATTERY BANK 1",
+        pe_info=pe_info,
+    )
+
+    assert ctx["batt"]["number"] == "BATTERY BANK 1"
+    assert ctx["batt"]["manufacturer"] == "Chloride"
+    assert ctx["batt"]["model"] == "Powersafe"
+    assert ctx["batt"]["serialnumber"] == "BATT-007"
+    assert ctx["batt"]["area"] == "Terminal Post/ Phase R"
+    assert ctx["batt"]["ir"]["reading"] == "45.0"
+    assert ctx["batt"]["us"]["reading"] == "-"
+    assert ctx["batt"]["tev"]["reading"] == "-"
+
+
+def test_render_docx_template_zero_raw_jinja_tag_leaks(tmp_path: Path):
+    import re
+    import zipfile
+    from src.quick_report.cbm_render import _render_docx_template
+
+    template_p = Path("templates/QUICK REPORT/DEFECT IR/swg-panel.docx")
+    if not template_p.exists():
+        pytest.skip("swg-panel.docx template not found")
+
+    out_p = tmp_path / "test_swg_rendered.docx"
+    # Minimal sparse context
+    context = {
+        "substation": {"name_erms": "PE TEST SUB"},
+        "swg": {"type": "RMU SF6"},
+        "panel": {"name": "PANEL 1"},
+    }
+
+    _render_docx_template(template_p, out_p, context)
+    assert out_p.exists()
+
+    with zipfile.ZipFile(out_p) as z:
+        xml = z.read("word/document.xml").decode("utf-8", errors="ignore")
+        raw_tags = re.findall(r"\{\{[^}]+\}\}", xml)
+        assert raw_tags == [], f"Found raw Jinja tags leaking in rendered docx: {raw_tags}"
+
+
+def test_transformer_pe_info_equipment_specs():
+    from unittest.mock import MagicMock
+    from src.quick_report.transformer import QuickReportTransformer
+    from src.testsheet.models import SubstationEquipmentPackage, SwitchgearSpec
+
+    swg = SwitchgearSpec(manufacturer="ABB")
+    pkg_equipment = SubstationEquipmentPackage(switchgears=(swg,))
+
+    pkg = MagicMock()
+    pkg.station = "KUANTAN"
+    pkg.month = "08. AUGUST"
+    pkg.substation_number = 1
+    pkg.data = MagicMock()
+    pkg.data.date_str = "12-08-2026"
+    pkg.data.substation_name_erms = "TEST SUBSTATION"
+    pkg.data.substation_name_site = "TEST SUBSTATION"
+    pkg.data.fl_erms = "FL123"
+    pkg.data.fl_site = "FL123"
+    pkg.data.gps_coordinate = ""
+    pkg.data.substation_type = ""
+    pkg.data.building_type = "ATTACHED"
+    pkg.data.ambient = ""
+    pkg.data.humidity = ""
+    pkg.data.time = ""
+    pkg.data.equipment = pkg_equipment
+
+    env = MagicMock()
+    env.po_number = "12345"
+    env.state = "PAHANG"
+    env.get_vi_front_page_template.return_value = Path("dummy.docx")
+    env.get_template.return_value = Path("dummy.docx")
+
+    transformer = QuickReportTransformer()
+    plan = transformer.transform(pkg, [], [], env)
+
+    assert plan.pe_info["equipment_specs"] == pkg_equipment
+    assert plan.pe_info["equipment_package"] == pkg_equipment
+    assert plan.pe_info["equipment"] == pkg_equipment
+
+
+def test_utils_clear_cell_text_and_set_cell_no_borders():
+    from docx import Document
+    from docx.oxml.ns import qn
+    from src.quick_report.utils import clear_cell_text, set_cell_no_borders
+
+    doc = Document()
+    table = doc.add_table(rows=2, cols=2)
+    cell = table.cell(0, 0)
+    cell.text = "Sample Text"
+    assert cell.text == "Sample Text"
+
+    clear_cell_text(cell)
+    assert cell.text == ""
+
+    set_cell_no_borders(cell)
+    tcPr = cell._tc.get_or_add_tcPr()
+    tcBorders = tcPr.find(qn("w:tcBorders"))
+    assert tcBorders is not None
+    for border_name in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        border = tcBorders.find(qn(f"w:{border_name}"))
+        assert border is not None
+        assert border.get(qn("w:val")) == "nil"
+
+
+def test_utils_normalize_functional_location_input():
+    from src.quick_report.utils import normalize_functional_location_input
+
+    assert normalize_functional_location_input(None) == ""
+    assert normalize_functional_location_input("") == ""
+    assert normalize_functional_location_input("12345.0") == "12345"
+    assert normalize_functional_location_input("F/L 67890") == "67890"
+    assert normalize_functional_location_input("  f/l 11111  ") == "11111"
+    assert normalize_functional_location_input(12345) == "12345"
+
+
 
 

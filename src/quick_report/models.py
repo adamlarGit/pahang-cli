@@ -64,20 +64,21 @@ class ViDefectPagePlan:
 class CbmSummaryRow:
     """Prepared technical summary row for CBM defect report."""
 
-    equipment: str
-    brand: str
-    model: str
-    rating: str
-    defect_area: str
-    remarks: str
-    ir_reading: str
-    us_reading: str
-    tev_reading: str
+    equipment: str = ""
+    brand: str = ""
+    model: str = ""
+    rating: str = ""
+    defect_area: str = ""
+    remarks: str = ""
+    ir_reading: str = ""
+    us_reading: str = ""
+    tev_reading: str = ""
     ir_abs: str = ""
-    ir_delta: str = ""
+    ir_delta: str = "-"
     us_dB: str = ""
     tev_dB: str = ""
-    status: str = "MAJOR"
+    severity: str = ""
+    status: str = ""
 
 
 @dataclass(frozen=True)

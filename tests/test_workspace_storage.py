@@ -102,3 +102,74 @@ def test_workspace_storage_raw_csv_fallback_discovery(tmp_path: Path) -> None:
     # Root MSMS folder is never created or touched
     assert not (tmp_path / "MSMS").exists()
 
+
+def test_workspace_storage_cbm_defect_dir(tmp_path: Path) -> None:
+    storage = LocalWorkspaceStorage(tmp_path)
+    assert storage.get_cbm_defect_dir("DEFECT IR") == tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR"
+    assert storage.get_cbm_defect_dir("DEFECT IR US") == tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR US"
+    assert storage.get_cbm_defect_dir("DEFECT IR US TEV") == tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR US TEV"
+
+
+def test_workspace_storage_cbm_defect_template_success(tmp_path: Path) -> None:
+    storage = LocalWorkspaceStorage(tmp_path)
+    defect_ir_dir = tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR"
+    defect_ir_dir.mkdir(parents=True, exist_ok=True)
+    tpl_file = defect_ir_dir / "fp-overview.docx"
+    tpl_file.touch()
+
+    resolved = storage.get_cbm_defect_template("DEFECT IR", "fp-overview.docx")
+    assert resolved == tpl_file
+
+
+def test_workspace_storage_cbm_defect_template_missing_folder_fails_fast(tmp_path: Path) -> None:
+    storage = LocalWorkspaceStorage(tmp_path)
+    with pytest.raises(FileNotFoundError, match="Required CBM defect template directory 'DEFECT IR US' is missing"):
+        storage.get_cbm_defect_template("DEFECT IR US", "fp-overview.docx")
+
+
+def test_workspace_storage_cbm_defect_template_missing_file_fails_fast(tmp_path: Path) -> None:
+    storage = LocalWorkspaceStorage(tmp_path)
+    defect_ir_dir = tmp_path / "templates" / "QUICK REPORT" / "DEFECT IR"
+    defect_ir_dir.mkdir(parents=True, exist_ok=True)
+
+    with pytest.raises(FileNotFoundError, match="Required CBM defect template 'nonexistent.docx' is missing"):
+        storage.get_cbm_defect_template("DEFECT IR", "nonexistent.docx")
+
+
+def test_workspace_storage_initialize_copies_cbm_defect_directories(tmp_path: Path) -> None:
+    import config
+
+    original_global_templates = config.GLOBAL_TEMPLATES_DIR
+    mock_global_templates = tmp_path / "global_templates"
+    mock_global_templates.mkdir()
+    config.GLOBAL_TEMPLATES_DIR = mock_global_templates
+
+    mock_ir_dir = mock_global_templates / "QUICK REPORT" / "DEFECT IR"
+    mock_ir_dir.mkdir(parents=True)
+    (mock_ir_dir / "fp-overview.docx").touch()
+
+    mock_ir_us_dir = mock_global_templates / "QUICK REPORT" / "DEFECT IR US"
+    mock_ir_us_dir.mkdir(parents=True)
+    (mock_ir_us_dir / "swg-overview.docx").touch()
+
+    mock_ir_us_tev_dir = mock_global_templates / "QUICK REPORT" / "DEFECT IR US TEV"
+    mock_ir_us_tev_dir.mkdir(parents=True)
+    (mock_ir_us_tev_dir / "tx-overview.docx").touch()
+
+    try:
+        project_root = tmp_path / "project_root"
+        project_root.mkdir()
+        storage = LocalWorkspaceStorage(project_root)
+        storage._initialize_project_workspace()
+
+        local_ir = storage.get_cbm_defect_dir("DEFECT IR")
+        local_ir_us = storage.get_cbm_defect_dir("DEFECT IR US")
+        local_ir_us_tev = storage.get_cbm_defect_dir("DEFECT IR US TEV")
+
+        assert (local_ir / "fp-overview.docx").is_file()
+        assert (local_ir_us / "swg-overview.docx").is_file()
+        assert (local_ir_us_tev / "tx-overview.docx").is_file()
+    finally:
+        config.GLOBAL_TEMPLATES_DIR = original_global_templates
+
+

@@ -51,13 +51,14 @@ class CbmDefectPageBuilder:
                     overview=True,
                     item_key=group_item_key,
                     item_suffix=group_item_suffix,
+                    pe_info=pe_info,
                 )
             )
 
             overview_filename = (
-                f"{substation_number_str}_3 {spec.id.upper()} OVERVIEW.docx"
+                f"{substation_number_str}_04_{spec.id.upper()}_OVERVIEW.docx"
                 if len(groups) == 1
-                else f"{substation_number_str}_3 {spec.id.upper()} OVERVIEW_grp{group_index}.docx"
+                else f"{substation_number_str}_04_{spec.id.upper()}_OVERVIEW_grp{group_index}.docx"
             )
 
             page_plans.append(
@@ -86,6 +87,7 @@ class CbmDefectPageBuilder:
                             overview=False,
                             item_key=group_item_key,
                             item_suffix=group_item_suffix,
+                            pe_info=pe_info,
                         )
                     )
 
@@ -96,7 +98,7 @@ class CbmDefectPageBuilder:
                         defect_suffix += f"_part{defect_index}"
 
                     defect_filename = (
-                        f"{substation_number_str}_3 {spec.id.upper()} {item_key}{defect_suffix}.docx"
+                        f"{substation_number_str}_04_{spec.id.upper()}_{item_key}{defect_suffix}.docx"
                     )
 
                     page_plans.append(

@@ -13,7 +13,7 @@ def generate_front_page(pe_info: dict, template_path: str | Path, output_dir: st
     if not template_p.exists():
         raise FileNotFoundError(f"Template not found: {template_path}")
     
-    out_path = Path(output_dir) / f"{substation_number:03d}_1 FRONT PAGE.docx"
+    out_path = Path(output_dir) / f"{substation_number:03d}_01_front_page.docx"
     context = build_front_page_context(pe_info)
     _render_docx_template(template_path, out_path, context)
     return out_path

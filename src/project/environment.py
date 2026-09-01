@@ -8,6 +8,7 @@ import config
 from src.project.models import CameraConfig, ProjectMetadata
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
+from src.whatsapp.models import WhatsAppReportResources
 
 
 class ProjectEnvironment:
@@ -101,15 +102,25 @@ class ProjectEnvironment:
     def get_station_mapping(self) -> dict[str, str]:
         return dict(config.STATION_MAPPING)
 
+    def get_cbm_defect_folder_name(self) -> str:
+        techs = {t.upper() for t in self.metadata.technologies}
+        if "TEV" in techs:
+            return "DEFECT IR US TEV"
+        elif "US" in techs:
+            return "DEFECT IR US"
+        return "DEFECT IR"
+
     def get_template(self, key: str) -> Path:
+        if hasattr(config, "CBM_DEFECT_TEMPLATES") and key in config.CBM_DEFECT_TEMPLATES:
+            folder_name = self.get_cbm_defect_folder_name()
+            filename = config.CBM_DEFECT_TEMPLATES[key]
+            return self.storage.get_cbm_defect_template(folder_name, filename)
         return self.storage.get_template(key)
 
     def get_whatsapp_template(self) -> Path:
         return self.get_template("whatsapp_template")
 
     def get_whatsapp_report_resources(self) -> WhatsAppReportResources:
-        from src.whatsapp.models import WhatsAppReportResources
-
         return WhatsAppReportResources(
             quick_report_dir=self.get_quick_report_dir(),
             save_dir=self.get_whatsapp_dir(),
@@ -150,7 +161,7 @@ class ProjectEnvironment:
         return self.storage.ensure_directory(path)
 
     def resolve_template_path(self, key: str) -> Path:
-        return self.storage.resolve_template_path(key)
+        return self.get_template(key)
 
     @property
     def repository(self) -> ProjectRepository:

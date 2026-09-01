@@ -58,6 +58,6 @@ def generate_vi_summary(
 
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"{substation_number:03d}_2 VI SUMMARY.docx"
+    out_path = out_dir / f"{substation_number:03d}_03_vi_summary.docx"
 
     return _render_docx_template(template_p, out_path, context)

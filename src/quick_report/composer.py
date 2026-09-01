@@ -103,7 +103,7 @@ class QuickReportComposer:
             )
         )
 
-        # 2A. CBM Tech Summary
+        # 2. CBM Tech Summary
         if cbm_defects and plan.cbm_summary_template:
             parts.append(
                 generate_cbm_tech_summary(
@@ -115,7 +115,7 @@ class QuickReportComposer:
                 )
             )
 
-        # 2. VI Defect Summary
+        # 3. VI Defect Summary
         if vi_defects and plan.vi_summary_template:
             parts.append(
                 generate_vi_summary(
@@ -127,7 +127,7 @@ class QuickReportComposer:
                 )
             )
 
-        # 2B. CBM Defect Family Pages
+        # 4. CBM Defect Family Pages
         for family_plan in plan.cbm_defect_family_plans:
             family_pages = generate_cbm_defect_pages(
                 family_plan,

@@ -279,9 +279,13 @@ def generate_substation_condition_pages(
         chunks = [[]]
 
     parts: list[Path] = []
+    single_page = len(chunks) <= 1
 
     for idx, chunk in enumerate(chunks, start=1):
-        cond_out = out_dir / f"{substation_number:03d}_5 SUBSTATION CONDITION part{idx}.docx"
+        if single_page:
+            cond_out = out_dir / f"{substation_number:03d}_05_substation_condition.docx"
+        else:
+            cond_out = out_dir / f"{substation_number:03d}_05_substation_condition_part{idx}.docx"
 
         padded_chunk = list(chunk)
         while len(padded_chunk) < 3:
@@ -331,7 +335,7 @@ def generate_substation_condition_pages(
     # assembly stage pastes one file (no inter-part page breaks that
     # cause blank pages between full-page condition tables).
     if len(parts) > 1:
-        merged_path = out_dir / f"{substation_number:03d}_5 SUBSTATION CONDITION.docx"
+        merged_path = out_dir / f"{substation_number:03d}_05_substation_condition.docx"
         base_doc = Document(str(parts[0]))
         composer = DocxComposer(base_doc)
         for part_path in parts[1:]:

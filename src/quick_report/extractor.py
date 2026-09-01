@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from src.quick_report.defects import MasterQr03DefectRepository
 from src.testsheet.repository import SubstationTestsheetRepository
-
 if TYPE_CHECKING:
     from src.project.environment import ProjectEnvironment
     from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
@@ -26,11 +25,10 @@ class QuickReportExtractor:
         self, environment: ProjectEnvironment, request: QuickReportRequest
     ) -> list[SubstationTestsheetPackage]:
         """Discover testsheet packages strictly via read I/O (without domain filtering)."""
-        from src.workflows.models import QuickReportMode
-
         packages: list[SubstationTestsheetPackage] = []
 
-        if request.mode == QuickReportMode.FOLDER:
+        is_folder_mode = getattr(request.mode, "value", str(request.mode)).lower() == "folder"
+        if is_folder_mode:
             for folder_str in request.target_folders:
                 candidate = Path(folder_str)
                 if candidate.exists():

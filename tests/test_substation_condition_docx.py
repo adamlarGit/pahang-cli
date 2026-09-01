@@ -41,6 +41,7 @@ def test_generate_substation_condition_pages_single_page(tmp_path: Path):
     assert len(out_paths) == 1
     doc_path = out_paths[0]
     assert doc_path.exists()
+    assert doc_path.name == "001_05_substation_condition.docx"
 
     doc = Document(doc_path)
     assert len(doc.tables) == 1
@@ -92,12 +93,12 @@ def test_generate_substation_condition_pages_multi_page_and_half_pair(tmp_path: 
     assert len(out_paths) == 1
     merged_path = out_paths[0]
     assert merged_path.exists()
-    assert merged_path.name == "002_5 SUBSTATION CONDITION.docx"
+    assert merged_path.name == "002_05_substation_condition.docx"
 
     # Verify part files were cleaned up
-    part1 = tmp_path / "002_5 SUBSTATION CONDITION part1.docx"
-    part2 = tmp_path / "002_5 SUBSTATION CONDITION part2.docx"
-    part3 = tmp_path / "002_5 SUBSTATION CONDITION part3.docx"
+    part1 = tmp_path / "002_05_substation_condition_part1.docx"
+    part2 = tmp_path / "002_05_substation_condition_part2.docx"
+    part3 = tmp_path / "002_05_substation_condition_part3.docx"
     assert not part1.exists()
     assert not part2.exists()
     assert not part3.exists()

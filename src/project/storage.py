@@ -1,13 +1,17 @@
 """Workspace storage abstractions and implementations for Pahang CLI."""
 from __future__ import annotations
 
-import os
-import re
 from abc import ABC, abstractmethod
+import logging
+import os
 from pathlib import Path
+import re
+import shutil
 
 import config
 from src.project.models import HealthCheckItem, WorkspaceHealth
+
+logger = logging.getLogger(__name__)
 
 
 def sanitize_filename(name: str) -> str:
@@ -136,6 +140,14 @@ class WorkspaceStorage(ABC):
     @abstractmethod
     def get_template(self, key: str) -> Path:
         """Return the resolved path for a template key."""
+
+    @abstractmethod
+    def get_cbm_defect_dir(self, folder_name: str) -> Path:
+        """Return the CBM defect template directory path for the given technology folder."""
+
+    @abstractmethod
+    def get_cbm_defect_template(self, folder_name: str, filename: str) -> Path:
+        """Return the resolved path for a CBM defect template in the given technology folder."""
 
 
     @abstractmethod
@@ -276,6 +288,24 @@ class LocalWorkspaceStorage(WorkspaceStorage):
             )
         return local_path
 
+    def get_cbm_defect_dir(self, folder_name: str) -> Path:
+        return self._templates_dir / "QUICK REPORT" / folder_name
+
+    def get_cbm_defect_template(self, folder_name: str, filename: str) -> Path:
+        folder = self.get_cbm_defect_dir(folder_name)
+        if not folder.exists() or not folder.is_dir():
+            raise FileNotFoundError(
+                f"Required CBM defect template directory '{folder_name}' is missing at '{folder}'. "
+                f"Every project must contain its own templates in its project root directory ('{self.root_path}')."
+            )
+        file_path = folder / filename
+        if not file_path.exists() or not file_path.is_file():
+            raise FileNotFoundError(
+                f"Required CBM defect template '{filename}' is missing in '{folder}'. "
+                f"Every project must contain its own templates in its project root directory ('{self.root_path}')."
+            )
+        return file_path
+
     def validate_existence(self) -> None:
         required = [self.root_path, self.get_python_dir()]
         missing = [p for p in required if not p.exists()]
@@ -348,11 +378,6 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         return self.get_template(key)
     def _initialize_project_workspace(self) -> None:
         """Copy missing master seed templates and seed files to the project workspace."""
-        import shutil
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         # Create core workspace subdirectories
         for dir_fn in (
             self.get_python_dir,
@@ -386,6 +411,20 @@ class LocalWorkspaceStorage(WorkspaceStorage):
 
             if global_path.exists() and not local_path.exists():
                 _safe_copy(global_path, local_path)
+
+        # Copy CBM defect template directories from GLOBAL_TEMPLATES_DIR / "QUICK REPORT"
+        global_qr_dir = config.GLOBAL_TEMPLATES_DIR / "QUICK REPORT"
+        if global_qr_dir.exists() and global_qr_dir.is_dir():
+            for item in global_qr_dir.iterdir():
+                if item.is_dir() and item.name.startswith("DEFECT"):
+                    local_defect_dir = self._templates_dir / "QUICK REPORT" / item.name
+                    if not local_defect_dir.exists():
+                        _safe_copy(item, local_defect_dir)
+                    else:
+                        for sub_file in item.glob("*.docx"):
+                            local_sub_file = local_defect_dir / sub_file.name
+                            if not local_sub_file.exists():
+                                _safe_copy(sub_file, local_sub_file)
 
         # Copy SEED_FILES
         if hasattr(config, "SEED_FILES"):

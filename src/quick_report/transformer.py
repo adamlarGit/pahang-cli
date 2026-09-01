@@ -69,6 +69,9 @@ class QuickReportTransformer:
                 "humidity": normalize_for_report(pkg.data.humidity),
                 "time": normalize_for_report(pkg.data.time),
             },
+            "equipment_specs": getattr(pkg.data, "equipment", None),
+            "equipment_package": getattr(pkg.data, "equipment", None),
+            "equipment": getattr(pkg.data, "equipment", None),
         }
 
 

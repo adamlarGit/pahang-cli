@@ -8,7 +8,7 @@ from src.quick_report.utils import normalize_functional_location_input
 
 if TYPE_CHECKING:
     from src.testsheet.models import SubstationTestsheetPackage
-    from src.workflows.models import QuickReportMode, QuickReportRequest
+    from src.workflows.models import QuickReportRequest
 
 
 class QuickReportFilter:
@@ -20,11 +20,10 @@ class QuickReportFilter:
         request: QuickReportRequest,
     ) -> list[SubstationTestsheetPackage]:
         """Filter target substation packages, ensuring valid data state and matching predicates."""
-        from src.workflows.models import QuickReportMode
-
         valid_packages = [pkg for pkg in packages if pkg.data is not None]
 
-        if request.mode == QuickReportMode.FL and request.target_package_names:
+        is_fl_mode = getattr(request.mode, "value", str(request.mode)).lower() == "fl"
+        if is_fl_mode and request.target_package_names:
             target_fls = {
                 normalize_functional_location_input(fl)
                 for fl in request.target_package_names

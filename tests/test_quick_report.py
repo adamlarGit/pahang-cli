@@ -628,11 +628,11 @@ def test_generate_cbm_defect_pages_filename_uniqueness(tmp_path: Path):
     assert len(filenames) == len(
         set(filenames)
     ), f"Duplicate filenames found: {filenames}"
-    assert "001_3 SWG OVERVIEW_grp1.docx" in filenames
-    assert "001_3 SWG OVERVIEW_grp2.docx" in filenames
-    assert "001_3 SWG RMU SF6_grp1_part1.docx" in filenames
-    assert "001_3 SWG RMU SF6_grp1_part2.docx" in filenames
-    assert "001_3 SWG RMU SF6_grp2.docx" in filenames
+    assert "001_04_SWG_OVERVIEW_grp1.docx" in filenames
+    assert "001_04_SWG_OVERVIEW_grp2.docx" in filenames
+    assert "001_04_SWG_RMU SF6_grp1_part1.docx" in filenames
+    assert "001_04_SWG_RMU SF6_grp1_part2.docx" in filenames
+    assert "001_04_SWG_RMU SF6_grp2.docx" in filenames
 
 
 def test_vi_defect_pages_remove_empty_cell_borders_exception_handling(
@@ -1188,7 +1188,7 @@ def test_generate_substation_condition_pages_removes_trailing_sectpr(tmp_path: P
 
     assert len(out_files) == 1
     merged_path = out_files[0]
-    assert merged_path.name == "001_5 SUBSTATION CONDITION.docx"
+    assert merged_path.name == "001_05_substation_condition.docx"
 
     merged_doc = Document(merged_path)
     assert len(merged_doc.paragraphs) > 0
