@@ -9,8 +9,17 @@ from src.quick_report.cbm_summary import (
 )
 from src.quick_report.defects import CbmDefectRecord, MasterQr03DefectRepository, ViDefectRecord
 from src.quick_report.models import ViDefectPagePlan, ViSummaryRow
-from src.quick_report.vi_defect_pages import ViDefectPageBuilder, build_vi_defect_page_context
-from src.quick_report.vi_summary import build_vi_summary_context, prepare_vi_summary_rows
+from src.quick_report.vi_defect_pages import (
+    ViDefectPageBuilder,
+    build_vi_defect_page_context,
+    format_vi_defect_description,
+    generate_vi_defect_pages,
+)
+from src.quick_report.vi_summary import (
+    build_vi_summary_context,
+    generate_vi_summary,
+    prepare_vi_summary_rows,
+)
 
 
 def test_format_temperature_reading():
@@ -579,11 +588,17 @@ def test_prepare_vi_summary_rows():
     defects = [
         ViDefectRecord(equipment="SWG", defect_area="Door", additional_remarks="Broken latch"),
         ViDefectRecord(equipment="TX", defect_area="Body", additional_remarks="Rust"),
+        ViDefectRecord(equipment="SUBSTATION", defect_area="FENCE BROKEN", additional_remarks=""),
+        ViDefectRecord(equipment="LTX/DTX", defect_area="", additional_remarks="TX1 - NAMEPLATE NOT ACCESSIBLE"),
+        ViDefectRecord(equipment="", defect_area="", additional_remarks=""),
     ]
     rows = prepare_vi_summary_rows(defects)
-    assert len(rows) == 2
+    assert len(rows) == 5
     assert rows[0] == ViSummaryRow(equipment="SWG", defect_area="Door", remarks="Broken latch")
     assert rows[1] == ViSummaryRow(equipment="TX", defect_area="Body", remarks="Rust")
+    assert rows[2] == ViSummaryRow(equipment="SUBSTATION", defect_area="FENCE BROKEN", remarks="-")
+    assert rows[3] == ViSummaryRow(equipment="LTX/DTX", defect_area="-", remarks="TX1 - NAMEPLATE NOT ACCESSIBLE")
+    assert rows[4] == ViSummaryRow(equipment="-", defect_area="-", remarks="-")
 
 
 def test_build_vi_summary_context_accepts_only_vi_defect_record():
@@ -633,7 +648,7 @@ def test_vi_defect_page_builder_pagination_and_plans(tmp_path: Path):
     assert plan1.active_defect_count == 6
     for i in range(1, 7):
         assert plan1.context[f"equipment{i}"] == f"equipment{i}"
-        assert plan1.context[f"description{i}"] == f"area{i}"
+        assert plan1.context[f"description{i}"] == f"area{i} \u2013 remark{i}"
         assert plan1.context[f"remark{i}"] == f"remark{i}"
 
     # 4. Second page plan has active_defect_count == 1
@@ -643,13 +658,162 @@ def test_vi_defect_page_builder_pagination_and_plans(tmp_path: Path):
     assert plan2.output_filename == "001_06_vi_defect_part2.docx"
     assert plan2.active_defect_count == 1
     assert plan2.context["equipment1"] == "equipment7"
-    assert plan2.context["description1"] == "area7"
+    assert plan2.context["description1"] == "area7 \u2013 remark7"
     assert plan2.context["remark1"] == "remark7"
     assert len(plan2.context["defects"]) == 6
     for i in range(2, 7):
         assert plan2.context[f"equipment{i}"] == ""
         assert plan2.context[f"description{i}"] == ""
         assert plan2.context[f"remark{i}"] == ""
+
+
+def test_format_vi_defect_description_combinations():
+    """Verify VI defect description formatter handles all combination pairs and empty/dash values."""
+    # Both present -> joined with en-dash and spaces (\u2013)
+    assert (
+        format_vi_defect_description("CPR POSTER OLD VERSION", "SUBSTATION")
+        == "CPR POSTER OLD VERSION \u2013 SUBSTATION"
+    )
+    assert (
+        format_vi_defect_description("NO LINK NO./PANEL NO./FEEDER NAME", "PANEL TX")
+        == "NO LINK NO./PANEL NO./FEEDER NAME \u2013 PANEL TX"
+    )
+
+    # Defect area only -> no trailing dash
+    assert format_vi_defect_description("FENCE BROKEN", "") == "FENCE BROKEN"
+    assert format_vi_defect_description("FENCE BROKEN", "-") == "FENCE BROKEN"
+    assert format_vi_defect_description("FENCE BROKEN", "  -  ") == "FENCE BROKEN"
+    assert format_vi_defect_description("NO FUNCTIONAL LOCATION", "N/A") == "NO FUNCTIONAL LOCATION"
+    assert format_vi_defect_description("NO SIGNBOARD", None) == "NO SIGNBOARD"
+
+    # Remarks only -> no leading dash
+    assert (
+        format_vi_defect_description("", "TX1 - NAMEPLATE NOT ACCESSIBLE")
+        == "TX1 - NAMEPLATE NOT ACCESSIBLE"
+    )
+    assert (
+        format_vi_defect_description("-", "TX1 - NAMEPLATE NOT ACCESSIBLE")
+        == "TX1 - NAMEPLATE NOT ACCESSIBLE"
+    )
+    assert (
+        format_vi_defect_description("N/A", "TX1 - NAMEPLATE NOT ACCESSIBLE")
+        == "TX1 - NAMEPLATE NOT ACCESSIBLE"
+    )
+    assert (
+        format_vi_defect_description(None, "TX1 - NAMEPLATE NOT ACCESSIBLE")
+        == "TX1 - NAMEPLATE NOT ACCESSIBLE"
+    )
+
+    # Neither present -> empty string
+    assert format_vi_defect_description("", "") == ""
+    assert format_vi_defect_description("-", "-") == ""
+    assert format_vi_defect_description("N/A", "N/A") == ""
+    assert format_vi_defect_description(None, None) == ""
+    assert format_vi_defect_description("   ", "   ") == ""
+
+
+def test_build_vi_defect_page_context_description_formatting():
+    """Verify build_vi_defect_page_context populates clean 'description' key without trailing/leading dashes."""
+    pe_info = {"substation": {"name_erms": "TEST SUB"}}
+    chunk = [
+        ViDefectRecord(equipment="SUBSTATION", defect_area="CPR POSTER OLD VERSION", additional_remarks="SUBSTATION"),
+        ViDefectRecord(equipment="SUBSTATION", defect_area="FENCE BROKEN", additional_remarks=""),
+        ViDefectRecord(equipment="SIGNBOARD", defect_area="NO FUNCTIONAL LOCATION", additional_remarks="-"),
+        ViDefectRecord(equipment="LTX/DTX", defect_area="", additional_remarks="TX1 - NAMEPLATE NOT ACCESSIBLE"),
+    ]
+    ctx = build_vi_defect_page_context(pe_info, chunk)
+
+    # Check context['defects'] items have 'description' field
+    assert ctx["defects"][0]["description"] == "CPR POSTER OLD VERSION \u2013 SUBSTATION"
+    assert ctx["defects"][1]["description"] == "FENCE BROKEN"
+    assert ctx["defects"][2]["description"] == "NO FUNCTIONAL LOCATION"
+    assert ctx["defects"][3]["description"] == "TX1 - NAMEPLATE NOT ACCESSIBLE"
+    assert ctx["defects"][4]["description"] == ""
+    assert ctx["defects"][5]["description"] == ""
+
+    # Check top-level description keys
+    assert ctx["description1"] == "CPR POSTER OLD VERSION \u2013 SUBSTATION"
+    assert ctx["description2"] == "FENCE BROKEN"
+    assert ctx["description3"] == "NO FUNCTIONAL LOCATION"
+    assert ctx["description4"] == "TX1 - NAMEPLATE NOT ACCESSIBLE"
+    assert ctx["description5"] == ""
+    assert ctx["description6"] == ""
+
+
+def test_generate_vi_defect_pages_end_to_end_formatting_and_alignment(tmp_path: Path):
+    """Verify generate_vi_defect_pages produces clean descriptions and preserves cell formatting/alignment."""
+    import docx
+    template_path = Path("templates/QUICK REPORT/10. VISUAL DEFECT Jinja2 DYNAMIC.docx")
+    if not template_path.exists():
+        pytest.skip("Template 10. VISUAL DEFECT Jinja2 DYNAMIC.docx not found")
+
+    pe_info = {"substation": {"name_erms": "TEST SUB"}}
+    defects = [
+        ViDefectRecord(equipment="SUBSTATION", defect_area="CPR POSTER OLD VERSION", additional_remarks="SUBSTATION"),
+        ViDefectRecord(equipment="SUBSTATION", defect_area="FENCE BROKEN", additional_remarks=""),
+        ViDefectRecord(equipment="SIGNBOARD", defect_area="NO FUNCTIONAL LOCATION", additional_remarks="-"),
+        ViDefectRecord(equipment="LTX/DTX", defect_area="", additional_remarks="TX1 - NAMEPLATE NOT ACCESSIBLE"),
+    ]
+
+    out_paths = generate_vi_defect_pages(
+        defects=defects,
+        template_path=template_path,
+        output_dir=tmp_path,
+        substation_number=1,
+        pe_info=pe_info,
+    )
+
+    assert len(out_paths) == 1
+    doc = docx.Document(str(out_paths[0]))
+    t = doc.tables[0]
+
+    # Verify rendered description texts have no dangling dashes
+    assert t.rows[2].cells[0].text.strip() == "CPR POSTER OLD VERSION \u2013 SUBSTATION"
+    assert t.rows[2].cells[2].text.strip() == "FENCE BROKEN"
+    assert t.rows[6].cells[0].text.strip() == "NO FUNCTIONAL LOCATION"
+    assert t.rows[6].cells[2].text.strip() == "TX1 - NAMEPLATE NOT ACCESSIBLE"
+
+    # Verify paragraph center alignment is preserved on all active description cells
+    w_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    for r, c in [(2, 0), (2, 2), (6, 0), (6, 2)]:
+        cell = t.rows[r].cells[c]
+        p = cell.paragraphs[0]
+        jc = p._p.pPr.find(f"{w_ns}jc")
+        assert jc is not None
+        assert jc.get(f"{w_ns}val") == "center"
+
+
+def test_generate_vi_summary_end_to_end_empty_normalization(tmp_path: Path):
+    """Verify generate_vi_summary renders '-' for empty description and remarks."""
+    import docx
+    template_path = Path("templates/QUICK REPORT/2. VI SUMMARY TEMPLATE Jinja2 DYNAMIC.docx")
+    if not template_path.exists():
+        pytest.skip("Template 2. VI SUMMARY TEMPLATE Jinja2 DYNAMIC.docx not found")
+
+    pe_info = {"substation": {"name_erms": "TEST SUB"}}
+    defects = [
+        ViDefectRecord(equipment="SUBSTATION", defect_area="CPR POSTER OLD VERSION", additional_remarks="SUBSTATION"),
+        ViDefectRecord(equipment="SUBSTATION", defect_area="FENCE BROKEN", additional_remarks=""),
+        ViDefectRecord(equipment="LTX/DTX", defect_area="", additional_remarks="TX1 - NAMEPLATE NOT ACCESSIBLE"),
+    ]
+
+    out_path = generate_vi_summary(
+        pe_info=pe_info,
+        defects=defects,
+        template_path=template_path,
+        output_dir=tmp_path,
+        substation_number=1,
+    )
+
+    doc = docx.Document(str(out_path))
+    t = doc.tables[0]
+    # Row 0: Headers ('NO.', 'EQUIPMENT', 'DEFECT DESCRIPTION', 'ADDITIONAL REMARKS')
+    # Row 1: Defect 1
+    assert [c.text.strip() for c in t.rows[1].cells] == ["1", "SUBSTATION", "CPR POSTER OLD VERSION", "SUBSTATION"]
+    # Row 2: Defect 2 (remarks was empty -> '-')
+    assert [c.text.strip() for c in t.rows[2].cells] == ["2", "SUBSTATION", "FENCE BROKEN", "-"]
+    # Row 3: Defect 3 (defect_area was empty -> '-')
+    assert [c.text.strip() for c in t.rows[3].cells] == ["3", "LTX/DTX", "-", "TX1 - NAMEPLATE NOT ACCESSIBLE"]
 
 
 def test_vi_defect_record_to_dict_uses_remarks_key():
@@ -685,16 +849,18 @@ def test_build_vi_defect_page_context_padding():
         "equipment": "SWG 1",
         "defect_area": "Oil leak",
         "remarks": "Minor",
+        "description": "Oil leak \u2013 Minor",
     }
     for i in range(1, 6):
         assert context["defects"][i] == {
             "equipment": "",
             "defect_area": "",
             "remarks": "",
+            "description": "",
         }
 
     assert context["equipment1"] == "SWG 1"
-    assert context["description1"] == "Oil leak"
+    assert context["description1"] == "Oil leak \u2013 Minor"
     assert context["remark1"] == "Minor"
 
     for slot in range(2, 7):

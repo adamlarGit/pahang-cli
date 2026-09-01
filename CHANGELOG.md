@@ -5,6 +5,16 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.1] - 2026-09-01
+
+### Changed
+- **VI Defect Summary Empty Field Normalization**: Empty or blank spreadsheet values for `EQUIPMENT`, `DEFECT AREA`, and `ADDITIONAL REMARKS` are strictly normalized to `"-"` in VI summary table rows via `_normalize_summary_field` in `src/quick_report/vi_summary.py`.
+- **VI Defect Card Description Formatting**: Added `format_vi_defect_description` in `src/quick_report/vi_defect_pages.py` joining non-empty `defect_area` and `remarks` with an en-dash (`" – "`, `\u2013`), cleanly omitting trailing/leading dashes when either field is blank, whitespace, `"-"`, or `"N/A"`.
+- **Dynamic VI Defect Template & Context Update**: Updated `build_vi_defect_page_context` to bind pre-formatted `description` and surgically updated `10. VISUAL DEFECT Jinja2 DYNAMIC.docx` to reference `{{ defects[i].description }}` with 100% table cell alignment, font, and XML formatting preservation.
+
+### Added
+- **VI Component & End-to-End Test Suite**: Added comprehensive unit and integration tests in `tests/test_quick_report_components.py` validating all description combinations, blank value normalizations, and WordprocessingML table paragraph alignments.
+
 ## [1.12.0] - 2026-09-01
 
 ### Added

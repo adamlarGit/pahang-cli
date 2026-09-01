@@ -27,6 +27,34 @@ EMPTY_DEFECT_CELL_MAP = {
 }
 
 
+def format_vi_defect_description(defect_area: str | None, remarks: str | None) -> str:
+    """Format combined VI defect description for individual defect card display.
+
+    Normalizes empty values, blanks, dashes ('-'), and 'N/A' to empty strings.
+    If both defect area and remarks are present, joins them with ' – ' (en-dash \u2013).
+    If only one is present, returns that part without trailing/leading dashes.
+    If neither is present, returns an empty string.
+    """
+    def _clean(val: str | None) -> str:
+        if val is None:
+            return ""
+        s = str(val).strip()
+        if s in ("", "-", "N/A", "n/a", "NA", "na", "None", "nan"):
+            return ""
+        return s
+
+    clean_area = _clean(defect_area)
+    clean_remarks = _clean(remarks)
+
+    if clean_area and clean_remarks:
+        return f"{clean_area} \u2013 {clean_remarks}"
+    if clean_area:
+        return clean_area
+    if clean_remarks:
+        return clean_remarks
+    return ""
+
+
 def _remove_empty_cell_borders(docx_path: Path, active_count: int) -> None:
     """Clear borders and text for unused VI defect card cells safely using python-docx oxml."""
     if active_count >= DEFECTS_PER_PAGE:
@@ -63,13 +91,19 @@ def build_vi_defect_page_context(pe_info: dict[str, Any], chunk: Sequence[ViDefe
     context = pe_info.copy()
     raw_chunk = []
     for idx_slot, item in enumerate(chunk, start=1):
-        raw_chunk.append(item.to_dict())
+        desc = format_vi_defect_description(item.defect_area, item.additional_remarks)
+        raw_chunk.append({
+            "equipment": item.equipment,
+            "defect_area": item.defect_area,
+            "remarks": item.additional_remarks,
+            "description": desc,
+        })
         context[f"equipment{idx_slot}"] = item.equipment
-        context[f"description{idx_slot}"] = item.defect_area
+        context[f"description{idx_slot}"] = desc
         context[f"remark{idx_slot}"] = item.additional_remarks
 
     # Pad to DEFECTS_PER_PAGE with empty dicts for unused slots
-    empty_defect = {"equipment": "", "defect_area": "", "remarks": ""}
+    empty_defect = {"equipment": "", "defect_area": "", "remarks": "", "description": ""}
     for idx_slot in range(len(chunk) + 1, DEFECTS_PER_PAGE + 1):
         raw_chunk.append(empty_defect.copy())
         context[f"equipment{idx_slot}"] = ""

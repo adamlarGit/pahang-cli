@@ -10,13 +10,21 @@ if TYPE_CHECKING:
     from src.quick_report.defects import ViDefectRecord
 
 
+def _normalize_summary_field(val: str | None) -> str:
+    """Normalize empty, blank, or None values to '-' for VI Defect Summary presentation."""
+    if val is None:
+        return "-"
+    s = str(val).strip()
+    return s if s else "-"
+
+
 def prepare_vi_summary_rows(defects: Sequence[ViDefectRecord]) -> list[ViSummaryRow]:
     """Prepare strongly-typed VI summary rows from VI defect records."""
     return [
         ViSummaryRow(
-            equipment=record.equipment,
-            defect_area=record.defect_area,
-            remarks=record.additional_remarks,
+            equipment=_normalize_summary_field(record.equipment),
+            defect_area=_normalize_summary_field(record.defect_area),
+            remarks=_normalize_summary_field(record.additional_remarks),
         )
         for record in defects
     ]
