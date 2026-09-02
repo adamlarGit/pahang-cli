@@ -4,6 +4,6 @@ The package intentionally avoids eager submodule imports so lightweight test
 modules can import operations without initializing Word COM support.
 """
 
-__version__ = "1.13.1"
+__version__ = "1.14.0"
 
 

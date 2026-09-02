@@ -45,6 +45,22 @@ class QuickReportTransformer:
         substation_name_erms = pkg.data.substation_name_erms or ""
         substation_name_site = pkg.data.substation_name_site or ""
 
+        raw_data_dir = None
+        if hasattr(environment, "storage") and hasattr(environment.storage, "get_substation_raw_data_dir"):
+            raw_data_dir = environment.storage.get_substation_raw_data_dir(
+                station=pkg.station or "",
+                month=pkg.month,
+                date_str=pkg.date_str,
+                substation_number=pkg.substation_number,
+            )
+        elif hasattr(environment, "get_substation_raw_data_dir"):
+            raw_data_dir = environment.get_substation_raw_data_dir(
+                station=pkg.station or "",
+                month=pkg.month,
+                date_str=pkg.date_str,
+                substation_number=pkg.substation_number,
+            )
+
         pe_info: dict[str, Any] = {
             "purchaseorder": {
                 "number": po_num,
@@ -68,7 +84,14 @@ class QuickReportTransformer:
                 "ambient": normalize_for_report(pkg.data.ambient),
                 "humidity": normalize_for_report(pkg.data.humidity),
                 "time": normalize_for_report(pkg.data.time),
+                "tev_bg": normalize_for_report(getattr(pkg.data, "tev_background", "-")),
+                "tev_background": normalize_for_report(getattr(pkg.data, "tev_background", "-")),
             },
+            "raw_data_dir": raw_data_dir,
+            "survey_dir": raw_data_dir,
+            "tev_bg": normalize_for_report(getattr(pkg.data, "tev_background", "-")),
+            "tev_background": normalize_for_report(getattr(pkg.data, "tev_background", "-")),
+            "testsheet_data": pkg.data,
             "equipment_specs": getattr(pkg.data, "equipment", None),
             "equipment_package": getattr(pkg.data, "equipment", None),
             "equipment": getattr(pkg.data, "equipment", None),

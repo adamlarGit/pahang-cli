@@ -5,6 +5,20 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-09-03
+
+### Added
+- **Automated PRPD Graph Generation Pipeline (`src/quick_report/prpd.py`)**: Pure-Python PRPD decoder supporting EA Technology UltraTEV Plus2 survey files (`.UE01` FlatBuffers binary decoding and `.json` fallback phase plots), 4-tier repetition density scatter binning (`#00FF00`, `#0000FF`, `#FF0000`, `#640000`), 50Hz zero-crossing sine wave reference overlay, dynamic noise/discharge threshold lines, and matplotlib-rendered 300 DPI high-resolution output charts.
+- **UltraTEV Survey Feeder Matching Policy (`src/quick_report/prpd.py`)**: 3-tier hierarchical feeder matching (`feeder_code` exact match -> normalized substring matching -> apparatus type/ordinal fallback), multi-transformer layout resolution (`TX 1` vs `TX 2`), and automatic latest-timestamp survey selection across multiple inspection runs.
+- **Testsheet Ultrasound & TEV Measurement Ingestion Schema (`src/testsheet/models.py`, `src/quick_report/cbm_defect_pages.py`)**: Structured schema extraction parsing Switchgear ultrasound (rows 10/14/18/22, cols Q/S/T/U/V for `CB`, `BUSBAR`, `CABLE`, `PT`, `CT`), Switchgear TEV (cols S/U for `CB`, `CABLE`), Transformer ultrasound (rows 33–42, cols K/L/V/X for `HV BUSHING`, `LV BUSHING`, `BODY TANK`, `CONSERVATOR TANK`, `TAP CHANGER`, `CABLE BOX`, `COOLING RADIATOR`), and background TEV reference (cell `P6`).
+- **Dynamic OpenXML Severity Shading & Sanitization (`src/quick_report/cbm_render.py`)**: Low-level WordprocessingML table cell shading applying `#EE0000` (bold white text) for defect values exceeding thresholds and `#00B050` (bold white text) for normal/acceptable values, coupled with placeholder literal text stripping across all CBM detail page slots.
+- **Part 4 CBM Defect Detail Pages & Context Integration (`src/quick_report/cbm_defect_pages.py`)**: Seamless integration of PRPD graphs as `docxtpl.InlineImage` instances into multi-technology CBM defect detail templates (`DEFECT IR`, `DEFECT IR US`, `DEFECT IR US TEV`), with safe null fallback handling, apparatus label normalization, and dynamic multi-page rendering.
+- **Batch Substation PRPD Catalog Generation (`src/quick_report/prpd.py`)**: `generate_all_substation_prpd_graphs()` discovery and batch rendering of all PRPD graphs for switchgears and transformers in a substation workspace with structured catalog lookup.
+- **Comprehensive Test Suites & Documentation**: Added unit and E2E integration test suites in `tests/test_prpd_generator.py`, `tests/test_cbm_severity_and_measurements.py`, `tests/test_cbm_defect_pages_integration.py`, and `tests/test_e2e_real_substations.py` (tested against real inspection dataset `020 TRAS`), alongside `docs/prpd_graph_generation_guide.md` and `docs/prpd_option_c_specification.md`.
+
+### Changed
+- **Substation RAW DATA Directory Path Resolution (`src/project/storage.py`, `src/quick_report/transformer.py`)**: Added `get_substation_raw_data_dir()` on `WorkspaceStorage` supporting standard station/month/date folder structures as well as flat/unparented date folder layouts, wiring PRPD graphs and raw inspection data directly into `QuickReportTransformer` and `QuickReportComposer`.
+
 ## [1.13.1] - 2026-09-03
 
 ### Fixed

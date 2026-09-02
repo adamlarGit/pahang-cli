@@ -7,10 +7,11 @@ from typing import Any
 
 from src.quick_report.cbm_render import _build_family_render_context, _render_docx_template, _text_or_empty
 from src.quick_report.models import CbmDefectFamilyPlan, CbmDefectPagePlan
+from src.quick_report.prpd import discover_ultratev_survey_dir, generate_all_substation_prpd_graphs
 from src.quick_report.utils import sanitize_filename
 
 
-def build_cbm_defect_page_context(pe_info: dict[str, Any]) -> dict:
+def build_cbm_defect_page_context(pe_info: dict[str, Any]) -> dict[str, Any]:
     """Build the base context for CBM defect pages."""
     return pe_info.copy()
 
@@ -32,6 +33,22 @@ class CbmDefectPageBuilder:
 
         if not groups or not overview_template_path or not overview_template_path.exists():
             return []
+
+        if "prpd_catalog" not in pe_info:
+            raw_dir = pe_info.get("raw_data_dir") or pe_info.get("survey_dir") or pe_info.get("raw_dir")
+            if raw_dir:
+                survey_root = discover_ultratev_survey_dir(raw_dir)
+                if survey_root:
+                    prpd_out = pe_info.get("prpd_output_dir")
+                    if not prpd_out:
+                        prpd_out = Path(raw_dir) / "prpd_temp"
+                        prpd_out.mkdir(parents=True, exist_ok=True)
+                        pe_info["prpd_output_dir"] = prpd_out
+                    prpd_catalog = generate_all_substation_prpd_graphs(
+                        survey_root=survey_root,
+                        output_dir=Path(prpd_out),
+                    )
+                    pe_info["prpd_catalog"] = prpd_catalog
 
         page_plans: list[CbmDefectPagePlan] = []
         substation_number_str = f"{substation_number:03d}"
@@ -119,9 +136,25 @@ def generate_cbm_defect_pages(
     pe_info: dict[str, Any],
 ) -> list[Path]:
     """Generate CBM defect detail pages using typed CbmDefectFamilyPlan."""
+    pe_info_copy = pe_info.copy()
+    if "prpd_output_dir" not in pe_info_copy:
+        prpd_temp = output_dir / "prpd_temp"
+        prpd_temp.mkdir(parents=True, exist_ok=True)
+        pe_info_copy["prpd_output_dir"] = prpd_temp
+
+    raw_dir = pe_info_copy.get("raw_data_dir") or pe_info_copy.get("survey_dir") or pe_info_copy.get("raw_dir")
+    if raw_dir and "prpd_catalog" not in pe_info_copy:
+        survey_root = discover_ultratev_survey_dir(raw_dir)
+        if survey_root:
+            prpd_catalog = generate_all_substation_prpd_graphs(
+                survey_root=survey_root,
+                output_dir=pe_info_copy["prpd_output_dir"],
+            )
+            pe_info_copy["prpd_catalog"] = prpd_catalog
+
     pages = CbmDefectPageBuilder().build(
         family_plan=plan,
-        pe_info=pe_info,
+        pe_info=pe_info_copy,
         substation_number=substation_number,
     )
     generated_paths: list[Path] = []

@@ -294,6 +294,59 @@ def test_transformer_output_dir_resolution(tmp_path: Path):
     assert out_root == quick_report_dir
 
 
+def test_quick_report_transformer_resolves_raw_data_dir(tmp_path: Path):
+    """Verify QuickReportTransformer resolves raw_data_dir into pe_info."""
+    storage = MagicMock()
+    env = MagicMock()
+    env.storage = storage
+    env.po_number = "42360565"
+    env.state = "PAHANG"
+    env.get_quick_report_dir.return_value = tmp_path / "QUICK REPORT"
+    env.get_vi_front_page_template.return_value = tmp_path / "front.docx"
+    env.get_template.return_value = tmp_path / "sticker.docx"
+
+    mock_raw_dir = tmp_path / "RAW MATERIAL" / "KUANTAN" / "08. AUGUST" / "10-08-2026" / "042" / "RAW DATA"
+    storage.get_substation_raw_data_dir.return_value = mock_raw_dir
+
+    pkg = MagicMock()
+    pkg.station = "KUANTAN"
+    pkg.month = "08. AUGUST"
+    pkg.date_str = "10-08-2026"
+    pkg.substation_number = 42
+    pkg.data = MagicMock()
+    pkg.data.substation_name_erms = "PE TEST"
+    pkg.data.substation_name_site = ""
+    pkg.data.fl_erms = "12345"
+    pkg.data.fl_site = ""
+    pkg.data.date_str = "10-08-2026"
+    pkg.data.gps_coordinate = ""
+    pkg.data.substation_type = "ATTACHED"
+    pkg.data.building_type = ""
+    pkg.data.ambient = "30"
+    pkg.data.humidity = "70"
+    pkg.data.time = "10:00"
+    pkg.data.tev_background = "8"
+    pkg.data.equipment = None
+    pkg.data.condition = None
+
+    transformer = QuickReportTransformer()
+    plan = transformer.transform(
+        pkg=pkg,
+        cbm_defects=[],
+        vi_defects=[],
+        environment=env,
+    )
+
+    env.storage.get_substation_raw_data_dir.assert_called_once_with(
+        station="KUANTAN",
+        month="08. AUGUST",
+        date_str="10-08-2026",
+        substation_number=42,
+    )
+    assert plan.pe_info["raw_data_dir"] == mock_raw_dir
+    assert plan.pe_info["survey_dir"] == mock_raw_dir
+
+
 def test_master_qr03_defect_repository_empty(tmp_path: Path):
     """Verify MasterQr03DefectRepository raises FileNotFoundError when ENGR files/directory are missing."""
     repo = MasterQr03DefectRepository(tmp_path / "nonexistent")

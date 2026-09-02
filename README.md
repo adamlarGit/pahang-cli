@@ -1,6 +1,6 @@
 # Project & Utility Automation CLI (`pahang-cli`)
 
-A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.13.1`).
+A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.14.0`).
 
 ---
 
@@ -10,8 +10,9 @@ To keep this landing page concise and maintainable as the suite scales, detailed
 
 - **[System Architecture & Overview Guide](file:///docs/project_centric_architecture.md)** — Core design, deep modules (`src/project/` repository/storage seams and `src/postprocessing/converters.py`), and Windows COM automation rules.
 - **[ETL Pipeline Refactoring Methodology](file:///docs/etl_pipeline_refactoring_methodology.md)** — 6-stage ETL pipeline architecture, pre-flight guards, and repository seams across workflow engines.
+- **[PRPD Graph Generation Guide](file:///docs/prpd_graph_generation_guide.md)** — Pure-Python PRPD decoders (UE01 FlatBuffers & JSON), 4-tier repetition density scatter bins, and dynamic CBM defect page embedding.
 - **[Utility Actions Guide](file:///docs/workflows/utility_actions.md)** — Deep dive into standalone tools (batch PDF conversions, diagonal borders, signature replacement, and separator PDF merging).
-- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.13.0+`) following [Keep a Changelog](https://keepachangelog.com/).
+- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.14.0+`) following [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
@@ -113,7 +114,7 @@ Automates end-to-end engineering tasks against the currently active workspace.
 | **2** | **Populate TOTAL PE (from testsheets)** | Scans daily `TESTSHEET/` input folders (`<STATION>/<MONTH>/<DD-MM-YYYY>/`), validates testsheets, updates `TOTAL PE.xlsx` (`DataCycle1` sheet), enforces duplicate PE protection, and sorts records numerically by `PE NO`. |
 | **3** | **Automate Raw Material Creation & Sorting (from Testsheets)** | Validates `TOTAL PE.xlsx` pre-checks, provisions `RAW MATERIAL/` destination folder hierarchies, copies `IR`/`DG` photos using testsheet bounds, and extracts `US+TEV` survey `.zip` archives into counterpart PE raw data directories. |
 | **4** | **Update QR02 CBA (from testsheets)** | Extracts testsheet metadata (`PCE Testsheet`, `PCE VI`) and upserts per-station ENGR `QR02 CBA` Excel worksheets with atomic transactions, exact FL matching, and ghost cell sanitization. |
-| **5** | **Generate Quick Report (Visual Report)** | Interactively select 3-tier inspection date folders (`<STATION>/<MONTH>/<DATE>/`) or manual FLs and compile 7-part docx visual reports with dynamic multi-technology template resolution (`DEFECT IR`, `DEFECT IR US`, `DEFECT IR US TEV`), multi-technology defect merging, testsheet equipment spec enrichment, and canonical `(IR+US+TEV+VI)` defect suffixes. |
+| **5** | **Generate Quick Report (Visual Report)** | Interactively select 3-tier inspection date folders (`<STATION>/<MONTH>/<DATE>/`) or manual FLs and compile 7-part docx visual reports with dynamic multi-technology template resolution (`DEFECT IR`, `DEFECT IR US`, `DEFECT IR US TEV`), automated pure-Python PRPD phase plot rendering (UE01 FlatBuffers & JSON decoders, 4-tier density scatter bins), testsheet ultrasound/TEV measurement ingestion, dynamic cell severity shading (`#EE0000` defect, `#00B050` normal), UltraTEV feeder matching, multi-technology defect merging, and canonical `(IR+US+TEV+VI)` defect suffixes. |
 | **6** | **Run Full Substation Post-Processing Pipeline (1-Click)** | **1-Click Automation**: 6-stage post-processing pipeline executing pre-flight integrity validation across 3-tier Pahang hierarchies, automated renaming sync, daily WhatsApp reporting, digital signature stamping / `mode="none"` placeholder sanitization, diagonal blank borders, shared COM session automation, per-substation error resilience, and deliverable PDF merging into `QUICK REPORT/<DATE>/<STEM>.pdf`. |
 | **7** | **Generate WhatsApp Report** | Interactively select quick report batches to generate formatted WhatsApp inspection summary reports (`.docx`) in `PYTHON/WHATSAPP/`. |
 | **8** | **Consolidate MSMS (PYTHON/MSMS/*.xls -> DATA MSMS)** | 6-stage ETL workflow reading scattered `.xls` work order files in `PYTHON/MSMS/`, deduplicating records, normalizing FL ERMS tokens, appending rows to `DATA MSMS.xlsx`, and archiving processed files to `COMPLETED/`. |

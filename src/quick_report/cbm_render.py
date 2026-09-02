@@ -7,11 +7,18 @@ from pathlib import Path
 import re
 from typing import Any
 
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
+from docx.shared import Mm
 from jinja2 import Environment, Undefined
 
 from src.quick_report.cbm_family import QuickReportFamilySpec
 from src.quick_report.defects import CbmDefectRecord
+from src.quick_report.prpd import (
+    discover_ultratev_survey_dir,
+    generate_prpd_graphs_for_swg_panel,
+    generate_prpd_graphs_for_transformer,
+)
+from src.quick_report.utils import clear_cell_text, set_cell_shading
 from src.testsheet.models import (
     BatteryBankSpec,
     LVDBSpec,
@@ -63,6 +70,13 @@ class QuickReportContext(dict):
             return QuickReportContext(value, path)
         if isinstance(value, list):
             return [self._wrap_value(item, path) for item in value]
+        if isinstance(value, InlineImage):
+            return value
+        if path.endswith(".prpd") or path.endswith("_image") or path.endswith(".image") or path == "prpd":
+            if isinstance(value, (InlineImage, Path)):
+                return value
+            if value is None or (isinstance(value, str) and not value.strip()) or value == "-":
+                return ""
         if value is None:
             return "-"
         if isinstance(value, str) and not value.strip():
@@ -86,7 +100,6 @@ def _build_jinja_env() -> Environment:
     return Environment(undefined=PreservingUndefined, autoescape=True)
 
 
-
 def _preserve_blank_render_values(value):
     """Wrap quick-report render data so missing keys render as clean '-'."""
     if isinstance(value, dict):
@@ -96,10 +109,84 @@ def _preserve_blank_render_values(value):
     return value
 
 
-def _render_docx_template(template_path: str | Path, output_path: Path, context: dict) -> Path:
-    """Render a DocxTemplate with quick-report placeholder semantics."""
+def _process_inline_images(doc: DocxTemplate, context: dict) -> None:
+    """Recursively convert file path images (like PRPD graphs) into InlineImage instances."""
+    def _convert(obj: Any) -> None:
+        if isinstance(obj, dict):
+            for k, v in list(obj.items()):
+                k_str = str(k)
+                if k_str == "prpd" or k_str.endswith("_image") or k_str.endswith(".image"):
+                    if isinstance(v, (str, Path)) and str(v).strip() and str(v) != "-":
+                        v_path = Path(v)
+                        if v_path.is_file():
+                            obj[k] = InlineImage(doc, str(v_path), width=Mm(80))
+                        else:
+                            obj[k] = ""
+                    elif isinstance(v, InlineImage):
+                        pass
+                    else:
+                        obj[k] = ""
+                else:
+                    _convert(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                _convert(item)
+
+    _convert(context)
+
+
+def _render_docx_template(
+    template_path: str | Path,
+    output_path: Path,
+    context: dict,
+    *,
+    defective_technologies: set[str] | list[str] | tuple[str, ...] | str | None = None,
+    overview: bool | None = None,
+) -> Path:
+    """Render a DocxTemplate with quick-report placeholder semantics and severity cell shading."""
     doc = DocxTemplate(str(template_path))
-    doc.render(_preserve_blank_render_values(context), jinja_env=_build_jinja_env(), autoescape=True)
+    rendered_context = dict(context)
+    _process_inline_images(doc, rendered_context)
+    doc.render(_preserve_blank_render_values(rendered_context), jinja_env=_build_jinja_env(), autoescape=True)
+
+    is_overview = overview if overview is not None else bool(context.get("__is_overview__", False))
+    def_techs: set[str] = set()
+    if defective_technologies is not None:
+        if isinstance(defective_technologies, str):
+            def_techs = {t.strip().upper() for t in defective_technologies.replace(",", " ").replace("+", " ").split() if t.strip()}
+        else:
+            def_techs = {str(t).strip().upper() for t in defective_technologies if str(t).strip()}
+    elif "__defective_technologies__" in context:
+        raw_dt = context["__defective_technologies__"]
+        if isinstance(raw_dt, str):
+            def_techs = {t.strip().upper() for t in raw_dt.replace(",", " ").replace("+", " ").split() if t.strip()}
+        elif isinstance(raw_dt, (set, list, tuple)):
+            def_techs = {str(t).strip().upper() for t in raw_dt if str(t).strip()}
+
+    # Post-process table cells for severity shading
+    for table in doc.docx.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text = cell.text.strip()
+                if "__SEVERITY_IR__" in text or "{{ ir.severity }}" in text:
+                    clear_cell_text(cell)
+                    if not is_overview:
+                        set_cell_shading(cell, "EE0000" if "IR" in def_techs else "00B050")
+                    else:
+                        cell.paragraphs[0].text = "-"
+                elif "__SEVERITY_US__" in text or "{{ us.severity }}" in text:
+                    clear_cell_text(cell)
+                    if not is_overview:
+                        set_cell_shading(cell, "EE0000" if "US" in def_techs else "00B050")
+                    else:
+                        cell.paragraphs[0].text = "-"
+                elif "__SEVERITY_TEV__" in text or "{{ tev.severity }}" in text:
+                    clear_cell_text(cell)
+                    if not is_overview:
+                        set_cell_shading(cell, "EE0000" if "TEV" in def_techs else "00B050")
+                    else:
+                        cell.paragraphs[0].text = "-"
+
     doc.save(output_path)
     del doc
     gc.collect()
@@ -257,6 +344,24 @@ def _find_matching_battery(
     return None
 
 
+def _extract_tev_background(pe_info: dict[str, Any] | None) -> str:
+    """Extract TEV background dB value from pe_info or testsheet data."""
+    if not pe_info:
+        return "-"
+    ts_data = pe_info.get("testsheet_data")
+    if ts_data and getattr(ts_data, "tev_background", None):
+        return str(ts_data.tev_background)
+    if isinstance(pe_info.get("substation"), dict):
+        bg = pe_info["substation"].get("tev_bg") or pe_info["substation"].get("tev_background")
+        if bg and bg != "-":
+            return str(bg)
+    if pe_info.get("tev_background"):
+        return str(pe_info["tev_background"])
+    if pe_info.get("tev_bg"):
+        return str(pe_info["tev_bg"])
+    return "-"
+
+
 def _build_fp_lvdb_render_context(
     record: CbmDefectRecord,
     *,
@@ -264,7 +369,7 @@ def _build_fp_lvdb_render_context(
     item_key: str = "",
     item_suffix: str = "",
     pe_info: dict[str, Any] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     resolved_item_key = _text_or_empty(item_key)
     resolved_item_suffix = _text_or_empty(item_suffix)
     equipment = _text_or_empty(record.equipment).strip()
@@ -312,7 +417,15 @@ def _build_fp_lvdb_render_context(
     if not fp_cable and "CABLE" in equipment.upper():
         fp_cable = equipment
 
+    tev_bg = _extract_tev_background(pe_info)
+    ir_sev = "-" if overview else "__SEVERITY_IR__"
+    us_sev = "-" if overview else "__SEVERITY_US__"
+    tev_sev = "-" if overview else "__SEVERITY_TEV__"
+    def_techs = {record.technology} if record.technology else set()
+
     return {
+        "__is_overview__": overview,
+        "__defective_technologies__": def_techs,
         "fp": {
             "labelsource": _fallback_dash(labelsource),
             "feederno": _fallback_dash(feederno),
@@ -322,16 +435,41 @@ def _build_fp_lvdb_render_context(
             "rating": _fallback_dash(fp_rating),
             "serialnumber": _fallback_dash(fp_serial),
             "cabletype": _fallback_dash(fp_cable),
-            "ir": {"reading": _fallback_dash(record.ir_reading)},
+            "ir": {
+                "reading": _fallback_dash(record.ir_reading),
+                "severity": ir_sev,
+            },
             "us": {
                 "reading": _fallback_dash(record.us_reading),
                 "char": _fallback_dash(record.us_char),
+                "severity": us_sev,
+                "prpd": "",
             },
             "tev": {
                 "reading": _fallback_dash(record.tev_reading),
                 "char": _fallback_dash(record.tev_char),
+                "bg": _fallback_dash(tev_bg),
+                "severity": tev_sev,
+                "prpd": "",
             },
-        }
+        },
+        "ir": {
+            "reading": _fallback_dash(record.ir_reading),
+            "severity": ir_sev,
+        },
+        "us": {
+            "reading": _fallback_dash(record.us_reading),
+            "char": _fallback_dash(record.us_char),
+            "severity": us_sev,
+            "prpd": "",
+        },
+        "tev": {
+            "reading": _fallback_dash(record.tev_reading),
+            "char": _fallback_dash(record.tev_char),
+            "bg": _fallback_dash(tev_bg),
+            "severity": tev_sev,
+            "prpd": "",
+        },
     }
 
 
@@ -342,7 +480,7 @@ def _build_swg_render_context(
     item_key: str = "",
     item_suffix: str = "",
     pe_info: dict[str, Any] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     resolved_item_key = _text_or_empty(item_key)
     resolved_item_suffix = _text_or_empty(item_suffix)
     equipment = _text_or_empty(record.equipment).strip()
@@ -360,7 +498,7 @@ def _build_swg_render_context(
 
     # Match panel in testsheet
     all_panels = [p for swg in (equipment_pkg.switchgears if equipment_pkg else ()) for p in swg.panels]
-    panel_match_target = record.equipment_id or resolved_item_suffix or resolved_item_key
+    panel_match_target = record.equipment_id or resolved_item_suffix or resolved_item_key or equipment
     matched_panel = _find_matching_switchgear_panel(all_panels, panel_match_target)
 
     if matched_panel:
@@ -369,12 +507,22 @@ def _build_swg_render_context(
         panel_breakerstatus = matched_panel.status
         panel_cabletype = matched_panel.cable_type or (equipment if "CABLE" in equipment.upper() else "")
         panel_serialnumber = matched_panel.serial_no
+        panel_us_reading = matched_panel.us_reading or _text_or_empty(record.us_reading)
+        panel_us_char = matched_panel.us_char or _text_or_empty(record.us_char)
+        panel_tev_reading = matched_panel.tev_reading or _text_or_empty(record.tev_reading)
+        panel_tev_ppc = matched_panel.tev_ppc
+        panel_tev_char = matched_panel.tev_char or _text_or_empty(record.tev_char)
     else:
         panel_loadamp = ""
         panel_heateramp = ""
         panel_breakerstatus = ""
         panel_cabletype = equipment if "CABLE" in equipment.upper() else ""
         panel_serialnumber = ""
+        panel_us_reading = _text_or_empty(record.us_reading)
+        panel_us_char = _text_or_empty(record.us_char)
+        panel_tev_reading = _text_or_empty(record.tev_reading)
+        panel_tev_ppc = ""
+        panel_tev_char = _text_or_empty(record.tev_char)
 
     if " - " in panel_match_target:
         parts = panel_match_target.split(" - ", 1)
@@ -384,7 +532,59 @@ def _build_swg_render_context(
         panel_name = panel_match_target
         panel_linknumber = panel_match_target
 
+    tev_bg = _extract_tev_background(pe_info)
+    ir_sev = "-" if overview else "__SEVERITY_IR__"
+    us_sev = "-" if overview else "__SEVERITY_US__"
+    tev_sev = "-" if overview else "__SEVERITY_TEV__"
+    def_techs = {record.technology} if record.technology else set()
+
+    # Discover survey root and retrieve/generate PRPD images if available
+    us_prpd: Path | str = ""
+    tev_prpd: Path | str = ""
+    if pe_info and not overview:
+        panel_no = matched_panel.panel_no if matched_panel else 0
+        if panel_no == 0:
+            digits = re.findall(r"\d+", panel_match_target)
+            if digits:
+                try:
+                    panel_no = int(digits[0])
+                except ValueError:
+                    panel_no = 0
+
+        prpd_catalog = pe_info.get("prpd_catalog")
+        if prpd_catalog and isinstance(prpd_catalog, dict) and "swg" in prpd_catalog:
+            swg_catalog = prpd_catalog["swg"]
+            if panel_no in swg_catalog:
+                entry = swg_catalog[panel_no]
+                us_prpd = entry.get("us") or ""
+                tev_prpd = entry.get("tev") or ""
+            elif len(swg_catalog) == 1 and 0 in swg_catalog:
+                entry = swg_catalog[0]
+                us_prpd = entry.get("us") or ""
+                tev_prpd = entry.get("tev") or ""
+
+        # Fallback to direct on-demand generation if not in catalog
+        if not us_prpd and not tev_prpd:
+            raw_dir = pe_info.get("raw_data_dir") or pe_info.get("survey_dir") or pe_info.get("raw_dir")
+            survey_root = discover_ultratev_survey_dir(raw_dir)
+            prpd_out_dir = pe_info.get("prpd_output_dir")
+
+            if survey_root and prpd_out_dir:
+                us_png, tev_png = generate_prpd_graphs_for_swg_panel(
+                    survey_root=survey_root,
+                    panel_no=panel_no,
+                    output_dir=Path(prpd_out_dir),
+                    feeder_no=panel_match_target,
+                    panel_name=panel_name,
+                )
+                if us_png:
+                    us_prpd = us_png
+                if tev_png:
+                    tev_prpd = tev_png
+
     return {
+        "__is_overview__": overview,
+        "__defective_technologies__": def_techs,
         "swg": {
             "area": area,
             "manufacturer": _fallback_dash(swg_manufacturer),
@@ -403,15 +603,42 @@ def _build_swg_render_context(
             "heateramp": _fallback_dash(panel_heateramp),
             "loadamp": _fallback_dash(panel_loadamp),
             "serialnumber": _fallback_dash(panel_serialnumber),
-            "ir": {"reading": _fallback_dash(record.ir_reading)},
+            "ir": {
+                "reading": _fallback_dash(record.ir_reading),
+                "severity": ir_sev,
+            },
             "us": {
-                "reading": _fallback_dash(record.us_reading),
-                "char": _fallback_dash(record.us_char),
+                "reading": _fallback_dash(panel_us_reading),
+                "char": _fallback_dash(panel_us_char),
+                "severity": us_sev,
+                "prpd": us_prpd,
             },
             "tev": {
-                "reading": _fallback_dash(record.tev_reading),
-                "char": _fallback_dash(record.tev_char),
+                "reading": _fallback_dash(panel_tev_reading),
+                "ppc": _fallback_dash(panel_tev_ppc),
+                "char": _fallback_dash(panel_tev_char),
+                "bg": _fallback_dash(tev_bg),
+                "severity": tev_sev,
+                "prpd": tev_prpd,
             },
+        },
+        "ir": {
+            "reading": _fallback_dash(record.ir_reading),
+            "severity": ir_sev,
+        },
+        "us": {
+            "reading": _fallback_dash(panel_us_reading),
+            "char": _fallback_dash(panel_us_char),
+            "severity": us_sev,
+            "prpd": us_prpd,
+        },
+        "tev": {
+            "reading": _fallback_dash(panel_tev_reading),
+            "ppc": _fallback_dash(panel_tev_ppc),
+            "char": _fallback_dash(panel_tev_char),
+            "bg": _fallback_dash(tev_bg),
+            "severity": tev_sev,
+            "prpd": tev_prpd,
         },
     }
 
@@ -423,7 +650,7 @@ def _build_tx_render_context(
     item_key: str = "",
     item_suffix: str = "",
     pe_info: dict[str, Any] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     resolved_item_key = _text_or_empty(item_key)
     resolved_item_suffix = _text_or_empty(item_suffix)
     equipment = _text_or_empty(record.equipment).strip()
@@ -431,7 +658,7 @@ def _build_tx_render_context(
 
     equipment_pkg = _extract_equipment_package(pe_info)
     transformers = equipment_pkg.transformers if equipment_pkg else ()
-    tx_match_target = record.equipment_id or resolved_item_key
+    tx_match_target = record.equipment_id or resolved_item_key or equipment
     matched_tx = _find_matching_transformer(transformers, tx_match_target)
 
     # Location from substation building_type (overview) or HV/LV side (detail)
@@ -486,8 +713,67 @@ def _build_tx_render_context(
         tx_cable = equipment
 
     tx_number = record.equipment_id or resolved_item_key
+    tx_us_reading = (matched_tx.us_reading if matched_tx and matched_tx.us_reading else "") or _text_or_empty(record.us_reading)
+    tx_us_char = (matched_tx.us_char if matched_tx and matched_tx.us_char else "") or _text_or_empty(record.us_char)
+    tev_bg = _extract_tev_background(pe_info)
+
+    ir_sev = "-" if overview else "__SEVERITY_IR__"
+    us_sev = "-" if overview else "__SEVERITY_US__"
+    tev_sev = "-" if overview else "__SEVERITY_TEV__"
+    def_techs = {record.technology} if record.technology else set()
+
+    # Discover survey root and retrieve/generate PRPD images if available
+    us_prpd: Path | str = ""
+    tev_prpd: Path | str = ""
+    if pe_info and not overview:
+        tx_idx = 1
+        if matched_tx and matched_tx.tx_id:
+            digits = re.findall(r"\d+", matched_tx.tx_id)
+            if digits:
+                try:
+                    tx_idx = int(digits[0])
+                except ValueError:
+                    tx_idx = 1
+        elif equipment:
+            digits = re.findall(r"\d+", equipment)
+            if digits:
+                try:
+                    tx_idx = int(digits[0])
+                except ValueError:
+                    tx_idx = 1
+
+        prpd_catalog = pe_info.get("prpd_catalog")
+        if prpd_catalog and isinstance(prpd_catalog, dict) and "tx" in prpd_catalog:
+            tx_catalog = prpd_catalog["tx"]
+            if tx_idx in tx_catalog:
+                entry = tx_catalog[tx_idx]
+                us_prpd = entry.get("us") or ""
+                tev_prpd = entry.get("tev") or ""
+            elif len(tx_catalog) == 1 and 1 in tx_catalog:
+                entry = tx_catalog[1]
+                us_prpd = entry.get("us") or ""
+                tev_prpd = entry.get("tev") or ""
+
+        # Fallback to direct on-demand generation if not in catalog
+        if not us_prpd and not tev_prpd:
+            raw_dir = pe_info.get("raw_data_dir") or pe_info.get("survey_dir") or pe_info.get("raw_dir")
+            survey_root = discover_ultratev_survey_dir(raw_dir)
+            prpd_out_dir = pe_info.get("prpd_output_dir")
+
+            if survey_root and prpd_out_dir:
+                us_png, tev_png = generate_prpd_graphs_for_transformer(
+                    survey_root=survey_root,
+                    tx_idx=tx_idx,
+                    output_dir=Path(prpd_out_dir),
+                )
+                if us_png:
+                    us_prpd = us_png
+                if tev_png:
+                    tev_prpd = tev_png
 
     return {
+        "__is_overview__": overview,
+        "__defective_technologies__": def_techs,
         "tx": {
             "number": _fallback_dash(tx_number),
             "location": _fallback_dash(tx_location),
@@ -497,16 +783,41 @@ def _build_tx_render_context(
             "rating": _fallback_dash(tx_rating),
             "serialnumber": _fallback_dash(tx_serial),
             "cabletype": _fallback_dash(tx_cable),
-            "ir": {"reading": _fallback_dash(record.ir_reading)},
+            "ir": {
+                "reading": _fallback_dash(record.ir_reading),
+                "severity": ir_sev,
+            },
             "us": {
-                "reading": _fallback_dash(record.us_reading),
-                "char": _fallback_dash(record.us_char),
+                "reading": _fallback_dash(tx_us_reading),
+                "char": _fallback_dash(tx_us_char),
+                "severity": us_sev,
+                "prpd": us_prpd,
             },
             "tev": {
                 "reading": _fallback_dash(record.tev_reading),
                 "char": _fallback_dash(record.tev_char),
+                "bg": _fallback_dash(tev_bg),
+                "severity": tev_sev,
+                "prpd": tev_prpd,
             },
-        }
+        },
+        "ir": {
+            "reading": _fallback_dash(record.ir_reading),
+            "severity": ir_sev,
+        },
+        "us": {
+            "reading": _fallback_dash(tx_us_reading),
+            "char": _fallback_dash(tx_us_char),
+            "severity": us_sev,
+            "prpd": us_prpd,
+        },
+        "tev": {
+            "reading": _fallback_dash(record.tev_reading),
+            "char": _fallback_dash(record.tev_char),
+            "bg": _fallback_dash(tev_bg),
+            "severity": tev_sev,
+            "prpd": tev_prpd,
+        },
     }
 
 
@@ -517,7 +828,7 @@ def _build_blackbox_render_context(
     item_key: str = "",
     item_suffix: str = "",
     pe_info: dict[str, Any] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     resolved_item_key = _text_or_empty(item_key)
     resolved_item_suffix = _text_or_empty(item_suffix)
     area = _format_detail_area(record.defect_area, record.additional_remarks, overview=overview)
@@ -543,21 +854,54 @@ def _build_blackbox_render_context(
     else:
         bbox_location = "-"
 
+    tev_bg = _extract_tev_background(pe_info)
+    ir_sev = "-" if overview else "__SEVERITY_IR__"
+    us_sev = "-" if overview else "__SEVERITY_US__"
+    tev_sev = "-" if overview else "__SEVERITY_TEV__"
+    def_techs = {record.technology} if record.technology else set()
+
     return {
+        "__is_overview__": overview,
+        "__defective_technologies__": def_techs,
         "bbox": {
             "number": _fallback_dash(bbox_number),
             "location": _fallback_dash(bbox_location),
             "area": area,
-            "ir": {"reading": _fallback_dash(record.ir_reading)},
+            "ir": {
+                "reading": _fallback_dash(record.ir_reading),
+                "severity": ir_sev,
+            },
             "us": {
                 "reading": _fallback_dash(record.us_reading),
                 "char": _fallback_dash(record.us_char),
+                "severity": us_sev,
+                "prpd": "",
             },
             "tev": {
                 "reading": _fallback_dash(record.tev_reading),
                 "char": _fallback_dash(record.tev_char),
+                "bg": _fallback_dash(tev_bg),
+                "severity": tev_sev,
+                "prpd": "",
             },
-        }
+        },
+        "ir": {
+            "reading": _fallback_dash(record.ir_reading),
+            "severity": ir_sev,
+        },
+        "us": {
+            "reading": _fallback_dash(record.us_reading),
+            "char": _fallback_dash(record.us_char),
+            "severity": us_sev,
+            "prpd": "",
+        },
+        "tev": {
+            "reading": _fallback_dash(record.tev_reading),
+            "char": _fallback_dash(record.tev_char),
+            "bg": _fallback_dash(tev_bg),
+            "severity": tev_sev,
+            "prpd": "",
+        },
     }
 
 
@@ -568,7 +912,7 @@ def _build_battery_render_context(
     item_key: str = "",
     item_suffix: str = "",
     pe_info: dict[str, Any] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     resolved_item_key = _text_or_empty(item_key)
     resolved_item_suffix = _text_or_empty(item_suffix)
     area = _format_detail_area(record.defect_area, record.additional_remarks, overview=overview)
@@ -584,23 +928,56 @@ def _build_battery_render_context(
     batt_serial = matched_batt.serial_no if matched_batt else ""
     batt_number = raw_target or (matched_batt.name if matched_batt else "")
 
+    tev_bg = _extract_tev_background(pe_info)
+    ir_sev = "-" if overview else "__SEVERITY_IR__"
+    us_sev = "-" if overview else "__SEVERITY_US__"
+    tev_sev = "-" if overview else "__SEVERITY_TEV__"
+    def_techs = {record.technology} if record.technology else set()
+
     return {
+        "__is_overview__": overview,
+        "__defective_technologies__": def_techs,
         "batt": {
             "number": _fallback_dash(batt_number),
             "manufacturer": _fallback_dash(batt_mfg),
             "model": _fallback_dash(batt_model),
             "serialnumber": _fallback_dash(batt_serial),
             "area": area,
-            "ir": {"reading": _fallback_dash(record.ir_reading)},
+            "ir": {
+                "reading": _fallback_dash(record.ir_reading),
+                "severity": ir_sev,
+            },
             "us": {
                 "reading": _fallback_dash(record.us_reading),
                 "char": _fallback_dash(record.us_char),
+                "severity": us_sev,
+                "prpd": "",
             },
             "tev": {
                 "reading": _fallback_dash(record.tev_reading),
                 "char": _fallback_dash(record.tev_char),
+                "bg": _fallback_dash(tev_bg),
+                "severity": tev_sev,
+                "prpd": "",
             },
-        }
+        },
+        "ir": {
+            "reading": _fallback_dash(record.ir_reading),
+            "severity": ir_sev,
+        },
+        "us": {
+            "reading": _fallback_dash(record.us_reading),
+            "char": _fallback_dash(record.us_char),
+            "severity": us_sev,
+            "prpd": "",
+        },
+        "tev": {
+            "reading": _fallback_dash(record.tev_reading),
+            "char": _fallback_dash(record.tev_char),
+            "bg": _fallback_dash(tev_bg),
+            "severity": tev_sev,
+            "prpd": "",
+        },
     }
 
 
@@ -612,7 +989,7 @@ def _build_family_render_context(
     item_key: str = "",
     item_suffix: str = "",
     pe_info: dict[str, Any] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     if family_spec.id == "fp_lvdb":
         return _build_fp_lvdb_render_context(
             record,

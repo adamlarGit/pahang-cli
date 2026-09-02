@@ -9,6 +9,7 @@ import re
 import shutil
 
 import config
+from src.core.normalizers import format_month_folder
 from src.project.models import HealthCheckItem, WorkspaceHealth
 
 logger = logging.getLogger(__name__)
@@ -177,6 +178,16 @@ class WorkspaceStorage(ABC):
     @abstractmethod
     def check_workspace_health(self) -> WorkspaceHealth:
         """Inspect and report existence status for core workspace folders and seed files."""
+
+    @abstractmethod
+    def get_substation_raw_data_dir(
+        self,
+        station: str,
+        month: str | None,
+        date_str: str | None,
+        substation_number: int,
+    ) -> Path | None:
+        """Return the RAW DATA directory path for a specific substation package."""
 
 
 class LocalWorkspaceStorage(WorkspaceStorage):
@@ -462,4 +473,49 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         )
         is_healthy = all(item.exists for item in items if item.is_critical)
         return WorkspaceHealth(is_healthy=is_healthy, items=items)
+
+    def get_substation_raw_data_dir(
+        self,
+        station: str,
+        month: str | None,
+        date_str: str | None,
+        substation_number: int,
+    ) -> Path | None:
+        """Resolve RAW DATA directory for a substation package.
+
+        1. Gets raw_material_root = self.get_raw_material_dir()
+        2. Formats month folder using format_month_folder(month) or format_month_folder(date_str) or '01. JANUARY'
+        3. Builds date directory: raw_material_root / (station or 'UNASSIGNED') / month_folder / (date_str or '01-01-2026')
+        4. If date directory exists, matches any folder starting with f'{substation_number:03d}' or str(substation_number)
+           and returns child / 'RAW DATA' if it exists.
+        """
+        raw_material_root = self.get_raw_material_dir()
+        month_folder = format_month_folder(month) or format_month_folder(date_str) or "01. JANUARY"
+        date_dir = raw_material_root / (station or "UNASSIGNED") / month_folder / (date_str or "01-01-2026")
+
+        if not date_dir.exists():
+            return None
+
+        sub_str = f"{substation_number:03d}"
+        sub_int_str = str(substation_number)
+
+        for child in date_dir.iterdir():
+            if not child.is_dir():
+                continue
+            name = child.name.strip()
+            if (
+                name.startswith(sub_str)
+                or name == sub_int_str
+                or name.startswith(f"{sub_int_str}.")
+                or name.startswith(f"{sub_int_str}_")
+                or name.startswith(f"{sub_int_str} ")
+            ):
+                raw_data_sub = child / "RAW DATA"
+                if raw_data_sub.exists() and raw_data_sub.is_dir():
+                    return raw_data_sub
+                if (child / "US+TEV").exists() or (child / "IR").exists() or (child / "DG").exists():
+                    return child
+
+        return None
+
 

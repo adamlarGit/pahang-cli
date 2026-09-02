@@ -95,6 +95,20 @@ class ProjectEnvironment:
     def get_sign_dir(self) -> Path:
         return self.storage.get_sign_dir()
 
+    def get_substation_raw_data_dir(
+        self,
+        station: str,
+        month: str | None,
+        date_str: str | None,
+        substation_number: int,
+    ) -> Path | None:
+        return self.storage.get_substation_raw_data_dir(
+            station=station,
+            month=month,
+            date_str=date_str,
+            substation_number=substation_number,
+        )
+
     def get_po_number(self) -> str:
 
         return self.metadata.po_number

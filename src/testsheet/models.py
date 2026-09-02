@@ -55,6 +55,11 @@ class SwitchgearPanelSpec:
     load_amp: str = ""
     cable_type: str = ""
     heater_amp: str = ""
+    us_reading: str = ""
+    us_char: str = ""
+    tev_reading: str = ""
+    tev_ppc: str = ""
+    tev_char: str = ""
 
 
 @dataclass(frozen=True)
@@ -80,6 +85,8 @@ class TransformerSpec:
     manufacturer: str = ""
     serial_no: str = ""
     type: str = ""
+    us_reading: str = ""
+    us_char: str = ""
 
 
 @dataclass(frozen=True)
@@ -169,6 +176,7 @@ class TestsheetData:
     ambient: str = "-"
     humidity: str = "-"
     time: str = "-"
+    tev_background: str = "-"
     cycle_1: datetime | None = None
     equipment: SubstationEquipmentPackage = SubstationEquipmentPackage()
 

@@ -46,9 +46,23 @@ def set_cell_no_borders(cell: Any) -> None:
         border.set(qn("w:val"), "nil")
 
 
+def set_cell_shading(cell: Any, hex_color: str) -> None:
+    """Set background fill color on a python-docx table cell (e.g. 'EE0000' or '00B050')."""
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = tcPr.find(qn("w:shd"))
+    if shd is None:
+        shd = OxmlElement("w:shd")
+        tcPr.append(shd)
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:color"), "auto")
+    shd.set(qn("w:fill"), hex_color.lstrip("#").upper())
+
+
 __all__ = [
     "clear_cell_text",
     "normalize_functional_location_input",
     "sanitize_filename",
     "set_cell_no_borders",
+    "set_cell_shading",
 ]
+
