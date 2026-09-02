@@ -119,7 +119,7 @@ class PopulateTotalPeAction(ProjectWorkflowAction):
                 return None
             request = PopulateTotalPeRequest(
                 mode=PopulateMode.SPECIFIC_FOLDERS,
-                target_folder_names=(selected_path.name,),
+                target_folder_names=(selected_path.name, str(selected_path)),
                 progress_sink=_cli_progress_sink,
             )
         elif mode_str == "all":

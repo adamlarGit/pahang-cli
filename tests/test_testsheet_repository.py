@@ -58,3 +58,16 @@ def test_discover_packages_direct_date_folder(pahang_testsheet_tree: Path) -> No
     assert pkg.station == "RAUB"
     assert pkg.month == "01. MAY"
     assert pkg.date_str == "01-05-2026"
+
+
+def test_discover_packages_eager_extract_false(pahang_testsheet_tree: Path) -> None:
+    repo = SubstationTestsheetRepository()
+    packages = repo.discover_packages(pahang_testsheet_tree, eager_extract=False)
+
+    assert len(packages) == 2
+    for pkg in packages:
+        assert pkg.data is None
+        assert pkg.station == "RAUB"
+        assert pkg.substation_number in (1, 2)
+        assert pkg.date_str == "01-05-2026"
+

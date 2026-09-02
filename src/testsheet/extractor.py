@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 import re
+import warnings
 from pathlib import Path
 import openpyxl
 
@@ -93,6 +94,85 @@ class TestsheetExtractor:
         data = self.extract_testsheet_data(workbook_path)
         return data.photo_ranges
 
+    def extract_testsheet_metadata(
+        self,
+        workbook_path: Path | str,
+        station_hint: str = "",
+        date_hint: str = "",
+    ) -> TestsheetData:
+        """Fast read-only extraction of header metadata required for TOTAL PE."""
+        path = Path(workbook_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Testsheet workbook not found: {path}")
+
+        substation_number = 1
+        num_match = re.match(r"^(\d+)", path.name)
+        if num_match:
+            substation_number = int(num_match.group(1))
+
+        fl_erms = ""
+        substation_name_erms = ""
+        cycle_1: datetime | None = None
+        date_str = date_hint
+        station_name = station_hint
+        wo_number = ""
+        substation_type = ""
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+            try:
+                sheet_names = wb.sheetnames
+
+                # 1. PCE Testsheet
+                if "PCE Testsheet" in sheet_names:
+                    ws_pce = wb["PCE Testsheet"]
+                    fl_erms = normalize_fl_erms(ws_pce["W5"].value)
+                    cleaned_sub_erms = clean_val(ws_pce["C5"].value)
+                    substation_name_erms = cleaned_sub_erms if cleaned_sub_erms is not None else ""
+                    cycle_1 = to_excel_date(ws_pce["P4"].value)
+                    if cycle_1 is not None and not date_str:
+                        date_str = cycle_1.strftime("%d-%m-%Y")
+
+                    y1_val = ws_pce["Y1"].value
+                    if y1_val is not None and str(y1_val).strip() not in ("", "-", "None", "N/A"):
+                        try:
+                            substation_number = int(float(str(y1_val).strip()))
+                        except (ValueError, TypeError):
+                            pass
+
+                # 2. PCE VI (for substation_type)
+                pce_vi_name = None
+                for sname in sheet_names:
+                    s_lower = sname.strip().lower()
+                    if (
+                        s_lower == "pce vi"
+                        or s_lower.startswith("pce vi ")
+                        or s_lower.startswith("pce vi(")
+                        or s_lower.startswith("pce vi_")
+                        or s_lower.startswith("pce vi-")
+                    ):
+                        pce_vi_name = sname
+                        break
+
+                if pce_vi_name is not None:
+                    ws_vi = wb[pce_vi_name]
+                    cleaned_type = clean_val(ws_vi["N1"].value)
+                    substation_type = cleaned_type if cleaned_type is not None else ""
+            finally:
+                wb.close()
+
+        return TestsheetData(
+            substation_number=substation_number,
+            station_name=station_name,
+            date_str=date_str,
+            fl_erms=fl_erms,
+            wo_number=wo_number,
+            substation_name_erms=substation_name_erms,
+            substation_type=substation_type,
+            cycle_1=cycle_1,
+        )
+
     def extract_testsheet_data(
         self,
         workbook_path: Path | str,
@@ -133,6 +213,7 @@ class TestsheetExtractor:
             ambient = "-"
             humidity = "-"
             time_str = "-"
+            tev_background = "-"
 
             # Phase 1: PCE Testsheet (fixed cells)
             if "PCE Testsheet" in wb.sheetnames:
@@ -145,6 +226,9 @@ class TestsheetExtractor:
                 time_str = format_testsheet_time(ws_pce["P5"].value)
                 humidity = format_humidity_str(ws_pce["S6"].value)
                 ambient = parse_background_temp(ws_pce["W6"].value)
+                tev_bg_val = clean_val(ws_pce["P6"].value)
+                if tev_bg_val is not None:
+                    tev_background = str(tev_bg_val)
 
                 y1_val = ws_pce["Y1"].value
                 if y1_val is not None and str(y1_val).strip() not in ("", "-", "None", "N/A"):
@@ -267,7 +351,7 @@ class TestsheetExtractor:
             first_pce = pce_sheets[0] if pce_sheets else (wb["PCE Testsheet"] if "PCE Testsheet" in wb.sheetnames else None)
 
             switchgears = self._extract_switchgear_specs(wb, ws_vi=pce_vi_sheet, pce_sheets=pce_sheets)
-            transformers = self._extract_transformer_specs(ws_vi=pce_vi_sheet)
+            transformers = self._extract_transformer_specs(ws_vi=pce_vi_sheet, ws_pce=first_pce)
             lvdb_specs = self._extract_lvdb_specs(ws_pce=first_pce)
             battery_banks = self._extract_battery_banks(ws_pce=first_pce)
             fire_extinguisher = self._extract_fire_extinguisher_spec(ws_vi=pce_vi_sheet, building_type=building_type)
@@ -316,6 +400,7 @@ class TestsheetExtractor:
             ambient=ambient,
             humidity=humidity,
             time=time_str,
+            tev_background=tev_background,
             cycle_1=cycle_1,
             equipment=equipment,
         )
@@ -407,6 +492,50 @@ class TestsheetExtractor:
                 heater_amp = clean_val(ws[f"H{r}"].value) or ""
                 panel_type = clean_val(ws[f"J{r}"].value) or ""
 
+                # Ultrasound (Col Q / Col S) and TEV (Col T / Col U / Col V)
+                us_reading = clean_val(ws[f"Q{r}"].value) or ""
+                us_char = clean_val(ws[f"S{r}"].value) or ""
+                tev_reading = clean_val(ws[f"T{r}"].value) or ""
+                tev_ppc = clean_val(ws[f"U{r}"].value) or ""
+                tev_char = clean_val(ws[f"V{r}"].value) or ""
+
+                # Fallback to sub-rows (e.g. Breaker, Top Panel, PT) if top row empty
+                if not us_reading:
+                    for sub_r in range(r, r + 4):
+                        if sub_r <= ws.max_row:
+                            val = clean_val(ws[f"Q{sub_r}"].value)
+                            if val:
+                                us_reading = val
+                                break
+                if not us_char:
+                    for sub_r in range(r, r + 4):
+                        if sub_r <= ws.max_row:
+                            val = clean_val(ws[f"S{sub_r}"].value)
+                            if val:
+                                us_char = val
+                                break
+                if not tev_reading:
+                    for sub_r in range(r, r + 4):
+                        if sub_r <= ws.max_row:
+                            val = clean_val(ws[f"T{sub_r}"].value)
+                            if val:
+                                tev_reading = val
+                                break
+                if not tev_ppc:
+                    for sub_r in range(r, r + 4):
+                        if sub_r <= ws.max_row:
+                            val = clean_val(ws[f"U{sub_r}"].value)
+                            if val:
+                                tev_ppc = val
+                                break
+                if not tev_char:
+                    for sub_r in range(r, r + 4):
+                        if sub_r <= ws.max_row:
+                            val = clean_val(ws[f"V{sub_r}"].value)
+                            if val:
+                                tev_char = val
+                                break
+
                 panels.append(
                     SwitchgearPanelSpec(
                         panel_no=panel_idx,
@@ -418,6 +547,11 @@ class TestsheetExtractor:
                         load_amp=load_amp,
                         cable_type=cable_type,
                         heater_amp=heater_amp,
+                        us_reading=us_reading,
+                        us_char=us_char,
+                        tev_reading=tev_reading,
+                        tev_ppc=tev_ppc,
+                        tev_char=tev_char,
                     )
                 )
                 panel_idx += 1
@@ -508,9 +642,11 @@ class TestsheetExtractor:
         return tuple(result)
 
     def _extract_transformer_specs(
-        self, ws_vi: openpyxl.worksheet.worksheet.Worksheet | None
+        self,
+        ws_vi: openpyxl.worksheet.worksheet.Worksheet | None,
+        ws_pce: openpyxl.worksheet.worksheet.Worksheet | None = None,
     ) -> tuple[TransformerSpec, ...]:
-        """Extract transformer specifications from PCE VI rows 17-21."""
+        """Extract transformer specifications from PCE VI rows 17-21 and PCE Testsheet."""
         if ws_vi is None:
             return ()
 
@@ -559,6 +695,28 @@ class TestsheetExtractor:
             if not (tx_type or rating_kva or const_year or mfg or serial_no):
                 continue
 
+            # Extract ultrasound measurements from PCE Testsheet (TX1/TX2: Col K/L; TX3/TX4: Col V/X)
+            tx_us_reading = ""
+            tx_us_char = ""
+            if ws_pce is not None:
+                if i in (1, 2):
+                    start_r = 33 if i == 1 else 38
+                    col_db = 11  # K
+                    col_char = 12  # L
+                else:
+                    start_r = 33 if i == 3 else 38
+                    col_db = 22  # V
+                    col_char = 24  # X
+
+                for row_idx in range(start_r, start_r + 5):
+                    if row_idx <= ws_pce.max_row:
+                        db_val = clean_val(ws_pce.cell(row_idx, col_db).value)
+                        if db_val and not tx_us_reading:
+                            tx_us_reading = db_val
+                        char_val = clean_val(ws_pce.cell(row_idx, col_char).value)
+                        if char_val and not tx_us_char:
+                            tx_us_char = char_val
+
             transformers.append(
                 TransformerSpec(
                     tx_id=f"Tx {i}",
@@ -567,6 +725,8 @@ class TestsheetExtractor:
                     manufacturer=mfg,
                     serial_no=serial_no,
                     type=tx_type,
+                    us_reading=tx_us_reading,
+                    us_char=tx_us_char,
                 )
             )
 

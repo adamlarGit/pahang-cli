@@ -11,15 +11,17 @@ from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 
 
-
-
 class SubstationTestsheetRepository:
     """Discovers testsheet packages across Pahang's TESTSHEET directory hierarchy."""
 
     def __init__(self, extractor: TestsheetExtractor | None = None) -> None:
         self.extractor = extractor or TestsheetExtractor()
 
-    def discover_packages(self, root_path: Path | str) -> list[SubstationTestsheetPackage]:
+    def discover_packages(
+        self,
+        root_path: Path | str,
+        eager_extract: bool = True,
+    ) -> list[SubstationTestsheetPackage]:
         """Discover all testsheet packages under root_path."""
         root = Path(root_path)
         if not root.exists():
@@ -66,12 +68,13 @@ class SubstationTestsheetRepository:
                     substation_number = int(match.group(1))
 
                 data = None
-                try:
-                    data = self.extractor.extract_testsheet_data(
-                        xlsx_path, station_hint=station, date_hint=date_str
-                    )
-                except Exception:
-                    pass
+                if eager_extract:
+                    try:
+                        data = self.extractor.extract_testsheet_data(
+                            xlsx_path, station_hint=station, date_hint=date_str
+                        )
+                    except Exception:
+                        pass
 
                 pkg = SubstationTestsheetPackage(
                     testsheet_path=xlsx_path,
@@ -118,7 +121,6 @@ class LocalTestsheetPackageRepository:
             filter_valid_quick_reports,
             filter_valid_testsheets,
         )
-
 
         # Find candidate directory pairs (date_folder_name, ts_dir, qr_dir)
         date_folder_pairs: list[tuple[str, Path, Path]] = []

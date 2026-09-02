@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import openpyxl
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -57,6 +58,40 @@ class PopulateTotalPePlan:
     packages: tuple[SubstationTestsheetPackage, ...]
 
 
+def resolve_target_folders(
+    testsheet_dir: Path, target_folder_names: Sequence[str]
+) -> list[Path]:
+    """Resolve target folder names / paths to existing directory paths."""
+    matched_dirs: list[Path] = []
+    seen: set[Path] = set()
+
+    for target in target_folder_names:
+        cand = Path(target)
+        if cand.is_absolute() and cand.is_dir():
+            resolved = cand.resolve()
+            if resolved not in seen:
+                seen.add(resolved)
+                matched_dirs.append(resolved)
+            continue
+
+        rel_cand = (testsheet_dir / target).resolve()
+        if rel_cand.is_dir():
+            if rel_cand not in seen:
+                seen.add(rel_cand)
+                matched_dirs.append(rel_cand)
+            continue
+
+        if testsheet_dir.exists():
+            for p in testsheet_dir.rglob("*"):
+                if p.is_dir() and (p.name == target or target in str(p)):
+                    resolved = p.resolve()
+                    if resolved not in seen:
+                        seen.add(resolved)
+                        matched_dirs.append(resolved)
+
+    return matched_dirs
+
+
 class PopulateTotalPeExtractor:
     """Pure I/O reading stage for Populate Total PE workflow."""
 
@@ -68,9 +103,75 @@ class PopulateTotalPeExtractor:
         self.repository = repository or SubstationTestsheetRepository()
         self.total_pe_repository = total_pe_repository or LocalExcelTotalPeRepository()
 
-    def discover_packages(self, testsheet_dir: Path) -> list[SubstationTestsheetPackage]:
-        """Scan testsheet packages from repository."""
-        return self.repository.discover_packages(testsheet_dir)
+    def discover_packages(
+        self,
+        testsheet_dir: Path,
+        target_folder_names: Sequence[str] | None = None,
+        mode: PopulateMode | None = None,
+        eager_extract: bool = False,
+    ) -> list[SubstationTestsheetPackage]:
+        """Scan testsheet packages from repository with optional scoped discovery."""
+        if mode == PopulateMode.SPECIFIC_FOLDERS and target_folder_names:
+            target_dirs = resolve_target_folders(testsheet_dir, target_folder_names)
+            if not target_dirs:
+                return []
+            packages: list[SubstationTestsheetPackage] = []
+            seen_paths: set[Path] = set()
+            for td in target_dirs:
+                try:
+                    discovered = self.repository.discover_packages(
+                        td, eager_extract=eager_extract
+                    )
+                except TypeError:
+                    discovered = self.repository.discover_packages(td)
+                for pkg in discovered:
+                    resolved_p = pkg.testsheet_path.resolve()
+                    if resolved_p not in seen_paths:
+                        seen_paths.add(resolved_p)
+                        packages.append(pkg)
+            return packages
+
+        try:
+            return self.repository.discover_packages(
+                testsheet_dir, eager_extract=eager_extract
+            )
+        except TypeError:
+            return self.repository.discover_packages(testsheet_dir)
+
+    def hydrate_packages_metadata(
+        self, packages: Sequence[SubstationTestsheetPackage]
+    ) -> list[SubstationTestsheetPackage]:
+        """Hydrate package TestsheetData using fast read-only metadata extractor."""
+        hydrated: list[SubstationTestsheetPackage] = []
+        extractor = getattr(self.repository, "extractor", None)
+
+        for pkg in packages:
+            if pkg.data is not None:
+                hydrated.append(pkg)
+                continue
+
+            if extractor is not None:
+                try:
+                    if hasattr(extractor, "extract_testsheet_metadata"):
+                        data = extractor.extract_testsheet_metadata(
+                            pkg.testsheet_path,
+                            station_hint=pkg.station,
+                            date_hint=pkg.date_str,
+                        )
+                    else:
+                        data = extractor.extract_testsheet_data(
+                            pkg.testsheet_path,
+                            station_hint=pkg.station,
+                            date_hint=pkg.date_str,
+                        )
+                    hydrated.append(dataclasses.replace(pkg, data=data))
+                    continue
+                except Exception:
+                    pass
+
+            hydrated.append(pkg)
+
+        return hydrated
 
     def get_existing_auto_keys(self, total_pe_path: Path) -> set[tuple[str, str]]:
         """Read existing auto keys from TOTAL PE workbook."""
@@ -130,7 +231,11 @@ class PopulateTotalPeFilter:
 
         str_sub_num = str(pkg.substation_number)
         padded_sub_num = f"{pkg.substation_number:03d}"
-        erms_name = pkg.data.substation_name_erms.upper() if (pkg.data and pkg.data.substation_name_erms) else None
+        erms_name = (
+            pkg.data.substation_name_erms.upper()
+            if (pkg.data and pkg.data.substation_name_erms)
+            else None
+        )
 
         for str_id, key_dt in keys:
             norm_key_dt = normalize_date_str(key_dt)
@@ -234,7 +339,12 @@ class PopulateTotalPeWorkflow:
         if request.progress_sink:
             request.progress_sink(f"Scanning testsheet packages in {testsheet_dir}...")
 
-        packages = self.extractor.discover_packages(testsheet_dir)
+        packages = self.extractor.discover_packages(
+            testsheet_dir=testsheet_dir,
+            target_folder_names=request.target_folder_names,
+            mode=request.mode,
+            eager_extract=False,
+        )
 
         existing_auto_keys: set[tuple[str, str]] | None = None
         if request.mode == PopulateMode.AUTO:
@@ -252,7 +362,22 @@ class PopulateTotalPeWorkflow:
                 request.progress_sink("No testsheet packages found to process.")
             return PopulateTotalPeResult(new_rows_added=0)
 
-        plan = self.transformer.build_plan(total_pe_path, filtered_packages)
+        hydrated_packages = self.extractor.hydrate_packages_metadata(filtered_packages)
+
+        if request.mode == PopulateMode.AUTO and existing_auto_keys:
+            hydrated_packages = self.filter_stage.filter_packages(
+                packages=hydrated_packages,
+                mode=request.mode,
+                target_folder_names=request.target_folder_names,
+                existing_auto_keys=existing_auto_keys,
+            )
+
+        if not hydrated_packages:
+            if request.progress_sink:
+                request.progress_sink("No testsheet packages found to process.")
+            return PopulateTotalPeResult(new_rows_added=0)
+
+        plan = self.transformer.build_plan(total_pe_path, hydrated_packages)
         load_output = self.loader.upsert_packages(plan)
 
         result = self.auditor.audit(environment, plan, load_output)
@@ -263,5 +388,3 @@ class PopulateTotalPeWorkflow:
             )
 
         return result
-
-

@@ -292,3 +292,18 @@ def test_grid_table_photo_range_extraction(tmp_path: Path) -> None:
     assert data.photo_ranges.ir == PhotoRange(start_num=49, end_num=66)
     assert data.photo_ranges.dg == PhotoRange(start_num=1715, end_num=1739)
 
+
+def test_extract_testsheet_metadata(sample_testsheet_file: Path) -> None:
+    extractor = TestsheetExtractor()
+    meta = extractor.extract_testsheet_metadata(sample_testsheet_file, station_hint="RAUB", date_hint="01-05-2026")
+
+    assert isinstance(meta, TestsheetData)
+    assert meta.substation_number == 1
+    assert meta.substation_name_erms == "RM CHEROH"
+    assert meta.fl_erms == "CRAU-S001"
+    assert meta.date_str == "01-05-2026"
+    assert meta.cycle_1 == datetime(2026, 5, 1)
+    assert meta.substation_type == "RM"
+    assert meta.station_name == "RAUB"
+
+

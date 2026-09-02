@@ -268,4 +268,105 @@ def test_filter_helper_is_package_in_keys(
     assert filter_stage._is_package_in_keys(pkg, {("999", "01-05-2026")}) is False
 
 
+def test_resolve_target_folders(tmp_path: Path) -> None:
+    from src.workflows.populate_total_pe import resolve_target_folders
 
+    date_dir1 = tmp_path / "RAUB" / "01. MAY" / "01-05-2026"
+    date_dir1.mkdir(parents=True)
+    date_dir2 = tmp_path / "RAUB" / "01. MAY" / "02-05-2026"
+    date_dir2.mkdir(parents=True)
+
+    # 1. Resolve by date string name
+    res1 = resolve_target_folders(tmp_path, ["01-05-2026"])
+    assert len(res1) == 1
+    assert res1[0] == date_dir1.resolve()
+
+    # 2. Resolve by absolute path and folder name deduplication
+    res2 = resolve_target_folders(tmp_path, ["01-05-2026", str(date_dir1)])
+    assert len(res2) == 1
+    assert res2[0] == date_dir1.resolve()
+
+    # 3. Non-existent folder returns empty
+    res3 = resolve_target_folders(tmp_path, ["NON_EXISTENT"])
+    assert len(res3) == 0
+
+
+def test_extractor_scoped_discovery_specific_folders(tmp_path: Path) -> None:
+    from src.testsheet.repository import SubstationTestsheetRepository
+    import openpyxl
+
+    date_dir1 = tmp_path / "RAUB" / "01. MAY" / "01-05-2026"
+    date_dir1.mkdir(parents=True)
+    (date_dir1 / "UNSORTED RAW DATA").mkdir()
+    wb1 = openpyxl.Workbook()
+    wb1.save(date_dir1 / "001. SSU CHEROH.xlsx")
+    wb1.close()
+
+    date_dir2 = tmp_path / "RAUB" / "01. MAY" / "02-05-2026"
+    date_dir2.mkdir(parents=True)
+    (date_dir2 / "UNSORTED RAW DATA").mkdir()
+    wb2 = openpyxl.Workbook()
+    wb2.save(date_dir2 / "002. PPU BENTA.xlsx")
+    wb2.close()
+
+    extractor = PopulateTotalPeExtractor(repository=SubstationTestsheetRepository())
+
+    # In SPECIFIC_FOLDERS mode, scoped to 01-05-2026
+    pkgs = extractor.discover_packages(
+        testsheet_dir=tmp_path,
+        target_folder_names=["01-05-2026"],
+        mode=PopulateMode.SPECIFIC_FOLDERS,
+        eager_extract=False,
+    )
+    assert len(pkgs) == 1
+    assert pkgs[0].substation_number == 1
+    assert pkgs[0].date_str == "01-05-2026"
+    assert pkgs[0].data is None
+
+
+def test_extractor_hydrate_packages_metadata(tmp_path: Path) -> None:
+    import openpyxl
+    from src.testsheet.repository import SubstationTestsheetRepository
+
+    date_dir = tmp_path / "RAUB" / "01. MAY" / "01-05-2026"
+    date_dir.mkdir(parents=True)
+    (date_dir / "UNSORTED RAW DATA").mkdir()
+
+    wb = openpyxl.Workbook()
+    ws_pce = wb.active
+    ws_pce.title = "PCE Testsheet"
+    ws_pce["W5"] = "CRAU-S001"
+    ws_pce["C5"] = "SSU CHEROH"
+    ws_pce["P4"] = "01-05-2026"
+    ws_pce["Y1"] = "1"
+    wb.save(date_dir / "001. SSU CHEROH.xlsx")
+    wb.close()
+
+    extractor = PopulateTotalPeExtractor(repository=SubstationTestsheetRepository())
+    pkgs = extractor.discover_packages(testsheet_dir=tmp_path, eager_extract=False)
+    assert len(pkgs) == 1
+    assert pkgs[0].data is None
+
+    hydrated = extractor.hydrate_packages_metadata(pkgs)
+    assert len(hydrated) == 1
+    assert hydrated[0].data is not None
+    assert hydrated[0].data.substation_number == 1
+    assert hydrated[0].data.substation_name_erms == "SSU CHEROH"
+    assert hydrated[0].data.fl_erms == "CRAU-S001"
+
+
+def test_filter_auto_mode_pre_filters_without_data() -> None:
+    filter_stage = PopulateTotalPeFilter()
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=Path("/testsheets/01-05-2026/001. SSU CHEROH.xlsx"),
+        unsorted_raw_data_dir=Path("/testsheets/01-05-2026/UNSORTED RAW DATA"),
+        station="RAUB",
+        month="01. MAY",
+        date_str="01-05-2026",
+        substation_number=1,
+        data=None,
+    )
+
+    existing_keys = {("1", "01-05-2026")}
+    res = filter_stage.filter_packages([pkg], mode=PopulateMode.AUTO, existing_auto_keys=existing_keys)
+    assert len(res) == 0

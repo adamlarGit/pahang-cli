@@ -5,6 +5,13 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.1] - 2026-09-03
+
+### Fixed
+- **Populate TOTAL PE Scoped Folder Discovery (`src/workflows/populate_total_pe.py`)**: Scoped package discovery directly to target date directories when running in `SPECIFIC_FOLDERS` mode, eliminating whole-tree directory walks and dropping single-folder execution time from ~106s to ~1.2s (~88× faster).
+- **Fast Read-Only Testsheet Metadata Extraction (`src/testsheet/extractor.py`)**: Added `extract_testsheet_metadata()` with `openpyxl.load_workbook(path, data_only=True, read_only=True)` to stream only the 6 required header fields (`PE NO`, `FL NUMBER`, `SUBSTATION NAME`, `DATE`, `TYPE`, `WO`) in ~0.06s/file without parsing heavy equipment specifications.
+- **Lazy Package Discovery & In-Memory Pre-Filtering (`src/testsheet/repository.py`, `src/master/total_pe.py`)**: Added `eager_extract=False` to `SubstationTestsheetRepository.discover_packages()` and in-memory `(substation_number, date_str)` pre-filtering in `AUTO` mode, coupled with `iter_rows(values_only=True)` streaming in `LocalExcelTotalPeRepository.get_existing_auto_keys()`.
+
 ## [1.13.0] - 2026-09-01
 
 ### Added

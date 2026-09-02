@@ -24,7 +24,6 @@ def write_cell(ws: Any, row: int, col_letter: str, value: Any) -> None:
     ws[f"{col_letter}{row}"] = value
 
 
-
 class TotalPeRepository(ABC):
     """Abstract repository for TOTAL PE workbook management."""
 
@@ -55,7 +54,6 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
     """Excel-backed repository for TOTAL PE workbook management."""
 
     @staticmethod
-
     def _get_real_dimensions(ws: openpyxl.worksheet.worksheet.Worksheet) -> tuple[int, int]:
         max_r = 1
         max_c = 1
@@ -143,16 +141,16 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
         if not total_pe_path.exists():
             return set()
 
-        wb_check = openpyxl.load_workbook(total_pe_path, data_only=True)
+        wb_check = openpyxl.load_workbook(total_pe_path, data_only=True, read_only=True)
         try:
             if "DataCycle1" not in wb_check.sheetnames:
                 raise RuntimeError(f"'DataCycle1' sheet missing in {total_pe_path}")
             ws_check = wb_check["DataCycle1"]
             existing_keys: set[tuple[str, str]] = set()
-            for r_idx in range(2, ws_check.max_row + 1):
-                pe_val = str(ws_check.cell(r_idx, 1).value or "").strip()
-                sub_val = str(ws_check.cell(r_idx, 3).value or "").strip().upper()
-                dt_val = str(ws_check.cell(r_idx, 4).value or "").strip()
+            for row in ws_check.iter_rows(min_row=2, values_only=True):
+                pe_val = str(row[0] or "").strip() if len(row) > 0 and row[0] is not None else ""
+                sub_val = str(row[2] or "").strip().upper() if len(row) > 2 and row[2] is not None else ""
+                dt_val = str(row[3] or "").strip() if len(row) > 3 and row[3] is not None else ""
                 norm_dt = normalize_date_str(dt_val)
 
                 for d in (dt_val, norm_dt):
