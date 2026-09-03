@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from src.core.normalizers import (
     format_date_cbm,
     format_date_front_page,
+    format_db_int,
     normalize_for_report,
 )
 from src.quick_report.cbm_defect_planner import CbmDefectPlanner
@@ -84,13 +85,13 @@ class QuickReportTransformer:
                 "ambient": normalize_for_report(pkg.data.ambient),
                 "humidity": normalize_for_report(pkg.data.humidity),
                 "time": normalize_for_report(pkg.data.time),
-                "tev_bg": normalize_for_report(getattr(pkg.data, "tev_background", "-")),
-                "tev_background": normalize_for_report(getattr(pkg.data, "tev_background", "-")),
+                "tev_bg": format_db_int(getattr(pkg.data, "tev_background", "-")),
+                "tev_background": format_db_int(getattr(pkg.data, "tev_background", "-")),
             },
             "raw_data_dir": raw_data_dir,
             "survey_dir": raw_data_dir,
-            "tev_bg": normalize_for_report(getattr(pkg.data, "tev_background", "-")),
-            "tev_background": normalize_for_report(getattr(pkg.data, "tev_background", "-")),
+            "tev_bg": format_db_int(getattr(pkg.data, "tev_background", "-")),
+            "tev_background": format_db_int(getattr(pkg.data, "tev_background", "-")),
             "testsheet_data": pkg.data,
             "equipment_specs": getattr(pkg.data, "equipment", None),
             "equipment_package": getattr(pkg.data, "equipment", None),

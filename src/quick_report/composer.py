@@ -47,7 +47,7 @@ def _collapse_and_escape_table(main_doc):
 
 
 def _paste_with_retry(rng, max_attempts: int = 5, delay: float = 0.15) -> None:
-    """Retry rng.Paste() up to max_attempts times to handle transient COM/clipboard errors."""
+    """Retry rng.PasteAndFormat(16) / rng.Paste() up to max_attempts times to preserve source formatting and handle COM errors."""
     exceptions: tuple[type[BaseException], ...]
     if pywintypes and hasattr(pywintypes, "com_error"):
         exceptions = (pywintypes.com_error, Exception)
@@ -56,11 +56,19 @@ def _paste_with_retry(rng, max_attempts: int = 5, delay: float = 0.15) -> None:
 
     for attempt in range(1, max_attempts + 1):
         try:
-            rng.Paste()
-            return
+            if hasattr(rng, "PasteAndFormat"):
+                try:
+                    rng.PasteAndFormat(16)  # 16 = wdFormatOriginalFormatting
+                    return
+                except (AttributeError, TypeError):
+                    rng.Paste()
+                    return
+            else:
+                rng.Paste()
+                return
         except exceptions as exc:
             if attempt == max_attempts:
-                logger.error("rng.Paste() failed after %d attempts: %s", max_attempts, exc)
+                logger.error("rng paste failed after %d attempts: %s", max_attempts, exc)
                 raise
             time.sleep(delay)
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, TYPE_CHECKING
 import pandas as pd
 
+from src.core.normalizers import normalize_us_characteristic
 from src.quick_report.utils import normalize_functional_location_input
 
 if TYPE_CHECKING:
@@ -338,17 +339,19 @@ class MasterQr03DefectRepository:
                 us_reading = _get_val("US READING", "US_READING")
                 tev_reading = _get_val("TEV READING", "TEV_READING")
 
-                us_char = (
+                us_char_raw = (
                     _clean_val(row.get(us_char_col))
                     if us_char_col
                     else _get_val("US CHAR", "US CHARACTER", "US_CHAR", "US_CHARACTER")
                 )
-                if not us_char and tech == "US":
-                    us_char = (
+                if not us_char_raw and tech == "US":
+                    us_char_raw = (
                         _clean_val(row.get(defect_type_col))
                         if defect_type_col
                         else _get_val("DEFECT TYPE", "DEFECT_TYPE", "DEFECT")
                     )
+                norm_us = normalize_us_characteristic(us_char_raw)
+                us_char = "" if norm_us == "-" else norm_us
 
                 tev_char = (
                     _clean_val(row.get(tev_char_col))

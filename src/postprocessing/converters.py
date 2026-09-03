@@ -68,11 +68,11 @@ def select_and_sort_sheets(
     return testsheet_names + vi_names
 
 
-def configure_uniform_printer(excel_app: object) -> None:
-    """Configure ActivePrinter to a standardized virtual PDF printer (e.g. Microsoft Print to PDF) to ensure uniform sheet scaling."""
+def configure_uniform_printer(app: object) -> None:
+    """Configure ActivePrinter to a standardized virtual PDF printer (Adobe PDF or Microsoft Print to PDF) to ensure uniform scaling."""
     try:
-        current_printer = str(getattr(excel_app, "ActivePrinter", ""))
-        preferred_printers = ["microsoft print to pdf", "microsoft xps document writer"]
+        current_printer = str(getattr(app, "ActivePrinter", ""))
+        preferred_printers = ["adobe pdf", "microsoft print to pdf"]
         if any(p in current_printer.lower() for p in preferred_printers):
             return
 
@@ -97,7 +97,7 @@ def configure_uniform_printer(excel_app: object) -> None:
             for pref in preferred_printers:
                 for dev_name, full_spec in devices.items():
                     if pref in dev_name:
-                        excel_app.ActivePrinter = full_spec
+                        app.ActivePrinter = full_spec
                         return
     except Exception as exc:
         logging.debug("Could not configure uniform printer: %s", exc)
@@ -148,6 +148,8 @@ class BatchComSession:
                 word = win32.DispatchEx("Word.Application")
                 word.Visible = False
                 word.DisplayAlerts = 0
+                if self.configure_printer:
+                    configure_uniform_printer(word)
                 self.word_app = word
 
             if self.excel_app is None:
@@ -424,7 +426,7 @@ class ComDocumentConverter(DocumentConverter):
         word_app: object | None = None,
         session: BatchComSession | None = None,
     ) -> Path:
-        """Convert Word document to PDF using COM SaveAs2."""
+        """Convert Word document to PDF using high-fidelity COM ExportAsFixedFormat."""
         if session is not None and word_app is None:
             word_app = session.word_app
 
@@ -441,11 +443,25 @@ class ComDocumentConverter(DocumentConverter):
             word_app = win32.DispatchEx("Word.Application")
             word_app.Visible = False
             word_app.DisplayAlerts = 0
+            self._configure_uniform_printer(word_app)
 
         doc = None
         try:
             doc = word_app.Documents.Open(str(docx_path.resolve()))
-            doc.SaveAs2(str(pdf_path.resolve()), FileFormat=17)
+            doc.ExportAsFixedFormat(
+                OutputFileName=str(pdf_path.resolve()),
+                ExportFormat=17,  # wdExportFormatPDF
+                OpenAfterExport=False,
+                OptimizeFor=0,  # wdExportOptimizeForPrint (High Quality)
+                Range=0,  # wdExportAllDocument
+                Item=0,  # wdExportDocumentContent
+                IncludeDocProps=True,
+                KeepIRM=True,
+                CreateBookmarks=0,  # wdExportCreateNoBookmarks
+                DocStructureTags=True,
+                BitmapMissingFonts=True,
+                UseISO19005_1=False,
+            )
         finally:
             if doc is not None:
                 try:

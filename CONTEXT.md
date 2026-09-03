@@ -161,3 +161,12 @@ Per-substation error isolation policy during batch document post-processing. Fai
 
 ### SignaturePlaceholderSanitizationPolicy
 The clean placeholder sanitization policy implemented in `src/workflows/replace_signatures.py` when digital signature stamping is omitted or disabled (`mode="none"`). Ensures template tags `{{signvendor}}` and `{{signtnb}}` are cleanly stripped from testsheet cells without inserting image drawings, clearing cell values to prepare pristine blank signature boxes for manual wet-ink physical signing while preventing raw curly-brace template tags from appearing on client deliverables.
+
+### HighFidelityDocumentExportPolicy
+The cross-platform document rendering and PDF export fidelity policy governing Quick Report `.docx` and Testsheet `.xlsx` conversions in `src/postprocessing/converters.py`. Enforces:
+1. **Dynamic Virtual Printer Discovery**: Standardizes `ActivePrinter` on both `Word.Application` and `Excel.Application` by discovering `Adobe PDF` (preferred driver metrics) or falling back to universal `Microsoft Print to PDF`.
+2. **Template OpenXML High Fidelity**: Injects `<w:doNotCompressImages/>` and `<w:defaultImageDpi w:val="0"/>` (High Fidelity) into all `.docx` templates to lock image resolutions against host Word profile downsampling.
+3. **Runtime COM Image Compression Suppression**: Enforces `word_app.Options.DoNotCompressImages = True` and `doc.DoNotCompressImages = True` across batch runs.
+4. **Native COM Fixed Format Export**: Uses `doc.ExportAsFixedFormat` (`OptimizeFor=0` / `wdExportOptimizeForPrint`, `BitmapMissingFonts=True`, `DocStructureTags=True`) for Word, and `ws.ExportAsFixedFormat` (`Quality=0` / `xlQualityStandard`, `PaperSize=9` A4, `Orientation=2` Landscape) for Excel.
+5. **Orientation Partitioning**: Strictly maintains Portrait orientation for Quick Report Word document pages and Landscape orientation for Excel testsheet pages during final client deliverable PDF merging.
+

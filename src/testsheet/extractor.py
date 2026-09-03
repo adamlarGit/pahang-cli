@@ -8,7 +8,12 @@ import warnings
 from pathlib import Path
 import openpyxl
 
-from src.core.normalizers import format_testsheet_time, format_humidity_str, parse_background_temp
+from src.core.normalizers import (
+    format_humidity_str,
+    format_testsheet_time,
+    normalize_us_characteristic,
+    parse_background_temp,
+)
 from src.testsheet.models import (
     BatteryBankSpec,
     FireExtinguisherSpec,
@@ -514,6 +519,9 @@ class TestsheetExtractor:
                             if val:
                                 us_char = val
                                 break
+                if us_char:
+                    norm_us = normalize_us_characteristic(us_char)
+                    us_char = "" if norm_us == "-" else norm_us
                 if not tev_reading:
                     for sub_r in range(r, r + 4):
                         if sub_r <= ws.max_row:
@@ -715,7 +723,8 @@ class TestsheetExtractor:
                             tx_us_reading = db_val
                         char_val = clean_val(ws_pce.cell(row_idx, col_char).value)
                         if char_val and not tx_us_char:
-                            tx_us_char = char_val
+                            norm_char = normalize_us_characteristic(char_val)
+                            tx_us_char = "" if norm_char == "-" else norm_char
 
             transformers.append(
                 TransformerSpec(

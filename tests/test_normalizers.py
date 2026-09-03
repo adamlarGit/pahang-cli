@@ -4,19 +4,25 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from decimal import Decimal
+
 from src.core.normalizers import (
     extract_background_temperature,
+    format_cbm_reading,
     format_date_cbm,
     format_date_front_page,
+    format_db_int,
     format_humidity_str,
     format_iso8601,
-    format_month_folder, 
+    format_month_folder,
+    format_temperature_float,
     format_testsheet_time,
     normalize_date_str,
     normalize_fl_erms,
     normalize_for_csv,
     normalize_for_excel,
     normalize_for_report,
+    normalize_us_characteristic,
     parse_background_temp,
 )
 
@@ -131,18 +137,94 @@ def test_format_month_folder_keyword_args() -> None:
 
 
 def test_format_testsheet_time() -> None:
-    from datetime import time
+    from datetime import time, date, datetime
+    from decimal import Decimal
+
+    # datetime objects (including openpyxl epoch 1899-12-30)
+    assert format_testsheet_time(datetime(1899, 12, 30, 10, 35)) == "10:35 AM"
+    assert format_testsheet_time(datetime(2026, 9, 2, 14, 30)) == "02:30 PM"
+    assert format_testsheet_time(datetime(2026, 9, 2, 0, 0)) == "12:00 AM"
+    assert format_testsheet_time(datetime(2026, 9, 2, 12, 0)) == "12:00 PM"
+
+    # time objects
+    assert format_testsheet_time(time(10, 35)) == "10:35 AM"
+    assert format_testsheet_time(time(14, 30)) == "02:30 PM"
+    assert format_testsheet_time(time(9, 15)) == "09:15 AM"
+    assert format_testsheet_time(time(0, 0)) == "12:00 AM"
+    assert format_testsheet_time(time(12, 0)) == "12:00 PM"
+
+    # date objects (without time component) -> fallback to "-"
+    assert format_testsheet_time(date(2026, 9, 2)) == "-"
+
+    # Excel day fraction numbers (0.0 <= val < 1.0)
+    assert format_testsheet_time(0.4409722222222222) == "10:35 AM"
+    assert format_testsheet_time(0.6041666666666666) == "02:30 PM"
+    assert format_testsheet_time(Decimal("0.4409722222222222")) == "10:35 AM"
+    assert format_testsheet_time(0.0) == "12:00 AM"
+    assert format_testsheet_time("0.4409722222222222") == "10:35 AM"
+
+    # Integers and float-integers (3-4 digits, e.g. 1035, 1035.0, 930, 930.0)
+    assert format_testsheet_time(1035) == "10:35 AM"
+    assert format_testsheet_time(1035.0) == "10:35 AM"
+    assert format_testsheet_time(930) == "09:30 AM"
+    assert format_testsheet_time(930.0) == "09:30 AM"
+    assert format_testsheet_time(1430) == "02:30 PM"
+    assert format_testsheet_time(1430.0) == "02:30 PM"
+    assert format_testsheet_time(915) == "09:15 AM"
+    assert format_testsheet_time("1035") == "10:35 AM"
+    assert format_testsheet_time("1035.0") == "10:35 AM"
+    assert format_testsheet_time("930") == "09:30 AM"
+    assert format_testsheet_time("930.0") == "09:30 AM"
+    assert format_testsheet_time("0915") == "09:15 AM"
+    assert format_testsheet_time("915") == "09:15 AM"
+    assert format_testsheet_time("1430") == "02:30 PM"
+
+    # Colon and dot separated strings with or without AM/PM
+    assert format_testsheet_time("10:35 AM") == "10:35 AM"
+    assert format_testsheet_time("10.35 AM") == "10:35 AM"
+    assert format_testsheet_time("10:35:00") == "10:35 AM"
+    assert format_testsheet_time("10.35.00") == "10:35 AM"
+    assert format_testsheet_time("10:35:00 AM") == "10:35 AM"
+    assert format_testsheet_time("10.35.00 AM") == "10:35 AM"
+    assert format_testsheet_time("10.35") == "10:35 AM"
+    assert format_testsheet_time("10:35") == "10:35 AM"
+    assert format_testsheet_time("14:30") == "02:30 PM"
+    assert format_testsheet_time("14.30") == "02:30 PM"
+    assert format_testsheet_time("14:30:00") == "02:30 PM"
+    assert format_testsheet_time("2:30 PM") == "02:30 PM"
+    assert format_testsheet_time("2.30 PM") == "02:30 PM"
+    assert format_testsheet_time("2.30pm") == "02:30 PM"
+    assert format_testsheet_time("2:30pm") == "02:30 PM"
+    assert format_testsheet_time("02:30 PM") == "02:30 PM"
+    assert format_testsheet_time("9.30") == "09:30 AM"
+    assert format_testsheet_time("9:30") == "09:30 AM"
+    assert format_testsheet_time("9:30 PM") == "09:30 PM"
+    assert format_testsheet_time("9.30 PM") == "09:30 PM"
+    assert format_testsheet_time("12:00 PM") == "12:00 PM"
+    assert format_testsheet_time("12:00 AM") == "12:00 AM"
+    assert format_testsheet_time("00:00") == "12:00 AM"
+    assert format_testsheet_time("0:00") == "12:00 AM"
+
+    # Null, empty, sentinels, booleans, and invalid inputs
     assert format_testsheet_time(None) == "-"
     assert format_testsheet_time("") == "-"
+    assert format_testsheet_time("   ") == "-"
     assert format_testsheet_time("-") == "-"
-    assert format_testsheet_time("1430") == "02:30 PM"
-    assert format_testsheet_time(1430) == "02:30 PM"
-    assert format_testsheet_time("0915") == "09:15 AM"
-    assert format_testsheet_time(915) == "09:15 AM"
-    assert format_testsheet_time("14:30") == "02:30 PM"
-    assert format_testsheet_time("9:15") == "09:15 AM"
-    assert format_testsheet_time(time(14, 30)) == "02:30 PM"
+    assert format_testsheet_time("--") == "-"
+    assert format_testsheet_time("N/A") == "-"
+    assert format_testsheet_time("n/a") == "-"
+    assert format_testsheet_time("None") == "-"
+    assert format_testsheet_time("none") == "-"
+    assert format_testsheet_time("nan") == "-"
+    assert format_testsheet_time(float("nan")) == "-"
+    assert format_testsheet_time(float("inf")) == "-"
+    assert format_testsheet_time(True) == "-"
+    assert format_testsheet_time(False) == "-"
     assert format_testsheet_time("invalid") == "-"
+    assert format_testsheet_time("25:00") == "-"
+    assert format_testsheet_time("10:65") == "-"
+    assert format_testsheet_time("99:99") == "-"
+    assert format_testsheet_time("14:30 AM") == "-"
 
 
 def test_format_humidity_str() -> None:
@@ -328,3 +410,211 @@ def test_normalize_fl_erms() -> None:
     assert normalize_fl_erms("None") == ""
     assert normalize_fl_erms("nan") == ""
     assert normalize_fl_erms("location") == ""
+
+
+def test_normalize_us_characteristic() -> None:
+    """Verify normalize_us_characteristic maps shorthand codes to full descriptive terms."""
+    # 1. Null, empty, and sentinel values -> '-'
+    assert normalize_us_characteristic(None) == "-"
+    assert normalize_us_characteristic("") == "-"
+    assert normalize_us_characteristic("   ") == "-"
+    assert normalize_us_characteristic("-") == "-"
+    assert normalize_us_characteristic("--") == "-"
+    assert normalize_us_characteristic("---") == "-"
+    assert normalize_us_characteristic("N/A") == "-"
+    assert normalize_us_characteristic("n/a") == "-"
+    assert normalize_us_characteristic("NAN") == "-"
+    assert normalize_us_characteristic("nan") == "-"
+    assert normalize_us_characteristic(float("nan")) == "-"
+    assert normalize_us_characteristic("None") == "-"
+    assert normalize_us_characteristic("null") == "-"
+    assert normalize_us_characteristic("#REF!") == "-"
+
+    # 2. Corona Discharge mappings (C, CORONA, CORONA DISCHARGE)
+    assert normalize_us_characteristic("C") == "CORONA DISCHARGE"
+    assert normalize_us_characteristic("c") == "CORONA DISCHARGE"
+    assert normalize_us_characteristic("  c  ") == "CORONA DISCHARGE"
+    assert normalize_us_characteristic("CORONA") == "CORONA DISCHARGE"
+    assert normalize_us_characteristic("corona") == "CORONA DISCHARGE"
+    assert normalize_us_characteristic("CORONA DISCHARGE") == "CORONA DISCHARGE"
+    assert normalize_us_characteristic("corona discharge") == "CORONA DISCHARGE"
+    assert normalize_us_characteristic("  CORONA  ") == "CORONA DISCHARGE"
+
+    # 3. Arcing mappings (A, ARCING)
+    assert normalize_us_characteristic("A") == "ARCING"
+    assert normalize_us_characteristic("a") == "ARCING"
+    assert normalize_us_characteristic("  a  ") == "ARCING"
+    assert normalize_us_characteristic("ARCING") == "ARCING"
+    assert normalize_us_characteristic("arcing") == "ARCING"
+    assert normalize_us_characteristic("  ARCING  ") == "ARCING"
+
+    # 4. Tracking mappings (T, TRACKING, SURFACE TRACKING)
+    assert normalize_us_characteristic("T") == "TRACKING"
+    assert normalize_us_characteristic("t") == "TRACKING"
+    assert normalize_us_characteristic("  t  ") == "TRACKING"
+    assert normalize_us_characteristic("TRACKING") == "TRACKING"
+    assert normalize_us_characteristic("tracking") == "TRACKING"
+    assert normalize_us_characteristic("SURFACE TRACKING") == "TRACKING"
+    assert normalize_us_characteristic("surface tracking") == "TRACKING"
+    assert normalize_us_characteristic("  SURFACE TRACKING  ") == "TRACKING"
+
+    # 5. Mechanical Vibration mappings (MV, MECHANICAL VIBRATION)
+    assert normalize_us_characteristic("MV") == "MECHANICAL VIBRATION"
+    assert normalize_us_characteristic("mv") == "MECHANICAL VIBRATION"
+    assert normalize_us_characteristic("  mv  ") == "MECHANICAL VIBRATION"
+    assert normalize_us_characteristic("MECHANICAL VIBRATION") == "MECHANICAL VIBRATION"
+    assert normalize_us_characteristic("mechanical vibration") == "MECHANICAL VIBRATION"
+    assert normalize_us_characteristic("  MECHANICAL VIBRATION  ") == "MECHANICAL VIBRATION"
+
+    # 6. Other / non-mapped strings -> return cleaned string representation
+    assert normalize_us_characteristic("NORMAL") == "NORMAL"
+    assert normalize_us_characteristic("normal") == "normal"
+    assert normalize_us_characteristic("PARTIAL DISCHARGE") == "PARTIAL DISCHARGE"
+    assert normalize_us_characteristic("  Custom Sound Pattern  ") == "Custom Sound Pattern"
+
+
+def test_format_db_int() -> None:
+    """Verify format_db_int formats US and TEV dB readings as 0-decimal integer strings."""
+    # Integers
+    assert format_db_int(20) == "20"
+    assert format_db_int(0) == "0"
+    assert format_db_int(-5) == "-5"
+
+    # Floats (rounding to nearest integer)
+    assert format_db_int(20.0) == "20"
+    assert format_db_int(0.0) == "0"
+    assert format_db_int(14.8) == "15"
+    assert format_db_int(14.2) == "14"
+    assert format_db_int(14.5) == "15"
+    assert format_db_int(-5.6) == "-6"
+    assert format_db_int(-5.2) == "-5"
+
+    # Decimal instances
+    assert format_db_int(Decimal("20.0")) == "20"
+    assert format_db_int(Decimal("14.8")) == "15"
+    assert format_db_int(Decimal("0.0")) == "0"
+
+    # Strings with units and variations
+    assert format_db_int("20") == "20"
+    assert format_db_int("20.0") == "20"
+    assert format_db_int("20 dB") == "20"
+    assert format_db_int("20dB") == "20"
+    assert format_db_int("20.0 dB") == "20"
+    assert format_db_int("14.8 dB") == "15"
+    assert format_db_int("14.2dB") == "14"
+    assert format_db_int("  18.5 dB  ") == "19"
+    assert format_db_int("-5 dB") == "-5"
+    assert format_db_int("0") == "0"
+    assert format_db_int("0.0") == "0"
+    assert format_db_int("0 dB") == "0"
+
+    # Null, empty, sentinel, boolean, and invalid inputs -> "-"
+    assert format_db_int(None) == "-"
+    assert format_db_int("") == "-"
+    assert format_db_int("   ") == "-"
+    assert format_db_int("-") == "-"
+    assert format_db_int("--") == "-"
+    assert format_db_int("---") == "-"
+    assert format_db_int("None") == "-"
+    assert format_db_int("none") == "-"
+    assert format_db_int("NaN") == "-"
+    assert format_db_int("nan") == "-"
+    assert format_db_int("N/A") == "-"
+    assert format_db_int("n/a") == "-"
+    assert format_db_int("null") == "-"
+    assert format_db_int("#REF!") == "-"
+    assert format_db_int(float("nan")) == "-"
+    assert format_db_int(float("inf")) == "-"
+    assert format_db_int(-float("inf")) == "-"
+    assert format_db_int(True) == "-"
+    assert format_db_int(False) == "-"
+    assert format_db_int("invalid text") == "-"
+
+
+def test_format_temperature_float() -> None:
+    """Verify format_temperature_float formats IR temperature readings as 1-decimal float strings."""
+    # Integers
+    assert format_temperature_float(32) == "32.0"
+    assert format_temperature_float(0) == "0.0"
+    assert format_temperature_float(-5) == "-5.0"
+
+    # Floats
+    assert format_temperature_float(32.0) == "32.0"
+    assert format_temperature_float(32.34) == "32.3"
+    assert format_temperature_float(32.36) == "32.4"
+    assert format_temperature_float(32.35) == "32.4"
+    assert format_temperature_float(0.0) == "0.0"
+    assert format_temperature_float(-5.65) == "-5.7"
+    assert format_temperature_float(-5.64) == "-5.6"
+
+    # Decimal instances
+    assert format_temperature_float(Decimal("32")) == "32.0"
+    assert format_temperature_float(Decimal("32.0")) == "32.0"
+    assert format_temperature_float(Decimal("32.34")) == "32.3"
+    assert format_temperature_float(Decimal("32.35")) == "32.4"
+
+    # Strings with units and variations
+    assert format_temperature_float("32") == "32.0"
+    assert format_temperature_float("32.0") == "32.0"
+    assert format_temperature_float("32.34") == "32.3"
+    assert format_temperature_float("33.3 °C") == "33.3"
+    assert format_temperature_float("33.3°C") == "33.3"
+    assert format_temperature_float("33 °C") == "33.0"
+    assert format_temperature_float("33C") == "33.0"
+    assert format_temperature_float("  35.5 °C  ") == "35.5"
+    assert format_temperature_float("ΔT 5.4") == "5.4"
+    assert format_temperature_float("ΔT 5.4 °C") == "5.4"
+    assert format_temperature_float("0") == "0.0"
+    assert format_temperature_float("0.0") == "0.0"
+
+    # Null, empty, sentinel, boolean, and invalid inputs -> "-"
+    assert format_temperature_float(None) == "-"
+    assert format_temperature_float("") == "-"
+    assert format_temperature_float("   ") == "-"
+    assert format_temperature_float("-") == "-"
+    assert format_temperature_float("--") == "-"
+    assert format_temperature_float("---") == "-"
+    assert format_temperature_float("None") == "-"
+    assert format_temperature_float("none") == "-"
+    assert format_temperature_float("NaN") == "-"
+    assert format_temperature_float("nan") == "-"
+    assert format_temperature_float("N/A") == "-"
+    assert format_temperature_float("n/a") == "-"
+    assert format_temperature_float("null") == "-"
+    assert format_temperature_float("#REF!") == "-"
+    assert format_temperature_float(float("nan")) == "-"
+    assert format_temperature_float(float("inf")) == "-"
+    assert format_temperature_float(-float("inf")) == "-"
+    assert format_temperature_float(True) == "-"
+    assert format_temperature_float(False) == "-"
+    assert format_temperature_float("invalid text") == "-"
+
+
+def test_format_cbm_reading() -> None:
+    """Verify format_cbm_reading dispatches to format_db_int for US/TEV and format_temperature_float for IR."""
+    # US readings -> format_db_int
+    assert format_cbm_reading(14.8, "US") == "15"
+    assert format_cbm_reading("14.2 dB", "US") == "14"
+    assert format_cbm_reading("20.0 dB", "ULTRASOUND") == "20"
+    assert format_cbm_reading(None, "US") == "-"
+
+    # TEV readings -> format_db_int
+    assert format_cbm_reading(20.0, "TEV") == "20"
+    assert format_cbm_reading("28.5 dB", "TEV") == "29"
+    assert format_cbm_reading("12", "TRANSIENT EARTH VOLTAGE") == "12"
+    assert format_cbm_reading(None, "TEV") == "-"
+
+    # IR readings -> format_temperature_float
+    assert format_cbm_reading(32, "IR") == "32.0"
+    assert format_cbm_reading(32.34, "IR") == "32.3"
+    assert format_cbm_reading("33.3 °C", "INFRARED") == "33.3"
+    assert format_cbm_reading("55", "THERMAL") == "55.0"
+    assert format_cbm_reading(None, "IR") == "-"
+
+    # Other / None / VI -> normalize_for_report
+    assert format_cbm_reading("Corrosion", "VI") == "Corrosion"
+    assert format_cbm_reading("Oil Leakage", "VISUAL") == "Oil Leakage"
+    assert format_cbm_reading(None, None) == "-"
+    assert format_cbm_reading("", "") == "-"
+
+

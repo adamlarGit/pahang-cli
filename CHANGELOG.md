@@ -5,6 +5,11 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.1] - 2026-09-03
+
+### Fixed
+- **Missing `matplotlib` Dependency in `pyproject.toml` and `uv.lock`**: Added explicit `matplotlib>=3.8.0` dependency to `pyproject.toml` and synchronized `uv.lock` so that downstream client installations running `start_cli.bat` (`uv sync --frozen`) correctly resolve and install all PRPD rendering libraries.
+
 ## [1.14.0] - 2026-09-03
 
 ### Added

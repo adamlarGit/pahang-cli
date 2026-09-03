@@ -17,3 +17,5 @@ diff*.txt
 scratch/
 .serena/
 .tmp/
+~$*
+

@@ -11,6 +11,11 @@ from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
 from jinja2 import Environment, Undefined
 
+from src.core.normalizers import (
+    format_db_int,
+    format_temperature_float,
+    normalize_us_characteristic,
+)
 from src.quick_report.cbm_family import QuickReportFamilySpec
 from src.quick_report.defects import CbmDefectRecord
 from src.quick_report.prpd import (
@@ -350,15 +355,15 @@ def _extract_tev_background(pe_info: dict[str, Any] | None) -> str:
         return "-"
     ts_data = pe_info.get("testsheet_data")
     if ts_data and getattr(ts_data, "tev_background", None):
-        return str(ts_data.tev_background)
+        return format_db_int(ts_data.tev_background)
     if isinstance(pe_info.get("substation"), dict):
         bg = pe_info["substation"].get("tev_bg") or pe_info["substation"].get("tev_background")
         if bg and bg != "-":
-            return str(bg)
+            return format_db_int(bg)
     if pe_info.get("tev_background"):
-        return str(pe_info["tev_background"])
+        return format_db_int(pe_info["tev_background"])
     if pe_info.get("tev_bg"):
-        return str(pe_info["tev_bg"])
+        return format_db_int(pe_info["tev_bg"])
     return "-"
 
 
@@ -436,37 +441,37 @@ def _build_fp_lvdb_render_context(
             "serialnumber": _fallback_dash(fp_serial),
             "cabletype": _fallback_dash(fp_cable),
             "ir": {
-                "reading": _fallback_dash(record.ir_reading),
+                "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
             },
             "us": {
-                "reading": _fallback_dash(record.us_reading),
-                "char": _fallback_dash(record.us_char),
+                "reading": format_db_int(record.us_reading),
+                "char": normalize_us_characteristic(record.us_char),
                 "severity": us_sev,
                 "prpd": "",
             },
             "tev": {
-                "reading": _fallback_dash(record.tev_reading),
+                "reading": format_db_int(record.tev_reading),
                 "char": _fallback_dash(record.tev_char),
-                "bg": _fallback_dash(tev_bg),
+                "bg": format_db_int(tev_bg),
                 "severity": tev_sev,
                 "prpd": "",
             },
         },
         "ir": {
-            "reading": _fallback_dash(record.ir_reading),
+            "reading": format_temperature_float(record.ir_reading),
             "severity": ir_sev,
         },
         "us": {
-            "reading": _fallback_dash(record.us_reading),
-            "char": _fallback_dash(record.us_char),
+            "reading": format_db_int(record.us_reading),
+            "char": normalize_us_characteristic(record.us_char),
             "severity": us_sev,
             "prpd": "",
         },
         "tev": {
-            "reading": _fallback_dash(record.tev_reading),
+            "reading": format_db_int(record.tev_reading),
             "char": _fallback_dash(record.tev_char),
-            "bg": _fallback_dash(tev_bg),
+            "bg": format_db_int(tev_bg),
             "severity": tev_sev,
             "prpd": "",
         },
@@ -604,39 +609,39 @@ def _build_swg_render_context(
             "loadamp": _fallback_dash(panel_loadamp),
             "serialnumber": _fallback_dash(panel_serialnumber),
             "ir": {
-                "reading": _fallback_dash(record.ir_reading),
+                "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
             },
             "us": {
-                "reading": _fallback_dash(panel_us_reading),
-                "char": _fallback_dash(panel_us_char),
+                "reading": format_db_int(panel_us_reading),
+                "char": normalize_us_characteristic(panel_us_char),
                 "severity": us_sev,
                 "prpd": us_prpd,
             },
             "tev": {
-                "reading": _fallback_dash(panel_tev_reading),
+                "reading": format_db_int(panel_tev_reading),
                 "ppc": _fallback_dash(panel_tev_ppc),
                 "char": _fallback_dash(panel_tev_char),
-                "bg": _fallback_dash(tev_bg),
+                "bg": format_db_int(tev_bg),
                 "severity": tev_sev,
                 "prpd": tev_prpd,
             },
         },
         "ir": {
-            "reading": _fallback_dash(record.ir_reading),
+            "reading": format_temperature_float(record.ir_reading),
             "severity": ir_sev,
         },
         "us": {
-            "reading": _fallback_dash(panel_us_reading),
-            "char": _fallback_dash(panel_us_char),
+            "reading": format_db_int(panel_us_reading),
+            "char": normalize_us_characteristic(panel_us_char),
             "severity": us_sev,
             "prpd": us_prpd,
         },
         "tev": {
-            "reading": _fallback_dash(panel_tev_reading),
+            "reading": format_db_int(panel_tev_reading),
             "ppc": _fallback_dash(panel_tev_ppc),
             "char": _fallback_dash(panel_tev_char),
-            "bg": _fallback_dash(tev_bg),
+            "bg": format_db_int(tev_bg),
             "severity": tev_sev,
             "prpd": tev_prpd,
         },
@@ -784,37 +789,37 @@ def _build_tx_render_context(
             "serialnumber": _fallback_dash(tx_serial),
             "cabletype": _fallback_dash(tx_cable),
             "ir": {
-                "reading": _fallback_dash(record.ir_reading),
+                "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
             },
             "us": {
-                "reading": _fallback_dash(tx_us_reading),
-                "char": _fallback_dash(tx_us_char),
+                "reading": format_db_int(tx_us_reading),
+                "char": normalize_us_characteristic(tx_us_char),
                 "severity": us_sev,
                 "prpd": us_prpd,
             },
             "tev": {
-                "reading": _fallback_dash(record.tev_reading),
+                "reading": format_db_int(record.tev_reading),
                 "char": _fallback_dash(record.tev_char),
-                "bg": _fallback_dash(tev_bg),
+                "bg": format_db_int(tev_bg),
                 "severity": tev_sev,
                 "prpd": tev_prpd,
             },
         },
         "ir": {
-            "reading": _fallback_dash(record.ir_reading),
+            "reading": format_temperature_float(record.ir_reading),
             "severity": ir_sev,
         },
         "us": {
-            "reading": _fallback_dash(tx_us_reading),
-            "char": _fallback_dash(tx_us_char),
+            "reading": format_db_int(tx_us_reading),
+            "char": normalize_us_characteristic(tx_us_char),
             "severity": us_sev,
             "prpd": us_prpd,
         },
         "tev": {
-            "reading": _fallback_dash(record.tev_reading),
+            "reading": format_db_int(record.tev_reading),
             "char": _fallback_dash(record.tev_char),
-            "bg": _fallback_dash(tev_bg),
+            "bg": format_db_int(tev_bg),
             "severity": tev_sev,
             "prpd": tev_prpd,
         },
@@ -868,37 +873,37 @@ def _build_blackbox_render_context(
             "location": _fallback_dash(bbox_location),
             "area": area,
             "ir": {
-                "reading": _fallback_dash(record.ir_reading),
+                "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
             },
             "us": {
-                "reading": _fallback_dash(record.us_reading),
-                "char": _fallback_dash(record.us_char),
+                "reading": format_db_int(record.us_reading),
+                "char": normalize_us_characteristic(record.us_char),
                 "severity": us_sev,
                 "prpd": "",
             },
             "tev": {
-                "reading": _fallback_dash(record.tev_reading),
+                "reading": format_db_int(record.tev_reading),
                 "char": _fallback_dash(record.tev_char),
-                "bg": _fallback_dash(tev_bg),
+                "bg": format_db_int(tev_bg),
                 "severity": tev_sev,
                 "prpd": "",
             },
         },
         "ir": {
-            "reading": _fallback_dash(record.ir_reading),
+            "reading": format_temperature_float(record.ir_reading),
             "severity": ir_sev,
         },
         "us": {
-            "reading": _fallback_dash(record.us_reading),
-            "char": _fallback_dash(record.us_char),
+            "reading": format_db_int(record.us_reading),
+            "char": normalize_us_characteristic(record.us_char),
             "severity": us_sev,
             "prpd": "",
         },
         "tev": {
-            "reading": _fallback_dash(record.tev_reading),
+            "reading": format_db_int(record.tev_reading),
             "char": _fallback_dash(record.tev_char),
-            "bg": _fallback_dash(tev_bg),
+            "bg": format_db_int(tev_bg),
             "severity": tev_sev,
             "prpd": "",
         },
@@ -944,37 +949,37 @@ def _build_battery_render_context(
             "serialnumber": _fallback_dash(batt_serial),
             "area": area,
             "ir": {
-                "reading": _fallback_dash(record.ir_reading),
+                "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
             },
             "us": {
-                "reading": _fallback_dash(record.us_reading),
-                "char": _fallback_dash(record.us_char),
+                "reading": format_db_int(record.us_reading),
+                "char": normalize_us_characteristic(record.us_char),
                 "severity": us_sev,
                 "prpd": "",
             },
             "tev": {
-                "reading": _fallback_dash(record.tev_reading),
+                "reading": format_db_int(record.tev_reading),
                 "char": _fallback_dash(record.tev_char),
-                "bg": _fallback_dash(tev_bg),
+                "bg": format_db_int(tev_bg),
                 "severity": tev_sev,
                 "prpd": "",
             },
         },
         "ir": {
-            "reading": _fallback_dash(record.ir_reading),
+            "reading": format_temperature_float(record.ir_reading),
             "severity": ir_sev,
         },
         "us": {
-            "reading": _fallback_dash(record.us_reading),
-            "char": _fallback_dash(record.us_char),
+            "reading": format_db_int(record.us_reading),
+            "char": normalize_us_characteristic(record.us_char),
             "severity": us_sev,
             "prpd": "",
         },
         "tev": {
-            "reading": _fallback_dash(record.tev_reading),
+            "reading": format_db_int(record.tev_reading),
             "char": _fallback_dash(record.tev_char),
-            "bg": _fallback_dash(tev_bg),
+            "bg": format_db_int(tev_bg),
             "severity": tev_sev,
             "prpd": "",
         },

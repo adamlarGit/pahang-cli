@@ -227,7 +227,7 @@ def test_testsheet_extractor_us_tev_measurements(tmp_path: Path):
     assert len(panels) == 2
     assert panels[0].name == "INCOMING 1"
     assert panels[0].us_reading == "14.2"
-    assert panels[0].us_char == "CORONA"
+    assert panels[0].us_char == "CORONA DISCHARGE"
     assert panels[0].tev_reading == "28.5"
     assert panels[0].tev_ppc == "150"
     assert panels[0].tev_char == "CONTINUOUS"
@@ -244,7 +244,7 @@ def test_testsheet_extractor_us_tev_measurements(tmp_path: Path):
     assert len(transformers) == 2
     assert transformers[0].tx_id == "Tx 1"
     assert transformers[0].us_reading == "11.7"
-    assert transformers[0].us_char == "SURFACE TRACKING"
+    assert transformers[0].us_char == "TRACKING"
 
     assert transformers[1].tx_id == "Tx 2"
     assert transformers[1].us_reading == "6.3"
@@ -304,9 +304,9 @@ def test_build_swg_and_tx_render_contexts_measurement_flow():
     )
     swg_ctx = _build_swg_render_context(swg_rec, overview=False, pe_info=pe_info)
 
-    assert swg_ctx["us"]["reading"] == "16.4"
-    assert swg_ctx["us"]["char"] == "CORONA"
-    assert swg_ctx["tev"]["reading"] == "31.2"
+    assert swg_ctx["us"]["reading"] == "16"
+    assert swg_ctx["us"]["char"] == "CORONA DISCHARGE"
+    assert swg_ctx["tev"]["reading"] == "31"
     assert swg_ctx["tev"]["ppc"] == "200"
     assert swg_ctx["tev"]["bg"] == "8"
     assert swg_ctx["panel"]["tev"]["bg"] == "8"
@@ -320,8 +320,8 @@ def test_build_swg_and_tx_render_contexts_measurement_flow():
     )
     tx_ctx = _build_tx_render_context(tx_rec, overview=False, pe_info=pe_info)
 
-    assert tx_ctx["tx"]["us"]["reading"] == "13.5"
+    assert tx_ctx["tx"]["us"]["reading"] == "14"
     assert tx_ctx["tx"]["us"]["char"] == "PARTIAL DISCHARGE"
-    assert tx_ctx["us"]["reading"] == "13.5"
+    assert tx_ctx["us"]["reading"] == "14"
     assert tx_ctx["us"]["char"] == "PARTIAL DISCHARGE"
     assert tx_ctx["tev"]["bg"] == "8"

@@ -1,6 +1,6 @@
 [project]
 name = "pahang-cli"
-version = "1.14.0"
+version = "1.14.1"
 description = "Pahang Area - Interactive CLI for PE inspection workflows"
 
 
@@ -8,6 +8,7 @@ requires-python = ">=3.11"
 dependencies = [
     "questionary>=2.1.0",
     "pandas>=2.0.0",
+    "matplotlib>=3.8.0",
     "openpyxl>=3.1.0",
     "PyPDF2>=3.0.0",
     "pdf2image>=1.16.0",

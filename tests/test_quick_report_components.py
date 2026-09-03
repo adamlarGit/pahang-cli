@@ -81,6 +81,53 @@ def test_quick_report_transformer_date_formatting():
     assert plan_none.pe_info["substation"]["date"] == "-"
 
 
+def test_quick_report_transformer_ambient_formatting():
+    """Verify QuickReportTransformer normalizes ambient temperature consistently with humidity and time."""
+    from unittest.mock import MagicMock
+    from src.quick_report.transformer import QuickReportTransformer
+
+    transformer = QuickReportTransformer()
+
+    pkg = MagicMock()
+    pkg.station = "KUANTAN"
+    pkg.month = "08. AUGUST"
+    pkg.substation_number = 1
+    pkg.data = MagicMock()
+    pkg.data.date_str = "12-08-2026"
+    pkg.data.substation_name_erms = "TEST SUBSTATION"
+    pkg.data.substation_name_site = "TEST SUBSTATION"
+    pkg.data.fl_erms = "FL123"
+    pkg.data.fl_site = "FL123"
+    pkg.data.gps_coordinate = ""
+    pkg.data.substation_type = ""
+    pkg.data.building_type = ""
+    pkg.data.humidity = "70%"
+    pkg.data.time = "10:35 AM"
+    pkg.data.equipment = None
+    pkg.data.condition = None
+
+    env = MagicMock()
+    env.po_number = "12345"
+    env.state = "PAHANG"
+    env.get_vi_front_page_template.return_value = Path("dummy.docx")
+    env.get_template.return_value = Path("dummy.docx")
+
+    # Case 1: Populated ambient string with unit
+    pkg.data.ambient = "23.2 °C"
+    plan = transformer.transform(pkg, [], [], env)
+    assert plan.pe_info["substation"]["ambient"] == "23.2 °C"
+
+    # Case 2: Dash sentinel
+    pkg.data.ambient = "-"
+    plan_dash = transformer.transform(pkg, [], [], env)
+    assert plan_dash.pe_info["substation"]["ambient"] == "-"
+
+    # Case 3: None
+    pkg.data.ambient = None
+    plan_none = transformer.transform(pkg, [], [], env)
+    assert plan_none.pe_info["substation"]["ambient"] == "-"
+
+
 def test_format_db_reading():
     assert format_db_reading("") == "-"
     assert format_db_reading(None) == "-"
@@ -238,8 +285,8 @@ def test_prepare_tech_summary_rows_multitech_merged():
     assert r.ir_delta == "-"
     assert r.us_dB == "14dB"
     assert r.tev_dB == "28.5dB"
-    assert r.severity == "CORONA"
-    assert r.status == "CORONA"
+    assert r.severity == "CORONA DISCHARGE"
+    assert r.status == "CORONA DISCHARGE"
     assert r.ir_reading == "62.1 °C"
     assert r.us_reading == "14dB"
     assert r.tev_reading == "28.5dB"
@@ -1484,7 +1531,7 @@ def test_master_qr03_fetch_cbm_defects_alignment_fallback_columns(tmp_path: Path
     assert d1.equipment_id == "P1"
     assert d1.technology == "US"
     assert d1.criticality == "CRITICAL"
-    assert d1.us_char == "CORONA"
+    assert d1.us_char == "CORONA DISCHARGE"
     assert d1.us_reading == "28.4"
     assert d1.raw_measurement == "28.4"
 
@@ -2098,7 +2145,7 @@ def test_swg_render_context_without_testsheet_fallback_dash():
     assert ctx["panel"]["serialnumber"] == "-"
     assert ctx["panel"]["busbarposition"] == "-"
     assert ctx["panel"]["ir"]["reading"] == "-"
-    assert ctx["panel"]["us"]["reading"] == "24.0"
+    assert ctx["panel"]["us"]["reading"] == "24"
     assert ctx["panel"]["us"]["char"] == "TRACKING"
     assert ctx["panel"]["tev"]["reading"] == "-"
     assert ctx["panel"]["tev"]["char"] == "-"
@@ -2151,8 +2198,8 @@ def test_tx_render_context_with_and_without_testsheet():
     assert ctx["tx"]["serialnumber"] == "TX-SN-999"
     assert ctx["tx"]["cabletype"] == "-"
     assert ctx["tx"]["ir"]["reading"] == "-"
-    assert ctx["tx"]["us"]["reading"] == "18.5"
-    assert ctx["tx"]["us"]["char"] == "CORONA"
+    assert ctx["tx"]["us"]["reading"] == "19"
+    assert ctx["tx"]["us"]["char"] == "CORONA DISCHARGE"
     assert ctx["tx"]["tev"]["reading"] == "-"
     assert ctx["tx"]["tev"]["char"] == "-"
 
@@ -2247,7 +2294,7 @@ def test_blackbox_render_context_number_and_location_detection():
     assert ctx["bbox"]["number"] == "2"
     assert ctx["bbox"]["location"] == "LEFT"
     assert ctx["bbox"]["area"] == "LEFT SIDE TERMINAL/ Loose wire"
-    assert ctx["bbox"]["tev"]["reading"] == "24.0"
+    assert ctx["bbox"]["tev"]["reading"] == "24"
     assert ctx["bbox"]["tev"]["char"] == "SURFACE"
     assert ctx["bbox"]["ir"]["reading"] == "-"
     assert ctx["bbox"]["us"]["reading"] == "-"

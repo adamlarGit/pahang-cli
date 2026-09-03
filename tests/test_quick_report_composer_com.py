@@ -38,7 +38,7 @@ def test_compile_document_com_recopy_paste(tmp_path: Path):
     mock_part_doc2.Close.assert_called_once_with(False)
 
     mock_rng.InsertBreak.assert_called_once_with(7)
-    assert mock_rng.Paste.call_count == 2
+    assert mock_rng.PasteAndFormat.call_count == 2 or mock_rng.Paste.call_count == 2
     mock_main_doc.SaveAs2.assert_called_once_with(str(out.resolve()))
     mock_main_doc.Close.assert_called_once_with(False)
 
@@ -67,7 +67,7 @@ def test_compile_document_with_external_word_app(tmp_path: Path):
     mock_word.Documents.Add.assert_called_once()
     mock_part_doc.Content.Copy.assert_called_once()
     mock_part_doc.Close.assert_called_once_with(False)
-    mock_rng.Paste.assert_called_once()
+    assert mock_rng.PasteAndFormat.call_count == 1 or mock_rng.Paste.call_count == 1
     mock_main_doc.SaveAs2.assert_called_once_with(str(out.resolve()))
     mock_main_doc.Close.assert_called_once_with(False)
 
@@ -83,27 +83,35 @@ def test_compile_document_raises_when_win32com_missing(tmp_path: Path):
 
 
 def test_paste_with_retry_success_first_attempt():
-    """Verify _paste_with_retry succeeds on first attempt without retrying."""
+    """Verify _paste_with_retry succeeds on first attempt using PasteAndFormat(16)."""
     mock_rng = MagicMock()
+    _paste_with_retry(mock_rng, max_attempts=3, delay=0.01)
+    mock_rng.PasteAndFormat.assert_called_once_with(16)
+
+
+def test_paste_with_retry_fallback_to_paste():
+    """Verify _paste_with_retry falls back to Paste() when PasteAndFormat raises TypeError/AttributeError."""
+    mock_rng = MagicMock()
+    mock_rng.PasteAndFormat.side_effect = TypeError("Method not supported")
     _paste_with_retry(mock_rng, max_attempts=3, delay=0.01)
     mock_rng.Paste.assert_called_once()
 
 
 def test_paste_with_retry_success_after_retries():
-    """Verify _paste_with_retry retries rng.Paste() until success."""
+    """Verify _paste_with_retry retries rng.PasteAndFormat() until success."""
     mock_rng = MagicMock()
-    mock_rng.Paste.side_effect = [Exception("Clipboard locked"), Exception("COM error"), None]
+    mock_rng.PasteAndFormat.side_effect = [Exception("Clipboard locked"), Exception("COM error"), None]
     _paste_with_retry(mock_rng, max_attempts=5, delay=0.01)
-    assert mock_rng.Paste.call_count == 3
+    assert mock_rng.PasteAndFormat.call_count == 3
 
 
 def test_paste_with_retry_fails_and_reraises():
     """Verify _paste_with_retry re-raises exception when all retry attempts fail."""
     mock_rng = MagicMock()
-    mock_rng.Paste.side_effect = Exception("Persistent COM failure")
+    mock_rng.PasteAndFormat.side_effect = Exception("Persistent COM failure")
     with pytest.raises(Exception, match="Persistent COM failure"):
         _paste_with_retry(mock_rng, max_attempts=3, delay=0.01)
-    assert mock_rng.Paste.call_count == 3
+    assert mock_rng.PasteAndFormat.call_count == 3
 
 
 def test_compile_document_escapes_table_cell(tmp_path: Path):

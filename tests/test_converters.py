@@ -61,7 +61,7 @@ def test_fake_document_converter(tmp_path) -> None:
 
 
 def test_convert_docx_to_pdf_with_provided_word_app(tmp_path) -> None:
-    """Test that ComDocumentConverter reuses provided word_app without quitting it."""
+    """Test that ComDocumentConverter reuses provided word_app without quitting it and exports high fidelity PDF."""
     converter = ComDocumentConverter()
     docx_path = tmp_path / "sample.docx"
     pdf_path = tmp_path / "sample.pdf"
@@ -71,17 +71,30 @@ def test_convert_docx_to_pdf_with_provided_word_app(tmp_path) -> None:
     mock_doc = MagicMock()
     mock_word.Documents.Open.return_value = mock_doc
 
-    def fake_save_as(path, FileFormat):
-        Path(path).write_bytes(b"%PDF-mock")
+    def fake_export(OutputFileName, **kwargs):
+        Path(OutputFileName).write_bytes(b"%PDF-mock")
 
-    mock_doc.SaveAs2.side_effect = fake_save_as
+    mock_doc.ExportAsFixedFormat.side_effect = fake_export
 
     result = converter.convert_docx_to_pdf(docx_path, pdf_path, word_app=mock_word)
 
     assert result == pdf_path
     assert pdf_path.exists()
     mock_word.Documents.Open.assert_called_once_with(str(docx_path.resolve()))
-    mock_doc.SaveAs2.assert_called_once_with(str(pdf_path.resolve()), FileFormat=17)
+    mock_doc.ExportAsFixedFormat.assert_called_once_with(
+        OutputFileName=str(pdf_path.resolve()),
+        ExportFormat=17,
+        OpenAfterExport=False,
+        OptimizeFor=0,
+        Range=0,
+        Item=0,
+        IncludeDocProps=True,
+        KeepIRM=True,
+        CreateBookmarks=0,
+        DocStructureTags=True,
+        BitmapMissingFonts=True,
+        UseISO19005_1=False,
+    )
     mock_doc.Close.assert_called_once_with(SaveChanges=False)
     # word_app must NOT be quit when passed in
     mock_word.Quit.assert_not_called()
@@ -107,10 +120,10 @@ def test_convert_docx_to_pdf_standalone_lifecycle(
     mock_dispatch_ex.return_value = mock_word
     mock_word.Documents.Open.return_value = mock_doc
 
-    def fake_save_as(path, FileFormat):
-        Path(path).write_bytes(b"%PDF-standalone")
+    def fake_export(OutputFileName, **kwargs):
+        Path(OutputFileName).write_bytes(b"%PDF-standalone")
 
-    mock_doc.SaveAs2.side_effect = fake_save_as
+    mock_doc.ExportAsFixedFormat.side_effect = fake_export
 
     result = converter.convert_docx_to_pdf(docx_path, pdf_path)
 
@@ -118,6 +131,7 @@ def test_convert_docx_to_pdf_standalone_lifecycle(
     assert pdf_path.exists()
     mock_co_init.assert_called_once()
     mock_dispatch_ex.assert_called_once_with("Word.Application")
+    mock_doc.ExportAsFixedFormat.assert_called_once()
     mock_word.Quit.assert_called_once()
     mock_co_uninit.assert_called_once()
 
@@ -150,16 +164,35 @@ def test_merge_temp_pdfs_combines_pages(tmp_path: Path) -> None:
         assert round(float(page.mediabox.height), 2) == 612.0
 
 
-def test_configure_uniform_printer_sets_standard_printer() -> None:
-    """Test that _configure_uniform_printer assigns standard printer if current printer is Adobe PDF."""
+def test_configure_uniform_printer_prefers_adobe_pdf() -> None:
+    """Test that configure_uniform_printer assigns Adobe PDF if available."""
     converter = ComDocumentConverter()
     mock_app = MagicMock()
-    mock_app.ActivePrinter = "Adobe PDF on Ne07:"
+    mock_app.ActivePrinter = "Brother Printer on USB01:"
 
     with patch("winreg.OpenKey"), patch(
         "winreg.EnumValue",
         side_effect=[
             ("Adobe PDF", "winspool,Ne07:", None),
+            ("Microsoft Print to PDF", "winspool,Ne02:", None),
+            OSError("No more data"),
+        ],
+    ):
+        converter._configure_uniform_printer(mock_app)
+
+    assert mock_app.ActivePrinter == "Adobe PDF on Ne07:"
+
+
+def test_configure_uniform_printer_falls_back_to_microsoft_print_to_pdf() -> None:
+    """Test that configure_uniform_printer falls back to Microsoft Print to PDF if Adobe PDF is absent."""
+    converter = ComDocumentConverter()
+    mock_app = MagicMock()
+    mock_app.ActivePrinter = "Brother Printer on USB01:"
+
+    with patch("winreg.OpenKey"), patch(
+        "winreg.EnumValue",
+        side_effect=[
+            ("Brother Printer", "winspool,USB01:", None),
             ("Microsoft Print to PDF", "winspool,Ne02:", None),
             OSError("No more data"),
         ],

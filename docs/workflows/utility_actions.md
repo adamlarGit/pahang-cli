@@ -24,9 +24,13 @@ This document details the standalone batch processing tools available under the 
 
 ---
 
-## 2. Convert DOCX to PDF (`src/docx_to_pdf_workflow.py`)
-- **Purpose:** Batch converts `.docx` Word documents into `.pdf` using `Word.Application` COM automation while preserving table borders and font rendering exactness.
-- **Execution Safeguards:** Runs with `word_app.Visible = False` inside a `try...finally` block, ensuring `word_app.Quit()` is invoked even if Word encounters a corrupted document.
+## 2. Convert DOCX to PDF (`src/workflows/docx_to_pdf.py`)
+- **Purpose:** Batch converts `.docx` Word documents into `.pdf` using `Word.Application` COM automation while preserving maximum image resolution (High Fidelity), table borders, and font rendering exactness.
+- **High-Fidelity Mechanics:**
+  - Standardizes `ActivePrinter` to `Adobe PDF` (or `Microsoft Print to PDF` fallback).
+  - Enforces `word_app.Options.DoNotCompressImages = True` and `doc.DoNotCompressImages = True` at runtime.
+  - Exports via `doc.ExportAsFixedFormat(..., OptimizeFor=0, BitmapMissingFonts=True, DocStructureTags=True)` (`wdExportOptimizeForPrint`).
+- **Execution Safeguards:** Runs with `word_app.Visible = False` and `word_app.DisplayAlerts = 0` inside a `try...finally` block, ensuring `word_app.Quit()` is invoked even if Word encounters a corrupted document.
 
 ---
 

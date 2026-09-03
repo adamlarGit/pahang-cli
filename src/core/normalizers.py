@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 import math
 import re
 from typing import Any
@@ -213,35 +213,113 @@ def format_month_folder(month_input: object = None, val: object = None) -> str:
 
 
 def format_testsheet_time(val: object) -> str:
+    """Parse 24-hour time values or time serials in various formats and convert to 12-hour hh:mm AM/PM.
+
+    Handles:
+    - datetime.datetime objects (e.g. datetime(1899, 12, 30, 10, 35)) -> '10:35 AM'
+    - datetime.time objects (e.g. time(10, 35)) -> '10:35 AM'
+    - Float / int numbers representing Excel day fractions (0.0 <= val < 1.0) -> '10:35 AM'
+    - 3-4 digit integers / floats (e.g. 1035, 1035.0 -> '10:35 AM', 930, 930.0 -> '09:30 AM')
+    - Strings with colon or dot separators, with or without AM/PM:
+      '10:35 AM', '10.35 AM', '10:35:00', '10.35', '10:35', '14:30', '14.30', '2:30 PM' -> 12-hour AM/PM string
+    - Empty / None / '-' / 'N/A' / 'None' / NaN -> returns '-'
+
+    Args:
+        val: Time representation as datetime, time, int, float, string, or None.
+
+    Returns:
+        Formatted 12-hour time string '%I:%M %p' (e.g. '10:35 AM'), or '-' if unparseable or empty.
     """
-    Parse 24-hour time values in various formats and convert to 12-hour hh:mm AM/PM.
-    Returns '-' if unparseable or empty.
-    """
-    if val is None:
+    if val is None or isinstance(val, bool):
         return "-"
-    if isinstance(val, time):
+    if isinstance(val, (datetime, time)):
         return val.strftime("%I:%M %p")
-    
-    s = str(val).strip()
-    if not s or s == "-":
+    if isinstance(val, date):
+        return "-"
+    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
         return "-"
 
-    s_clean = re.sub(r"[^\d:]", "", s)
-    if ":" in s_clean:
-        parts = s_clean.split(":")
-        if len(parts) >= 2 and parts[0].isdigit() and parts[1].isdigit():
-            hour, minute = int(parts[0]), int(parts[1])
-            if 0 <= hour <= 23 and 0 <= minute <= 59:
-                return time(hour, minute).strftime("%I:%M %p")
-    else:
-        if s_clean.isdigit():
-            if len(s_clean) == 3:
-                s_clean = "0" + s_clean
-            if len(s_clean) == 4:
-                hour, minute = int(s_clean[:2]), int(s_clean[2:])
+    if isinstance(val, (int, float, Decimal)):
+        f_val = float(val)
+        if 0.0 <= f_val < 1.0 and (isinstance(val, (float, Decimal)) or f_val == 0.0):
+            total_minutes = int(round(f_val * 1440)) % 1440
+            hour = total_minutes // 60
+            minute = total_minutes % 60
+            return time(hour, minute).strftime("%I:%M %p")
+        if f_val.is_integer():
+            int_val = int(round(f_val))
+            s_num = str(int_val)
+            if len(s_num) == 3:
+                s_num = "0" + s_num
+            if len(s_num) == 4:
+                hour, minute = int(s_num[:2]), int(s_num[2:])
                 if 0 <= hour <= 23 and 0 <= minute <= 59:
                     return time(hour, minute).strftime("%I:%M %p")
-    return "-"
+
+    s = str(val).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return "-"
+
+    try:
+        f = float(s)
+        if 0.0 <= f < 1.0 and not (math.isnan(f) or math.isinf(f)):
+            total_minutes = int(round(f * 1440)) % 1440
+            hour = total_minutes // 60
+            minute = total_minutes % 60
+            return time(hour, minute).strftime("%I:%M %p")
+    except ValueError:
+        pass
+
+    if re.match(r"^\d{3,4}\.0+$", s):
+        s = s.split(".")[0]
+
+    is_pm: bool | None = None
+    if re.search(r"\bPM\b|(?<=\d)PM\b|\bP\.M\.\b", s, re.IGNORECASE):
+        is_pm = True
+    elif re.search(r"\bAM\b|(?<=\d)AM\b|\bA\.M\.\b", s, re.IGNORECASE):
+        is_pm = False
+
+    m = re.search(r"(?:^|[^\d])(\d{1,2})[:.](\d{1,2})(?:[:.](\d{1,2}))?(?:[^\d]|$)", s)
+    if m:
+        hour, minute = int(m.group(1)), int(m.group(2))
+    else:
+        m2 = re.search(r"(?:^|[^\d])(\d{3,4})(?:[^\d]|$)", s)
+        if m2:
+            digits = m2.group(1)
+            if len(digits) == 3:
+                digits = "0" + digits
+            hour, minute = int(digits[:2]), int(digits[2:])
+        else:
+            return "-"
+
+    if not (0 <= minute <= 59):
+        return "-"
+
+    if is_pm is True:
+        if 1 <= hour <= 11:
+            hour += 12
+        elif hour == 12:
+            pass
+        elif hour == 0:
+            hour = 12
+        elif 13 <= hour <= 23:
+            pass
+        else:
+            return "-"
+    elif is_pm is False:
+        if hour == 12:
+            hour = 0
+        elif 0 <= hour <= 11:
+            pass
+        elif 13 <= hour <= 23:
+            return "-"
+        else:
+            return "-"
+    else:
+        if not (0 <= hour <= 23):
+            return "-"
+
+    return time(hour, minute).strftime("%I:%M %p")
 
 
 def format_humidity_str(val: object) -> str:
@@ -449,6 +527,48 @@ def extract_background_temperature(text: Any) -> float | None:
     return None
 
 
+US_CHARACTERISTIC_MAP: dict[str, str] = {
+    "C": "CORONA DISCHARGE",
+    "CORONA": "CORONA DISCHARGE",
+    "CORONA DISCHARGE": "CORONA DISCHARGE",
+    "A": "ARCING",
+    "ARCING": "ARCING",
+    "T": "TRACKING",
+    "TRACKING": "TRACKING",
+    "SURFACE TRACKING": "TRACKING",
+    "MV": "MECHANICAL VIBRATION",
+    "MECHANICAL VIBRATION": "MECHANICAL VIBRATION",
+}
+
+
+def normalize_us_characteristic(val: Any) -> str:
+    """Normalize ultrasound defect characteristic shorthand codes to standard full terms.
+
+    Mapping:
+    - C, CORONA, CORONA DISCHARGE -> CORONA DISCHARGE
+    - A, ARCING -> ARCING
+    - T, TRACKING, SURFACE TRACKING -> TRACKING
+    - MV, MECHANICAL VIBRATION -> MECHANICAL VIBRATION
+    - None, empty, '-', 'N/A', 'NAN', etc. -> '-'
+    - Other strings -> cleaned string representation
+
+    Args:
+        val: Ultrasound defect characteristic code or string.
+
+    Returns:
+        Standardized ultrasound defect characteristic string or '-' if empty/invalid.
+    """
+    if _is_null_or_empty(val):
+        return "-"
+    s = str(val).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return "-"
+    s_upper = s.upper()
+    if s_upper in US_CHARACTERISTIC_MAP:
+        return US_CHARACTERISTIC_MAP[s_upper]
+    return s
+
+
 def normalize_fl_erms(location: object) -> str:
     """Normalize location string to FL ERMS by inserting a slash after character 8 if length >= 8.
 
@@ -468,3 +588,140 @@ def normalize_fl_erms(location: object) -> str:
             return s
         return s[:8] + "/" + s[8:]
     return s
+
+
+def format_db_int(val: Any) -> str:
+    """Format ultrasound (US) and TEV measurement or background dB values as integer strings (0 decimal places).
+
+    Rounds floating-point numbers to the nearest integer using standard half-up rounding.
+    Strips 'dB' or other unit text. Falls back to '-' for null, empty, boolean, NaN, or sentinel values.
+
+    Examples:
+        20.0 -> "20"
+        0.0 -> "0"
+        14.8 -> "15"
+        "20 dB" -> "20"
+        "20dB" -> "20"
+        "14.8 dB" -> "15"
+        None / "" / "-" -> "-"
+    """
+    if val is None or isinstance(val, bool):
+        return "-"
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, float):
+        if math.isnan(val) or math.isinf(val):
+            return "-"
+        d = Decimal(str(round(val, 6))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return str(int(d))
+    if isinstance(val, Decimal):
+        d = val.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return str(int(d))
+
+    s = str(val).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return "-"
+
+    match = re.search(r"[-+]?\d+(?:\.\d+)?", s)
+    if not match:
+        return "-"
+
+    try:
+        f_val = float(match.group(0))
+        if math.isnan(f_val) or math.isinf(f_val):
+            return "-"
+        d = Decimal(str(round(f_val, 6))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return str(int(d))
+    except (ValueError, InvalidOperation):
+        return "-"
+
+
+def format_temperature_float(val: Any) -> str:
+    """Format infrared (IR) temperature measurement values (°C / ΔT) as 1-decimal float strings.
+
+    Rounds floating-point numbers to 1 decimal place using standard half-up rounding.
+    Strips '°C' or other unit text. Falls back to '-' for null, empty, boolean, NaN, or sentinel values.
+
+    Examples:
+        32 -> "32.0"
+        32.0 -> "32.0"
+        32.34 -> "32.3"
+        32.36 -> "32.4"
+        "33.3 °C" -> "33.3"
+        "33 °C" -> "33.0"
+        None / "" / "-" -> "-"
+    """
+    if val is None or isinstance(val, bool):
+        return "-"
+    if isinstance(val, int):
+        return f"{float(val):.1f}"
+    if isinstance(val, float):
+        if math.isnan(val) or math.isinf(val):
+            return "-"
+        d = Decimal(str(round(val, 6))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        return f"{d:.1f}"
+    if isinstance(val, Decimal):
+        d = val.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        return f"{d:.1f}"
+
+    s = str(val).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return "-"
+
+    match = re.search(r"[-+]?\d+(?:\.\d+)?", s)
+    if not match:
+        return "-"
+
+    try:
+        f_val = float(match.group(0))
+        if math.isnan(f_val) or math.isinf(f_val):
+            return "-"
+        d = Decimal(str(round(f_val, 6))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        return f"{d:.1f}"
+    except (ValueError, InvalidOperation):
+        return "-"
+
+
+def format_cbm_reading(val: Any, technology: str | None) -> str:
+    """Format a CBM measurement reading according to inspection technology rules.
+
+    - US (Ultrasound) and TEV: Formatted as integer dB (0 decimal places) via format_db_int.
+    - IR (Infrared): Formatted as 1-decimal float temperature (°C) via format_temperature_float.
+    - Other / Unknown / VI: Falls back to normalize_for_report(val).
+
+    Args:
+        val: Measurement reading value (int, float, Decimal, str, etc.).
+        technology: Inspection technology identifier (e.g. 'US', 'TEV', 'IR', 'VI').
+
+    Returns:
+        Technology-specific formatted string representation, or '-' for missing/invalid.
+    """
+    if not technology:
+        return normalize_for_report(val)
+    tech_upper = str(technology).strip().upper()
+    if any(k in tech_upper for k in ("US", "ULTRASOUND", "TEV", "TRANSIENT")):
+        return format_db_int(val)
+    if any(k in tech_upper for k in ("IR", "INFRARED", "THERMAL", "THERMOGRAPHY")):
+        return format_temperature_float(val)
+    return normalize_for_report(val)
+
+
+__all__ = [
+    "extract_background_temperature",
+    "format_cbm_reading",
+    "format_date_cbm",
+    "format_date_front_page",
+    "format_db_int",
+    "format_humidity_str",
+    "format_iso8601",
+    "format_month_folder",
+    "format_temperature_float",
+    "format_testsheet_time",
+    "normalize_date_str",
+    "normalize_fl_erms",
+    "normalize_for_csv",
+    "normalize_for_excel",
+    "normalize_for_report",
+    "normalize_us_characteristic",
+    "parse_background_temp",
+]

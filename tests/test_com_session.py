@@ -144,11 +144,11 @@ def test_com_document_converter_reuses_session_apps(tmp_path: Path) -> None:
     mock_wb2.Worksheets = [mock_ws2]
     mock_excel.Workbooks.Open.side_effect = [mock_wb1, mock_wb2]
 
-    def fake_word_save_as(path: str, FileFormat: int) -> None:
-        Path(path).write_bytes(b"%PDF-word")
+    def fake_word_export(OutputFileName: str, **kwargs) -> None:
+        Path(OutputFileName).write_bytes(b"%PDF-word")
 
-    mock_doc1.SaveAs2.side_effect = fake_word_save_as
-    mock_doc2.SaveAs2.side_effect = fake_word_save_as
+    mock_doc1.ExportAsFixedFormat.side_effect = fake_word_export
+    mock_doc2.ExportAsFixedFormat.side_effect = fake_word_export
 
     def fake_excel_export(format_type: int, path: str, *args, **kwargs) -> None:
         Path(path).write_bytes(b"%PDF-excel")

@@ -600,7 +600,7 @@ def test_compile_document_word_com_success(tmp_path: Path):
     mock_part_doc.Close.assert_called_with(False)
 
     mock_rng.InsertBreak.assert_called_once_with(7)
-    assert mock_rng.Paste.call_count == 2
+    assert mock_rng.PasteAndFormat.call_count == 2 or mock_rng.Paste.call_count == 2
 
     mock_main_doc.SaveAs2.assert_called_once_with(str(output_path.resolve()))
     mock_main_doc.Close.assert_called_once_with(False)

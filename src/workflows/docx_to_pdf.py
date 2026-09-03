@@ -12,7 +12,11 @@ except ImportError:
     pythoncom = None  # type: ignore[assignment]
     win32com = None  # type: ignore[assignment]
 
-from src.postprocessing.converters import ComDocumentConverter, DocumentConverter
+from src.postprocessing.converters import (
+    ComDocumentConverter,
+    DocumentConverter,
+    configure_uniform_printer,
+)
 from src.workflows.progress import ProgressSink, QuantityProgressTracker
 
 
@@ -60,6 +64,7 @@ def convert_docx_folder_to_pdf(
             word_app = win32com.client.DispatchEx("Word.Application")
             word_app.Visible = False
             word_app.DisplayAlerts = 0
+            configure_uniform_printer(word_app)
 
         for idx, docx_path in enumerate(docx_files, start=1):
             output_path = docx_path.with_suffix(".pdf")

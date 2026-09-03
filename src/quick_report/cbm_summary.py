@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from docxtpl import DocxTemplate
 
+from src.core.normalizers import normalize_us_characteristic
 from src.quick_report.cbm_render import _build_jinja_env
 from src.quick_report.models import CbmSummaryRow
 
@@ -161,12 +162,12 @@ def prepare_tech_summary_rows(
             tev_raw = (record.raw_measurement or "").strip()
         tev_read_str = format_db_reading(tev_raw) if (tev_raw and tev_raw != "-") else "-"
 
-        # Determine severity: US defect characteristic (CORONA, TRACKING, ARCING, etc.)
+        # Determine severity: US defect characteristic (CORONA DISCHARGE, TRACKING, ARCING, etc.)
         severity = ""
         if record.technology == "US" or record.us_char:
-            us_char = (record.us_char or "").strip()
-            if us_char and us_char != "-":
-                severity = us_char.upper()
+            norm_char = normalize_us_characteristic(record.us_char)
+            if norm_char != "-":
+                severity = norm_char
 
         if key not in paired:
             paired[key] = {
