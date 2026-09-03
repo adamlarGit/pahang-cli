@@ -110,3 +110,119 @@ def test_extract_board_average_temperature() -> None:
     assert extract_board_average_temperature(None) is None
     assert extract_board_average_temperature("") is None
     assert extract_board_average_temperature("-") is None
+
+
+def test_resolve_feeder_channel_msms_meters() -> None:
+    from src.testsheet.feeder_thermal import resolve_feeder_channel
+
+    res_in1 = resolve_feeder_channel("TH_FPIN1_AVG_PE13R")
+    assert res_in1 is not None
+    assert res_in1.pillar_index == 1
+    assert res_in1.channel == "IN1"
+    assert res_in1.feederno_label == "INCOMING 1"
+    assert res_in1.column_letter == "D"
+    assert res_in1.cable_cell == "D45"
+    assert res_in1.board_temp_cell == "R50"
+
+    res_ot2 = resolve_feeder_channel("TH_FPOT2_MAX_PE13V")
+    assert res_ot2 is not None
+    assert res_ot2.pillar_index == 1
+    assert res_ot2.channel == "OT2"
+    assert res_ot2.feederno_label == "OUTGOING F2"
+    assert res_ot2.column_letter == "J"
+    assert res_ot2.cable_cell == "J45"
+    assert res_ot2.board_temp_cell == "R50"
+
+    res_ot10 = resolve_feeder_channel("TH_FPOT10_DEL_PE13R")
+    assert res_ot10 is not None
+    assert res_ot10.channel == "OT10"
+    assert res_ot10.feederno_label == "OUTGOING F10"
+    assert res_ot10.column_letter == "R"
+    assert res_ot10.cable_cell == "R45"
+
+
+def test_resolve_feeder_channel_cbm_defect_ids() -> None:
+    from src.testsheet.feeder_thermal import resolve_feeder_channel
+
+    # FP TX1 - OUTGOING F1 -> pillar 1, OT1
+    res1 = resolve_feeder_channel("FP TX1 - OUTGOING F1")
+    assert res1 is not None
+    assert res1.pillar_index == 1
+    assert res1.channel == "OT1"
+    assert res1.feederno_label == "OUTGOING F1"
+    assert res1.column_letter == "I"
+    assert res1.cable_cell == "I45"
+    assert res1.board_temp_cell == "R50"
+
+    # FP TX2 - OUTGOING F3 -> pillar 2, OT3
+    res2 = resolve_feeder_channel("FP TX2 - OUTGOING F3")
+    assert res2 is not None
+    assert res2.pillar_index == 2
+    assert res2.channel == "OT3"
+    assert res2.feederno_label == "OUTGOING F3"
+    assert res2.column_letter == "K"
+    assert res2.cable_cell == "K47"
+    assert res2.board_temp_cell == "R54"
+
+    # LVDB 2 - INC 2 -> pillar 2, IN2
+    res3 = resolve_feeder_channel("LVDB 2 - INC 2")
+    assert res3 is not None
+    assert res3.pillar_index == 2
+    assert res3.channel == "IN2"
+    assert res3.feederno_label == "INCOMING 2"
+    assert res3.column_letter == "E"
+    assert res3.cable_cell == "E47"
+    assert res3.board_temp_cell == "R54"
+
+
+def test_resolve_feeder_channel_partial_and_bay_texts() -> None:
+    from src.testsheet.feeder_thermal import resolve_feeder_channel
+
+    # OUTGOING F1
+    res = resolve_feeder_channel("OUTGOING F1")
+    assert res is not None
+    assert res.channel == "OT1"
+    assert res.feederno_label == "OUTGOING F1"
+    assert res.pillar_index == 1
+
+    # OUTGOING F2
+    res = resolve_feeder_channel("OUTGOING F2")
+    assert res is not None
+    assert res.channel == "OT2"
+    assert res.feederno_label == "OUTGOING F2"
+
+    # F1, F2, F10
+    res_f1 = resolve_feeder_channel("F1")
+    assert res_f1 is not None
+    assert res_f1.channel == "OT1"
+
+    res_f2 = resolve_feeder_channel("F2")
+    assert res_f2 is not None
+    assert res_f2.channel == "OT2"
+
+    res_f10 = resolve_feeder_channel("F10")
+    assert res_f10 is not None
+    assert res_f10.channel == "OT10"
+
+    # INC 1, INCOMING 1
+    res_inc1 = resolve_feeder_channel("INC 1")
+    assert res_inc1 is not None
+    assert res_inc1.channel == "IN1"
+    assert res_inc1.feederno_label == "INCOMING 1"
+
+    res_inc2 = resolve_feeder_channel("INCOMING 1")
+    assert res_inc2 is not None
+    assert res_inc2.channel == "IN1"
+    assert res_inc2.feederno_label == "INCOMING 1"
+
+
+def test_resolve_feeder_channel_invalid_and_empty() -> None:
+    from src.testsheet.feeder_thermal import resolve_feeder_channel
+
+    assert resolve_feeder_channel("") is None
+    assert resolve_feeder_channel("   ") is None
+    assert resolve_feeder_channel("FP TX1") is None
+    assert resolve_feeder_channel("TRANSFORMER 1") is None
+    assert resolve_feeder_channel("SWITCHGEAR") is None
+    assert resolve_feeder_channel("F11") is None
+

@@ -2266,6 +2266,119 @@ def test_fp_lvdb_render_context_splitting_and_testsheet():
     assert ctx_nosplit["fp"]["feederno"] == "-"
 
 
+def test_tx_render_context_cable_type_selection():
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import (
+        SubstationEquipmentPackage,
+        SwitchgearPanelSpec,
+        SwitchgearSpec,
+        TransformerSpec,
+    )
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["tx"]
+    tx_spec = TransformerSpec(
+        tx_id="Tx 1",
+        hv_cable_type="XLPE 3C 240mm2",
+        lv_cable_type="PILC 4C 500mm2",
+    )
+    # Include switchgear panel with "NOT ACCESSIBLE" to ensure no leak
+    swg_panel = SwitchgearPanelSpec(panel_no=1, name="TX1", cable_type="NOT ACCESSIBLE")
+    swg_spec = SwitchgearSpec(panels=(swg_panel,))
+    equipment_pkg = SubstationEquipmentPackage(
+        transformers=(tx_spec,),
+        switchgears=(swg_spec,),
+    )
+    pe_info = {"equipment_specs": equipment_pkg}
+
+    # HV defect area
+    rec_hv = CbmDefectRecord(
+        equipment="TRANSFORMER",
+        equipment_id="TX 1",
+        defect_area="HT BUSHING",
+        additional_remarks="RED PHASE",
+    )
+    ctx_hv = _build_family_render_context(spec, rec_hv, overview=False, pe_info=pe_info)
+    assert ctx_hv["tx"]["cabletype"] == "XLPE 3C 240mm2"
+    assert ctx_hv["tx"]["cabletype"] != "NOT ACCESSIBLE"
+
+    # LV defect area
+    rec_lv = CbmDefectRecord(
+        equipment="TRANSFORMER",
+        equipment_id="TX 1",
+        defect_area="LV CABLE TERMINATION",
+        additional_remarks="YELLOW PHASE",
+    )
+    ctx_lv = _build_family_render_context(spec, rec_lv, overview=False, pe_info=pe_info)
+    assert ctx_lv["tx"]["cabletype"] == "PILC 4C 500mm2"
+    assert ctx_lv["tx"]["cabletype"] != "NOT ACCESSIBLE"
+
+
+def test_fp_lvdb_render_context_cable_type_resolution():
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import (
+        LVDBFeederSpec,
+        LVDBSpec,
+        SubstationEquipmentPackage,
+        SwitchgearPanelSpec,
+        SwitchgearSpec,
+    )
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["fp_lvdb"]
+    f1 = LVDBFeederSpec(channel="OT1", cable_type="PILC")
+    f2 = LVDBFeederSpec(channel="OT2", cable_type="XLPE")
+    lv_spec = LVDBSpec(
+        name="FP 1",
+        label="FP",
+        source="TX1",
+        cable_type="XLPE",
+        feeders=(f1, f2),
+    )
+    # Include switchgear panel with "NOT ACCESSIBLE" to ensure no leak
+    swg_panel = SwitchgearPanelSpec(panel_no=1, name="FP1", cable_type="NOT ACCESSIBLE")
+    swg_spec = SwitchgearSpec(panels=(swg_panel,))
+    equipment_pkg = SubstationEquipmentPackage(
+        lvdb_specs=(lv_spec,),
+        switchgears=(swg_spec,),
+    )
+    pe_info = {"equipment_specs": equipment_pkg}
+
+    # Defect on OUTGOING F1 -> resolves to PILC
+    rec_f1 = CbmDefectRecord(
+        equipment="LV",
+        model="FP (J)",
+        equipment_id="FP TX1 - OUTGOING F1",
+        defect_area="OUTGOING FUSE CONNECTION",
+    )
+    ctx_f1 = _build_family_render_context(spec, rec_f1, overview=False, pe_info=pe_info)
+    assert ctx_f1["fp"]["cabletype"] == "PILC"
+    assert ctx_f1["fp"]["cabletype"] != "NOT ACCESSIBLE"
+
+    # Defect on OUTGOING F2 -> resolves to XLPE
+    rec_f2 = CbmDefectRecord(
+        equipment="LV",
+        model="FP (J)",
+        equipment_id="FP TX1 - OUTGOING F2",
+        defect_area="OUTGOING FUSE CONNECTION",
+    )
+    ctx_f2 = _build_family_render_context(spec, rec_f2, overview=False, pe_info=pe_info)
+    assert ctx_f2["fp"]["cabletype"] == "XLPE"
+
+    # Defect on OUTGOING F3 (unspecified in feeders) -> falls back to board cable_type XLPE
+    rec_f3 = CbmDefectRecord(
+        equipment="LV",
+        model="FP (J)",
+        equipment_id="FP TX1 - OUTGOING F3",
+        defect_area="OUTGOING FUSE CONNECTION",
+    )
+    ctx_f3 = _build_family_render_context(spec, rec_f3, overview=False, pe_info=pe_info)
+    assert ctx_f3["fp"]["cabletype"] == "XLPE"
+    assert ctx_f3["fp"]["cabletype"] != "NOT ACCESSIBLE"
+
+
 def test_blackbox_render_context_number_and_location_detection():
     from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
     from src.quick_report.cbm_render import _build_family_render_context

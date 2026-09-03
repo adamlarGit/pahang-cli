@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
-
-
 from datetime import datetime
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -76,6 +74,24 @@ class SwitchgearSpec:
 
 
 @dataclass(frozen=True)
+class LVDBFeederSpec:
+    """Specification for an individual LVDB / Feeder Pillar circuit way."""
+
+    channel: str = ""       # e.g. "IN1", "IN2", "IN3", "OT1".."OT10"
+    cable_type: str = ""    # e.g. "XLPE", "PILC"
+
+
+@dataclass(frozen=True)
+class ThermalReadingSpec:
+    """Thermal measurement readings for an equipment component."""
+
+    tmin: str = ""       # Reference / minimum temperature
+    tmax: str = ""       # Maximum temperature
+    delta_t: str = ""    # Temperature rise / difference
+    avg: str = ""        # Average temperature
+
+
+@dataclass(frozen=True)
 class TransformerSpec:
     """Specification for a power distribution transformer."""
 
@@ -87,6 +103,13 @@ class TransformerSpec:
     type: str = ""
     us_reading: str = ""
     us_char: str = ""
+    hv_cable_type: str = ""
+    lv_cable_type: str = ""
+    hv_cable_thermal: ThermalReadingSpec = ThermalReadingSpec()
+    hv_bushing_thermal: ThermalReadingSpec = ThermalReadingSpec()
+    lv_cable_thermal: ThermalReadingSpec = ThermalReadingSpec()
+    lv_bushing_thermal: ThermalReadingSpec = ThermalReadingSpec()
+    body_thermal: ThermalReadingSpec = ThermalReadingSpec()
 
 
 @dataclass(frozen=True)
@@ -99,6 +122,34 @@ class LVDBSpec:
     manufacturer: str = ""
     serial_no: str = ""
     rating: str = ""
+    cable_type: str = ""
+    feeders: tuple[LVDBFeederSpec, ...] = ()
+
+    def get_feeder_cable(self, feeder_channel_or_id: str) -> str:
+        """Resolve cable type for a given feeder channel or identifier, falling back to board cable_type."""
+        if not feeder_channel_or_id or feeder_channel_or_id.strip() in ("", "-", "--"):
+            return self.cable_type
+        target = feeder_channel_or_id.strip().upper()
+        # 1. Exact match on channel
+        for f in self.feeders:
+            if f.channel and f.channel.upper() == target:
+                if f.cable_type:
+                    return f.cable_type
+        # 2. Universal feeder channel resolution (handles MSMS meters, CBM defect IDs, bay labels)
+        from src.testsheet.feeder_thermal import resolve_feeder_channel
+
+        ch_res = resolve_feeder_channel(target)
+        if ch_res:
+            for f in self.feeders:
+                if f.channel and f.channel.upper() == ch_res.channel.upper():
+                    if f.cable_type:
+                        return f.cable_type
+        # 3. Substring / fuzzy match on channel
+        for f in self.feeders:
+            if f.channel and (f.channel.upper() in target or target in f.channel.upper()):
+                if f.cable_type:
+                    return f.cable_type
+        return self.cable_type
 
 
 @dataclass(frozen=True)

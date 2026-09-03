@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date, datetime
 import re
 import warnings
@@ -14,9 +15,14 @@ from src.core.normalizers import (
     normalize_us_characteristic,
     parse_background_temp,
 )
+from src.testsheet.feeder_thermal import (
+    FEEDER_CHANNEL_COLUMNS,
+    INACTIVE_FEEDER_SENTINELS,
+)
 from src.testsheet.models import (
     BatteryBankSpec,
     FireExtinguisherSpec,
+    LVDBFeederSpec,
     LVDBSpec,
     PhotoRange,
     RawPhotoRanges,
@@ -24,6 +30,7 @@ from src.testsheet.models import (
     SwitchgearPanelSpec,
     SwitchgearSpec,
     TestsheetData,
+    ThermalReadingSpec,
     TransformerSpec,
 )
 
@@ -706,6 +713,14 @@ class TestsheetExtractor:
             # Extract ultrasound measurements from PCE Testsheet (TX1/TX2: Col K/L; TX3/TX4: Col V/X)
             tx_us_reading = ""
             tx_us_char = ""
+            hv_cable_type = ""
+            lv_cable_type = ""
+            hv_cable_thermal = ThermalReadingSpec()
+            hv_bushing_thermal = ThermalReadingSpec()
+            lv_cable_thermal = ThermalReadingSpec()
+            lv_bushing_thermal = ThermalReadingSpec()
+            body_thermal = ThermalReadingSpec()
+
             if ws_pce is not None:
                 if i in (1, 2):
                     start_r = 33 if i == 1 else 38
@@ -726,6 +741,65 @@ class TestsheetExtractor:
                             norm_char = normalize_us_characteristic(char_val)
                             tx_us_char = "" if norm_char == "-" else norm_char
 
+                # Cable types & thermal measurement extraction
+                if i == 1:
+                    hv_cable_type = clean_val(ws_pce["C33"].value) or ""
+                    lv_cable_type = clean_val(ws_pce["C35"].value) or ""
+                    base_r = 33
+                    th_cols = ("F", "G", "H", "I")
+                elif i == 2:
+                    hv_cable_type = clean_val(ws_pce["C38"].value) or ""
+                    lv_cable_type = clean_val(ws_pce["C40"].value) or ""
+                    base_r = 38
+                    th_cols = ("F", "G", "H", "I")
+                elif i == 3:
+                    hv_cable_type = clean_val(ws_pce["O33"].value) or ""
+                    lv_cable_type = clean_val(ws_pce["O35"].value) or ""
+                    base_r = 33
+                    q32_val = str(ws_pce["Q32"].value or "").upper()
+                    r32_val = str(ws_pce["R32"].value or "").upper()
+                    if "TMIN" in q32_val or "MIN" in q32_val:
+                        th_cols = ("Q", "R", "S", "T")
+                    elif "TMIN" in r32_val or "MIN" in r32_val:
+                        th_cols = ("R", "S", "T", "U")
+                    else:
+                        has_q = any(clean_val(ws_pce[f"Q{row_idx}"].value) for row_idx in range(33, 38) if row_idx <= ws_pce.max_row)
+                        th_cols = ("Q", "R", "S", "T") if has_q else ("R", "S", "T", "U")
+                elif i == 4:
+                    hv_cable_type = clean_val(ws_pce["O38"].value) or ""
+                    lv_cable_type = clean_val(ws_pce["O40"].value) or ""
+                    base_r = 38
+                    q32_val = str(ws_pce["Q32"].value or "").upper()
+                    r32_val = str(ws_pce["R32"].value or "").upper()
+                    if "TMIN" in q32_val or "MIN" in q32_val:
+                        th_cols = ("Q", "R", "S", "T")
+                    elif "TMIN" in r32_val or "MIN" in r32_val:
+                        th_cols = ("R", "S", "T", "U")
+                    else:
+                        has_q = any(clean_val(ws_pce[f"Q{row_idx}"].value) for row_idx in range(38, 43) if row_idx <= ws_pce.max_row)
+                        th_cols = ("Q", "R", "S", "T") if has_q else ("R", "S", "T", "U")
+                else:
+                    base_r = 0
+                    th_cols = ()
+
+                if base_r and th_cols:
+                    c_min, c_max, c_del, c_avg = th_cols
+                    def _extract_th(r_idx: int) -> ThermalReadingSpec:
+                        if r_idx > ws_pce.max_row:
+                            return ThermalReadingSpec()
+                        return ThermalReadingSpec(
+                            tmin=clean_val(ws_pce[f"{c_min}{r_idx}"].value) or "",
+                            tmax=clean_val(ws_pce[f"{c_max}{r_idx}"].value) or "",
+                            delta_t=clean_val(ws_pce[f"{c_del}{r_idx}"].value) or "",
+                            avg=clean_val(ws_pce[f"{c_avg}{r_idx}"].value) or "",
+                        )
+
+                    hv_cable_thermal = _extract_th(base_r)
+                    hv_bushing_thermal = _extract_th(base_r + 1)
+                    lv_cable_thermal = _extract_th(base_r + 2)
+                    lv_bushing_thermal = _extract_th(base_r + 3)
+                    body_thermal = _extract_th(base_r + 4)
+
             transformers.append(
                 TransformerSpec(
                     tx_id=f"Tx {i}",
@@ -736,6 +810,13 @@ class TestsheetExtractor:
                     type=tx_type,
                     us_reading=tx_us_reading,
                     us_char=tx_us_char,
+                    hv_cable_type=hv_cable_type,
+                    lv_cable_type=lv_cable_type,
+                    hv_cable_thermal=hv_cable_thermal,
+                    hv_bushing_thermal=hv_bushing_thermal,
+                    lv_cable_thermal=lv_cable_thermal,
+                    lv_bushing_thermal=lv_bushing_thermal,
+                    body_thermal=body_thermal,
                 )
             )
 
@@ -750,7 +831,21 @@ class TestsheetExtractor:
 
         lvdb_specs: list[LVDBSpec] = []
 
-        # Slot 1: Rows 48-51
+        def _compute_board_cable_type(feeders: list[LVDBFeederSpec]) -> str:
+            cables = [f.cable_type.strip() for f in feeders if f.cable_type and f.cable_type.strip()]
+            if not cables:
+                return ""
+            counts = Counter(cables)
+            return counts.most_common(1)[0][0]
+
+        # Slot 1: Rows 44-51
+        feeders1: list[LVDBFeederSpec] = []
+        for channel, col in FEEDER_CHANNEL_COLUMNS.items():
+            cable = clean_val(ws_pce[f"{col}45"].value) or ""
+            if cable and cable.upper() not in INACTIVE_FEEDER_SENTINELS:
+                feeders1.append(LVDBFeederSpec(channel=channel, cable_type=cable))
+        cable_type1 = _compute_board_cable_type(feeders1)
+
         label1_raw = clean_val(ws_pce["R48"].value) or ""
         source1_raw = clean_val(ws_pce["T48"].value) or ""
         photo1 = ws_pce["S49"].value
@@ -765,7 +860,7 @@ class TestsheetExtractor:
             rating1 = clean_val(ws_pce["R51"].value) or ""
 
         photo1_active = photo1 is not None and str(photo1).strip() not in ("", "-", "None", "nan", "N/A")
-        slot1_active = bool(photo1_active or mfg1 or sn1 or rating1)
+        slot1_active = bool(photo1_active or mfg1 or sn1 or rating1 or feeders1)
 
         if slot1_active:
             label1 = "FP" if "FP" in label1_raw.upper() else "LVDB"
@@ -779,10 +874,19 @@ class TestsheetExtractor:
                     manufacturer=mfg1,
                     serial_no=sn1,
                     rating=rating1,
+                    cable_type=cable_type1,
+                    feeders=tuple(feeders1),
                 )
             )
 
-        # Slot 2: Rows 52-55
+        # Slot 2: Rows 46-55
+        feeders2: list[LVDBFeederSpec] = []
+        for channel, col in FEEDER_CHANNEL_COLUMNS.items():
+            cable = clean_val(ws_pce[f"{col}47"].value) or ""
+            if cable and cable.upper() not in INACTIVE_FEEDER_SENTINELS:
+                feeders2.append(LVDBFeederSpec(channel=channel, cable_type=cable))
+        cable_type2 = _compute_board_cable_type(feeders2)
+
         label2_raw = clean_val(ws_pce["R52"].value) or ""
         source2_raw = clean_val(ws_pce["T52"].value) or ""
         photo2 = ws_pce["S53"].value
@@ -797,7 +901,7 @@ class TestsheetExtractor:
             rating2 = clean_val(ws_pce["R55"].value) or ""
 
         photo2_active = photo2 is not None and str(photo2).strip() not in ("", "-", "None", "nan", "N/A")
-        slot2_active = bool(photo2_active or mfg2 or sn2 or rating2)
+        slot2_active = bool(photo2_active or mfg2 or sn2 or rating2 or feeders2)
 
         if slot2_active:
             label2 = "FP" if "FP" in label2_raw.upper() else "LVDB"
@@ -811,6 +915,8 @@ class TestsheetExtractor:
                     manufacturer=mfg2,
                     serial_no=sn2,
                     rating=rating2,
+                    cable_type=cable_type2,
+                    feeders=tuple(feeders2),
                 )
             )
 

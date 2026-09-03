@@ -699,6 +699,77 @@ def test_transformer_specs_up_to_four_units() -> None:
         assert tx.serial_no == f"SN-TX-{i}"
 
 
+def test_extract_transformer_specs_with_cables_and_thermal() -> None:
+    """Verify _extract_transformer_specs parses cable types and thermal readings from PCE Testsheet."""
+    extractor = TestsheetExtractor()
+    wb_vi = openpyxl.Workbook()
+    ws_vi = wb_vi.active
+    ws_vi["C17"] = 2
+    ws_vi["D18"] = "HERMETIC"
+    ws_vi["F18"] = "1000kVA"
+    ws_vi["D19"] = "HERMETIC"
+    ws_vi["F19"] = "500kVA"
+
+    wb_pce = openpyxl.Workbook()
+    ws_pce = wb_pce.active
+
+    # TX1: row 33 to 37
+    ws_pce["C33"] = "XLPE"
+    ws_pce["C35"] = "XLPE"
+    ws_pce["F33"] = 40.1  # HT CABLE Tmin
+    ws_pce["G33"] = 40.6  # Tmax
+    ws_pce["H33"] = 0.5   # Delta T
+    ws_pce["I33"] = 40.35 # Avg
+    ws_pce["F34"] = 42.7  # HT BUSHING
+    ws_pce["G34"] = 43.1
+    ws_pce["H34"] = 0.4
+    ws_pce["I34"] = 42.9
+    ws_pce["F35"] = 38.7  # LV CABLE
+    ws_pce["G35"] = 39.2
+    ws_pce["H35"] = 0.5
+    ws_pce["I35"] = 38.95
+    ws_pce["F36"] = 42.2  # LV BUSHING
+    ws_pce["G36"] = 42.8
+    ws_pce["H36"] = 0.6
+    ws_pce["I36"] = 42.5
+    ws_pce["F37"] = 41.6  # BODY
+    ws_pce["G37"] = 45.1
+    ws_pce["H37"] = 3.5
+    ws_pce["I37"] = 43.35
+
+    # TX2: row 38 to 42
+    ws_pce["C38"] = "PILC"
+    ws_pce["C40"] = "XLPE"
+    ws_pce["F38"] = 35.0
+    ws_pce["G38"] = 36.0
+    ws_pce["H38"] = 1.0
+    ws_pce["I38"] = 35.5
+
+    specs = extractor._extract_transformer_specs(ws_vi, ws_pce=ws_pce)
+    assert len(specs) == 2
+
+    tx1 = specs[0]
+    assert tx1.tx_id == "Tx 1"
+    assert tx1.hv_cable_type == "XLPE"
+    assert tx1.lv_cable_type == "XLPE"
+    assert tx1.hv_cable_thermal.tmin == "40.1"
+    assert tx1.hv_cable_thermal.tmax == "40.6"
+    assert tx1.hv_cable_thermal.delta_t == "0.5"
+    assert tx1.hv_cable_thermal.avg == "40.35"
+    assert tx1.hv_bushing_thermal.tmin == "42.7"
+    assert tx1.lv_cable_thermal.tmin == "38.7"
+    assert tx1.lv_bushing_thermal.tmin == "42.2"
+    assert tx1.body_thermal.tmin == "41.6"
+    assert tx1.body_thermal.delta_t == "3.5"
+
+    tx2 = specs[1]
+    assert tx2.tx_id == "Tx 2"
+    assert tx2.hv_cable_type == "PILC"
+    assert tx2.lv_cable_type == "XLPE"
+    assert tx2.hv_cable_thermal.tmin == "35.0"
+    assert tx2.hv_cable_thermal.delta_t == "1.0"
+
+
 def test_lvdb_specs_empty_template_ignored() -> None:
     """Verify _extract_lvdb_specs returns empty tuple when no photo or fields are filled."""
     extractor = TestsheetExtractor()
@@ -714,6 +785,59 @@ def test_lvdb_specs_empty_template_ignored() -> None:
 
     specs = extractor._extract_lvdb_specs(ws)
     assert specs == ()
+
+
+def test_extract_lvdb_specs_with_feeders_and_cable_type() -> None:
+    """Verify _extract_lvdb_specs extracts feeder ways and calculates board cable type."""
+    extractor = TestsheetExtractor()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    # Slot 1: row 45 feeders
+    ws["D45"] = "XLPE"
+    ws["E45"] = "XLPE"
+    ws["G45"] = "-"       # Inactive sentinel
+    ws["I45"] = "XLPE"
+    ws["J45"] = "PILC"
+    ws["K45"] = "XLPE"
+    ws["L45"] = "SPARE"   # Inactive sentinel
+
+    ws["R48"] = "FP"
+    ws["T48"] = "TX1"
+    ws["V49"] = "SSE"
+    ws["V50"] = "FPPO-1628"
+    ws["V51"] = "1600A"
+
+    # Slot 2: row 47 feeders
+    ws["D47"] = "PILC"
+    ws["I47"] = "PILC"
+    ws["R52"] = "LVDB"
+    ws["T52"] = "TX2"
+    ws["V53"] = "TAMCO"
+    ws["V54"] = "SN-22"
+    ws["V55"] = "800A"
+
+    specs = extractor._extract_lvdb_specs(ws)
+    assert len(specs) == 2
+
+    fp1 = specs[0]
+    assert fp1.name == "FP 1"
+    assert fp1.label == "FP"
+    assert fp1.cable_type == "XLPE"
+    assert len(fp1.feeders) == 5
+    # Channel checks
+    channels = [f.channel for f in fp1.feeders]
+    assert channels == ["IN1", "IN2", "OT1", "OT2", "OT3"]
+    assert fp1.get_feeder_cable("OT1") == "XLPE"
+    assert fp1.get_feeder_cable("OT2") == "PILC"
+    assert fp1.get_feeder_cable("OT3") == "XLPE"
+    assert fp1.get_feeder_cable("OT4") == "XLPE"  # Fallback to board cable_type
+
+    fp2 = specs[1]
+    assert fp2.name == "LVDB 2"
+    assert fp2.cable_type == "PILC"
+    assert len(fp2.feeders) == 2
+    assert fp2.get_feeder_cable("IN1") == "PILC"
 
 
 def test_battery_banks_empty_template_ignored() -> None:

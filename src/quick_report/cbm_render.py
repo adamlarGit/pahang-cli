@@ -24,6 +24,7 @@ from src.quick_report.prpd import (
     generate_prpd_graphs_for_transformer,
 )
 from src.quick_report.utils import clear_cell_text, set_cell_shading
+from src.testsheet.feeder_thermal import resolve_feeder_channel
 from src.testsheet.models import (
     BatteryBankSpec,
     LVDBSpec,
@@ -389,9 +390,15 @@ def _build_fp_lvdb_render_context(
         labelsource = raw_id.strip()
         feederno = "-"
 
+    ch_res = resolve_feeder_channel(raw_id)
+    if ch_res and feederno == "-":
+        feederno = ch_res.feederno_label
+
     equipment_pkg = _extract_equipment_package(pe_info)
     lvdb_specs = equipment_pkg.lvdb_specs if equipment_pkg else ()
     matched_lv = _find_matching_lvdb(lvdb_specs, labelsource or raw_id)
+    if not matched_lv and ch_res and lvdb_specs:
+        matched_lv = _find_matching_lvdb(lvdb_specs, f"FP {ch_res.pillar_index}")
 
     fp_mfg = (matched_lv.manufacturer if matched_lv and matched_lv.manufacturer else "") or _text_or_empty(record.brand)
     
@@ -411,14 +418,15 @@ def _build_fp_lvdb_render_context(
     fp_serial = matched_lv.serial_no if matched_lv else ""
     
     fp_cable = ""
-    if equipment_pkg:
-        for swg in equipment_pkg.switchgears:
-            for p in swg.panels:
-                if p.cable_type:
-                    fp_cable = p.cable_type
-                    break
-            if fp_cable:
-                break
+    if matched_lv:
+        if feederno and feederno != "-":
+            # Try channel resolution first, then feederno string
+            ch_key = ch_res.channel if ch_res else feederno
+            fp_cable = matched_lv.get_feeder_cable(ch_key)
+        if not fp_cable:
+            fp_cable = matched_lv.cable_type
+    if not fp_cable and lvdb_specs:
+        fp_cable = lvdb_specs[0].cable_type
     if not fp_cable and "CABLE" in equipment.upper():
         fp_cable = equipment
 
@@ -697,23 +705,11 @@ def _build_tx_render_context(
     tx_rating = (matched_tx.rating_kva if matched_tx and matched_tx.rating_kva else "") or _text_or_empty(record.rating)
     tx_serial = matched_tx.serial_no if matched_tx else ""
 
-    tx_cable = ""
-    if equipment_pkg:
-        for swg in equipment_pkg.switchgears:
-            for p in swg.panels:
-                if "TX" in p.name.upper() and p.cable_type:
-                    tx_cable = p.cable_type
-                    break
-            if tx_cable:
-                break
-        if not tx_cable:
-            for swg in equipment_pkg.switchgears:
-                for p in swg.panels:
-                    if p.cable_type:
-                        tx_cable = p.cable_type
-                        break
-                if tx_cable:
-                    break
+    raw_role_id = f"{record.defect_area} {record.additional_remarks} {record.equipment_id} {equipment} {resolved_item_key} {resolved_item_suffix}"
+    if "LV" in raw_role_id.upper():
+        tx_cable = matched_tx.lv_cable_type if matched_tx else ""
+    else:
+        tx_cable = matched_tx.hv_cable_type if matched_tx else ""
     if not tx_cable and "CABLE" in equipment.upper():
         tx_cable = equipment
 

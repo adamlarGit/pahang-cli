@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import hashlib
 import random
 import re
@@ -34,6 +35,117 @@ INACTIVE_FEEDER_SENTINELS: frozenset[str] = frozenset({
     "NONE",
     "TIADA",
 })
+
+
+@dataclass(frozen=True)
+class FeederChannelResolution:
+    """Resolved Feeder Pillar / LVDB circuit way coordinate and label info."""
+
+    pillar_index: int       # 1 for FP1/LVDB1, 2 for FP2/LVDB2
+    channel: str            # "IN1".."IN3", "OT1".."OT10"
+    feederno_label: str     # "INCOMING 1", "OUTGOING F1", etc.
+    column_letter: str      # "D", "E", "G", "I".."R"
+    cable_cell: str         # "D45", "I45" for FP1; "D47", "I47" for FP2
+    board_temp_cell: str    # "R50" for FP1; "R54" for FP2
+
+
+def resolve_feeder_channel(
+    identifier: str,
+    default_pillar_index: int = 1,
+) -> FeederChannelResolution | None:
+    """Resolve Feeder Pillar / LVDB feeder circuit way information.
+
+    Supports:
+        - MSMS meters: 'TH_FPIN1_AVG_PE13R' -> 'IN1', 'TH_FPOT2_MAX_PE13V' -> 'OT2'
+        - CBM defect IDs: 'FP TX1 - OUTGOING F1' -> 'OT1' (pillar 1), 'FP TX2 - OUTGOING F3' -> 'OT3' (pillar 2)
+        - Partial / bay texts: 'OUTGOING F1', 'OUTGOING F2', 'F1', 'F2', 'INC 1', 'INCOMING 1'
+    """
+    if not identifier or not identifier.strip():
+        return None
+
+    ident_upper = identifier.strip().upper()
+
+    # Determine pillar index (1 or 2)
+    if re.search(r"\b(?:FP\s*TX\s*2|LVDB\s*2|FP\s*2|TX\s*2)\b", ident_upper):
+        pillar_idx = 2
+    elif re.search(r"\b(?:FP\s*TX\s*1|LVDB\s*1|FP\s*1|TX\s*1)\b", ident_upper):
+        pillar_idx = 1
+    else:
+        pillar_idx = default_pillar_index
+
+    # Determine channel
+    channel: str | None = None
+
+    # 1. Check MSMS meter pattern
+    meter_match = parse_feeder_meter(ident_upper)
+    if meter_match:
+        channel = meter_match[0]
+
+    # 2. Check direct channel identifier
+    if not channel and ident_upper in FEEDER_CHANNEL_COLUMNS:
+        channel = ident_upper
+
+    # 3. Check incoming feeder patterns
+    if not channel:
+        m_inc = re.search(r"\b(?:INCOMING|INCOMER|INC\.?)\s*(?:FEEDER\s*|F\s*)?([1-3])\b", ident_upper)
+        if m_inc:
+            channel = f"IN{m_inc.group(1)}"
+        elif re.search(r"\bIN\s*([1-3])\b", ident_upper):
+            m_in = re.search(r"\bIN\s*([1-3])\b", ident_upper)
+            if m_in:
+                channel = f"IN{m_in.group(1)}"
+        elif re.search(r"\b(?:INCOMING|INCOMER)\b", ident_upper):
+            channel = "IN1"
+
+    # 4. Check outgoing feeder patterns
+    if not channel:
+        m_ot = re.search(r"\bOUTGOING\s*(?:FEEDER\s*|F\s*)?(\d+)\b", ident_upper)
+        if m_ot:
+            num = int(m_ot.group(1))
+            if 1 <= num <= 10:
+                channel = f"OT{num}"
+
+    if not channel:
+        m_fdr = re.search(r"\bFEEDER\s*(\d+)\b", ident_upper)
+        if m_fdr:
+            num = int(m_fdr.group(1))
+            if 1 <= num <= 10:
+                channel = f"OT{num}"
+
+    if not channel:
+        m_ot_direct = re.search(r"\bOT\s*(\d+)\b", ident_upper)
+        if m_ot_direct:
+            num = int(m_ot_direct.group(1))
+            if 1 <= num <= 10:
+                channel = f"OT{num}"
+
+    if not channel:
+        m_f = re.search(r"(?<![A-Z])F\s*(\d+)\b", ident_upper)
+        if m_f:
+            num = int(m_f.group(1))
+            if 1 <= num <= 10:
+                channel = f"OT{num}"
+
+    if not channel or channel not in FEEDER_CHANNEL_COLUMNS:
+        return None
+
+    if channel.startswith("IN"):
+        feederno_label = f"INCOMING {channel[2:]}"
+    else:
+        feederno_label = f"OUTGOING F{channel[2:]}"
+
+    col = FEEDER_CHANNEL_COLUMNS[channel]
+    cable_row = 45 if pillar_idx == 1 else 47
+    board_temp_cell = "R50" if pillar_idx == 1 else "R54"
+
+    return FeederChannelResolution(
+        pillar_index=pillar_idx,
+        channel=channel,
+        feederno_label=feederno_label,
+        column_letter=col,
+        cable_cell=f"{col}{cable_row}",
+        board_temp_cell=board_temp_cell,
+    )
 
 
 def parse_feeder_meter(meter_name: str) -> tuple[str, str] | None:

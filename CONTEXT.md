@@ -92,20 +92,21 @@ The canonical switchgear domain model in `src/testsheet/models.py`.
 The top-level composite equipment domain entity attached to `TestsheetData.equipment`. Bundles all 5 equipment categories:
 1. **Environment & Metadata**: `building_type`, `substation_type`.
 2. **Switchgear**: `switchgears: tuple[SwitchgearSpec, ...]` (with `switchgear` property pointing to primary unit for backwards compatibility).
-3. **Transformers**: `transformers: tuple[TransformerSpec, ...]` (`tx_id`, `rating_kva`, `construction_year`, `manufacturer`, `serial_no`, `type`). Supports 0 TX (SSU), 1 TX, 2 TX, or up to 4 TX.
-4. **LVDB / Feeder Pillar**: `lvdb_specs: tuple[LVDBSpec, ...]` (`name`, `label`, `source`, `manufacturer`, `serial_no`, `rating`).
+3. **Transformers**: `transformers: tuple[TransformerSpec, ...]` (`tx_id`, `rating_kva`, `construction_year`, `manufacturer`, `serial_no`, `type`, `hv_cable_type`, `lv_cable_type`, component thermals). Supports 0 TX (SSU), 1 TX, 2 TX, or up to 4 TX.
+4. **LVDB / Feeder Pillar**: `lvdb_specs: tuple[LVDBSpec, ...]` (`name`, `label`, `source`, `manufacturer`, `serial_no`, `rating`, `cable_type`, `feeders: tuple[LVDBFeederSpec, ...]`).
 5. **Auxiliary & Safety**: `battery_banks: tuple[BatteryBankSpec, ...]`, `fire_extinguisher: FireExtinguisherSpec`, `has_battery_charger`, `has_rtu`, `has_sf6`, `has_efi`.
 
 ### LvdbExtractionAndClassificationPolicy
 Classification and naming policy for LVDB / Feeder Pillar:
 - **Detection**: Inspect `R48`/`R52` on `PCE Testsheet`. If prefix is `FP` $\to$ Feeder Pillar (`"FEEDER PILLAR"`). If prefix is `LVDB` $\to$ LVDB (`"LVDB"`).
-- **Active Unit Detection**: Unit is active if an IR photo number is present in `S49`/`S53`, or non-empty manufacturer/serial/rating fields exist.
+- **Active Unit Detection**: Unit is active if an IR photo number is present in `S49`/`S53`, non-empty manufacturer/serial/rating fields exist, or active feeder cables are populated in rows 45/47.
+- **Feeder Cable Extraction**: Rows 44–45 (Slot 1) and Rows 46–47 (Slot 2) parse all 13 incomer and outgoing feeder ways (`IN1..IN3`, `OT1..OT10`) using `FEEDER_CHANNEL_COLUMNS`. Inactive sentinels (`SPARE`, `N/A`, `-`) are omitted. Board-level `cable_type` is resolved from the most common active feeder cable type.
 - **Naming Rule**:
   - Single active unit $\to$ `("FEEDER PILLAR", "FEEDER PILLAR NAMEPLATE")` or `("LVDB", "LVDB NAMEPLATE")`.
   - Multiple active units $\to$ `Label + Source`: e.g. `("LVDB TX1", "LVDB TX1 NAMEPLATE")` or `("FEEDER PILLAR TX1", "FEEDER PILLAR TX1 NAMEPLATE")` (falling back to sequential index if source is blank).
 
 ### TransformerExtractionPolicy
-Extraction and counting policy for transformers from `PCE VI`:
+Extraction and counting policy for transformers from `PCE VI` and `PCE Testsheet`:
 - **Authoritative Quantity Cell (`C17`)**: The `No of Transformer` cell (`C17`) on `PCE VI` is authoritative.
   - If `C17` has an integer `1..4`, up to that exact quantity of transformer rows are parsed.
   - If `C17` is `N/A`, `0`, empty, or contains non-accessible remarks (e.g. `NOT ACCESSIBLE`), `transformer_count` is 0 and empty tuple `()` is produced.
@@ -115,6 +116,9 @@ Extraction and counting policy for transformers from `PCE VI`:
   - Column `I`: Construction Year (`construction_year`)
   - Column `K`: Manufacturer (`manufacturer`)
   - Column `O`: Serial Number (`serial_no`)
+- **Coordinates on `PCE Testsheet` (Rows 33–42)**:
+  - HV / LV Cable Types: Parsed from `C33`/`C35` (Tx 1), `C38`/`C40` (Tx 2), `O33`/`O35` (Tx 3), `O38`/`O40` (Tx 4).
+  - 5-Point Component Thermal Readings: Parsed across `HT CABLE`, `HT BUSHING`, `LV CABLE`, `LV BUSHING`, `BODY` (Columns F–I for Tx 1/2, Columns R–U / Q–T for Tx 3/4).
 - **Accessibility / False-Positive Guard**: If a Tx row or `C17` indicates `NOT ACCESSIBLE`, it is excluded from active testable transformers to prevent false positives in Quick Report condition pages and downstream workflows.
 
 ### MissingValuePresentationPolicy

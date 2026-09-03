@@ -5,6 +5,16 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.3] - 2026-09-04
+
+### Added
+- **`LVDBFeederSpec` & Feeder Circuit Way Cable Ingestion (`src/testsheet/models.py`, `src/testsheet/extractor.py`)**: Immutable feeder specification capturing `channel` and `cable_type` across all incomer (`IN1..IN3`) and outgoing (`OT1..OT10`) feeder ways from `PCE Testsheet` rows 44–47. Unit-level default `cable_type` derived dynamically from active feeder insulation types.
+- **Universal Feeder Channel Resolver (`src/testsheet/feeder_thermal.py`)**: Centralized `resolve_feeder_channel` utility mapping MSMS meter names (`TH_FPIN1_AVG_PE13R`), CBM defect IDs (`FP TX1 - OUTGOING F1`), and standalone bay labels (`OUTGOING F1`, `F1`, `INC 1`) into typed `FeederChannelResolution` with canonical column letters, cable cells, and board temperature coordinates.
+- **Transformer Cable Types & 5-Point Component Thermal Ingestion (`src/testsheet/models.py`, `src/testsheet/extractor.py`)**: Explicit `hv_cable_type` and `lv_cable_type` fields on `TransformerSpec` parsed from rows 33/35/38/40, alongside structured 5-point thermal matrices (`ThermalReadingSpec` for HT Cable, HT Bushing, LV Cable, LV Bushing, Body) across Tx 1..4.
+
+### Fixed
+- **Feeder Pillar & Transformer Quick Report Cable Type Leakage (`src/quick_report/cbm_render.py`)**: Purged hazardous fallback loop that queried 11kV switchgear panels for Feeder Pillar defect pages, which leaked `NOT ACCESSIBLE` into Feeder Pillar reports whenever switchgear cable trenches were inaccessible. Bound `fp.cabletype` directly to `matched_lv.get_feeder_cable(...)`, and bound `tx.cabletype` directly to `matched_tx.hv_cable_type` or `matched_tx.lv_cable_type`.
+
 ## [1.14.2] - 2026-09-03
 
 ### Fixed
