@@ -26,10 +26,14 @@ def test_format_temperature_reading():
     assert format_temperature_reading("") == "-"
     assert format_temperature_reading(None) == "-"
     assert format_temperature_reading("-") == "-"
-    assert format_temperature_reading("50") == "50 °C"
+    assert format_temperature_reading("50") == "50.0 °C"
     assert format_temperature_reading("50.5") == "50.5 °C"
-    assert format_temperature_reading("50 °C") == "50 °C"
-    assert format_temperature_reading("50°C") == "50 °C"
+    assert format_temperature_reading("50 °C") == "50.0 °C"
+    assert format_temperature_reading("50°C") == "50.0 °C"
+    assert format_temperature_reading("33.3 °C") == "33.3 °C"
+    assert format_temperature_reading(True) == "-"
+    assert format_temperature_reading(False) == "-"
+    assert format_temperature_reading(float("nan")) == "-"
 
 
 def test_quick_report_transformer_date_formatting():
@@ -146,7 +150,7 @@ def test_prepare_tech_summary_rows():
     rows = prepare_tech_summary_rows(defects)
     assert len(rows) == 1
     assert rows[0].equipment == "TX"
-    assert rows[0].ir_reading == "50 °C"
+    assert rows[0].ir_reading == "50.0 °C"
     assert rows[0].us_reading == "20dB"
 
 
@@ -323,7 +327,7 @@ def test_prepare_tech_summary_rows_case_insensitive_and_non_matching():
     assert r0.equipment == "Switchgear A"
     assert r0.defect_area == "Panel 1/ Hotspot"
     assert r0.remarks == "Hotspot"
-    assert r0.ir_abs == "50 °C"
+    assert r0.ir_abs == "50.0 °C"
     assert r0.us_dB == "10dB"
     assert r0.severity == "ARCING"
 
@@ -331,7 +335,7 @@ def test_prepare_tech_summary_rows_case_insensitive_and_non_matching():
     assert r1.equipment == "OVERHEAD LINE"
     assert r1.defect_area == "Conductor/ Sagging"
     assert r1.remarks == "Sagging"
-    assert r1.ir_abs == "40 °C"
+    assert r1.ir_abs == "40.0 °C"
     assert r1.us_dB == "-"
     assert r1.tev_dB == "-"
     assert r1.severity == ""
@@ -349,7 +353,6 @@ def test_cbm_defect_record_normalization():
         additional_remarks="  Hotspot  ",
         raw_measurement="  55.4  ",
         equipment_id="  SWG 01  ",
-        criticality="  CRITICAL  ",
     )
     assert rec.technology == "IR"
     assert rec.equipment == "TX 1"
@@ -359,7 +362,6 @@ def test_cbm_defect_record_normalization():
     assert rec.defect_area == "Body"
     assert rec.additional_remarks == "Hotspot"
     assert rec.equipment_id == "SWG 01"
-    assert rec.criticality == "CRITICAL"
     # Invariant: IR reading populated from raw_measurement
     assert rec.raw_measurement == "55.4"
     assert rec.ir_reading == "55.4"
@@ -387,10 +389,9 @@ def test_cbm_defect_record_normalization():
     rec_tev2 = CbmDefectRecord(technology="TEV", tev_reading="30.0")
     assert rec_tev2.raw_measurement == "30.0"
 
-    # 5. equipment_id and criticality None/empty normalization
+    # 5. equipment_id None/empty normalization
     rec_defaults = CbmDefectRecord()
     assert rec_defaults.equipment_id == ""
-    assert rec_defaults.criticality == ""
 
 
 def test_cbm_defect_record_to_dict():
@@ -409,7 +410,6 @@ def test_cbm_defect_record_to_dict():
         tev_char="",
         raw_measurement="24.5",
         equipment_id="PANEL 2",
-        criticality="HIGH",
         source_order=3,
     )
     d = rec.to_dict()
@@ -428,7 +428,6 @@ def test_cbm_defect_record_to_dict():
         "tev_char": "",
         "raw_measurement": "24.5",
         "equipment_id": "PANEL 2",
-        "criticality": "HIGH",
         "source_order": 3,
     }
 
@@ -973,7 +972,7 @@ def test_generate_cbm_tech_summary_programmatic(tmp_path: Path):
     assert r1_texts[0] == "1"
     assert r1_texts[1] == "TRANSFORMER"
     assert r1_texts[2] == "HV Bushing"
-    assert r1_texts[3] == "65 °C"
+    assert r1_texts[3] == "65.0 °C"
 
     # Check cell XML formatting
     tcPr = t.rows[1].cells[0]._tc.get_or_add_tcPr()
@@ -1367,7 +1366,7 @@ def test_cbm_defect_page_builder_empty_or_missing_templates(tmp_path: Path):
 
 
 def test_master_qr03_fetch_cbm_defects_alignment_standard_columns(tmp_path: Path):
-    """Verify fetch_cbm_defects extracts equipment_id, criticality, us_char, tev_char from standard columns."""
+    """Verify fetch_cbm_defects extracts equipment_id, us_char, tev_char from standard columns."""
     import pandas as pd
 
     cba_df = pd.DataFrame(
@@ -1436,7 +1435,6 @@ def test_master_qr03_fetch_cbm_defects_alignment_standard_columns(tmp_path: Path
     assert ir_def.equipment == "RMU SF6"
     assert ir_def.equipment_id == "SWG 01"
     assert ir_def.technology == "IR"
-    assert ir_def.criticality == "HIGH"
     assert ir_def.raw_measurement == "65.5"
     assert ir_def.ir_reading == "65.5"
     assert ir_def.us_reading == ""
@@ -1447,7 +1445,6 @@ def test_master_qr03_fetch_cbm_defects_alignment_standard_columns(tmp_path: Path
     assert us_def.equipment == "RMU SF6"
     assert us_def.equipment_id == "SWG 02"
     assert us_def.technology == "US"
-    assert us_def.criticality == "MEDIUM"
     assert us_def.raw_measurement == "22.0"
     assert us_def.us_reading == "22.0"
     assert us_def.us_char == "TRACKING"
@@ -1457,7 +1454,6 @@ def test_master_qr03_fetch_cbm_defects_alignment_standard_columns(tmp_path: Path
     assert tev_def.equipment == "LTX/DTX"
     assert tev_def.equipment_id == "TX 1"
     assert tev_def.technology == "TEV"
-    assert tev_def.criticality == "LOW"
     assert tev_def.raw_measurement == "18.5"
     assert tev_def.tev_reading == "18.5"
     assert tev_def.tev_char == "CONTINUOUS"
@@ -1530,7 +1526,6 @@ def test_master_qr03_fetch_cbm_defects_alignment_fallback_columns(tmp_path: Path
     assert d1.equipment == "RMU SF6"
     assert d1.equipment_id == "P1"
     assert d1.technology == "US"
-    assert d1.criticality == "CRITICAL"
     assert d1.us_char == "CORONA DISCHARGE"
     assert d1.us_reading == "28.4"
     assert d1.raw_measurement == "28.4"
@@ -1540,7 +1535,6 @@ def test_master_qr03_fetch_cbm_defects_alignment_fallback_columns(tmp_path: Path
     assert d2.equipment == "LTX/DTX"
     assert d2.equipment_id == "TX2"
     assert d2.technology == "TEV"
-    assert d2.criticality == "HIGH"
     assert d2.tev_char == "SURFACE"
     assert d2.tev_reading == "31.2"
     assert d2.raw_measurement == "31.2"
@@ -1550,7 +1544,6 @@ def test_master_qr03_fetch_cbm_defects_alignment_fallback_columns(tmp_path: Path
     assert d3.equipment == "FP (D)"
     assert d3.equipment_id == "FP TX1"
     assert d3.technology == "IR"
-    assert d3.criticality == "LOW"
     assert d3.us_char == ""
     assert d3.tev_char == ""
     assert d3.ir_reading == "58.2"
@@ -1589,7 +1582,6 @@ def test_master_qr03_fetch_cbm_defects_case_and_whitespace_insensitivity(tmp_pat
     assert d.equipment == "RMU SF6"
     assert d.equipment_id == "SWG-PANEL-3"
     assert d.technology == "US"
-    assert d.criticality == "MEDIUM"
     assert d.us_char == "ARCING"
     assert d.us_reading == "19.5"
 
@@ -1743,8 +1735,8 @@ def test_cbm_defect_planner_canonical_aliasing_matching(tmp_path: Path):
     assert "CABLE PTX" in tx_defects
 
 
-def test_cbm_defect_planner_physical_apparatus_grouping_by_item_key(tmp_path: Path):
-    """Verify defects are grouped by physical apparatus (item_key derived from equipment_id or equipment)."""
+def test_cbm_defect_planner_equipment_family_grouping_by_item_key(tmp_path: Path):
+    """Verify defects are grouped by equipment family (item_key derived from equipment_id or equipment)."""
     from unittest.mock import MagicMock
     from src.quick_report.cbm_defect_planner import CbmDefectPlanner
 
@@ -1772,21 +1764,33 @@ def test_cbm_defect_planner_physical_apparatus_grouping_by_item_key(tmp_path: Pa
     assert len(plans) == 1
     swg_plan = plans[0]
 
-    # Should have 3 apparatus groups: "PANEL 1", "PANEL 2", "RMU SF6"
-    group_keys = [g.item_key for g in swg_plan.groups]
-    assert group_keys == ["PANEL 1", "PANEL 2", "RMU SF6"]
+    # Single switchgear board belongs to 1 equipment family group: "RMU SF6"
+    assert len(swg_plan.groups) == 1
+    swg_group = swg_plan.groups[0]
+    assert swg_group.item_key == "RMU SF6"
+    # All 4 defect rows are preserved across panels within the equipment family
+    assert len(swg_group.defects) == 4
 
-    # PANEL 1 has 2 defects (different areas, so not merged)
-    panel1_group = next(g for g in swg_plan.groups if g.item_key == "PANEL 1")
-    assert len(panel1_group.defects) == 2
+    # Multiple distinct equipment families (e.g. FP TX1 and FP TX2) produce distinct groups
+    fp_template_map = {
+        "fp_overview": tmp_path / "fp_overview.docx",
+        "fp_individual_defect": tmp_path / "fp_individual_defect.docx",
+    }
+    for p in fp_template_map.values():
+        p.touch()
+    env.get_template.side_effect = lambda k: fp_template_map.get(k) or template_map.get(k)
 
-    # PANEL 2 has 1 defect
-    panel2_group = next(g for g in swg_plan.groups if g.item_key == "PANEL 2")
-    assert len(panel2_group.defects) == 1
-
-    # Empty equipment_id group has item_key="RMU SF6"
-    fallback_group = next(g for g in swg_plan.groups if g.item_key == "RMU SF6")
-    assert len(fallback_group.defects) == 1
+    fp_defects = [
+        CbmDefectRecord(equipment="FP (J)", equipment_id="FP TX1 - OUTGOING F1", defect_area="Fuse", technology="IR"),
+        CbmDefectRecord(equipment="FP (J)", equipment_id="FP TX1 - OUTGOING F2", defect_area="Fuse", technology="IR"),
+        CbmDefectRecord(equipment="FP (J)", equipment_id="FP TX2 - OUTGOING F1", defect_area="Fuse", technology="IR"),
+    ]
+    fp_plans = planner.plan(fp_defects, env)
+    assert len(fp_plans) == 1
+    fp_plan = fp_plans[0]
+    assert [g.item_key for g in fp_plan.groups] == ["FP TX1", "FP TX2"]
+    assert len(fp_plan.groups[0].defects) == 2  # F1 and F2 under FP TX1
+    assert len(fp_plan.groups[1].defects) == 1  # F1 under FP TX2
 
 
 def test_cbm_defect_planner_multi_technology_merging_same_item_and_area(tmp_path: Path):
@@ -1813,7 +1817,6 @@ def test_cbm_defect_planner_multi_technology_merging_same_item_and_area(tmp_path
             defect_area="Cable Compartment",
             technology="IR",
             ir_reading="58.5",
-            criticality="LOW",
             additional_remarks="Thermal hotspot",
             source_order=1,
         ),
@@ -1824,7 +1827,6 @@ def test_cbm_defect_planner_multi_technology_merging_same_item_and_area(tmp_path
             technology="US",
             us_reading="25.0",
             us_char="CORONA",
-            criticality="CRITICAL",
             additional_remarks="Corona sound",
             source_order=2,
         ),
@@ -1835,7 +1837,6 @@ def test_cbm_defect_planner_multi_technology_merging_same_item_and_area(tmp_path
             technology="TEV",
             tev_reading="33.5",
             tev_char="CONTINUOUS",
-            criticality="HIGH",
             source_order=3,
         ),
     ]
@@ -1846,7 +1847,7 @@ def test_cbm_defect_planner_multi_technology_merging_same_item_and_area(tmp_path
     assert len(swg_plan.groups) == 1
 
     group = swg_plan.groups[0]
-    assert group.item_key == "PANEL 1"
+    assert group.item_key == "RMU SF6"
     # Merged to exactly 1 unified defect
     assert len(group.defects) == 1
 
@@ -1859,8 +1860,6 @@ def test_cbm_defect_planner_multi_technology_merging_same_item_and_area(tmp_path
     assert merged.us_char == "CORONA"
     assert merged.tev_reading == "33.5"
     assert merged.tev_char == "CONTINUOUS"
-    # Criticality merged to highest severity: CRITICAL
-    assert merged.criticality == "CRITICAL"
     # Source order preserved from earliest: 1
     assert merged.source_order == 1
 

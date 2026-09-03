@@ -5,6 +5,18 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.2] - 2026-09-03
+
+### Fixed
+- **CBM Defect Overview Page Duplication**: Resolved issue where multiple defect rows for an equipment family (e.g. `FP TX1` with multiple feeders `OUTGOING F1`, `OUTGOING F2`, `OUTGOING F3`) generated duplicate overview pages. Canonicalized equipment grouping by equipment family (`_derive_family_group_key` in `src/quick_report/cbm_defect_planner.py`), producing exactly 1 overview page per equipment family followed by all individual defect detail pages in sequence.
+- **Individual Defect Phase Preservation**: Refined multi-technology defect merging in `CbmDefectPlanner._merge_defects_by_area` to bucket on `(equipment_id, defect_area, phase)`. Individual defect rows for different phases (e.g. Red Phase vs Yellow Phase) or duplicate technologies are preserved as separate defect cards, while multi-technology measurements (`IR + US + TEV`) for the same defect merge into unified cards as intended.
+- **Unicode Dash Resilience for Feeder Pillars & LVDB**: Updated `_build_fp_lvdb_render_context` in `src/quick_report/cbm_render.py` to regex-split on standard hyphens (`-`), en-dashes (`–`), and em-dashes (`—`) to extract `labelsource` and `feederno`.
+- **IR Background Temperature Normalization**: Standardized temperature parsing and formatting in `src/core/normalizers.py` (`parse_background_temp`) and `src/quick_report/cbm_summary.py` (`format_temperature_reading`) to format numeric readings as 1-decimal floats with `' °C'` suffix (e.g. `32` → `32.0 °C`, `23.2` → `23.2 °C`), while cleanly handling booleans, sentinels, and invalid inputs.
+
+### Removed
+- **Unused Criticality Field Cleanup**: Removed unused `criticality` field from `CbmDefectRecord` in `src/quick_report/defects.py`, deleted unused `_CRITICALITY_PRIORITY` dictionary and resolution logic from `src/quick_report/cbm_defect_planner.py`, and cleaned up test assertions.
+- **Domain Terminology Alignment**: Purged non-domain "apparatus" terms from internal variables (`apparatus_groups` → `family_groups`, `apparatus_keys` → `family_keys`) and docstrings, standardizing strictly on `EQUIPMENT`, `EQUIPMENT ID`, and `equipment family`.
+
 ## [1.14.1] - 2026-09-03
 
 ### Fixed

@@ -247,9 +247,11 @@ def test_parse_background_temp() -> None:
     assert parse_background_temp("BACKGROUND TEMP : 30.4 °C") == "30.4 °C"
     assert parse_background_temp("23.2") == "23.2 °C"
     assert parse_background_temp(23.2) == "23.2 °C"
-    assert parse_background_temp(23) == "23 °C"
+    assert parse_background_temp(23) == "23.0 °C"
     assert parse_background_temp("invalid") == "-"
     assert parse_background_temp(float("nan")) == "-"
+    assert parse_background_temp(True) == "-"
+    assert parse_background_temp(False) == "-"
 
 
 def test_normalize_for_csv_null_and_empty() -> None:
@@ -389,6 +391,8 @@ def test_extract_background_temperature() -> None:
     assert extract_background_temperature("N/A") is None
     assert extract_background_temperature("invalid text") is None
     assert extract_background_temperature(float("nan")) is None
+    assert extract_background_temperature(True) is None
+    assert extract_background_temperature(False) is None
 
 
 def test_normalize_fl_erms() -> None:

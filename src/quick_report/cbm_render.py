@@ -381,10 +381,10 @@ def _build_fp_lvdb_render_context(
     area = _format_detail_area(record.defect_area, record.additional_remarks, overview=overview)
 
     raw_id = record.equipment_id or resolved_item_key or resolved_item_suffix
-    if " - " in raw_id:
-        parts = raw_id.split(" - ", 1)
-        labelsource = parts[0].strip()
-        feederno = parts[1].strip() if len(parts) > 1 and parts[1].strip() else "-"
+    dash_split = re.split(r"\s*[-–—]\s*", raw_id, maxsplit=1)
+    if len(dash_split) > 1 and dash_split[1].strip():
+        labelsource = dash_split[0].strip()
+        feederno = dash_split[1].strip()
     else:
         labelsource = raw_id.strip()
         feederno = "-"

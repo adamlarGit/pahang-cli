@@ -1,6 +1,6 @@
 # Project & Utility Automation CLI (`pahang-cli`)
 
-A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.14.1`).
+A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.14.2`).
 
 ---
 

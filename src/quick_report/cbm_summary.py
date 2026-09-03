@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 
 from docxtpl import DocxTemplate
 
-from src.core.normalizers import normalize_us_characteristic
+from src.core.normalizers import format_temperature_float, normalize_us_characteristic
 from src.quick_report.cbm_render import _build_jinja_env
 from src.quick_report.models import CbmSummaryRow
 
@@ -16,18 +16,22 @@ if TYPE_CHECKING:
     from src.quick_report.defects import CbmDefectRecord
 
 
-def format_temperature_reading(value: str) -> str:
-    """Format temperature reading string with ' °C' suffix if non-empty, or '-' if empty/None."""
-    if value is None:
+def format_temperature_reading(value: Any) -> str:
+    """Format temperature reading as 1-decimal float string with ' °C' suffix.
+
+    Returns '-' if empty/None.
+
+    Examples:
+        "50"      → "50.0 °C"
+        "50.5"    → "50.5 °C"
+        "50 °C"   → "50.0 °C"
+        "50.5°C"  → "50.5 °C"
+        None / "" / "-"  → "-"
+    """
+    formatted = format_temperature_float(value)
+    if formatted == "-":
         return "-"
-    val_str = str(value).strip()
-    if not val_str or val_str == "-":
-        return "-"
-    if "°C" in val_str:
-        if val_str.endswith("°C") and not val_str.endswith(" °C"):
-            return val_str[:-2].strip() + " °C"
-        return val_str
-    return f"{val_str} °C"
+    return f"{formatted} °C"
 
 
 def format_db_reading(value: str) -> str:

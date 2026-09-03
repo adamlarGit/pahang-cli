@@ -341,18 +341,24 @@ def format_humidity_str(val: object) -> str:
 
 
 def parse_background_temp(val: object) -> str:
-    """
-    Extract numeric temperature value and append ' °C'. Returns '-' if empty or invalid.
+    """Extract numeric temperature value, format as 1-decimal float, and append ' °C'.
+
+    Returns '-' if empty or invalid.
+
+    Examples:
+        32         → "32.0 °C"
+        32.0       → "32.0 °C"
+        23.2       → "23.2 °C"
+        "BACKGROUND TEMP : 23.2 °C" → "23.2 °C"
+        None / "" / "-"  → "-"
     """
     temp = extract_background_temperature(val)
     if temp is None:
         return "-"
-    if isinstance(val, int) and not isinstance(val, bool):
-        return f"{val} °C"
-    s_val = str(val).strip()
-    if temp.is_integer() and (s_val == str(int(temp)) or s_val.endswith(f"{int(temp)} °C") or s_val.endswith(f"{int(temp)}°C")):
-        return f"{int(temp)} °C"
-    return f"{temp} °C"
+    formatted = format_temperature_float(temp)
+    if formatted == "-":
+        return "-"
+    return f"{formatted} °C"
 
 
 _NULL_SENTINELS = frozenset({
@@ -503,7 +509,7 @@ def format_iso8601(dt: Any, tz_offset: str = "+08:00") -> str:
 
 def extract_background_temperature(text: Any) -> float | None:
     """Extract background temperature numeric float from testsheet cell value."""
-    if text is None:
+    if text is None or isinstance(text, bool):
         return None
     if isinstance(text, (int, float)):
         if isinstance(text, float) and (math.isnan(text) or math.isinf(text)):

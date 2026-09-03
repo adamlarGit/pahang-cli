@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Sequence
 
 from src.quick_report.cbm_family import (
@@ -19,12 +20,26 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_CRITICALITY_PRIORITY: dict[str, int] = {
-    "CRITICAL": 4,
-    "HIGH": 3,
-    "MEDIUM": 2,
-    "LOW": 1,
-}
+_PHASE_PATTERN = re.compile(
+    r"\b(RED\s*PHASE|YELLOW\s*PHASE|BLUE\s*PHASE|R\s*PHASE|Y\s*PHASE|B\s*PHASE|RED|YELLOW|BLUE|NEUTRAL)\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_phase(text: str) -> str:
+    """Extract canonical electrical phase from text (RED, YELLOW, BLUE, NEUTRAL, or '')."""
+    m = _PHASE_PATTERN.search(text or "")
+    if m:
+        token = m.group(1).upper()
+        if "RED" in token or token.startswith("R"):
+            return "RED"
+        if "YELLOW" in token or token.startswith("Y"):
+            return "YELLOW"
+        if "BLUE" in token or token.startswith("B"):
+            return "BLUE"
+        if "NEUTRAL" in token:
+            return "NEUTRAL"
+    return ""
 
 
 class CbmDefectPlanner:
@@ -75,21 +90,21 @@ class CbmDefectPlanner:
                     )
                 detail_templates.append((role.id, Path(tmpl)))
 
-            # Physical apparatus grouping: group by item_key (equipment_id if present, else equipment)
-            apparatus_groups: dict[str, list[CbmDefectRecord]] = {}
-            apparatus_keys: dict[str, str] = {}
+            # Group defects by equipment family key (e.g. FP TX1, LVDB TX1, TX1, SWG)
+            family_groups: dict[str, list[CbmDefectRecord]] = {}
+            family_keys: dict[str, str] = {}
             for d in family_defects:
-                ikey = self._derive_item_key(d)
+                ikey = self._derive_family_group_key(d, spec)
                 norm_key = ikey.upper()
-                if norm_key not in apparatus_groups:
-                    apparatus_groups[norm_key] = []
-                    apparatus_keys[norm_key] = ikey
-                apparatus_groups[norm_key].append(d)
+                if norm_key not in family_groups:
+                    family_groups[norm_key] = []
+                    family_keys[norm_key] = ikey
+                family_groups[norm_key].append(d)
 
             groups: list[CbmDefectGroup] = []
-            for norm_key, raw_group_defects in apparatus_groups.items():
-                item_key = apparatus_keys[norm_key]
-                # Multi-technology merging on (item_key, defect_area)
+            for norm_key, raw_group_defects in family_groups.items():
+                item_key = family_keys[norm_key]
+                # Multi-technology merging on (equipment_id, defect_area, phase)
                 merged_defects = self._merge_defects_by_area(raw_group_defects)
                 if not merged_defects:
                     continue
@@ -134,9 +149,66 @@ class CbmDefectPlanner:
 
         return tuple(family_plans)
 
-    @staticmethod
-    def _derive_item_key(defect: CbmDefectRecord) -> str:
-        """Derive apparatus item_key from equipment_id if present, else equipment."""
+    @classmethod
+    def _derive_family_group_key(
+        cls, defect: CbmDefectRecord, spec: QuickReportFamilySpec
+    ) -> str:
+        """Derive equipment family group key (e.g. 'FP TX1', 'LVDB TX1', 'TX1', 'SWG')."""
+        raw_id = (defect.equipment_id or "").strip()
+        raw_eq = (defect.equipment or "").strip()
+        raw_area = (defect.defect_area or "").strip()
+        combined = f"{raw_eq} {raw_id} {raw_area}".upper()
+
+        if spec.id == "fp_lvdb":
+            # 1. Hyphen separator split (e.g. 'FP TX1 - OUTGOING F1' -> 'FP TX1')
+            split_match = re.split(r"\s*[-–—]\s*", raw_id, maxsplit=1)
+            if len(split_match) > 1 and any(k in split_match[0].upper() for k in ("FP", "LVDB", "FEEDER")):
+                return split_match[0].strip()
+            # 2. Match canonical equipment family + TX/number patterns (e.g. 'LVDB TX1', 'FP TX2')
+            m = re.search(r"(?:FP|LVDB|FEEDER\s*PILLAR)\s*(?:TX\s*[1-9]|\d+)", combined)
+            if m:
+                return m.group(0).upper()
+            # 3. Explicit TX reference in feeder pillar / LVDB
+            if "TX2" in combined or "TX 2" in combined:
+                return "FP TX2" if "LVDB" not in raw_eq.upper() else "LVDB TX2"
+            if "TX1" in combined or "TX 1" in combined:
+                return "FP TX1" if "LVDB" not in raw_eq.upper() else "LVDB TX1"
+            # 4. Fallback: equipment name or 'FP LVDB'
+            return raw_eq if raw_eq else "FP LVDB"
+
+        if spec.id == "tx":
+            split_match = re.split(r"\s*[-–—]\s*", raw_id, maxsplit=1)
+            if len(split_match) > 1 and re.match(r"^(?:TX|T)\s*\d+", split_match[0].strip(), re.I):
+                return split_match[0].strip()
+            m = re.search(r"\b(?:TX|T)\s*([1-9])\b", combined)
+            if m and not raw_id:
+                return f"TX{m.group(1)}"
+            return raw_id or raw_eq or "TX1"
+
+        if spec.id == "swg":
+            if "SWG 2" in combined or "SWITCHGEAR 2" in combined or "SWG2" in combined:
+                return "SWG 2"
+            return raw_eq or "SWG"
+
+        if spec.id == "battery":
+            if "BATTERY 2" in combined or "CHARGER 2" in combined or "BANK 2" in combined:
+                return "BATTERY 2"
+            return raw_id or raw_eq or "BATTERY"
+
+        if spec.id == "blackbox":
+            if "BLACK BOX 2" in combined or "BLACKBOX 2" in combined or "BOX 2" in combined:
+                return "BLACK BOX 2"
+            return raw_id or raw_eq or "BLACK BOX"
+
+        return raw_id or raw_eq or "DEFAULT"
+
+    @classmethod
+    def _derive_item_key(
+        cls, defect: CbmDefectRecord, spec: QuickReportFamilySpec | None = None
+    ) -> str:
+        """Derive equipment item_key from equipment_id if present, else equipment."""
+        if spec is not None:
+            return cls._derive_family_group_key(defect, spec)
         if defect.equipment_id and defect.equipment_id.strip():
             return defect.equipment_id.strip()
         return (defect.equipment or "").strip()
@@ -145,27 +217,33 @@ class CbmDefectPlanner:
     def _merge_defects_by_area(
         cls, defects: Sequence[CbmDefectRecord]
     ) -> list[CbmDefectRecord]:
-        """Merge multi-technology defects sharing the same defect_area (case-insensitive)."""
+        """Merge multi-technology defects sharing the same equipment_id, area, and phase."""
         if not defects:
             return []
 
-        area_groups: dict[str, list[CbmDefectRecord]] = {}
+        buckets: dict[tuple[str, str, str], list[CbmDefectRecord]] = {}
         for d in defects:
-            norm_area = (d.defect_area or "").strip().upper()
-            area_groups.setdefault(norm_area, []).append(d)
+            item_id = (d.equipment_id or d.equipment or "").strip().upper()
+            area = (d.defect_area or "").strip().upper()
+            phase = _extract_phase(f"{d.defect_area} {d.additional_remarks}")
+            buckets.setdefault((item_id, area, phase), []).append(d)
 
         merged: list[CbmDefectRecord] = []
-        for records in area_groups.values():
+        for records in buckets.values():
             if len(records) == 1:
                 merged.append(records[0])
             else:
-                merged.append(cls._merge_records(records))
+                techs = [r.technology.strip().upper() for r in records if r.technology]
+                if len(techs) == len(set(techs)):
+                    merged.append(cls._merge_records(records))
+                else:
+                    merged.extend(records)
 
         return merged
 
     @staticmethod
     def _merge_records(records: Sequence[CbmDefectRecord]) -> CbmDefectRecord:
-        """Merge multiple CbmDefectRecords on the same apparatus and area into a unified record."""
+        """Merge multiple CbmDefectRecords sharing the same equipment_id and area into a unified record."""
         def _first_non_empty(*values: str) -> str:
             for v in values:
                 if v and str(v).strip() and str(v).strip() != "-":
@@ -203,18 +281,6 @@ class CbmDefectPlanner:
         tev_char = _first_non_empty(*(d.tev_char for d in records))
         raw_measurement = _first_non_empty(*(d.raw_measurement for d in records))
 
-        # Criticality: highest severity rank or first non-empty
-        criticality = ""
-        best_rank = -1
-        for d in records:
-            c = (d.criticality or "").strip().upper()
-            rank = _CRITICALITY_PRIORITY.get(c, 0)
-            if rank > best_rank:
-                best_rank = rank
-                criticality = d.criticality.strip()
-        if not criticality:
-            criticality = _first_non_empty(*(d.criticality for d in records))
-
         # Earliest source order
         source_orders = [d.source_order for d in records if d.source_order > 0]
         source_order = min(source_orders) if source_orders else 0
@@ -234,7 +300,6 @@ class CbmDefectPlanner:
             tev_char=tev_char,
             raw_measurement=raw_measurement,
             equipment_id=equipment_id,
-            criticality=criticality,
             source_order=source_order,
         )
 

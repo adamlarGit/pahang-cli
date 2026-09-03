@@ -36,7 +36,6 @@ class CbmDefectRecord:
     - tev_char: TEV waveform characteristic.
     - additional_remarks: From ADDITIONAL REMARKS or REMARKS Excel column.
     - equipment_id: Equipment identifier / panel / feeder / tx identifier.
-    - criticality: Defect severity / criticality level (e.g. HIGH, MEDIUM, LOW, CRITICAL).
     """
 
     equipment: str = ""
@@ -53,7 +52,6 @@ class CbmDefectRecord:
     tev_char: str = ""
     raw_measurement: str = ""
     equipment_id: str = ""
-    criticality: str = ""
     source_order: int = 0
 
     def __post_init__(self) -> None:
@@ -71,7 +69,6 @@ class CbmDefectRecord:
         object.__setattr__(self, "tev_char", _clean_val(self.tev_char))
         object.__setattr__(self, "raw_measurement", _clean_val(self.raw_measurement))
         object.__setattr__(self, "equipment_id", _clean_val(self.equipment_id))
-        object.__setattr__(self, "criticality", _clean_val(self.criticality))
 
         tech = self.technology
         raw = self.raw_measurement
@@ -92,6 +89,7 @@ class CbmDefectRecord:
                 object.__setattr__(self, "raw_measurement", self.tev_reading)
 
     def to_dict(self) -> dict:
+        """Convert record to dictionary."""
         return {
             "equipment": self.equipment,
             "technology": self.technology,
@@ -107,7 +105,6 @@ class CbmDefectRecord:
             "tev_char": self.tev_char,
             "raw_measurement": self.raw_measurement,
             "equipment_id": self.equipment_id,
-            "criticality": self.criticality,
             "source_order": self.source_order,
         }
 
@@ -319,7 +316,6 @@ class MasterQr03DefectRepository:
                 tech = _get_val("DEFECT FROM", "TECHNOLOGY", "TECH").upper()
                 equipment = _get_val("EQUIPMENT", "EQUIPMENT NAME", "EQUIPMENT_NAME")
                 equipment_id = _get_val("EQUIPMENT ID", "EQUIPMENT_ID", "ID")
-                criticality = _get_val("CRITICALITY", "STATUS")
                 brand = _get_val("BRAND")
                 model = _get_val("MODEL")
                 rating = _get_val("RATING")
@@ -380,7 +376,6 @@ class MasterQr03DefectRepository:
                     tev_char=tev_char,
                     raw_measurement=reading,
                     equipment_id=equipment_id,
-                    criticality=criticality,
                     source_order=idx,
                 )
                 defects.append(rec)
