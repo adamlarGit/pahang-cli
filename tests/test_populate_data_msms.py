@@ -11,7 +11,7 @@ import pytest
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
-from src.quick_report.defects import ViDefectRecord
+from src.quick_report.defects import MasterQr03DefectRepository, ViDefectRecord
 
 pytest.importorskip("src.workflows.populate_data_msms")
 
@@ -67,28 +67,208 @@ def test_match_vi_defect() -> None:
     defects = [
         ViDefectRecord(
             equipment="SWITCHGEAR",
-            defect_area="SF6 Pressure Gauge",
+            defect_area="LOW SF6 GAS",
             additional_remarks="Pressure drop below green mark",
         ),
         ViDefectRecord(
             equipment="SUBSTATION",
-            defect_area="Cleanliness",
+            defect_area="BUSHES & CREEPERS",
             additional_remarks="High grass around compound",
         ),
     ]
 
     # Matched meter
-    matched = match_vi_defect("VI11_SG_PRESGAUGE_RMU", defects)
+    matched = match_vi_defect("VI11_SG_PRESGAUGE_RMU", "CCHL/PCEJ00024/11KV/1", defects)
     assert matched is not None
     assert matched.additional_remarks == "Pressure drop below green mark"
 
     # Matched cleanliness
-    matched_clean = match_vi_defect("VI11_SUB_CLEANLINESS_RMU", defects)
+    matched_clean = match_vi_defect("VI11_SUB_CLEANLINESS_RMU", "CCHL/PCEJ00024", defects)
     assert matched_clean is not None
-    assert matched_clean.defect_area == "Cleanliness"
+    assert matched_clean.defect_area == "BUSHES & CREEPERS"
+
+    # Backward compatibility: 2-arg call (meter_name, defects)
+    matched_2arg = match_vi_defect("VI11_SUB_CLEANLINESS_RMU", defects)
+    assert matched_2arg is not None
+    assert matched_2arg.defect_area == "BUSHES & CREEPERS"
+
+    # Defensive handling: None tnb_loc
+    matched_none_loc = match_vi_defect("VI11_SUB_CLEANLINESS_RMU", None, defects)
+    assert matched_none_loc is not None
+
+    # Backward compatibility: VI_METER_KEYWORDS alias
+    from src.workflows.populate_data_msms import VI_METER_KEYWORDS
+    assert isinstance(VI_METER_KEYWORDS, dict)
 
     # Unmatched meter
-    assert match_vi_defect("VI11_TX_OILLEAK_RMU", defects) is None
+    assert match_vi_defect("VI11_TX_OILLEAK_RMU", "CCHL/PCEJ00024/TX/DTX1", defects) is None
+
+
+def test_row_845_signboard_defect_does_not_match_sg_labelling_rmu() -> None:
+    """Regression test for row 845: SIGNBOARD defect must NOT match VI11_SG_LABELLING_RMU."""
+    signboard_defect = ViDefectRecord(
+        equipment="SIGNBOARD",
+        defect_area="NO FUNCTIONAL LOCATION",
+        additional_remarks="SUBSTATION SIGNBOARD NO FL NUMBER",
+    )
+
+    # Must NOT match Switchgear Labelling meter
+    matched_sg = match_vi_defect(
+        "VI11_SG_LABELLING_RMU", "CCHL/PCEJ00024/11KV/1", [signboard_defect]
+    )
+    assert matched_sg is None
+
+    # Must match Substation Signboard meter
+    matched_sub = match_vi_defect(
+        "VI11_SUB_SIGNBOARD_RMU", "CCHL/PCEJ00024", [signboard_defect]
+    )
+    assert matched_sub is not None
+    assert matched_sub.equipment == "SIGNBOARD"
+
+
+def test_match_vi_defect_all_groups_and_rules() -> None:
+    """Comprehensive test for aligned defect matching rules across Groups A-E."""
+    # Group A: Switchgear
+    sg_label1 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="NO LINK NO./PANEL NO./FEEDER NAME", additional_remarks="Panel 1")
+    sg_label2 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="WRONG LINK NO./PANEL NO./FEEDER NAME", additional_remarks="Panel 2")
+    sg_label3 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="LINK NO./PANEL NO./FEEDER NAME LABEL IN POOR CONDITION", additional_remarks="Panel 3")
+    assert match_vi_defect("VI11_SG_LABELLING_RMU", "LOC/11KV/1", [sg_label1]) == sg_label1
+    assert match_vi_defect("VI11_SG_LABELLING_RMU", "LOC/11KV/1", [sg_label2]) == sg_label2
+    assert match_vi_defect("VI11_SG_LABELLING_RMU", "LOC/11KV/1", [sg_label3]) == sg_label3
+
+    sg_gas1 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="LOW SF6 GAS", additional_remarks="Gas low")
+    sg_gas2 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="SF6 GAS INDICATOR BROKEN", additional_remarks="Gauge cracked")
+    assert match_vi_defect("VI11_SG_PRESGAUGE_RMU", "LOC/11KV/1", [sg_gas1]) == sg_gas1
+    assert match_vi_defect("VI11_SG_PRESGAUGE_RMU", "LOC/11KV/1", [sg_gas2]) == sg_gas2
+
+    sg_vdis1 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="VCB STATUS LAMP INDICATOR NOT OPERATED")
+    sg_vdis2 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="BREAKER INDICATOR LAMP NOT OPERATED")
+    sg_vdis3 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="RELAY NOT OPERATED")
+    assert match_vi_defect("VI11_SG_VDIS_RMU", "LOC/11KV/1", [sg_vdis1]) == sg_vdis1
+    assert match_vi_defect("VI11_SG_VDIS_RMU", "LOC/11KV/1", [sg_vdis2]) == sg_vdis2
+    assert match_vi_defect("VI11_SG_VDIS_RMU", "LOC/11KV/1", [sg_vdis3]) == sg_vdis3
+
+    sg_door = ViDefectRecord(equipment="SWITCHGEAR", defect_area="DOOR BROKEN")
+    sg_rust = ViDefectRecord(equipment="SWITCHGEAR", defect_area="BODY RUST")
+    assert match_vi_defect("VI11_SG_COVERDOOR_RMU", "LOC/11KV/1", [sg_door]) == sg_door
+    assert match_vi_defect("VI11_SWG_DOOR_VCB", "LOC/11KV/1", [sg_door]) == sg_door
+    assert match_vi_defect("VI11_SG_COVERDOOR_RMU", "LOC/11KV/1", [sg_rust]) is None
+
+    sg_htr1 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="HEATER NO SUPPLY")
+    sg_htr2 = ViDefectRecord(equipment="SWITCHGEAR", defect_area="HEATER INDICATOR LAMP NOT OPERATED")
+    assert match_vi_defect("VI11_SG_HEATER_VCB", "LOC/11KV/1", [sg_htr1]) == sg_htr1
+    assert match_vi_defect("VI11_SG_HEATER_VCB", "LOC/11KV/1", [sg_htr2]) == sg_htr2
+
+    sg_earth = ViDefectRecord(equipment="EARTHING", additional_remarks="SWG ROOM EARTH DISCONNECTED")
+    tx_earth = ViDefectRecord(equipment="EARTHING", additional_remarks="TX1 BODY EARTH")
+    assert match_vi_defect("VI11_SG_EARTHIN_RMU", "LOC/11KV/1", [sg_earth]) == sg_earth
+    assert match_vi_defect("VI11_SWG_EARTH_VCB", "LOC/11KV/1", [sg_earth]) == sg_earth
+    assert match_vi_defect("VI11_SG_EARTHIN_RMU", "LOC/11KV/1", [tx_earth]) is None
+
+    sg_handle = ViDefectRecord(equipment="SWITCHGEAR", defect_area="OPERATING HANDLE BROKEN")
+    assert match_vi_defect("VI11_SG_HANDLE_RMU", "LOC/11KV/1", [sg_handle]) == sg_handle
+
+    sg_oilleak = ViDefectRecord(equipment="SWITCHGEAR", defect_area="OIL LEAK AT TANK")
+    assert match_vi_defect("VI11_SG_OILLEAK_RMU", "LOC/11KV/1", [sg_oilleak]) == sg_oilleak
+
+    # Group B: Feeder Pillar
+    fp_guard = ViDefectRecord(equipment="FP/LVDB", defect_area="NO LVDB GUARD")
+    assert match_vi_defect("VI11_FP_LVDBGUARD_RMU", "LOC/FP/FP1", [fp_guard]) == fp_guard
+
+    fp_fuse1 = ViDefectRecord(equipment="FP/LVDB", defect_area="FP (J) FUSE HOLDER MISSING")
+    fp_fuse2 = ViDefectRecord(equipment="FP/LVDB", defect_area="FP (J) LINK HOLDER BROKEN")
+    fp_casing = ViDefectRecord(equipment="FP/LVDB", defect_area="FP (D) CASING MISSING / BROKEN")
+    assert match_vi_defect("VI11_FP_LINK/FUSE_RMU", "LOC/FP/FP1", [fp_fuse1]) == fp_fuse1
+    assert match_vi_defect("VI11_FP_LINK/FUSE_RMU", "LOC/FP/FP1", [fp_fuse2]) == fp_fuse2
+    assert match_vi_defect("VI11_FP_LINK/FUSE_RMU", "LOC/FP/FP1", [fp_casing]) is None
+
+    fp_door = ViDefectRecord(equipment="FP/LVDB", defect_area="FP DOOR BROKEN")
+    sub_plock_fp = ViDefectRecord(equipment="SUBSTATION", defect_area="OLD ABLOY PADLOCK", additional_remarks="FP DOOR PADLOCK")
+    assert match_vi_defect("VI11_FP_PLOCK_RMU", "LOC/FP/FP1", [fp_door]) == fp_door
+    assert match_vi_defect("VI11_FP_PLOCK_RMU", "LOC/FP/FP1", [sub_plock_fp]) == sub_plock_fp
+
+    fp_tdi = ViDefectRecord(equipment="FP/LVDB", defect_area="TDI BROKEN")
+    assert match_vi_defect("VI11_FP_TDI_RMU", "LOC/FP/FP1", [fp_tdi]) == fp_tdi
+
+    # Group C: Transformer & Disambiguation
+    tx_guard = ViDefectRecord(equipment="LTX/DTX", defect_area="NO TX GUARD")
+    tx_bush = ViDefectRecord(equipment="LTX/DTX", defect_area="NO LV INSULATION BOOT COVER")
+    tx_level = ViDefectRecord(equipment="LTX/DTX", defect_area="LOW OIL LEVEL")
+    tx_leak = ViDefectRecord(equipment="LTX/DTX", defect_area="OIL LEAKS")
+    tx_clamp = ViDefectRecord(equipment="LTX/DTX", defect_area="NO CABLE SUPPORT")
+    assert match_vi_defect("VI11_TX_TXGUARD_RMU", "LOC/TX/DTX1", [tx_guard]) == tx_guard
+    assert match_vi_defect("VI11_TX_TXBUSH_RMU", "LOC/TX/DTX1", [tx_bush]) == tx_bush
+    assert match_vi_defect("VI11_TX_OILLEVEL_RMU", "LOC/TX/DTX1", [tx_level]) == tx_level
+    assert match_vi_defect("VI11_TX_OILLEAK_RMU", "LOC/TX/DTX1", [tx_leak]) == tx_leak
+    assert match_vi_defect("VI11_TX_CBLCLMP_RMU", "LOC/TX/DTX1", [tx_clamp]) == tx_clamp
+
+    # Transformer disambiguation
+    tx2_only_defect = ViDefectRecord(equipment="LTX/DTX", defect_area="OIL LEAKS", additional_remarks="DTX2 LOW OIL")
+    tx1_only_defect = ViDefectRecord(equipment="LTX/DTX", defect_area="OIL LEAKS", additional_remarks="TX1 OIL LEAK")
+    both_tx_defect = ViDefectRecord(equipment="LTX/DTX", defect_area="OIL LEAKS", additional_remarks="TX1 & TX2 OIL LEAK")
+
+    # DTX1 location
+    assert match_vi_defect("VI11_TX_OILLEAK_RMU", "LOC/TX/DTX1", [tx2_only_defect]) is None
+    assert match_vi_defect("VI11_TX_OILLEAK_RMU", "LOC/TX/DTX1", [tx1_only_defect]) == tx1_only_defect
+    assert match_vi_defect("VI11_TX_OILLEAK_RMU", "LOC/TX/DTX1", [both_tx_defect]) == both_tx_defect
+
+    # DTX2 location
+    assert match_vi_defect("VI11_TX_OILLEAK_RMU", "LOC/TX/DTX2", [tx1_only_defect]) is None
+    assert match_vi_defect("VI11_TX_OILLEAK_RMU", "LOC/TX/DTX2", [tx2_only_defect]) == tx2_only_defect
+    assert match_vi_defect("VI11_TX_OILLEAK_RMU", "LOC/TX/DTX2", [both_tx_defect]) == both_tx_defect
+
+    # Group D: Secondary Equipment
+    sec_bat = ViDefectRecord(equipment="BATTERY CHARGER", defect_area="FAULT", additional_remarks="Charger bad")
+    assert match_vi_defect("VI11_SEC_BATTERY_RMU", "LOC/SEC", [sec_bat]) == sec_bat
+    assert match_vi_defect("VI11_SEC_BADRTU_RMU", "LOC/SEC", [sec_bat]) is None
+
+    sec_efi = ViDefectRecord(equipment="EFI", defect_area="FAULT")
+    sec_rcb = ViDefectRecord(equipment="RCB", defect_area="FAULT")
+    sec_mc = ViDefectRecord(equipment="MULTICORE", defect_area="FAULT")
+    assert match_vi_defect("VI11_SEC_BADEFI_RMU", "LOC/SEC", [sec_efi]) == sec_efi
+    assert match_vi_defect("VI11_SEC_BADRCB_RMU", "LOC/SEC", [sec_rcb]) == sec_rcb
+    assert match_vi_defect("VI11_SEC_MCORE_RMU", "LOC/SEC", [sec_mc]) == sec_mc
+
+    # Group E: Substation / Civil
+    sub_sign = ViDefectRecord(equipment="SIGNBOARD", defect_area="DAMAGED")
+    sub_light = ViDefectRecord(equipment="LIGHTING", defect_area="FAULT")
+    sub_roof = ViDefectRecord(equipment="SUBSTATION", defect_area="ROOF BROKEN")
+    sub_clean = ViDefectRecord(equipment="SUBSTATION", defect_area="SARANG BINATANG")
+    sub_vandal = ViDefectRecord(equipment="SUBSTATION", defect_area="FENCE BROKEN")
+    sub_padlock_gate = ViDefectRecord(equipment="SUBSTATION", defect_area="OLD ABLOY PADLOCK", additional_remarks="MAIN GATE")
+    sub_padlock_fp = ViDefectRecord(equipment="SUBSTATION", defect_area="OLD ABLOY PADLOCK", additional_remarks="FP 1")
+
+    assert match_vi_defect("VI11_SUB_SIGNBOARD_RMU", "LOC", [sub_sign]) == sub_sign
+    assert match_vi_defect("VI11_SUB_LIGHT_CSU", "LOC", [sub_light]) == sub_light
+    assert match_vi_defect("VI11_SUB_RETROOF_CSU", "LOC", [sub_roof]) == sub_roof
+    assert match_vi_defect("VI11_SUB_CLEANLINESS_RMU", "LOC", [sub_clean]) == sub_clean
+    assert match_vi_defect("VI11_SUB_VANDALISM_RMU", "LOC", [sub_vandal]) == sub_vandal
+    assert match_vi_defect("VI11_SUB_VANDALISM_RMU", "LOC", [sub_padlock_gate]) == sub_padlock_gate
+    # Substation padlock with FP remarks excluded from VANDALISM
+    assert match_vi_defect("VI11_SUB_VANDALISM_RMU", "LOC", [sub_padlock_fp]) is None
+
+
+def test_master_qr03_defect_repository_report_by_eet_filter(tmp_path: Path) -> None:
+    """Verify MasterQr03DefectRepository filters VI defects to only REPORT BY == 'EET'."""
+    engr_wb = openpyxl.Workbook()
+    ws_cba = engr_wb.active
+    ws_cba.title = "QR03 CBA"
+    ws_cba.append(["FUNCTIONAL LOCATION (ERMS)", "EQUIPMENT"])
+
+    ws_vi = engr_wb.create_sheet("QR03 VI")
+    ws_vi.append(["FUNCTIONAL LOCATION (ERMS)", "EQUIPMENT", "DEFECT AREA", "ADDITIONAL REMARKS", "REPORT BY"])
+    ws_vi.append(["FL-001", "SWITCHGEAR", "LOW SF6 GAS", "EET row 1", "EET"])
+    ws_vi.append(["FL-001", "SWITCHGEAR", "LOW SF6 GAS", "Vendor row", "THIRD_PARTY_VENDOR"])
+    ws_vi.append(["FL-001", "SWITCHGEAR", "LOW SF6 GAS", "EET row 2", " eet "])
+    engr_wb.save(tmp_path / "ENGR-TEST.xlsx")
+    engr_wb.close()
+
+    repo = MasterQr03DefectRepository(tmp_path)
+    vi_defects = repo.fetch_vi_defects("FL-001")
+    assert len(vi_defects) == 2
+    assert vi_defects[0].additional_remarks == "EET row 1"
+    assert vi_defects[1].additional_remarks == "EET row 2"
+
 
 
 def test_preflight_guard_validations(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
@@ -294,8 +474,8 @@ def test_rmu_centerpoint_population_end_to_end(mock_env: ProjectEnvironment, tmp
     ws_cba.append(["FUNCTIONAL LOCATION (ERMS)", "DEFECT AREA", "READING", "REMARKS"])
     # Sheet 2: QR03 VI
     ws_vi = engr_wb.create_sheet("QR03 VI")
-    ws_vi.append(["FUNCTIONAL LOCATION (ERMS)", "EQUIPMENT", "DEFECT AREA", "ADDITIONAL REMARKS"])
-    ws_vi.append(["CCHL/PCEJ00024", "SWITCHGEAR", "SF6 Pressure Gauge", "Pressure drop below green mark"])
+    ws_vi.append(["FUNCTIONAL LOCATION (ERMS)", "EQUIPMENT", "DEFECT AREA", "ADDITIONAL REMARKS", "REPORT BY"])
+    ws_vi.append(["CCHL/PCEJ00024", "SWITCHGEAR", "LOW SF6 GAS", "Pressure drop below green mark", "EET"])
     engr_path = engr_dir / "ENGR-750-36-CBA-TEM-2026.xlsx"
     engr_wb.save(engr_path)
     engr_wb.close()

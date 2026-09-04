@@ -42,38 +42,84 @@ from src.workflows.models import (
 
 logger = logging.getLogger(__name__)
 
-# Canonical keywords mapping for VI11_* inspection meters
-VI_METER_KEYWORDS: dict[str, list[str]] = {
-    "VI11_FP_LINK/FUSE_RMU": ["LINK", "FUSE"],
-    "VI11_FP_LVDBGUARD_RMU": ["LVDB GUARD", "GUARD"],
-    "VI11_FP_PLOCK_RMU": ["PAD LOCK", "PADLOCK", "DOOR", "LOCK"],
-    "VI11_FP_TDI_RMU": ["TDI", "DEMAND INDICATOR"],
-    "VI11_SEC_BADEFI_RMU": ["EFI"],
-    "VI11_SEC_BADRCB_RMU": ["RCB"],
-    "VI11_SEC_BADRTU_RMU": ["RTU", "FTU"],
-    "VI11_SEC_BATTERY_RMU": ["BATTERY", "CHARGER"],
-    "VI11_SEC_MCORE_RMU": ["MULTICORE", "MCORE"],
-    "VI11_SG_COVERDOOR_RMU": ["COVER", "DOOR", "COVERDOOR"],
-    "VI11_SG_EARTHIN_RMU": ["EARTH", "EARTHING"],
-    "VI11_SG_HANDLE_RMU": ["HANDLE"],
-    "VI11_SG_HEATER_VCB": ["HEATER"],
-    "VI11_SG_LABELLING_RMU": ["LABEL", "LABELLING", "SIGN"],
-    "VI11_SG_OILLEAK_RMU": ["OIL LEAK", "OILLEAK", "LEAKAGE"],
-    "VI11_SG_PRESGAUGE_RMU": ["PRESSURE GAUGE", "PRESGAUGE", "SF6", "PRESSURE"],
-    "VI11_SG_VDIS_RMU": ["VDIS", "VOLTAGE DETECTION", "INDICATING"],
-    "VI11_SUB_CLEANLINESS_RMU": ["CLEANLINESS", "GRASS", "BUSH", "VERMIN", "HOUSEKEEPING"],
-    "VI11_SUB_LIGHT_CSU": ["LIGHT", "LIGHTING", "LAMP"],
-    "VI11_SUB_RETROOF_CSU": ["RETROOF", "ROOF", "ROOFING"],
-    "VI11_SUB_SIGNBOARD_RMU": ["SIGNBOARD", "SIGN BOARD", "SIGN"],
-    "VI11_SUB_VANDALISM_RMU": ["VANDALISM", "FENCING", "FENCE", "GATE", "BOLLARD"],
-    "VI11_SWG_DOOR_VCB": ["DOOR", "PANEL DOOR"],
-    "VI11_SWG_EARTH_VCB": ["EARTH", "EARTHING"],
-    "VI11_TX_CBLCLMP_RMU": ["CABLE CLAMP", "CBLCLMP", "CLAMP"],
-    "VI11_TX_OILLEAK_RMU": ["OIL LEAK", "OILLEAK", "LEAK"],
-    "VI11_TX_OILLEVEL_RMU": ["OIL LEVEL", "OILLEVEL"],
-    "VI11_TX_TXBUSH_RMU": ["BUSHING", "TXBUSH", "BUSH"],
-    "VI11_TX_TXGUARD_RMU": ["TRANSFORMER GUARD", "TXGUARD", "GUARD"],
+# Aligned Defect Matching Sets for VI11_* inspection meters
+
+# Group A: Switchgear
+SG_LABELLING_DEFECT_AREAS = {
+    "NO LINK NO./PANEL NO./FEEDER NAME",
+    "WRONG LINK NO./PANEL NO./FEEDER NAME",
+    "LINK NO./PANEL NO./FEEDER NAME LABEL IN POOR CONDITION",
 }
+SG_PRESGAUGE_DEFECT_AREAS = {
+    "LOW SF6 GAS",
+    "SF6 GAS INDICATOR BROKEN",
+}
+SG_VDIS_DEFECT_AREAS = {
+    "VCB STATUS LAMP INDICATOR NOT OPERATED",
+    "BREAKER INDICATOR LAMP NOT OPERATED",
+    "RELAY NOT OPERATED",
+}
+SG_HEATER_DEFECT_AREAS = {
+    "HEATER NO SUPPLY",
+    "HEATER INDICATOR LAMP NOT OPERATED",
+}
+SG_EARTHIN_REMARKS = {"SWG", "SWG1", "SWG ROOM", "SWG - NOT CONNECTED"}
+
+# Group B: Feeder Pillar
+FP_LINK_FUSE_DEFECT_AREAS = {
+    "FP (J) FUSE HOLDER MISSING",
+    "FP (J) FUSE HOLDER BROKEN",
+    "FP (J) LINK HOLDER MISSING",
+    "FP (J) LINK HOLDER BROKEN",
+}
+FP_PLOCK_FP_DEFECT_AREAS = {"DOOR BROKEN", "FP DOOR BROKEN"}
+FP_PLOCK_SUB_DEFECT_AREAS = {"OLD ABLOY PADLOCK", "NO PADLOCK"}
+
+# Group C: Transformer
+TX_TXGUARD_DEFECT_AREAS = {
+    "NO TX GUARD",
+    "CABLE TERMINATION TOUCH TX GUARD",
+}
+TX_TXBUSH_DEFECT_AREAS = {
+    "NO LV INSULATION BOOT COVER",
+    "NO HV INSULATION BOOT COVER",
+    "CABLE TERMINATION INSULATION BROKEN",
+}
+TX_OILLEVEL_DEFECT_AREAS = {
+    "LOW OIL LEVEL",
+    "OIL INDICATOR BROKEN",
+}
+TX_OILLEAK_DEFECT_AREAS = {
+    "OIL LEAKS",
+    "OIL LEAK",
+}
+TX_CBLCLMP_DEFECT_AREAS = {
+    "NO CABLE SUPPORT",
+    "CABLE SUPPORT IN POOR CONDITION",
+}
+
+# Group E: Substation / Civil
+SUB_RETROOF_DEFECT_AREAS = {"ROOF BROKEN", "CEILING BROKEN"}
+SUB_CLEANLINESS_DEFECT_AREAS = {
+    "BUSHES & CREEPERS",
+    "UNUSED ITEM LEFTOVER",
+    "SARANG BINATANG",
+    "CARCASS (BANGKAI BUSUK)",
+    "VERMIN",
+}
+SUB_VANDALISM_DEFECT_AREAS = {
+    "FENCE BROKEN",
+    "GATE BROKEN",
+    "DOOR BROKEN",
+    "WALL BROKEN",
+    "WINDOW BROKEN",
+    "VANDALISME",
+    "OLD ABLOY PADLOCK",
+    "NO PADLOCK",
+}
+
+# Backward compatibility alias for deprecated keyword dictionary
+VI_METER_KEYWORDS: dict[str, list[str]] = {}
 
 
 def parse_time_tuple(time_val: Any) -> tuple[int, int, int] | None:
@@ -110,12 +156,21 @@ def parse_time_tuple(time_val: Any) -> tuple[int, int, int] | None:
 
 
 def parse_testsheet_datetime(
-    date_val: Any, time_val: Any = None, tz_offset: str = "+08:00"
-) -> str:
-    """Construct standard ISO-8601 timestamp with timezone offset from testsheet Date and Time."""
+    date_val: Any,
+    time_val: Any = None,
+    tz_offset: str = "+08:00",
+) -> str | None:
+    """Parse testsheet date and optional time into ISO 8601 string.
+
+    Returns format 'YYYY-MM-DDTHH:MM:SS+08:00' or None if date unparseable.
+    """
+    if date_val is None:
+        return None
+
     d = _parse_date_object(date_val)
     if d is None:
-        return ""
+        return None
+
     t = parse_time_tuple(time_val)
     if t is not None:
         hh, mm, ss = t
@@ -123,22 +178,155 @@ def parse_testsheet_datetime(
     return f"{d.year:04d}-{d.month:02d}-{d.day:02d}T00:00:00{tz_offset}"
 
 
-def match_vi_defect(meter_name: str, defects: Sequence[ViDefectRecord]) -> ViDefectRecord | None:
-    """Match a VI11_* meter name against a list of VI defect records."""
-    if not defects:
+def match_vi_defect(
+    meter_name: str,
+    tnb_loc: str | Sequence[ViDefectRecord] | None = "",
+    defects: Sequence[ViDefectRecord] | None = None,
+) -> ViDefectRecord | None:
+    """Match a VI11_* meter name against a list of VI defect records using aligned business logic."""
+    if isinstance(tnb_loc, (list, tuple)):
+        defects = tnb_loc
+        tnb_loc = ""
+    elif tnb_loc is None:
+        tnb_loc = ""
+
+    if not defects or not meter_name:
         return None
 
-    meter_upper = meter_name.strip().upper()
-    keywords = VI_METER_KEYWORDS.get(meter_upper)
-    if not keywords:
-        parts = [p for p in re.split(r"[_\W]+", meter_upper) if p not in ("VI11", "SG", "TX", "FP", "SUB", "SEC", "SWG", "RMU", "VCB", "CSU")]
-        keywords = parts if parts else [meter_upper]
+    meter = meter_name.strip().upper()
+    loc = tnb_loc.strip().upper()
+
+    if not meter.startswith("VI11_"):
+        return None
 
     for defect in defects:
-        defect_blob = f"{defect.equipment} {defect.defect_area} {defect.additional_remarks}".upper()
-        for kw in keywords:
-            if kw.upper() in defect_blob:
+        eq = defect.equipment.strip().upper()
+        area = defect.defect_area.strip().upper()
+        rem = defect.additional_remarks.strip().upper()
+
+        # Group A: Switchgear (TNBLOCATION contains /11KV/ or meter starts with VI11_SG_ or VI11_SWG_)
+        if meter == "VI11_SG_LABELLING_RMU":
+            if eq in ("SWITCHGEAR", "SWG") and area in SG_LABELLING_DEFECT_AREAS:
                 return defect
+
+        elif meter == "VI11_SG_PRESGAUGE_RMU":
+            if eq in ("SWITCHGEAR", "SWG") and area in SG_PRESGAUGE_DEFECT_AREAS:
+                return defect
+
+        elif meter == "VI11_SG_VDIS_RMU":
+            if eq in ("SWITCHGEAR", "SWG") and area in SG_VDIS_DEFECT_AREAS:
+                return defect
+
+        elif meter in ("VI11_SG_COVERDOOR_RMU", "VI11_SWG_DOOR_VCB"):
+            if eq in ("SWITCHGEAR", "SWG") and area == "DOOR BROKEN":
+                return defect
+
+        elif meter == "VI11_SG_HEATER_VCB":
+            if eq in ("SWITCHGEAR", "SWG") and area in SG_HEATER_DEFECT_AREAS:
+                return defect
+
+        elif meter in ("VI11_SG_EARTHIN_RMU", "VI11_SWG_EARTH_VCB"):
+            if eq in ("EARTHING", "EARTH") and any(k in rem for k in SG_EARTHIN_REMARKS):
+                return defect
+
+        elif meter == "VI11_SG_HANDLE_RMU":
+            if eq in ("SWITCHGEAR", "SWG") and "HANDLE" in area:
+                return defect
+
+        elif meter == "VI11_SG_OILLEAK_RMU":
+            if eq in ("SWITCHGEAR", "SWG") and "OIL LEAK" in area:
+                return defect
+
+        # Group B: Feeder Pillar (TNBLOCATION contains /FP/ or meter starts with VI11_FP_)
+        elif meter == "VI11_FP_LVDBGUARD_RMU":
+            if eq in ("FP/LVDB", "LVDB", "FP") and area == "NO LVDB GUARD":
+                return defect
+
+        elif meter == "VI11_FP_LINK/FUSE_RMU":
+            if eq in ("FP/LVDB", "LVDB", "FP") and area in FP_LINK_FUSE_DEFECT_AREAS:
+                return defect
+
+        elif meter == "VI11_FP_PLOCK_RMU":
+            if eq in ("FP/LVDB", "LVDB", "FP") and area in FP_PLOCK_FP_DEFECT_AREAS:
+                return defect
+            if eq in ("SUBSTATION", "SUB") and area in FP_PLOCK_SUB_DEFECT_AREAS:
+                if "FP" in rem or "LVDB" in rem:
+                    return defect
+
+        elif meter == "VI11_FP_TDI_RMU":
+            if eq in ("FP/LVDB", "LVDB", "FP") and area == "TDI BROKEN":
+                return defect
+
+        # Group C: Transformer (TNBLOCATION contains /TX/ or meter starts with VI11_TX_)
+        elif meter in (
+            "VI11_TX_TXGUARD_RMU",
+            "VI11_TX_TXBUSH_RMU",
+            "VI11_TX_OILLEVEL_RMU",
+            "VI11_TX_OILLEAK_RMU",
+            "VI11_TX_CBLCLMP_RMU",
+        ):
+            # Multi-transformer disambiguation
+            has_tx1_rem = "TX1" in rem or "DTX1" in rem
+            has_tx2_rem = "TX2" in rem or "DTX2" in rem
+            if "DTX1" in loc and has_tx2_rem and not has_tx1_rem:
+                continue
+            if "DTX2" in loc and has_tx1_rem and not has_tx2_rem:
+                continue
+
+            if eq in ("LTX/DTX", "DTX", "LTX", "TX"):
+                if meter == "VI11_TX_TXGUARD_RMU" and area in TX_TXGUARD_DEFECT_AREAS:
+                    return defect
+                if meter == "VI11_TX_TXBUSH_RMU" and area in TX_TXBUSH_DEFECT_AREAS:
+                    return defect
+                if meter == "VI11_TX_OILLEVEL_RMU" and area in TX_OILLEVEL_DEFECT_AREAS:
+                    return defect
+                if meter == "VI11_TX_OILLEAK_RMU" and area in TX_OILLEAK_DEFECT_AREAS:
+                    return defect
+                if meter == "VI11_TX_CBLCLMP_RMU" and area in TX_CBLCLMP_DEFECT_AREAS:
+                    return defect
+
+        # Group D: Secondary Equipment (VI11_SEC_)
+        elif meter == "VI11_SEC_BATTERY_RMU":
+            if eq in ("BATTERY CHARGER", "BATTERY"):
+                return defect
+
+        elif meter == "VI11_SEC_BADEFI_RMU":
+            if eq == "EFI":
+                return defect
+
+        elif meter == "VI11_SEC_BADRTU_RMU":
+            # Do NOT match from BATTERY CHARGER. Keep unmapped.
+            pass
+
+        elif meter == "VI11_SEC_BADRCB_RMU":
+            if eq == "RCB":
+                return defect
+
+        elif meter == "VI11_SEC_MCORE_RMU":
+            if eq in ("MULTICORE", "MCORE"):
+                return defect
+
+        # Group E: Substation / Civil (VI11_SUB_)
+        elif meter == "VI11_SUB_SIGNBOARD_RMU":
+            if eq in ("SIGNBOARD", "SIGN BOARD"):
+                return defect
+
+        elif meter == "VI11_SUB_LIGHT_CSU":
+            if eq in ("LIGHTING", "LIGHT"):
+                return defect
+
+        elif meter == "VI11_SUB_RETROOF_CSU":
+            if eq in ("SUBSTATION", "SUB") and area in SUB_RETROOF_DEFECT_AREAS:
+                return defect
+
+        elif meter == "VI11_SUB_CLEANLINESS_RMU":
+            if eq in ("SUBSTATION", "SUB") and area in SUB_CLEANLINESS_DEFECT_AREAS:
+                return defect
+
+        elif meter == "VI11_SUB_VANDALISM_RMU":
+            if eq in ("SUBSTATION", "SUB") and area in SUB_VANDALISM_DEFECT_AREAS:
+                if not ("FP" in rem or "LVDB" in rem):
+                    return defect
 
     return None
 
@@ -465,7 +653,7 @@ class PopulateDataMsmsTransformer:
         # 1. Visual Inspection (VI11_*)
         if meter_name.upper().startswith("VI11_"):
             defects = self._get_vi_defects(fl_erms, vi_defects_cache)
-            matched_defect = match_vi_defect(meter_name, defects)
+            matched_defect = match_vi_defect(meter_name, tnb_loc, defects)
             if matched_defect is not None:
                 row["TNBNEWREADING"] = "YES"
                 row["TNBCOMMENTS"] = matched_defect.additional_remarks

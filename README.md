@@ -1,6 +1,6 @@
 # Project & Utility Automation CLI (`pahang-cli`)
 
-A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.14.4`).
+A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.14.5`).
 
 ---
 
@@ -121,7 +121,7 @@ Automates end-to-end engineering tasks against the currently active workspace.
 | **9** | **Enrich MSMS (TOTAL PE -> DATA MSMS metadata)** | 6-stage ETL workflow enriching blank metadata columns in `DATA MSMS.xlsx` (substation name, FL, cycle date, substation number) by matching Work Orders against `TOTAL PE.xlsx`. |
 | **10** | **Propagate Work Orders (DATA MSMS -> TOTAL PE)** | 6-stage ETL workflow mapping Work Orders from `DATA MSMS.xlsx` to blank WO cells in `TOTAL PE.xlsx` with strict formula and column preservation. |
 | **11** | **Ingest MSMS CSVs (RAW DATA -> TO BE FILLED)** | Ingests client MSMS CSV files from `RAW DATA/`, deduplicates by SHA-256 hash, normalizes filenames to canonical `DD-MM-YYYY_NNN.csv`, and moves them to `TO BE FILLED/`. |
-| **12** | **Populate Data MSMS (Testsheets -> TO BE FILLED CSVs)** | Fills detailed diagnostic CSV readings in `TO BE FILLED/` from testsheets with active Feeder Pillar thermal synthesis, single-decimal-place rounding (`ROUND_HALF_UP`), and interactive overwrite controls. |
+| **12** | **Populate Data MSMS (Testsheets -> TO BE FILLED CSVs)** | Fills detailed diagnostic CSV readings and visual inspection defect flags (`YES`/`NO`) in `TO BE FILLED/` from testsheets and master `QR03 VI` records with vendor boundary scoping (`REPORT BY == 'EET'`), equipment domain partitioning, active Feeder Pillar thermal synthesis, and single-decimal-place rounding. |
 
 ---
 

@@ -386,7 +386,7 @@ class MasterQr03DefectRepository:
         return []
 
     def fetch_vi_defects(self, fl_erms: str) -> list[ViDefectRecord]:
-        """Fetch VI defects for a functional location strictly from sheet 'QR03 VI'."""
+        """Fetch VI defects for a functional location strictly from sheet 'QR03 VI', filtered by REPORT BY == 'EET'."""
         if not fl_erms:
             return []
 
@@ -399,8 +399,18 @@ class MasterQr03DefectRepository:
             if matched_df.empty:
                 continue
 
+            report_by_col = next(
+                (c for c in df.columns if "REPORT" in str(c).upper()),
+                None,
+            )
+
             defects: list[ViDefectRecord] = []
             for _, row in matched_df.iterrows():
+                if report_by_col is not None:
+                    report_by_val = _clean_val(row.get(report_by_col)).upper()
+                    if report_by_val != "EET":
+                        continue
+
                 rec = ViDefectRecord(
                     equipment=_clean_val(row.get("EQUIPMENT")),
                     defect_area=_clean_val(

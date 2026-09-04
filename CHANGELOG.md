@@ -5,6 +5,13 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.5] - 2026-09-04
+
+### Fixed
+- **Visual Defect Scoping & Cross-Equipment Collision Purge (`src/workflows/populate_data_msms.py`)**: Replaced naive substring keyword matching in `match_vi_defect` with domain-partitioned matching across Groups A–E (Switchgear, Feeder Pillar, Transformer, Secondary, Substation). Resolved critical row 845 regression where `SIGNBOARD` defects wrongfully matched `VI11_SG_LABELLING_RMU` via the substring `"SIGN"`.
+- **EET Vendor Boundary Filter (`src/quick_report/defects.py`)**: Filtered `MasterQr03DefectRepository.fetch_vi_defects` to strictly extract records where `REPORT BY` is `'EET'`, preventing over 3,800 third-party contractor rows in master ENGR workbooks from polluting inspection results.
+- **Transformer & Feeder Pillar Defect Routing**: Bound `VI11_TX_*` meters strictly to `LTX/DTX` defects with multi-transformer disambiguation (`DTX1` vs `DTX2`), bound `VI11_FP_*` meters strictly to `FP/LVDB` (omitting casing defects), and restricted switchgear earthing to defects explicitly remarked for switchgears.
+
 ## [1.14.4] - 2026-09-04
 
 ### Fixed
