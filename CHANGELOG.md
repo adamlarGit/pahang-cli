@@ -5,6 +5,14 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.6] - 2026-09-05
+
+### Fixed
+- **Multi-Switchgear & Transformer Survey Auto-Discovery (`scripts/generate_prpd_option_c_html.py`, `scripts/generate_prpd_option_b.py`, `src/quick_report/prpd.py`)**: Replaced rigid `SWG` and `TX` folder scanning with dual-layer auto-discovery. Primary discovery parses UltraTEV's native `survey_summary.js` manifest (`assets` -> `$SUB_ASSETS` -> `$MEASURES`), resolving exact paths directly from `"Data"` attributes and supporting `VCB`, `RMU`, `SWG_1..N`, `TX1..TX4`, and outdoor equipment (`H_POLE`, `LIGHTNING_ARRESTER`, `DROPOUT_FUSE`). Fallback dynamic folder traversal crawls all known switchgear and transformer variants when manifests are absent or malformed.
+- **Switchgear Feeder & Panel Directory Matching (`src/quick_report/prpd.py`)**: Enhanced `find_swg_feeder_survey_dir` and `_is_survey_dir` to recognize `VCB` and `RMU` switchgear roots alongside `SWG`, with support for hyphenated and zero-padded folder naming formats (e.g. `PANEL-2`, `PANEL-02`, `FEEDER-03`).
+- **Temporary Render File Teardown & Label Sanitization (`scripts/generate_prpd_option_c_html.py`)**: Enclosed headless Chrome render operations in `try ... finally` blocks to ensure temporary injected HTML files (`_temp_render_c.html`) are purged reliably, and sanitized asset/panel label names via `re.sub(r"[^\w]+", "_", ...)` to prevent invalid filename characters on Windows.
+- **Test Environment Camera Config Isolation (`src/project/environment.py`)**: Fixed `ProjectEnvironment.get_camera_config` fallback so missing `project_config.json` cleanly defaults to standard `CameraConfig()` instead of reading global live `.cli_config.json`, eliminating test isolation leaks.
+
 ## [1.14.5] - 2026-09-04
 
 ### Fixed

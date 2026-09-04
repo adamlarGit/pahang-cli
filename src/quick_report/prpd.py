@@ -252,6 +252,22 @@ def generate_prpd_figure(
     return out_file
 
 
+def _is_survey_dir(p: Path) -> bool:
+    """Check if a directory looks like an UltraTEV survey root directory."""
+    try:
+        if not p.is_dir():
+            return False
+        if (p / "survey_summary.js").exists() or (p / "survey_metadata.js").exists():
+            return True
+        prefixes = ("SWG", "VCB", "RMU", "TX")
+        return any(
+            c.is_dir() and (c.name.upper().startswith(prefixes) or "TRANSFORMER" in c.name.upper())
+            for c in p.iterdir()
+        )
+    except OSError:
+        return False
+
+
 def discover_ultratev_survey_dir(raw_data_dir: Path | str | None) -> Path | None:
     """Discover the root UltraTEV survey directory inside a substation's RAW DATA folder."""
     if not raw_data_dir:
@@ -269,20 +285,26 @@ def discover_ultratev_survey_dir(raw_data_dir: Path | str | None) -> Path | None
 
     for candidate in candidate_roots:
         if candidate.exists() and candidate.is_dir():
-            # If candidate itself has SWG or TX
-            if (candidate / "SWG").exists() or (candidate / "TX").exists() or (candidate / "TX1").exists():
+            if _is_survey_dir(candidate):
                 return candidate
-            # Or child survey stems (e.g. 20260810T104017_043-STESEN-BAS-DAN-TEKSI)
-            for child in sorted(candidate.iterdir(), reverse=True):
-                if child.is_dir() and ((child / "SWG").exists() or (child / "TX").exists() or (child / "TX1").exists()):
+            try:
+                children = sorted(candidate.iterdir(), reverse=True)
+            except OSError:
+                children = []
+            for child in children:
+                if child.is_dir() and _is_survey_dir(child):
                     return child
 
-    # Deep search fallback for any folder containing SWG and (TX or TX1 or resources)
+    # Deep search fallback for any folder containing survey_summary.js or SWG/VCB/RMU
     try:
-        for child in sorted(raw_path.rglob("SWG"), reverse=True):
-            parent = child.parent
-            if parent.is_dir() and ((parent / "TX").exists() or (parent / "TX1").exists() or (parent / "resources").exists()):
-                return parent
+        for child in sorted(raw_path.rglob("survey_summary.js"), reverse=True):
+            if child.parent.is_dir():
+                return child.parent
+        for pattern in ("SWG*", "VCB*", "RMU*"):
+            for child in sorted(raw_path.rglob(pattern), reverse=True):
+                parent = child.parent
+                if parent.is_dir() and _is_survey_dir(parent):
+                    return parent
     except Exception:
         pass
 
@@ -295,19 +317,44 @@ def find_swg_feeder_survey_dir(
     feeder_no: str = "",
     panel_name: str = "",
 ) -> Path | None:
-    """Find the target SWG feeder survey directory using 3-tier precedence."""
-    swg_dir = survey_root / "SWG"
-    if not swg_dir.exists():
+    """Find the target SWG/VCB/RMU feeder survey directory using 3-tier precedence."""
+    swg_prefixes = ("SWG", "VCB", "RMU")
+    try:
+        swg_dirs = [
+            d for d in survey_root.iterdir()
+            if d.is_dir() and d.name.upper().startswith(swg_prefixes)
+        ]
+    except OSError:
         return None
 
-    candidate_subdirs = [d for d in swg_dir.iterdir() if d.is_dir()]
+    if not swg_dirs:
+        return None
+
+    # Canonical exact "SWG", "VCB", "RMU" precede numbered variants
+    swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU") else 1, d.name.upper()))
+
+    candidate_subdirs: list[Path] = []
+    for s_dir in swg_dirs:
+        try:
+            candidate_subdirs.extend([d for d in s_dir.iterdir() if d.is_dir()])
+        except OSError:
+            continue
 
     # Tier 1: Match panel_no (Column A index, 1-based)
     if panel_no > 0:
         p_num_str = str(panel_no)
+        target_names = {
+            f"FEEDER_{p_num_str}",
+            f"FEEDER {p_num_str}",
+            f"PANEL_{p_num_str}",
+            f"PANEL {p_num_str}",
+            f"FEEDER_{p_num_str.zfill(2)}",
+            f"PANEL_{p_num_str.zfill(2)}",
+        }
         for d in candidate_subdirs:
-            d_name = d.name.upper()
-            if d_name in (f"FEEDER_{p_num_str}", f"FEEDER {p_num_str}", f"PANEL_{p_num_str}", f"PANEL {p_num_str}"):
+            d_upper = d.name.upper()
+            d_norm = d_upper.replace("-", "_")
+            if d_upper in target_names or d_norm in target_names:
                 return d
 
     # Tier 2: Match exact folder name against panel_name / feeder_no
@@ -335,9 +382,13 @@ def find_swg_feeder_survey_dir(
             f"PANEL {int_digit}",
             f"PANEL_{raw_digit}",
             f"PANEL {raw_digit}",
+            f"FEEDER_{int_digit.zfill(2)}",
+            f"PANEL_{int_digit.zfill(2)}",
         }
         for d in candidate_subdirs:
-            if d.name.upper() in target_variants:
+            d_upper = d.name.upper()
+            d_norm = d_upper.replace("-", "_")
+            if d_upper in target_variants or d_norm in target_variants:
                 return d
 
     return None
@@ -523,10 +574,22 @@ def generate_all_substation_prpd_graphs(
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    # 1. SWG Feeders
-    swg_dir = survey_path / "SWG"
-    if swg_dir.exists() and swg_dir.is_dir():
-        candidate_feeders = [d for d in swg_dir.iterdir() if d.is_dir()]
+    # 1. SWG / VCB / RMU Feeders & Panels
+    swg_prefixes = ("SWG", "VCB", "RMU")
+    try:
+        swg_dirs = [
+            d for d in survey_path.iterdir()
+            if d.is_dir() and d.name.upper().startswith(swg_prefixes)
+        ]
+    except OSError:
+        swg_dirs = []
+    swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU") else 1, d.name.upper()))
+
+    for s_dir in swg_dirs:
+        try:
+            candidate_feeders = [d for d in s_dir.iterdir() if d.is_dir()]
+        except OSError:
+            continue
         for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
             digits = re.findall(r"\d+", feeder_dir.name)
             if digits:
@@ -536,6 +599,9 @@ def generate_all_substation_prpd_graphs(
                     panel_idx = len(catalog["swg"]) + 1
             else:
                 panel_idx = len(catalog["swg"]) + 1
+
+            while panel_idx in catalog["swg"]:
+                panel_idx += 1
 
             us_png: Path | None = None
             tev_png: Path | None = None
@@ -569,15 +635,18 @@ def generate_all_substation_prpd_graphs(
 
     # 2. Transformer (TX) units
     candidate_tx_indices: set[int] = set()
-    for child in survey_path.iterdir():
-        if child.is_dir():
-            d_upper = child.name.upper()
-            if d_upper.startswith("TX") or "TRANSFORMER" in d_upper:
-                digits = re.findall(r"\d+", d_upper)
-                if digits:
-                    candidate_tx_indices.add(int(digits[0]))
-                else:
-                    candidate_tx_indices.add(1)
+    try:
+        survey_children = [c for c in survey_path.iterdir() if c.is_dir()]
+    except OSError:
+        survey_children = []
+    for child in survey_children:
+        d_upper = child.name.upper()
+        if d_upper.startswith("TX") or "TRANSFORMER" in d_upper:
+            digits = re.findall(r"\d+", d_upper)
+            if digits:
+                candidate_tx_indices.add(int(digits[0]))
+            else:
+                candidate_tx_indices.add(1)
     if not candidate_tx_indices:
         if (survey_path / "TX").exists():
             candidate_tx_indices.add(1)

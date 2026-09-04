@@ -8,8 +8,10 @@ Purpose: Decode raw TEV and Ultrasonic event data from survey files and render
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
+import re
 import sys
 
 # Ensure repository root is on sys.path
@@ -25,63 +27,175 @@ from src.quick_report.prpd import (
 )
 
 
+def _sanitize_name(name: str) -> str:
+    """Sanitize asset or sub-asset names into filesystem-safe uppercase tokens."""
+    return re.sub(r"[^\w]+", "_", name.upper()).strip("_")
+
+
 def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, Path, str]]:
     """Dynamically discover all Switchgear and Transformer TEV and Ultrasonic measurement data files.
 
+    Primary approach parses survey_summary.js manifest.
+    Fallback approach scans filesystem dynamically (SWG, VCB, RMU, TX, outdoor equipment).
     Returns list of tuples: (label, data_filepath, tech_type)
     """
     base_path = Path(safe_path(survey_dir))
     items: list[tuple[str, Path, str]] = []
 
-    # 1. Scan SWG directory (FEEDER_1, FEEDER_2, ..., FEEDER_N)
-    swg_dir = base_path / "SWG"
-    if swg_dir.exists() and swg_dir.is_dir():
-        for feeder_folder in sorted(swg_dir.iterdir(), key=lambda p: p.name):
-            if not feeder_folder.is_dir():
+    # 1. Primary approach: parse survey_summary.js manifest
+    manifest_path = base_path / "survey_summary.js"
+    if os.path.exists(safe_path(manifest_path)):
+        try:
+            with open(safe_path(manifest_path), "r", encoding="utf-8", errors="ignore") as fh:
+                content = fh.read()
+
+            summary_data = None
+            m = re.search(r"var\s+survey_summary\s*=\s*(\{[\s\S]*?\});?\s*$", content)
+            if m:
+                try:
+                    summary_data = json.loads(m.group(1))
+                except Exception:
+                    pass
+
+            if summary_data is None:
+                start = content.find("{")
+                end = content.rfind("}")
+                if start != -1 and end > start:
+                    try:
+                        summary_data = json.loads(content[start : end + 1])
+                    except Exception:
+                        pass
+
+            if summary_data and isinstance(summary_data, dict):
+                seen_labels: set[str] = set()
+                for asset in summary_data.get("assets", []):
+                    if not isinstance(asset, dict):
+                        continue
+                    asset_name = str(asset.get("$ASSET_NAME", "")).strip()
+                    clean_asset = _sanitize_name(asset_name)
+                    sub_assets = asset.get("$SUB_ASSETS", [])
+                    if not isinstance(sub_assets, list):
+                        continue
+                    for sub in sub_assets:
+                        if not isinstance(sub, dict):
+                            continue
+                        sub_name = str(sub.get("$SUB_ASSET_NAME", "")).strip()
+                        clean_sub = _sanitize_name(sub_name)
+                        measures = sub.get("$MEASURES", [])
+                        if not isinstance(measures, list):
+                            continue
+                        for meas in measures:
+                            if not isinstance(meas, dict):
+                                continue
+                            mtype = meas.get("$MEASURE_TYPE", "")
+                            data_rel = meas.get("Data", "")
+                            if not data_rel:
+                                continue
+                            rel_subpath = str(data_rel).replace("\\", "/").strip("/")
+                            if mtype == "$TEV":
+                                data_filename = "eventData.js"
+                                tech = "TEV"
+                            elif mtype == "$ULTRA":
+                                data_filename = "ultrasonic_phase_plot.js"
+                                tech = "US"
+                            else:
+                                continue
+
+                            data_file = base_path / Path(rel_subpath) / data_filename
+                            if os.path.exists(safe_path(data_file)):
+                                base_label = f"{clean_asset}_{clean_sub}_{tech}" if clean_sub else f"{clean_asset}_{tech}"
+                                base_label = base_label.replace(" ", "_")
+                                label = base_label
+                                if label in seen_labels:
+                                    counter = 2
+                                    while f"{base_label}_{counter}" in seen_labels:
+                                        counter += 1
+                                    label = f"{base_label}_{counter}"
+                                seen_labels.add(label)
+                                items.append((label, data_file, tech))
+        except Exception:
+            items = []
+
+    if items:
+        return items
+
+    # 2. Fallback approach: dynamic directory traversal
+    seen_labels = set()
+    eq_prefixes = ("SWG", "VCB", "RMU", "TX", "TRANSFORMER", "H_POLE", "H-POLE", "LIGHTNING", "DROPOUT")
+    try:
+        candidate_eq_dirs = [
+            d for d in base_path.iterdir()
+            if d.is_dir() and (d.name.upper().startswith(eq_prefixes) or "TRANSFORMER" in d.name.upper())
+        ]
+    except OSError:
+        return items
+
+    for eq_dir in sorted(candidate_eq_dirs, key=lambda p: p.name):
+        eq_name = _sanitize_name(eq_dir.name)
+
+        try:
+            children = [c for c in eq_dir.iterdir() if c.is_dir()]
+        except OSError:
+            continue
+
+        for child in sorted(children, key=lambda p: p.name):
+            tev_data = child / "eventData.js"
+            us_data = child / "ultrasonic_phase_plot.js"
+            if os.path.exists(safe_path(tev_data)):
+                base_label = f"{eq_name}_TEV"
+                label = base_label
+                if label in seen_labels:
+                    c = 2
+                    while f"{base_label}_{c}" in seen_labels:
+                        c += 1
+                    label = f"{base_label}_{c}"
+                seen_labels.add(label)
+                items.append((label, tev_data, "TEV"))
                 continue
-            feeder_name = feeder_folder.name.upper()
-
-            # Find TEV measurement subfolder
-            for meas in feeder_folder.iterdir():
-                if meas.is_dir() and meas.name.endswith("_TEV"):
-                    data_file = meas / "eventData.js"
-                    if os.path.exists(safe_path(data_file)):
-                        label = f"SWG_{feeder_name}_TEV"
-                        items.append((label, data_file, "TEV"))
-
-            # Find Ultrasonic measurement subfolder
-            for meas in feeder_folder.iterdir():
-                if meas.is_dir() and meas.name.endswith("_Ultrasonic"):
-                    data_file = meas / "ultrasonic_phase_plot.js"
-                    if os.path.exists(safe_path(data_file)):
-                        label = f"SWG_{feeder_name}_US"
-                        items.append((label, data_file, "US"))
-
-    # 2. Scan TX directory (Transformer, TX1, TX2, etc.)
-    tx_dir = base_path / "TX"
-    if tx_dir.exists() and tx_dir.is_dir():
-        for tx_folder in sorted(tx_dir.iterdir(), key=lambda p: p.name):
-            if not tx_folder.is_dir():
+            if os.path.exists(safe_path(us_data)):
+                base_label = f"{eq_name}_US"
+                label = base_label
+                if label in seen_labels:
+                    c = 2
+                    while f"{base_label}_{c}" in seen_labels:
+                        c += 1
+                    label = f"{base_label}_{c}"
+                seen_labels.add(label)
+                items.append((label, us_data, "US"))
                 continue
-            tx_name = tx_folder.name.upper()
 
-            # Find Ultrasonic measurement subfolder
-            for meas in tx_folder.iterdir():
-                if meas.is_dir() and meas.name.endswith("_Ultrasonic"):
-                    data_file = meas / "ultrasonic_phase_plot.js"
-                    if os.path.exists(safe_path(data_file)):
-                        label = f"TX_{tx_name}_US"
-                        items.append((label, data_file, "US"))
+            sub_name = _sanitize_name(child.name)
+            try:
+                meas_dirs = [m for m in child.iterdir() if m.is_dir()]
+            except OSError:
+                continue
 
-            # Find TEV measurement subfolder if any on TX
-            for meas in tx_folder.iterdir():
-                if meas.is_dir() and meas.name.endswith("_TEV"):
-                    data_file = meas / "eventData.js"
-                    if os.path.exists(safe_path(data_file)):
-                        label = f"TX_{tx_name}_TEV"
-                        items.append((label, data_file, "TEV"))
+            for meas in sorted(meas_dirs, key=lambda p: p.name):
+                tev_data = meas / "eventData.js"
+                us_data = meas / "ultrasonic_phase_plot.js"
+                if os.path.exists(safe_path(tev_data)):
+                    base_label = f"{eq_name}_{sub_name}_TEV"
+                    label = base_label
+                    if label in seen_labels:
+                        c = 2
+                        while f"{base_label}_{c}" in seen_labels:
+                            c += 1
+                        label = f"{base_label}_{c}"
+                    seen_labels.add(label)
+                    items.append((label, tev_data, "TEV"))
+                elif os.path.exists(safe_path(us_data)):
+                    base_label = f"{eq_name}_{sub_name}_US"
+                    label = base_label
+                    if label in seen_labels:
+                        c = 2
+                        while f"{base_label}_{c}" in seen_labels:
+                            c += 1
+                        label = f"{base_label}_{c}"
+                    seen_labels.add(label)
+                    items.append((label, us_data, "US"))
 
     return items
+
 
 
 def generate_all_survey_prpd(survey_dir: Path | str, output_dir: Path | str) -> list[dict]:

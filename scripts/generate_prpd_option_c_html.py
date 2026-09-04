@@ -4,13 +4,13 @@ import json
 import os
 from pathlib import Path
 import posixpath
+import re
 import socket
 import socketserver
 import subprocess
 import threading
 import time
 import urllib.parse
-from PIL import Image
 
 
 def safe_path(p: Path | str) -> str:
@@ -21,6 +21,11 @@ def safe_path(p: Path | str) -> str:
     return s
 
 
+def _sanitize_name(name: str) -> str:
+    """Sanitize asset or sub-asset names into filesystem-safe uppercase tokens."""
+    return re.sub(r"[^\w]+", "_", name.upper()).strip("_")
+
+
 def find_free_port() -> int:
     """Finds an available TCP port on localhost dynamically."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -29,66 +34,175 @@ def find_free_port() -> int:
 
 
 def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, str, str]]:
-    """
-    Dynamically discovers all Switchgear and Transformer TEV and Ultrasonic measurements.
+    """Dynamically discovers all Switchgear and Transformer TEV and Ultrasonic measurements.
+
+    Primary approach parses survey_summary.js manifest.
+    Fallback approach scans filesystem dynamically (SWG, VCB, RMU, TX, outdoor equipment).
     Returns list of tuples: (label, relative_subpath, html_filename, tech_type)
     """
     base_path = Path(safe_path(survey_dir))
-    items = []
+    items: list[tuple[str, str, str, str]] = []
 
-    # 1. Scan SWG directory (FEEDER_1, FEEDER_2, ..., FEEDER_N)
-    swg_dir = base_path / "SWG"
-    if swg_dir.exists() and swg_dir.is_dir():
-        for feeder_folder in sorted(swg_dir.iterdir(), key=lambda p: p.name):
-            if not feeder_folder.is_dir():
+    # 1. Primary approach: parse survey_summary.js manifest
+    manifest_path = base_path / "survey_summary.js"
+    if os.path.exists(safe_path(manifest_path)):
+        try:
+            with open(safe_path(manifest_path), "r", encoding="utf-8", errors="ignore") as fh:
+                content = fh.read()
+
+            summary_data = None
+            m = re.search(r"var\s+survey_summary\s*=\s*(\{[\s\S]*?\});?\s*$", content)
+            if m:
+                try:
+                    summary_data = json.loads(m.group(1))
+                except Exception:
+                    pass
+
+            if summary_data is None:
+                start = content.find("{")
+                end = content.rfind("}")
+                if start != -1 and end > start:
+                    try:
+                        summary_data = json.loads(content[start : end + 1])
+                    except Exception:
+                        pass
+
+            if summary_data and isinstance(summary_data, dict):
+                seen_labels: set[str] = set()
+                for asset in summary_data.get("assets", []):
+                    if not isinstance(asset, dict):
+                        continue
+                    asset_name = str(asset.get("$ASSET_NAME", "")).strip()
+                    clean_asset = _sanitize_name(asset_name)
+                    sub_assets = asset.get("$SUB_ASSETS", [])
+                    if not isinstance(sub_assets, list):
+                        continue
+                    for sub in sub_assets:
+                        if not isinstance(sub, dict):
+                            continue
+                        sub_name = str(sub.get("$SUB_ASSET_NAME", "")).strip()
+                        clean_sub = _sanitize_name(sub_name)
+                        measures = sub.get("$MEASURES", [])
+                        if not isinstance(measures, list):
+                            continue
+                        for meas in measures:
+                            if not isinstance(meas, dict):
+                                continue
+                            mtype = meas.get("$MEASURE_TYPE", "")
+                            data_rel = meas.get("Data", "")
+                            if not data_rel:
+                                continue
+                            rel_subpath = str(data_rel).replace("\\", "/").strip("/")
+                            if mtype == "$TEV":
+                                html_name = "TEV.html"
+                                tech = "TEV"
+                            elif mtype == "$ULTRA":
+                                html_name = "Ultrasonic.html"
+                                tech = "US"
+                            else:
+                                continue
+
+                            target_html = base_path / Path(rel_subpath) / html_name
+                            if os.path.exists(safe_path(target_html)):
+                                base_label = f"{clean_asset}_{clean_sub}_{tech}" if clean_sub else f"{clean_asset}_{tech}"
+                                base_label = base_label.replace(" ", "_")
+                                label = base_label
+                                if label in seen_labels:
+                                    counter = 2
+                                    while f"{base_label}_{counter}" in seen_labels:
+                                        counter += 1
+                                    label = f"{base_label}_{counter}"
+                                seen_labels.add(label)
+                                items.append((label, rel_subpath, html_name, tech))
+        except Exception:
+            items = []
+
+    if items:
+        return items
+
+    # 2. Fallback approach: dynamic directory traversal
+    seen_labels = set()
+    eq_prefixes = ("SWG", "VCB", "RMU", "TX", "TRANSFORMER", "H_POLE", "H-POLE", "LIGHTNING", "DROPOUT")
+    try:
+        candidate_eq_dirs = [
+            d for d in base_path.iterdir()
+            if d.is_dir() and (d.name.upper().startswith(eq_prefixes) or "TRANSFORMER" in d.name.upper())
+        ]
+    except OSError:
+        return items
+
+    for eq_dir in sorted(candidate_eq_dirs, key=lambda p: p.name):
+        eq_name = _sanitize_name(eq_dir.name)
+
+        try:
+            children = [c for c in eq_dir.iterdir() if c.is_dir()]
+        except OSError:
+            continue
+
+        for child in sorted(children, key=lambda p: p.name):
+            # Check if child is direct measurement directory
+            tev_html = child / "TEV.html"
+            us_html = child / "Ultrasonic.html"
+            if os.path.exists(safe_path(tev_html)):
+                rel_path = child.relative_to(base_path).as_posix()
+                base_label = f"{eq_name}_TEV"
+                label = base_label
+                if label in seen_labels:
+                    c = 2
+                    while f"{base_label}_{c}" in seen_labels:
+                        c += 1
+                    label = f"{base_label}_{c}"
+                seen_labels.add(label)
+                items.append((label, rel_path, "TEV.html", "TEV"))
                 continue
-            feeder_name = feeder_folder.name.upper()  # e.g. FEEDER_1
-
-            # Find TEV measurement subfolder
-            for meas in feeder_folder.iterdir():
-                if meas.is_dir() and meas.name.endswith("_TEV"):
-                    html_file = meas / "TEV.html"
-                    if html_file.exists():
-                        rel_path = f"SWG/{feeder_folder.name}/{meas.name}"
-                        label = f"SWG_{feeder_name}_TEV"
-                        items.append((label, rel_path, "TEV.html", "TEV"))
-
-            # Find Ultrasonic measurement subfolder
-            for meas in feeder_folder.iterdir():
-                if meas.is_dir() and meas.name.endswith("_Ultrasonic"):
-                    html_file = meas / "Ultrasonic.html"
-                    if html_file.exists():
-                        rel_path = f"SWG/{feeder_folder.name}/{meas.name}"
-                        label = f"SWG_{feeder_name}_US"
-                        items.append((label, rel_path, "Ultrasonic.html", "US"))
-
-    # 2. Scan TX directory (Transformer, TX1, TX2, etc.)
-    tx_dir = base_path / "TX"
-    if tx_dir.exists() and tx_dir.is_dir():
-        for tx_folder in sorted(tx_dir.iterdir(), key=lambda p: p.name):
-            if not tx_folder.is_dir():
+            if os.path.exists(safe_path(us_html)):
+                rel_path = child.relative_to(base_path).as_posix()
+                base_label = f"{eq_name}_US"
+                label = base_label
+                if label in seen_labels:
+                    c = 2
+                    while f"{base_label}_{c}" in seen_labels:
+                        c += 1
+                    label = f"{base_label}_{c}"
+                seen_labels.add(label)
+                items.append((label, rel_path, "Ultrasonic.html", "US"))
                 continue
-            tx_name = tx_folder.name.upper()
 
-            # Find Ultrasonic measurement subfolder
-            for meas in tx_folder.iterdir():
-                if meas.is_dir() and meas.name.endswith("_Ultrasonic"):
-                    html_file = meas / "Ultrasonic.html"
-                    if html_file.exists():
-                        rel_path = f"TX/{tx_folder.name}/{meas.name}"
-                        label = f"TX_{tx_name}_US"
-                        items.append((label, rel_path, "Ultrasonic.html", "US"))
+            # Child is a sub-asset (panel/feeder/transformer)
+            sub_name = _sanitize_name(child.name)
+            try:
+                meas_dirs = [m for m in child.iterdir() if m.is_dir()]
+            except OSError:
+                continue
 
-            # Find TEV measurement subfolder if any on TX
-            for meas in tx_folder.iterdir():
-                if meas.is_dir() and meas.name.endswith("_TEV"):
-                    html_file = meas / "TEV.html"
-                    if html_file.exists():
-                        rel_path = f"TX/{tx_folder.name}/{meas.name}"
-                        label = f"TX_{tx_name}_TEV"
-                        items.append((label, rel_path, "TEV.html", "TEV"))
+            for meas in sorted(meas_dirs, key=lambda p: p.name):
+                tev_html = meas / "TEV.html"
+                us_html = meas / "Ultrasonic.html"
+                if os.path.exists(safe_path(tev_html)):
+                    rel_path = meas.relative_to(base_path).as_posix()
+                    base_label = f"{eq_name}_{sub_name}_TEV"
+                    label = base_label
+                    if label in seen_labels:
+                        c = 2
+                        while f"{base_label}_{c}" in seen_labels:
+                            c += 1
+                        label = f"{base_label}_{c}"
+                    seen_labels.add(label)
+                    items.append((label, rel_path, "TEV.html", "TEV"))
+                elif os.path.exists(safe_path(us_html)):
+                    rel_path = meas.relative_to(base_path).as_posix()
+                    base_label = f"{eq_name}_{sub_name}_US"
+                    label = base_label
+                    if label in seen_labels:
+                        c = 2
+                        while f"{base_label}_{c}" in seen_labels:
+                            c += 1
+                        label = f"{base_label}_{c}"
+                    seen_labels.add(label)
+                    items.append((label, rel_path, "Ultrasonic.html", "US"))
 
     return items
+
 
 
 # Non-overlapping Flexbox Layout: 320px Left Measurement Table + 840px Right PRPD Graph
@@ -212,28 +326,29 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
             content = content.replace("unipolar_sinewave: true", "unipolar_sinewave: false")
             mod_content = content.replace("</head>", INJECTION_TEMPLATE + "</head>")
 
-            with open(safe_path(temp_html_file), "w", encoding="utf-8") as fh:
-                fh.write(mod_content)
+            try:
+                with open(safe_path(temp_html_file), "w", encoding="utf-8") as fh:
+                    fh.write(mod_content)
 
-            url = f"http://127.0.0.1:{port}/{rel_subpath}/_temp_render_c.html"
+                url = f"http://127.0.0.1:{port}/{rel_subpath}/_temp_render_c.html"
 
-            cmd = [
-                chrome,
-                "--headless=new",
-                "--disable-gpu",
-                "--run-all-compositor-stages-before-draw",
-                "--virtual-time-budget=5000",
-                f"--screenshot={out_png}",
-                "--window-size=1200,380",
-                url,
-            ]
-            subprocess.run(cmd, check=True, capture_output=True)
-
-            if os.path.exists(safe_path(temp_html_file)):
-                try:
-                    os.remove(safe_path(temp_html_file))
-                except Exception:
-                    pass
+                cmd = [
+                    chrome,
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--run-all-compositor-stages-before-draw",
+                    "--virtual-time-budget=5000",
+                    f"--screenshot={out_png}",
+                    "--window-size=1200,380",
+                    url,
+                ]
+                subprocess.run(cmd, check=True, capture_output=True)
+            finally:
+                if os.path.exists(safe_path(temp_html_file)):
+                    try:
+                        os.remove(safe_path(temp_html_file))
+                    except Exception:
+                        pass
 
             out_size = os.path.getsize(safe_path(out_png)) if os.path.exists(safe_path(out_png)) else 0
             print(f"[{tech:3s}] {label:20s} -> Saved ({out_size:,} bytes) to {out_png.name}")
@@ -257,7 +372,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate Option C PRPD + Measurement Table composite graphs.")
     parser.add_argument(
         "--survey-dir", "-s",
-        default=r"C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\RAW MATERIAL\RAUB\02. SEPTEMBER\02-09-2026\199\RAW DATA\US+TEV\20260902T103527_199-LEMBAH-KLAU-BARU",
+        default=r"C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\RAW MATERIAL\RAUB\02. SEPTEMBER\04-09-2026\228\RAW DATA\US+TEV\20260904T122744_228-SSU-GALI-TENGAH",
         help="Path to the raw UltraTEV survey folder."
     )
     parser.add_argument(

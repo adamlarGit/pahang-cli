@@ -191,9 +191,7 @@ class ProjectEnvironment:
             raw_cfg = data.get("camera_config", data if "ir_mode" in data else None)
             if raw_cfg and isinstance(raw_cfg, dict):
                 return CameraConfig.from_dict(raw_cfg)
-        if self._repository is not None:
-            return self._repository.get_camera_config()
-        return JsonFileProjectRepository().get_camera_config()
+        return CameraConfig()
 
     def save_camera_config(self, camera_config: CameraConfig) -> None:
         config_path = self.base_path / "project_config.json"

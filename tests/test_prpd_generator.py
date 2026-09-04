@@ -332,3 +332,242 @@ def test_discover_survey_prioritizes_latest_timestamp(tmp_path: Path):
     discovered = discover_ultratev_survey_dir(tmp_path)
     assert discovered == late_survey
 
+
+def test_discover_ultratev_survey_dir_vcb_and_rmu(tmp_path: Path):
+    """Test discovering survey directory when only VCB or RMU folders are present."""
+    vcb_survey = tmp_path / "RAW DATA" / "US+TEV" / "20260904T122744_228-SSU-GALI-TENGAH"
+    (vcb_survey / "VCB" / "PANEL_2").mkdir(parents=True)
+    (vcb_survey / "TX1" / "Transformer").mkdir(parents=True)
+
+    discovered = discover_ultratev_survey_dir(tmp_path)
+    assert discovered == vcb_survey
+
+
+def test_find_swg_feeder_survey_dir_vcb_and_rmu(tmp_path: Path):
+    """Test find_swg_feeder_survey_dir correctly resolves VCB and RMU switchgear folders."""
+    survey_dir = tmp_path / "SURVEY_VCB"
+    vcb_dir = survey_dir / "VCB"
+    p2_dir = vcb_dir / "PANEL_2"
+    p2_dir.mkdir(parents=True)
+
+    # Match panel_no = 2 against VCB/PANEL_2
+    matched_p2 = find_swg_feeder_survey_dir(survey_dir, panel_no=2)
+    assert matched_p2 == p2_dir
+
+    # RMU test
+    rmu_survey = tmp_path / "SURVEY_RMU"
+    rmu_dir = rmu_survey / "RMU"
+    f1_dir = rmu_dir / "FEEDER_1"
+    f1_dir.mkdir(parents=True)
+
+    matched_rmu = find_swg_feeder_survey_dir(rmu_survey, panel_no=1)
+    assert matched_rmu == f1_dir
+
+
+def test_generate_all_substation_prpd_graphs_vcb(tmp_path: Path):
+    """Test generate_all_substation_prpd_graphs when substation uses VCB switchgear layout."""
+    survey_root = tmp_path / "SURVEY_228"
+    p2_dir = survey_root / "VCB" / "PANEL_2"
+    tx1_dir = survey_root / "TX1" / "Transformer"
+    p2_dir.mkdir(parents=True)
+    tx1_dir.mkdir(parents=True)
+
+    # Add TEV and US to VCB Panel 2
+    tev_run = p2_dir / "20260904T125310_TEV"
+    us_run = p2_dir / "20260904T123837_Ultrasonic"
+    tev_run.mkdir()
+    us_run.mkdir()
+    (tev_run / "eventData.js").write_text(_build_synthetic_tev_flatbuffers(), encoding="utf-8")
+    (us_run / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[15.0, 45, 1]]};', encoding="utf-8")
+
+    # Add US to TX1
+    tx_us = tx1_dir / "20260904T124600_Ultrasonic"
+    tx_us.mkdir()
+    (tx_us / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[-6.0, 90, 1]]};', encoding="utf-8")
+
+    out_dir = tmp_path / "prpd_vcb_out"
+    catalog = generate_all_substation_prpd_graphs(survey_root, out_dir)
+
+    assert 2 in catalog["swg"]
+    assert catalog["swg"][2]["us"] is not None and catalog["swg"][2]["us"].exists()
+    assert catalog["swg"][2]["tev"] is not None and catalog["swg"][2]["tev"].exists()
+
+    assert 1 in catalog["tx"]
+    assert catalog["tx"][1]["us"] is not None and catalog["tx"][1]["us"].exists()
+
+
+def test_auto_discover_measurements_option_c_and_b(tmp_path: Path):
+    """Test auto_discover_measurements in Option C and Option B scripts with survey_summary.js and fallback."""
+    from scripts.generate_prpd_option_c_html import auto_discover_measurements as discover_c
+    from scripts.generate_prpd_option_b import auto_discover_measurements as discover_b
+
+    survey_root = tmp_path / "SURVEY_TEST"
+    tev_dir = survey_root / "VCB" / "PANEL_2" / "20260904T125310_TEV"
+    us_dir = survey_root / "VCB" / "PANEL_2" / "20260904T123837_Ultrasonic"
+    tx_us_dir = survey_root / "TX1" / "Transformer" / "20260904T124600_Ultrasonic"
+
+    for d in (tev_dir, us_dir, tx_us_dir):
+        d.mkdir(parents=True)
+
+    # Option C HTML files
+    (tev_dir / "TEV.html").write_text("<html></html>", encoding="utf-8")
+    (us_dir / "Ultrasonic.html").write_text("<html></html>", encoding="utf-8")
+    (tx_us_dir / "Ultrasonic.html").write_text("<html></html>", encoding="utf-8")
+
+    # Option B data files
+    (tev_dir / "eventData.js").write_text(_build_synthetic_tev_flatbuffers(), encoding="utf-8")
+    (us_dir / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": []};', encoding="utf-8")
+    (tx_us_dir / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": []};', encoding="utf-8")
+
+    # 1. Test fallback traversal (before survey_summary.js exists)
+    items_c_fallback = discover_c(survey_root)
+    assert len(items_c_fallback) == 3
+    labels_c = {item[0] for item in items_c_fallback}
+    assert "VCB_PANEL_2_TEV" in labels_c
+    assert "VCB_PANEL_2_US" in labels_c
+    assert "TX1_TRANSFORMER_US" in labels_c
+
+    items_b_fallback = discover_b(survey_root)
+    assert len(items_b_fallback) == 3
+    labels_b = {item[0] for item in items_b_fallback}
+    assert "VCB_PANEL_2_TEV" in labels_b
+    assert "VCB_PANEL_2_US" in labels_b
+    assert "TX1_TRANSFORMER_US" in labels_b
+
+    # 2. Test primary manifest parsing with survey_summary.js
+    manifest_data = {
+        "assets": [
+            {
+                "$ASSET_NAME": "VCB",
+                "$SUB_ASSETS": [
+                    {
+                        "$SUB_ASSET_NAME": "PANEL 2",
+                        "$PANEL_NO": "2",
+                        "$MEASURES": [
+                            {"$MEASURE_TYPE": "$TEV", "Data": "VCB/PANEL_2/20260904T125310_TEV"},
+                            {"$MEASURE_TYPE": "$ULTRA", "Data": "VCB/PANEL_2/20260904T123837_Ultrasonic"},
+                        ],
+                    }
+                ],
+            },
+            {
+                "$ASSET_NAME": "TX1",
+                "$SUB_ASSETS": [
+                    {
+                        "$SUB_ASSET_NAME": "Transformer",
+                        "$PANEL_NO": "1",
+                        "$MEASURES": [
+                            {"$MEASURE_TYPE": "$ULTRA", "Data": "TX1/Transformer/20260904T124600_Ultrasonic"}
+                        ],
+                    }
+                ],
+            },
+        ]
+    }
+    (survey_root / "survey_summary.js").write_text(
+        f"var survey_summary = {json.dumps(manifest_data)};", encoding="utf-8"
+    )
+
+    items_c_manifest = discover_c(survey_root)
+    assert len(items_c_manifest) == 3
+    assert items_c_manifest[0] == ("VCB_PANEL_2_TEV", "VCB/PANEL_2/20260904T125310_TEV", "TEV.html", "TEV")
+    assert items_c_manifest[1] == ("VCB_PANEL_2_US", "VCB/PANEL_2/20260904T123837_Ultrasonic", "Ultrasonic.html", "US")
+    assert items_c_manifest[2] == ("TX1_TRANSFORMER_US", "TX1/Transformer/20260904T124600_Ultrasonic", "Ultrasonic.html", "US")
+
+    items_b_manifest = discover_b(survey_root)
+    assert len(items_b_manifest) == 3
+    assert items_b_manifest[0][0] == "VCB_PANEL_2_TEV"
+    assert items_b_manifest[0][2] == "TEV"
+    assert items_b_manifest[1][0] == "VCB_PANEL_2_US"
+    assert items_b_manifest[1][2] == "US"
+    assert items_b_manifest[2][0] == "TX1_TRANSFORMER_US"
+    assert items_b_manifest[2][2] == "US"
+
+
+def test_auto_discover_measurements_malformed_manifest_fallback(tmp_path: Path):
+    """Test auto_discover_measurements gracefully falls back to filesystem traversal on corrupted JSON."""
+    from scripts.generate_prpd_option_c_html import auto_discover_measurements as discover_c
+    from scripts.generate_prpd_option_b import auto_discover_measurements as discover_b
+
+    survey_root = tmp_path / "SURVEY_CORRUPT"
+    tev_dir = survey_root / "VCB" / "PANEL_1" / "20260904T120000_TEV"
+    tev_dir.mkdir(parents=True)
+    (tev_dir / "TEV.html").write_text("<html></html>", encoding="utf-8")
+    (tev_dir / "eventData.js").write_text(_build_synthetic_tev_flatbuffers(), encoding="utf-8")
+
+    # Write corrupt survey_summary.js
+    (survey_root / "survey_summary.js").write_text("var survey_summary = { NOT_VALID_JSON !!!", encoding="utf-8")
+
+    items_c = discover_c(survey_root)
+    assert len(items_c) == 1
+    assert items_c[0][0] == "VCB_PANEL_1_TEV"
+
+    items_b = discover_b(survey_root)
+    assert len(items_b) == 1
+    assert items_b[0][0] == "VCB_PANEL_1_TEV"
+
+
+def test_auto_discover_measurements_missing_and_special_char_attributes(tmp_path: Path):
+    """Test manifest parsing with missing attributes and special characters in asset names."""
+    from scripts.generate_prpd_option_c_html import auto_discover_measurements as discover_c
+    from scripts.generate_prpd_option_b import auto_discover_measurements as discover_b
+
+    survey_root = tmp_path / "SURVEY_SPECIAL"
+    sub_dir = survey_root / "FEEDERS" / "RUN1"
+    sub_dir.mkdir(parents=True)
+    (sub_dir / "TEV.html").write_text("<html></html>", encoding="utf-8")
+    (sub_dir / "eventData.js").write_text(_build_synthetic_tev_flatbuffers(), encoding="utf-8")
+
+    manifest = {
+        "assets": [
+            "invalid_asset_element_string",
+            None,
+            {
+                "$ASSET_NAME": "RMU #1 / 11kV",
+                "$SUB_ASSETS": [
+                    None,
+                    {
+                        "$SUB_ASSET_NAME": "Panel:A (Incomer)",
+                        "$MEASURES": [
+                            {"$MEASURE_TYPE": "UNKNOWN", "Data": "FEEDERS/RUN1"},
+                            {"$MEASURE_TYPE": "$TEV", "Data": ""},
+                            {"$MEASURE_TYPE": "$TEV", "Data": "FEEDERS/RUN1"},
+                        ],
+                    },
+                ],
+            },
+        ]
+    }
+    (survey_root / "survey_summary.js").write_text(f"var survey_summary = {json.dumps(manifest)};", encoding="utf-8")
+
+    items_c = discover_c(survey_root)
+    assert len(items_c) == 1
+    # Check that special characters (#, /, :, (, )) were cleanly sanitized
+    label_c = items_c[0][0]
+    assert label_c == "RMU_1_11KV_PANEL_A_INCOMER_TEV"
+    assert "/" not in label_c
+    assert ":" not in label_c
+
+    items_b = discover_b(survey_root)
+    assert len(items_b) == 1
+    label_b = items_b[0][0]
+    assert label_b == "RMU_1_11KV_PANEL_A_INCOMER_TEV"
+
+
+def test_find_swg_feeder_survey_dir_hyphen_and_zero_padding(tmp_path: Path):
+    """Test find_swg_feeder_survey_dir with hyphenated and zero-padded directory names."""
+    survey_dir = tmp_path / "SURVEY_HYPHEN"
+    (survey_dir / "SWG" / "PANEL-2").mkdir(parents=True)
+    (survey_dir / "SWG" / "FEEDER-03").mkdir(parents=True)
+
+    # Panel 2 via hyphenated name
+    m2 = find_swg_feeder_survey_dir(survey_dir, panel_no=2)
+    assert m2 is not None
+    assert m2.name == "PANEL-2"
+
+    # Feeder 3 via zero-padded hyphenated name
+    m3 = find_swg_feeder_survey_dir(survey_dir, panel_no=3)
+    assert m3 is not None
+    assert m3.name == "FEEDER-03"
+
+
