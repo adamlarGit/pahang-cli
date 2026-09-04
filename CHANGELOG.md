@@ -5,6 +5,11 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.4] - 2026-09-04
+
+### Fixed
+- **Transformer Overview & Detail Location Resolution (`src/quick_report/cbm_render.py`)**: Fixed an issue where the location field on Transformer overview pages erroneously inherited substation `building_type` (e.g. `INDOOR`). Transformer overview location now strictly defaults to `"-"`. Non-HV/LV Transformer detail defect pages (e.g. `BODY`) also default strictly to `"-"` instead of falling back to building type. Added regression tests in `tests/test_quick_report_components.py`.
+
 ## [1.14.3] - 2026-09-04
 
 ### Added

@@ -674,25 +674,19 @@ def _build_tx_render_context(
     tx_match_target = record.equipment_id or resolved_item_key or equipment
     matched_tx = _find_matching_transformer(transformers, tx_match_target)
 
-    # Location from substation building_type (overview) or HV/LV side (detail)
+    # Location: strictly "-" for overview, HV/LV side for detail (defaulting to "-")
     if overview:
-        tx_location = ""
-        if pe_info and isinstance(pe_info.get("substation"), dict):
-            tx_location = pe_info["substation"].get("building_type", "")
-        if not tx_location and resolved_item_suffix:
-            tx_location = resolved_item_suffix
+        tx_location = "-"
     else:
         search_loc = f"{record.defect_area} {record.additional_remarks} {record.equipment_id} {equipment}".upper()
         if any(k in search_loc for k in ("HV", "11KV", "33KV")):
             tx_location = "HV - SIDE"
         elif any(k in search_loc for k in ("LV", "415V")):
             tx_location = "LV - SIDE"
+        elif resolved_item_suffix:
+            tx_location = resolved_item_suffix
         else:
-            tx_location = ""
-            if pe_info and isinstance(pe_info.get("substation"), dict):
-                tx_location = pe_info["substation"].get("building_type", "")
-            if not tx_location and resolved_item_suffix:
-                tx_location = resolved_item_suffix
+            tx_location = "-"
 
     tx_mfg = (matched_tx.manufacturer if matched_tx and matched_tx.manufacturer else "") or _text_or_empty(record.brand)
     

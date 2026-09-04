@@ -2211,6 +2211,20 @@ def test_tx_render_context_with_and_without_testsheet():
     assert ctx_empty["tx"]["rating"] == "-"
     assert ctx_empty["tx"]["serialnumber"] == "-"
 
+    # Overview must strictly render location as "-" (never substation building_type)
+    ctx_overview = _build_family_render_context(spec, rec, overview=True, item_key="TX 1", pe_info=pe_info)
+    assert ctx_overview["tx"]["location"] == "-"
+
+    # Detail defect without HV/LV side (e.g. BODY) must strictly render location as "-"
+    rec_body = CbmDefectRecord(
+        equipment="LTX/DTX",
+        equipment_id="TX 1",
+        technology="IR",
+        defect_area="BODY",
+    )
+    ctx_body = _build_family_render_context(spec, rec_body, overview=False, item_key="TX 1", pe_info=pe_info)
+    assert ctx_body["tx"]["location"] == "-"
+
 
 def test_fp_lvdb_render_context_splitting_and_testsheet():
     from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
