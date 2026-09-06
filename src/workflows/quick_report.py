@@ -25,6 +25,33 @@ if TYPE_CHECKING:
     from src.workflows.models import QuickReportRequest
 
 
+def _terminate_word_process(pid: int | None) -> None:
+    """Safely terminate Word COM process if still running in background after Quit."""
+    if not pid:
+        return
+    try:
+        import ctypes
+        is_alive = False
+        if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "kernel32"):
+            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+            if handle:
+                ctypes.windll.kernel32.CloseHandle(handle)
+                is_alive = True
+        else:
+            is_alive = True
+
+        if is_alive:
+            import subprocess
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+    except Exception:
+        pass
+
+
 class QuickReportWorkflow:
     """Orchestrator for Pahang 7-part quick report document generation.
 
@@ -72,11 +99,21 @@ class QuickReportWorkflow:
 
         co_initialized = False
         word_app = None
+        word_pid = None
         try:
             pythoncom.CoInitialize()
             co_initialized = True
             word_app = win32com.client.Dispatch("Word.Application")
+            try:
+                import win32process
+                hwnd = getattr(word_app, "Hwnd", None)
+                if hwnd:
+                    _, word_pid = win32process.GetWindowThreadProcessId(hwnd)
+            except Exception:
+                word_pid = None
+
             word_app.Visible = False
+            word_app.ScreenUpdating = False
             word_app.DisplayAlerts = 0
 
             for i, pkg in enumerate(filtered_packages, start=1):
@@ -106,16 +143,25 @@ class QuickReportWorkflow:
         finally:
             if word_app is not None:
                 try:
+                    word_app.ScreenUpdating = True
+                except Exception:
+                    pass
+                try:
                     word_app.Quit()
                 except Exception:
                     pass
                 word_app = None
                 gc.collect()
+
+            if word_pid is not None:
+                _terminate_word_process(word_pid)
+
             if co_initialized:
                 try:
                     pythoncom.CoUninitialize()
                 except Exception:
                     pass
+
 
         return self._audit_and_build_result(
             generated_paths, [], errors

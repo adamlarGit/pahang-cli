@@ -5,6 +5,13 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.7] - 2026-09-07
+
+### Changed
+- **Targeted Quick Report Package Discovery (`src/quick_report/extractor.py`)**: Replaced full eager testsheet extraction across all station directories with dual-tier lazy discovery. In FL mode, queries `TOTAL PE.xlsx` header index first to instantly resolve target PE number and date folder (<0.2s), falling back to FL prefix routing (`CRAU` -> `RAUB`, `CKTN` -> `KUANTAN`, etc.) and lightweight metadata parsing (`extract_testsheet_metadata`). Bypasses openpyxl parsing for all non-target project workbooks, reducing discovery runtime from >140s to ~0.4s.
+- **Station-Scoped Master ENGR Defect Extraction (`src/quick_report/defects.py`, `src/core/normalizers.py`)**: Added `resolve_station_code` and station-scoped defect loading in `MasterQr03DefectRepository`. Authoritatively loads only the target station's master Excel workbook (`ENGR-750-36-CBA-<CODE>-<YEAR>.xlsx`), caching both `QR03 CBA` and `QR03 VI` DataFrames in memory. Clean/zero-defect substations immediately return empty defect lists without reloading cross-station workbooks, reducing defect extraction from 4.7s to ~0.4s.
+- **Word COM Compilation & Teardown Tuning (`src/quick_report/composer.py`, `src/workflows/quick_report.py`)**: Configured `word_app.ScreenUpdating = False` and `DisplayAlerts = 0`. Added `_clear_clipboard()` via Win32 `EmptyClipboard` between part merges, eliminating the 5.0s OLE ActiveX clipboard flush stall upon document close. Added PID tracking (`win32process.GetWindowThreadProcessId`) and safe process termination in `finally` to prevent orphaned background Word processes.
+
 ## [1.14.6] - 2026-09-05
 
 ### Fixed
