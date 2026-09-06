@@ -1030,6 +1030,25 @@ def test_generate_cbm_tech_summary_multitech_template(tmp_path: Path):
     assert r1_texts[5] == "28.5dB"
 
 
+def test_cbm_summary_rows_normal_char_does_not_set_severity():
+    """Verify that us_char='NORMAL' does not populate defect severity in summary table rows."""
+    from src.quick_report.cbm_summary import prepare_tech_summary_rows
+
+    defects = [
+        CbmDefectRecord(
+            equipment="VCB PANEL 1",
+            defect_area="Cable Box",
+            technology="US",
+            us_reading="12.0",
+            us_char="NORMAL",
+        ),
+    ]
+    rows = prepare_tech_summary_rows(defects)
+    assert len(rows) == 1
+    assert rows[0].severity == ""
+    assert rows[0].us_dB == "12dB"
+
+
 def test_cbm_defect_planner(tmp_path: Path):
     from unittest.mock import MagicMock
     from src.quick_report.cbm_defect_planner import CbmDefectPlanner
@@ -2349,6 +2368,25 @@ def test_tx_render_context_unspecified_us_char_defaults_to_normal():
     )
     assert ctx["tx"]["us"]["char"] == "NORMAL"
     assert ctx["us"]["char"] == "NORMAL"
+
+
+def test_swg_and_tx_render_context_overview_us_char_dash():
+    """Verify that overview render contexts maintain us.char as '-' rather than defaulting to NORMAL."""
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+
+    swg_spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
+    rec_swg = CbmDefectRecord(equipment="VCB", technology="IR", defect_area="Cable Box")
+    ctx_swg = _build_family_render_context(swg_spec, rec_swg, overview=True, pe_info={})
+    assert ctx_swg["panel"]["us"]["char"] == "-"
+    assert ctx_swg["us"]["char"] == "-"
+
+    tx_spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["tx"]
+    rec_tx = CbmDefectRecord(equipment="TX 1", technology="IR", defect_area="HV Bushing")
+    ctx_tx = _build_family_render_context(tx_spec, rec_tx, overview=True, pe_info={})
+    assert ctx_tx["tx"]["us"]["char"] == "-"
+    assert ctx_tx["us"]["char"] == "-"
 
 
 

@@ -544,6 +544,7 @@ US_CHARACTERISTIC_MAP: dict[str, str] = {
     "SURFACE TRACKING": "TRACKING",
     "MV": "MECHANICAL VIBRATION",
     "MECHANICAL VIBRATION": "MECHANICAL VIBRATION",
+    "NORMAL": "NORMAL",
 }
 
 
@@ -713,24 +714,30 @@ def format_cbm_reading(val: Any, technology: str | None) -> str:
     return normalize_for_report(val)
 
 
-def format_heater_amp(val: Any, switchgear_type: str | None = None) -> str:
+def format_heater_amp(
+    val: Any,
+    switchgear_type: str | None = None,
+    is_vcb: bool | None = None,
+) -> str:
     """Format anti-condensation heater current for switchgear panels.
 
-    - For VCB switchgear (or when switchgear_type is None / contains 'VCB'):
+    - For VCB switchgear:
       Parses valid numeric current into 1-decimal float using half-up rounding (stripping trailing 'A'/'a' and whitespace).
       Renders as 'ON:<amp>A/OFF:0.0A' (e.g. '0.5A' -> 'ON:0.5A/OFF:0.0A', '0.55' -> 'ON:0.6A/OFF:0.0A', '1' -> 'ON:1.0A/OFF:0.0A', '0' -> 'ON:0.0A/OFF:0.0A').
       Returns '-' if empty, blank, '-', 'N/A', or non-numeric.
-    - For Non-VCB switchgear (RMU SF6, RMU OIL, MRMU, OCB, etc.):
+    - For Non-VCB switchgear (RMU SF6, RMU OIL, MRMU, OCB, or unspecified non-VCB):
       Always returns '-'.
 
     Args:
         val: Heater current reading (str, int, float, Decimal, etc.).
         switchgear_type: Switchgear type string (e.g. 'VCB', 'RMU SF6', 'MRMU', etc.).
+        is_vcb: Explicit boolean indicating if the switchgear/panel is VCB. Takes precedence if provided.
 
     Returns:
         Formatted heater current string or '-' if invalid or non-VCB.
     """
-    if switchgear_type is not None and "VCB" not in str(switchgear_type).upper():
+    vcb_active = is_vcb if is_vcb is not None else (switchgear_type is not None and "VCB" in str(switchgear_type).upper())
+    if not vcb_active:
         return "-"
 
     if _is_null_or_empty(val) or isinstance(val, bool):
@@ -746,11 +753,7 @@ def format_heater_amp(val: Any, switchgear_type: str | None = None) -> str:
     if not s or s.lower() in _NULL_SENTINELS:
         return "-"
 
-    m_on = re.match(r"^ON:\s*(\d+(?:\.\d+)?)\s*A\s*/\s*OFF:\s*0(?:\.0)?\s*A$", s, re.IGNORECASE)
-    if m_on:
-        clean = m_on.group(1)
-    else:
-        clean = re.sub(r"[Aa]\s*$", "", s).strip()
+    clean = re.sub(r"[Aa]\s*$", "", s).strip()
 
     if not clean or clean.lower() in _NULL_SENTINELS:
         return "-"
@@ -765,7 +768,11 @@ def format_heater_amp(val: Any, switchgear_type: str | None = None) -> str:
         return "-"
 
 
-def format_busbar_position(panel_name: Any, switchgear_type: str | None = None) -> str:
+def format_busbar_position(
+    panel_name: Any,
+    switchgear_type: str | None = None,
+    is_vcb: bool | None = None,
+) -> str:
     """Format busbar position for switchgear panels.
 
     - If panel name contains 'TRANSITION' (case-insensitive, e.g. 'TRANSITION PANEL', 'TRANSITION'): output '-'.
@@ -775,6 +782,7 @@ def format_busbar_position(panel_name: Any, switchgear_type: str | None = None) 
     Args:
         panel_name: Name or label of the switchgear panel.
         switchgear_type: Switchgear type string (e.g. 'VCB', 'RMU SF6', 'MRMU', etc.).
+        is_vcb: Explicit boolean indicating if the switchgear/panel is VCB. Takes precedence if provided.
 
     Returns:
         'MAIN' for non-transition panels on VCB switchgear, or '-' otherwise.
@@ -782,7 +790,8 @@ def format_busbar_position(panel_name: Any, switchgear_type: str | None = None) 
     p_name = str(panel_name or "").strip().upper()
     if "TRANSITION" in p_name:
         return "-"
-    if switchgear_type and "VCB" in str(switchgear_type).upper():
+    vcb_active = is_vcb if is_vcb is not None else (switchgear_type is not None and "VCB" in str(switchgear_type).upper())
+    if vcb_active:
         return "MAIN"
     return "-"
 

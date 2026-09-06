@@ -170,7 +170,7 @@ def prepare_tech_summary_rows(
         severity = ""
         if record.technology == "US" or record.us_char:
             norm_char = normalize_us_characteristic(record.us_char)
-            if norm_char != "-":
+            if norm_char not in ("-", "NORMAL"):
                 severity = norm_char
 
         if key not in paired:

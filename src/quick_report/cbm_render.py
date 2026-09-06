@@ -561,13 +561,16 @@ def _build_swg_render_context(
     )
     panel_heateramp_formatted = format_heater_amp(
         panel_heateramp,
-        switchgear_type="VCB" if is_vcb else (swg_type or "OTHER"),
+        is_vcb=is_vcb,
     )
-    panel_name_check = f"{panel_name} {matched_panel.name if matched_panel else ''}"
+    combined_panel_name = f"{panel_name} {matched_panel.name if matched_panel else ''}"
     panel_busbarposition = format_busbar_position(
-        panel_name_check,
-        switchgear_type="VCB" if is_vcb else (swg_type or "OTHER"),
+        combined_panel_name,
+        is_vcb=is_vcb,
     )
+
+    us_char_default = "-" if overview else "NORMAL"
+    norm_panel_us_char = normalize_us_characteristic(panel_us_char, default=us_char_default)
 
     tev_bg = _extract_tev_background(pe_info)
     ir_sev = "-" if overview else "__SEVERITY_IR__"
@@ -647,7 +650,7 @@ def _build_swg_render_context(
             },
             "us": {
                 "reading": format_db_int(panel_us_reading),
-                "char": normalize_us_characteristic(panel_us_char, default="NORMAL"),
+                "char": norm_panel_us_char,
                 "severity": us_sev,
                 "prpd": us_prpd,
             },
@@ -666,7 +669,7 @@ def _build_swg_render_context(
         },
         "us": {
             "reading": format_db_int(panel_us_reading),
-            "char": normalize_us_characteristic(panel_us_char, default="NORMAL"),
+            "char": norm_panel_us_char,
             "severity": us_sev,
             "prpd": us_prpd,
         },
@@ -792,6 +795,9 @@ def _build_tx_render_context(
                 if tev_png:
                     tev_prpd = tev_png
 
+    us_char_default = "-" if overview else "NORMAL"
+    norm_tx_us_char = normalize_us_characteristic(tx_us_char, default=us_char_default)
+
     return {
         "__is_overview__": overview,
         "__defective_technologies__": def_techs,
@@ -810,7 +816,7 @@ def _build_tx_render_context(
             },
             "us": {
                 "reading": format_db_int(tx_us_reading),
-                "char": normalize_us_characteristic(tx_us_char, default="NORMAL"),
+                "char": norm_tx_us_char,
                 "severity": us_sev,
                 "prpd": us_prpd,
             },
@@ -828,7 +834,7 @@ def _build_tx_render_context(
         },
         "us": {
             "reading": format_db_int(tx_us_reading),
-            "char": normalize_us_characteristic(tx_us_char, default="NORMAL"),
+            "char": norm_tx_us_char,
             "severity": us_sev,
             "prpd": us_prpd,
         },

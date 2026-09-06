@@ -474,7 +474,7 @@ def test_normalize_us_characteristic() -> None:
 
     # 6. Other / non-mapped strings -> return cleaned string representation
     assert normalize_us_characteristic("NORMAL") == "NORMAL"
-    assert normalize_us_characteristic("normal") == "normal"
+    assert normalize_us_characteristic("normal") == "NORMAL"
     assert normalize_us_characteristic("PARTIAL DISCHARGE") == "PARTIAL DISCHARGE"
     assert normalize_us_characteristic("  Custom Sound Pattern  ") == "Custom Sound Pattern"
 
@@ -642,20 +642,20 @@ def test_format_cbm_reading() -> None:
 
 def test_format_heater_amp() -> None:
     """Verify format_heater_amp formats anti-condensation heater current per domain rules."""
-    # 1. Numeric and string formatting with VCB switchgear or default
-    assert format_heater_amp("0.5A") == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp("0.5a") == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp("0.5 A") == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp("0.55") == "ON:0.6A/OFF:0.0A"
-    assert format_heater_amp("0.54") == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp(0.5) == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp(0.55) == "ON:0.6A/OFF:0.0A"
-    assert format_heater_amp(1) == "ON:1.0A/OFF:0.0A"
-    assert format_heater_amp("1") == "ON:1.0A/OFF:0.0A"
-    assert format_heater_amp(0) == "ON:0.0A/OFF:0.0A"
-    assert format_heater_amp("0") == "ON:0.0A/OFF:0.0A"
-    assert format_heater_amp("0.0A") == "ON:0.0A/OFF:0.0A"
-    assert format_heater_amp(Decimal("0.55")) == "ON:0.6A/OFF:0.0A"
+    # 1. Numeric and string formatting with explicit is_vcb=True or VCB switchgear
+    assert format_heater_amp("0.5A", is_vcb=True) == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp("0.5a", is_vcb=True) == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp("0.5 A", is_vcb=True) == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp("0.55", is_vcb=True) == "ON:0.6A/OFF:0.0A"
+    assert format_heater_amp("0.54", is_vcb=True) == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp(0.5, is_vcb=True) == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp(0.55, is_vcb=True) == "ON:0.6A/OFF:0.0A"
+    assert format_heater_amp(1, is_vcb=True) == "ON:1.0A/OFF:0.0A"
+    assert format_heater_amp("1", is_vcb=True) == "ON:1.0A/OFF:0.0A"
+    assert format_heater_amp(0, is_vcb=True) == "ON:0.0A/OFF:0.0A"
+    assert format_heater_amp("0", is_vcb=True) == "ON:0.0A/OFF:0.0A"
+    assert format_heater_amp("0.0A", is_vcb=True) == "ON:0.0A/OFF:0.0A"
+    assert format_heater_amp(Decimal("0.55"), is_vcb=True) == "ON:0.6A/OFF:0.0A"
 
     # Explicit VCB switchgear_type
     assert format_heater_amp("0.5A", switchgear_type="VCB") == "ON:0.5A/OFF:0.0A"
@@ -663,57 +663,66 @@ def test_format_heater_amp() -> None:
     assert format_heater_amp("1", switchgear_type="AIS VCB") == "ON:1.0A/OFF:0.0A"
     assert format_heater_amp("0", switchgear_type="vcb") == "ON:0.0A/OFF:0.0A"
 
-    # 2. Non-VCB switchgear always outputs '-'
+    # 2. Non-VCB switchgear or unknown/omitted switchgear type always outputs '-'
     assert format_heater_amp("0.5A", switchgear_type="RMU SF6") == "-"
     assert format_heater_amp("0.5A", switchgear_type="RMU OIL") == "-"
     assert format_heater_amp("0.5A", switchgear_type="MRMU") == "-"
     assert format_heater_amp("0.5A", switchgear_type="OCB") == "-"
     assert format_heater_amp("0.5A", switchgear_type="OTHER") == "-"
     assert format_heater_amp(1.0, switchgear_type="RMU SF6") == "-"
+    assert format_heater_amp("0.5A", is_vcb=False) == "-"
+    assert format_heater_amp("0.5A", switchgear_type=None) == "-"
+    assert format_heater_amp("0.5A") == "-"
 
-    # 3. Empty, blank, '-', 'N/A', or non-numeric outputs '-'
-    assert format_heater_amp(None) == "-"
-    assert format_heater_amp("") == "-"
-    assert format_heater_amp("   ") == "-"
-    assert format_heater_amp("-") == "-"
-    assert format_heater_amp("--") == "-"
-    assert format_heater_amp("N/A") == "-"
-    assert format_heater_amp("n/a") == "-"
-    assert format_heater_amp("None") == "-"
-    assert format_heater_amp("null") == "-"
-    assert format_heater_amp("NOT WORKING") == "-"
-    assert format_heater_amp("DAMAGED") == "-"
-    assert format_heater_amp(float("nan")) == "-"
-    assert format_heater_amp(True) == "-"
-    assert format_heater_amp(False) == "-"
+    # 3. Empty, blank, '-', 'N/A', or non-numeric outputs '-' even on VCB
+    assert format_heater_amp(None, is_vcb=True) == "-"
+    assert format_heater_amp("", is_vcb=True) == "-"
+    assert format_heater_amp("   ", is_vcb=True) == "-"
+    assert format_heater_amp("-", is_vcb=True) == "-"
+    assert format_heater_amp("--", is_vcb=True) == "-"
+    assert format_heater_amp("N/A", is_vcb=True) == "-"
+    assert format_heater_amp("n/a", is_vcb=True) == "-"
+    assert format_heater_amp("None", is_vcb=True) == "-"
+    assert format_heater_amp("null", is_vcb=True) == "-"
+    assert format_heater_amp("NOT WORKING", is_vcb=True) == "-"
+    assert format_heater_amp("DAMAGED", is_vcb=True) == "-"
+    assert format_heater_amp(float("nan"), is_vcb=True) == "-"
+    assert format_heater_amp(True, is_vcb=True) == "-"
+    assert format_heater_amp(False, is_vcb=True) == "-"
 
 
 def test_format_busbar_position() -> None:
     """Verify format_busbar_position presents busbar position per domain rules."""
     # 1. Transition panels -> '-' regardless of switchgear type
-    assert format_busbar_position("TRANSITION PANEL", "VCB") == "-"
-    assert format_busbar_position("TRANSITION", "VCB") == "-"
-    assert format_busbar_position("transition panel", "VCB") == "-"
-    assert format_busbar_position("Panel Transition", "VCB") == "-"
-    assert format_busbar_position("TRANSITION PANEL", "RMU SF6") == "-"
-    assert format_busbar_position("TRANSITION PANEL", None) == "-"
+    assert format_busbar_position("TRANSITION PANEL", is_vcb=True) == "-"
+    assert format_busbar_position("TRANSITION", is_vcb=True) == "-"
+    assert format_busbar_position("transition panel", is_vcb=True) == "-"
+    assert format_busbar_position("Panel Transition", is_vcb=True) == "-"
+    assert format_busbar_position("TRANSITION PANEL", switchgear_type="VCB") == "-"
+    assert format_busbar_position("TRANSITION PANEL", switchgear_type="RMU SF6") == "-"
+    assert format_busbar_position("TRANSITION PANEL", is_vcb=False) == "-"
+    assert format_busbar_position("TRANSITION PANEL") == "-"
 
     # 2. VCB switchgear (non-transition) -> 'MAIN'
-    assert format_busbar_position("INCOMING 1", "VCB") == "MAIN"
-    assert format_busbar_position("PANEL 1", "VCB") == "MAIN"
-    assert format_busbar_position("TX 1", "AIS VCB") == "MAIN"
-    assert format_busbar_position("BUS COUPLER", "vcb") == "MAIN"
-    assert format_busbar_position("", "VCB") == "MAIN"
-    assert format_busbar_position(None, "VCB") == "MAIN"
+    assert format_busbar_position("INCOMING 1", is_vcb=True) == "MAIN"
+    assert format_busbar_position("PANEL 1", is_vcb=True) == "MAIN"
+    assert format_busbar_position("INCOMING 1", switchgear_type="VCB") == "MAIN"
+    assert format_busbar_position("PANEL 1", switchgear_type="VCB") == "MAIN"
+    assert format_busbar_position("TX 1", switchgear_type="AIS VCB") == "MAIN"
+    assert format_busbar_position("BUS COUPLER", switchgear_type="vcb") == "MAIN"
+    assert format_busbar_position("", is_vcb=True) == "MAIN"
+    assert format_busbar_position(None, is_vcb=True) == "MAIN"
 
     # 3. Non-VCB switchgear (RMU, MRMU, OIL, OCB, etc.) -> '-'
-    assert format_busbar_position("PANEL 1", "RMU SF6") == "-"
-    assert format_busbar_position("PANEL 1", "RMU OIL") == "-"
-    assert format_busbar_position("PANEL 1", "MRMU") == "-"
-    assert format_busbar_position("PANEL 1", "OCB") == "-"
-    assert format_busbar_position("PANEL 1", "OTHER") == "-"
-    assert format_busbar_position("PANEL 1", "") == "-"
-    assert format_busbar_position("PANEL 1", None) == "-"
+    assert format_busbar_position("PANEL 1", switchgear_type="RMU SF6") == "-"
+    assert format_busbar_position("PANEL 1", switchgear_type="RMU OIL") == "-"
+    assert format_busbar_position("PANEL 1", switchgear_type="MRMU") == "-"
+    assert format_busbar_position("PANEL 1", switchgear_type="OCB") == "-"
+    assert format_busbar_position("PANEL 1", switchgear_type="OTHER") == "-"
+    assert format_busbar_position("PANEL 1", is_vcb=False) == "-"
+    assert format_busbar_position("PANEL 1", switchgear_type="") == "-"
+    assert format_busbar_position("PANEL 1", switchgear_type=None) == "-"
+    assert format_busbar_position("PANEL 1") == "-"
 
 
 
