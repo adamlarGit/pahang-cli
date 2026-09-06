@@ -62,7 +62,15 @@ class QuickReportTransformer:
                 substation_number=pkg.substation_number,
             )
 
+        prpd_mode = "option_c"
+        if hasattr(environment, "get_prpd_config"):
+            try:
+                prpd_mode = environment.get_prpd_config().mode
+            except Exception:
+                prpd_mode = "option_c"
+
         pe_info: dict[str, Any] = {
+            "prpd_mode": prpd_mode,
             "purchaseorder": {
                 "number": po_num,
             },

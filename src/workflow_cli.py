@@ -118,7 +118,11 @@ def _run_utility_actions_menu(
 
 def _run_settings_menu(session: CliSession) -> None:
     """Run the settings submenu."""
-    from src.settings_actions import run_configure_camera_patterns, run_rollback
+    from src.settings_actions import (
+        run_configure_camera_patterns,
+        run_configure_prpd_style,
+        run_rollback,
+    )
 
     while True:
         selection = cli_menu.select_settings_action()
@@ -130,6 +134,8 @@ def _run_settings_menu(session: CliSession) -> None:
             _run_action("Rollback Version", run_rollback)
         elif selection == "configure_cameras":
             _run_action("Configure Camera Patterns", run_configure_camera_patterns)
+        elif selection == "configure_prpd":
+            _run_action("Configure PRPD Graph Style", run_configure_prpd_style)
         elif selection is cli_menu.SessionCommand.BACK:
             return
 

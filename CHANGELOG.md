@@ -5,6 +5,15 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-09-07
+ 
+### Added
+- **Configurable US+TEV PRPD Graph Generation (`src/quick_report/prpd.py`)**: Implemented dual-mode PRPD graph generation supporting Option C (Headless Chromium composite $1200\times380$ px image combining the UltraTEV measurement table and Flot scatter plot) and Option B (Pure PRPD scatter graph via native Matplotlib FlatBuffers and JSON decoders).
+- **PrpdConfig Domain Model & Storage Seams (`src/project/models.py`, `src/project/repository.py`, `src/project/environment.py`)**: Added typed `PrpdConfig` dataclass (`mode: "option_c" | "option_b"`) persisted in `project_config.json` alongside `CameraConfig`. Exposed via `get_prpd_config()` and `save_prpd_config()`.
+- **Interactive PRPD Style Configuration Submenu (`src/cli_menu.py`, `src/settings_actions.py`, `src/workflow_cli.py`)**: Added `Configure PRPD Graph Style` menu item under Settings allowing operators to switch between Option C (default) and Option B.
+- **Resilient Multi-Path Chromium Locator (`src/quick_report/prpd.py`)**: Added `find_chrome_executable()` checking 64-bit, 32-bit, and LocalAppData Google Chrome installations with Microsoft Edge (`msedge.exe`) fallback.
+- **Architectural Decision Record (`docs/adr/0001-prpd-graph-generation-strategy.md`)**: Documented context, decisions, and trade-offs for PRPD generation strategies.
+
 ## [1.14.7] - 2026-09-07
 
 ### Changed

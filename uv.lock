@@ -765,7 +765,7 @@ wheels = [
 
 [[package]]
 name = "pahang-cli"
-version = "1.14.7"
+version = "1.15.0"
 source = { editable = "." }
 dependencies = [
     { name = "docxcompose" },

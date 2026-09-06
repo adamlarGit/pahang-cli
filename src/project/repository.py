@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import config
-from src.project.models import CameraConfig, ProjectMetadata
+from src.project.models import CameraConfig, ProjectMetadata, PrpdConfig
 from src.project.storage import LocalWorkspaceStorage
 
 
@@ -39,6 +39,14 @@ class ProjectRepository(ABC):
     @abstractmethod
     def save_camera_config(self, camera_config: CameraConfig) -> None:
         """Persist camera photo pattern configuration."""
+
+    @abstractmethod
+    def get_prpd_config(self) -> PrpdConfig:
+        """Retrieve PRPD graph style configuration."""
+
+    @abstractmethod
+    def save_prpd_config(self, prpd_config: PrpdConfig) -> None:
+        """Persist PRPD graph style configuration."""
 
     @abstractmethod
     def update(self, project: ProjectMetadata) -> None:
@@ -201,4 +209,21 @@ class JsonFileProjectRepository(ProjectRepository):
         target_path = self._get_project_config_path() or self.config_file
         data = self._read_json(target_path)
         data["camera_config"] = camera_config.to_dict()
+        self._write_json(target_path, data)
+
+    def get_prpd_config(self) -> PrpdConfig:
+        target_path = self._get_project_config_path()
+        if not target_path or not target_path.exists():
+            target_path = self.config_file
+
+        data = self._read_json(target_path)
+        raw_cfg = data.get("prpd_config")
+        if raw_cfg and isinstance(raw_cfg, dict):
+            return PrpdConfig.from_dict(raw_cfg)
+        return PrpdConfig()
+
+    def save_prpd_config(self, prpd_config: PrpdConfig) -> None:
+        target_path = self._get_project_config_path() or self.config_file
+        data = self._read_json(target_path)
+        data["prpd_config"] = prpd_config.to_dict()
         self._write_json(target_path, data)

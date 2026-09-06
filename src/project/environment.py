@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import config
-from src.project.models import CameraConfig, ProjectMetadata
+from src.project.models import CameraConfig, ProjectMetadata, PrpdConfig
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
 from src.whatsapp.models import WhatsAppReportResources
@@ -201,6 +201,31 @@ class ProjectEnvironment:
         if self._repository is not None:
             try:
                 self._repository.save_camera_config(camera_config)
+            except Exception:
+                pass
+
+    def get_prpd_config(self) -> PrpdConfig:
+        config_path = self.base_path / "project_config.json"
+        if config_path.exists():
+            data = JsonFileProjectRepository._read_json(config_path)
+            raw_cfg = data.get("prpd_config")
+            if raw_cfg and isinstance(raw_cfg, dict):
+                return PrpdConfig.from_dict(raw_cfg)
+        if self._repository is not None:
+            try:
+                return self._repository.get_prpd_config()
+            except Exception:
+                pass
+        return PrpdConfig()
+
+    def save_prpd_config(self, prpd_config: PrpdConfig) -> None:
+        config_path = self.base_path / "project_config.json"
+        data = JsonFileProjectRepository._read_json(config_path)
+        data["prpd_config"] = prpd_config.to_dict()
+        JsonFileProjectRepository._write_json(config_path, data)
+        if self._repository is not None:
+            try:
+                self._repository.save_prpd_config(prpd_config)
             except Exception:
                 pass
 

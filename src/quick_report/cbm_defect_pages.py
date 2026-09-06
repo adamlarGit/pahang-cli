@@ -47,6 +47,7 @@ class CbmDefectPageBuilder:
                     prpd_catalog = generate_all_substation_prpd_graphs(
                         survey_root=survey_root,
                         output_dir=Path(prpd_out),
+                        mode=pe_info.get("prpd_mode", "option_c"),
                     )
                     pe_info["prpd_catalog"] = prpd_catalog
 
@@ -149,6 +150,7 @@ def generate_cbm_defect_pages(
             prpd_catalog = generate_all_substation_prpd_graphs(
                 survey_root=survey_root,
                 output_dir=pe_info_copy["prpd_output_dir"],
+                mode=pe_info_copy.get("prpd_mode", "option_c"),
             )
             pe_info_copy["prpd_catalog"] = prpd_catalog
 

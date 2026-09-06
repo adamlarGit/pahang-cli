@@ -12,10 +12,14 @@ from docxtpl import DocxTemplate
 import pytest
 
 from src.quick_report.prpd import (
+    OPTION_C_INJECTION_TEMPLATE,
+    SurveyHttpServer,
     build_prpd_inline_images,
     decode_tev_event_data,
     decode_ultrasonic_phase_plot,
     discover_ultratev_survey_dir,
+    find_chrome_executable,
+    find_free_port,
     find_latest_measurement_dir,
     find_swg_feeder_survey_dir,
     find_tx_survey_dir,
@@ -23,6 +27,7 @@ from src.quick_report.prpd import (
     generate_prpd_figure,
     generate_prpd_graphs_for_swg_panel,
     generate_prpd_graphs_for_transformer,
+    render_prpd_option_c_image,
 )
 
 
@@ -211,6 +216,7 @@ def test_find_latest_measurement_dir_and_generation(tmp_path: Path):
         survey_root=survey_root,
         panel_no=1,
         output_dir=out_dir,
+        mode="option_b",
     )
     assert us_png is not None and us_png.exists()
     assert tev_png is not None and tev_png.exists()
@@ -292,7 +298,7 @@ def test_generate_all_substation_prpd_graphs(tmp_path: Path):
     (tx2_us / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[6.0, 270, 1]]};', encoding="utf-8")
 
     out_dir = tmp_path / "prpd_catalog_out"
-    catalog = generate_all_substation_prpd_graphs(survey_root, out_dir)
+    catalog = generate_all_substation_prpd_graphs(survey_root, out_dir, mode="option_b")
 
     assert "swg" in catalog
     assert "tx" in catalog
@@ -386,7 +392,7 @@ def test_generate_all_substation_prpd_graphs_vcb(tmp_path: Path):
     (tx_us / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[-6.0, 90, 1]]};', encoding="utf-8")
 
     out_dir = tmp_path / "prpd_vcb_out"
-    catalog = generate_all_substation_prpd_graphs(survey_root, out_dir)
+    catalog = generate_all_substation_prpd_graphs(survey_root, out_dir, mode="option_b")
 
     assert 2 in catalog["swg"]
     assert catalog["swg"][2]["us"] is not None and catalog["swg"][2]["us"].exists()
@@ -569,5 +575,140 @@ def test_find_swg_feeder_survey_dir_hyphen_and_zero_padding(tmp_path: Path):
     m3 = find_swg_feeder_survey_dir(survey_dir, panel_no=3)
     assert m3 is not None
     assert m3.name == "FEEDER-03"
+
+
+def test_find_free_port():
+    """Test find_free_port returns a positive dynamic port."""
+    port = find_free_port()
+    assert isinstance(port, int)
+    assert port > 1024
+
+
+def test_find_chrome_executable(monkeypatch, tmp_path: Path):
+    """Test find_chrome_executable discovers standard Chrome or honors CHROME_PATH."""
+    # 1. Environment variable override
+    fake_chrome = tmp_path / "fake_chrome.exe"
+    fake_chrome.write_text("dummy", encoding="utf-8")
+    monkeypatch.setenv("CHROME_PATH", str(fake_chrome))
+    assert find_chrome_executable() == str(fake_chrome)
+
+    # 2. System detection or FileNotFoundError
+    monkeypatch.delenv("CHROME_PATH", raising=False)
+    monkeypatch.delenv("CHROMIUM_PATH", raising=False)
+    try:
+        chrome_path = find_chrome_executable()
+        assert Path(chrome_path).exists()
+    except FileNotFoundError:
+        pass  # On CI environments without Chrome/Edge installed
+
+    # 3. Simulate no candidate found
+    monkeypatch.setattr("os.path.isfile", lambda p: False)
+    monkeypatch.setattr("shutil.which", lambda cmd: None)
+    with pytest.raises(FileNotFoundError, match="No Google Chrome or Microsoft Edge executable found"):
+        find_chrome_executable()
+
+
+def test_survey_http_server(tmp_path: Path):
+    """Test SurveyHttpServer serves files locally and terminates cleanly."""
+    import urllib.request
+
+    survey_root = tmp_path / "SURVEY_SRV"
+    survey_root.mkdir()
+    test_file = survey_root / "hello.txt"
+    test_file.write_text("prpd option c test content", encoding="utf-8")
+
+    server = SurveyHttpServer(survey_root)
+    port = server.start()
+    try:
+        url = f"http://127.0.0.1:{port}/hello.txt"
+        with urllib.request.urlopen(url, timeout=3.0) as resp:
+            data = resp.read().decode("utf-8")
+            assert data == "prpd option c test content"
+    finally:
+        server.stop()
+
+
+def test_generate_all_substation_prpd_graphs_option_c_dispatch(tmp_path: Path, monkeypatch):
+    """Test generate_all_substation_prpd_graphs with mode='option_c' using mocked render function."""
+    survey_root = tmp_path / "SURVEY_C"
+    swg_dir = survey_root / "SWG" / "FEEDER_1"
+    swg_dir.mkdir(parents=True)
+    tev_dir = swg_dir / "20260810T105322_TEV"
+    us_dir = swg_dir / "20260810T104448_Ultrasonic"
+    tev_dir.mkdir()
+    us_dir.mkdir()
+
+    (tev_dir / "TEV.html").write_text("<html><head></head><body>TEV</body></html>", encoding="utf-8")
+    (us_dir / "Ultrasonic.html").write_text("<html><head></head><body>US</body></html>", encoding="utf-8")
+
+    tx_dir = survey_root / "TX1" / "Transformer" / "20260810T110000_Ultrasonic"
+    tx_dir.mkdir(parents=True)
+    (tx_dir / "Ultrasonic.html").write_text("<html><head></head><body>TX US</body></html>", encoding="utf-8")
+
+    out_dir = tmp_path / "out_prpd_c"
+
+    # Mock render_prpd_option_c_image to create an empty PNG without invoking real Chrome
+    def _mock_render(html_file, output_png, survey_root, http_port, chrome_path=None, timeout_seconds=15.0):
+        p = Path(output_png)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"\x89PNG\r\n\x1a\nfake_png")
+        return p
+
+    monkeypatch.setattr("src.quick_report.prpd.render_prpd_option_c_image", _mock_render)
+    monkeypatch.setattr("src.quick_report.prpd.find_chrome_executable", lambda: "fake_chrome.exe")
+
+    catalog = generate_all_substation_prpd_graphs(survey_root, out_dir, mode="option_c")
+
+    assert "swg" in catalog
+    assert 1 in catalog["swg"]
+    assert catalog["swg"][1]["us"] is not None and catalog["swg"][1]["us"].exists()
+    assert catalog["swg"][1]["tev"] is not None and catalog["swg"][1]["tev"].exists()
+
+    assert "tx" in catalog
+    assert 1 in catalog["tx"]
+    assert catalog["tx"][1]["us"] is not None and catalog["tx"][1]["us"].exists()
+    assert catalog["tx"][1]["tev"] is None
+
+
+def test_generate_prpd_graphs_for_swg_panel_and_tx_option_c(tmp_path: Path, monkeypatch):
+    """Test panel and transformer individual generator functions with mode='option_c'."""
+    survey_root = tmp_path / "SURVEY_INDIV"
+    swg_dir = survey_root / "SWG" / "FEEDER_1"
+    swg_dir.mkdir(parents=True)
+    us_dir = swg_dir / "20260810T104448_Ultrasonic"
+    us_dir.mkdir()
+    (us_dir / "Ultrasonic.html").write_text("<html></html>", encoding="utf-8")
+
+    out_dir = tmp_path / "out_indiv"
+
+    def _mock_render(html_file, output_png, survey_root, http_port, chrome_path=None, timeout_seconds=15.0):
+        p = Path(output_png)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"\x89PNG\r\n\x1a\nfake_png")
+        return p
+
+    monkeypatch.setattr("src.quick_report.prpd.render_prpd_option_c_image", _mock_render)
+    monkeypatch.setattr("src.quick_report.prpd.find_chrome_executable", lambda: "fake_chrome.exe")
+
+    # SWG panel 1: US exists, TEV missing -> (Path, None)
+    us_png, tev_png = generate_prpd_graphs_for_swg_panel(
+        survey_root=survey_root,
+        panel_no=1,
+        output_dir=out_dir,
+        mode="option_c",
+    )
+    assert us_png is not None and us_png.exists()
+    assert tev_png is None
+
+    # TX 1 without measurements -> (None, None)
+    tx_us, tx_tev = generate_prpd_graphs_for_transformer(
+        survey_root=survey_root,
+        tx_idx=1,
+        output_dir=out_dir,
+        mode="option_c",
+    )
+    assert tx_us is None
+    assert tx_tev is None
+
 
 

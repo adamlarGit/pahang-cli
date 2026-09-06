@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from src import cli_selectors
-from src.project.models import CameraConfig
+from src.project.models import CameraConfig, PrpdConfig
 from src.project.repository import JsonFileProjectRepository
 
 
@@ -272,3 +272,51 @@ def _configure_dg_pattern(repo: JsonFileProjectRepository, current: CameraConfig
     )
     repo.save_camera_config(updated)
     _safe_print("\n✓ DG Camera pattern updated successfully!")
+
+
+def run_configure_prpd_style() -> None:
+    """Interactive settings menu to configure PRPD graph generation style."""
+    repo = JsonFileProjectRepository()
+    current = repo.get_prpd_config()
+
+    current_desc = (
+        "Option C: Composite Table + PRPD Graph (Headless Chrome) [Default]"
+        if current.mode == "option_c"
+        else "Option B: Pure PRPD Scatter Graph (Native Python Matplotlib)"
+    )
+
+    menu_title = (
+        "PRPD GRAPH GENERATION STYLE SETTINGS\n"
+        f"Current Active Style:\n"
+        f"  • {current_desc}\n\n"
+        "Choose PRPD graph rendering strategy for Quick Report CBM defect detail pages:"
+    )
+
+    options = [
+        cli_selectors.SelectOption(
+            "Option C: Composite Table + PRPD Graph (Headless Chrome) [Default]",
+            "option_c",
+        ),
+        cli_selectors.SelectOption(
+            "Option B: Pure PRPD Scatter Graph (Native Python Matplotlib)",
+            "option_b",
+        ),
+        cli_selectors.SelectOption("Cancel / Back", "__cancel__", shortcut_key="c"),
+    ]
+
+    choice = cli_selectors.select_one(menu_title, options, default_value=current.mode)
+
+    if choice in (None, "__cancel__"):
+        return
+
+    if choice != current.mode:
+        updated = PrpdConfig(mode=choice)
+        repo.save_prpd_config(updated)
+        mode_label = (
+            "Option C (Composite Table + PRPD Graph)"
+            if choice == "option_c"
+            else "Option B (Pure PRPD Scatter Graph)"
+        )
+        _safe_print(f"\n✓ PRPD graph generation style set to {mode_label} successfully!")
+    else:
+        _safe_print("\n✓ PRPD graph generation style unchanged.")

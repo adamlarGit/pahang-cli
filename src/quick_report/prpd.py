@@ -1,19 +1,31 @@
-"""Native Python PRPD graph generator and survey directory resolution module (Option B).
+"""Native Python & Headless Chromium PRPD graph generator and survey directory resolution module.
 
-Implements binary FlatBuffers and JSON decoding for UltraTEV survey data, 4-tier
-density scatter binning, deterministic asset discovery, and DocxTemplate InlineImage binding.
+Implements Option C (Measurement Table + PRPD Graph composite via Headless Chrome)
+and Option B (Pure PRPD scatter graph via native Matplotlib and FlatBuffers/JSON decoding),
+deterministic asset discovery, and DocxTemplate InlineImage binding.
 """
 
 from __future__ import annotations
 
 import base64
 import gzip
+import http.server
 import json
+import logging
 import os
 from pathlib import Path
+import posixpath
 import re
+import shutil
+import socket
+import socketserver
 import struct
+import subprocess
+import threading
+import time
 from typing import Any
+import urllib.parse
+import uuid
 
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
@@ -22,6 +34,229 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
+
+
+# Non-overlapping Flexbox Layout: 320px Left Measurement Table + 840px Right PRPD Graph
+OPTION_C_INJECTION_TEMPLATE = """
+<style>
+header, ul.nav, #graphcontroltab, #maximise_prpd, #zoom_help, #tf_wfm_section, .navbar-fixed-bottom { display: none !important; }
+#survey-container .panel:nth-child(1), #survey-container .panel:nth-child(2) { display: none !important; }
+#survey-container .panel:nth-child(3) { display: block !important; margin: 0 !important; border: 1px solid #bce8f1 !important; }
+#survey-container .panel-heading { font-weight: bold !important; font-size: 13px !important; padding: 6px 12px !important; }
+#survey-container table { font-size: 11px !important; margin-bottom: 0 !important; width: 100% !important; }
+#survey-container table td { padding: 4px 8px !important; }
+</style>
+<script>
+window.addEventListener('load', function() {
+    document.body.style.cssText = 'display: flex !important; flex-direction: row !important; align-items: stretch !important; justify-content: flex-start !important; width: 1200px !important; height: 380px !important; margin: 0 !important; padding: 10px !important; box-sizing: border-box !important; background: white !important; overflow: hidden !important;';
+
+    var surveyEl = document.querySelector('.survey');
+    if (surveyEl) {
+        surveyEl.className = 'survey';
+        surveyEl.style.cssText = 'width: 320px !important; min-width: 320px !important; max-width: 320px !important; flex: 0 0 320px !important; margin: 0 15px 0 0 !important; padding: 0 !important; float: none !important;';
+        var surveyTab = surveyEl.querySelector('.tab-content');
+        if (surveyTab) surveyTab.style.cssText = 'width: 100% !important; padding: 0 !important; margin: 0 !important;';
+    }
+
+    var allTabContents = document.querySelectorAll('.tab-content');
+    var graphTabContent = allTabContents[allTabContents.length - 1];
+    if (graphTabContent) {
+        graphTabContent.style.cssText = 'flex: 1 1 840px !important; width: 840px !important; height: 360px !important; margin: 0 !important; padding: 0 !important; float: none !important; overflow: hidden !important;';
+    }
+
+    var phaseTab = document.getElementById('phase_tab');
+    if (phaseTab) {
+        phaseTab.style.cssText = 'width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; float: none !important; display: block !important;';
+    }
+
+    var prpdSection = document.getElementById('prpd_section');
+    if (prpdSection) {
+        prpdSection.style.cssText = 'width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; float: none !important; position: relative !important;';
+    }
+
+    var prpdGraph = document.getElementById('prpd_graph');
+    if (prpdGraph) {
+        prpdGraph.style.cssText = 'width: 100% !important; height: 100% !important;';
+    }
+
+    setTimeout(function() {
+        if (typeof prpd !== 'undefined') {
+            prpd.sinewave_mode = 0;
+            prpd.Plot();
+        }
+    }, 150);
+});
+</script>
+"""
+
+
+def find_free_port() -> int:
+    """Finds an available TCP port on localhost dynamically."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def find_chrome_executable() -> str:
+    """Find Google Chrome or Microsoft Edge executable path across standard locations."""
+    env_override = os.environ.get("CHROME_PATH") or os.environ.get("CHROMIUM_PATH")
+    if env_override and os.path.isfile(env_override):
+        return env_override
+
+    candidate_paths: list[str] = []
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+
+    # Google Chrome candidate paths (64-bit, 32-bit, LocalAppData)
+    candidate_paths.extend([
+        os.path.join(program_files, "Google", "Chrome", "Application", "chrome.exe"),
+        os.path.join(program_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+        os.path.join(local_app_data, "Google", "Chrome", "Application", "chrome.exe") if local_app_data else "",
+    ])
+
+    # Microsoft Edge candidate paths (Edge fallback)
+    candidate_paths.extend([
+        os.path.join(program_files, "Microsoft", "Edge", "Application", "msedge.exe"),
+        os.path.join(program_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+        os.path.join(local_app_data, "Microsoft", "Edge", "Application", "msedge.exe") if local_app_data else "",
+    ])
+
+    for path in candidate_paths:
+        if path and os.path.isfile(path):
+            return path
+
+    for cmd in ("chrome", "google-chrome", "google-chrome-stable", "chromium", "msedge", "edge"):
+        found = shutil.which(cmd)
+        if found and os.path.isfile(found):
+            return found
+
+    raise FileNotFoundError(
+        "No Google Chrome or Microsoft Edge executable found. "
+        "Please install Google Chrome or Microsoft Edge, or set the CHROME_PATH environment variable."
+    )
+
+
+class SurveyHttpServer:
+    """Lightweight localhost HTTP server for serving survey directory assets to Headless Chrome."""
+
+    def __init__(self, survey_dir: Path | str) -> None:
+        self.survey_dir = str(Path(survey_dir).resolve())
+        self.port = find_free_port()
+        self._httpd: socketserver.TCPServer | None = None
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> int:
+        survey_raw = self.survey_dir
+
+        class CustomHandler(http.server.SimpleHTTPRequestHandler):
+            def translate_path(self, path: str) -> str:
+                path = path.split("?", 1)[0].split("#", 1)[0]
+                trailing_slash = path.rstrip().endswith("/")
+                try:
+                    path = urllib.parse.unquote(path, errors="surrogatepass")
+                except UnicodeDecodeError:
+                    path = urllib.parse.unquote(path)
+                path = posixpath.normpath(path)
+                words = filter(None, path.split("/"))
+                full_path = safe_path(survey_raw)
+                for word in words:
+                    full_path = os.path.join(full_path, word)
+                if trailing_slash:
+                    full_path += "/"
+                return full_path
+
+            def log_message(self, format: str, *args: Any) -> None:
+                pass
+
+        self._httpd = socketserver.TCPServer(("127.0.0.1", self.port), CustomHandler)
+        self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
+        self._thread.start()
+        time.sleep(0.1)
+        return self.port
+
+    def stop(self) -> None:
+        if self._httpd:
+            try:
+                self._httpd.shutdown()
+                self._httpd.server_close()
+            except Exception:
+                pass
+            self._httpd = None
+
+    def __enter__(self) -> int:
+        return self.start()
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.stop()
+
+
+def render_prpd_option_c_image(
+    html_file: Path | str,
+    output_png: Path | str,
+    survey_root: Path | str,
+    http_port: int,
+    chrome_path: str | None = None,
+    timeout_seconds: float = 15.0,
+) -> Path | None:
+    """Render an UltraTEV HTML measurement page to a composite PNG via Headless Chrome."""
+    html_path = Path(safe_path(html_file))
+    if not html_path.exists():
+        return None
+
+    survey_root_path = Path(safe_path(survey_root))
+    out_png_path = Path(output_png).resolve()
+    out_png_path.parent.mkdir(parents=True, exist_ok=True)
+
+    chrome = chrome_path or find_chrome_executable()
+
+    try:
+        rel_subpath = html_path.parent.relative_to(survey_root_path).as_posix()
+    except ValueError:
+        rel_subpath = Path(html_path.parent).resolve().relative_to(Path(survey_root_path).resolve()).as_posix()
+
+    with open(safe_path(html_path), "r", encoding="utf-8", errors="ignore") as fh:
+        content = fh.read()
+
+    mod_content = content.replace("unipolar_sinewave: true", "unipolar_sinewave: false")
+    if "</head>" in mod_content:
+        mod_content = mod_content.replace("</head>", OPTION_C_INJECTION_TEMPLATE + "</head>")
+    else:
+        mod_content = OPTION_C_INJECTION_TEMPLATE + mod_content
+
+    temp_html_name = f"_temp_render_c_{uuid.uuid4().hex[:8]}.html"
+    temp_html_file = html_path.parent / temp_html_name
+
+    try:
+        with open(safe_path(temp_html_file), "w", encoding="utf-8") as fh:
+            fh.write(mod_content)
+
+        url = f"http://127.0.0.1:{http_port}/{rel_subpath}/{temp_html_name}"
+
+        cmd = [
+            chrome,
+            "--headless=new",
+            "--disable-gpu",
+            "--run-all-compositor-stages-before-draw",
+            "--virtual-time-budget=5000",
+            f"--screenshot={str(out_png_path)}",
+            "--window-size=1200,380",
+            url,
+        ]
+        subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_seconds)
+    except Exception as exc:
+        logging.warning("Option C headless render failed for %s: %s", html_file, exc)
+        return None
+    finally:
+        if os.path.exists(safe_path(temp_html_file)):
+            try:
+                os.remove(safe_path(temp_html_file))
+            except Exception:
+                pass
+
+    if os.path.exists(safe_path(out_png_path)) and os.path.getsize(safe_path(out_png_path)) > 0:
+        return out_png_path
+    return None
 
 
 def safe_path(p: Path | str) -> str:
@@ -425,6 +660,7 @@ def find_latest_measurement_dir(feeder_or_tx_dir: Path, tech_type: str) -> Path 
     is_tev = tech_type.upper() == "TEV"
     target_pattern = "_TEV" if is_tev else "_Ultrasonic"
     target_payload = "eventData.js" if is_tev else "ultrasonic_phase_plot.js"
+    target_html = "TEV.html" if is_tev else "Ultrasonic.html"
 
     candidate_dirs = [
         d
@@ -436,7 +672,10 @@ def find_latest_measurement_dir(feeder_or_tx_dir: Path, tech_type: str) -> Path 
 
     for d in candidate_dirs:
         payload_file = d / target_payload
-        if payload_file.exists() and payload_file.stat().st_size > 0:
+        html_file = d / target_html
+        if (payload_file.exists() and payload_file.stat().st_size > 0) or (
+            html_file.exists() and html_file.stat().st_size > 0
+        ):
             return d
 
     return None
@@ -448,9 +687,13 @@ def generate_prpd_graphs_for_swg_panel(
     output_dir: Path,
     feeder_no: str = "",
     panel_name: str = "",
+    mode: str = "option_c",
+    http_port: int | None = None,
+    chrome_path: str | None = None,
 ) -> tuple[Path | None, Path | None]:
     """Generate US and TEV PRPD PNG graph images for a switchgear panel.
 
+    Supports mode='option_c' (Headless Chrome) and mode='option_b' (Native Python).
     Returns (us_png_path, tev_png_path).
     """
     if not survey_root:
@@ -468,29 +711,74 @@ def generate_prpd_graphs_for_swg_panel(
     us_png: Path | None = None
     tev_png: Path | None = None
 
-    # 1. Ultrasonic Graph
-    us_dir = find_latest_measurement_dir(feeder_dir, "US")
-    if us_dir:
-        us_file = us_dir / "ultrasonic_phase_plot.js"
-        if us_file.exists():
-            try:
-                events = decode_ultrasonic_phase_plot(us_file)
-                us_out = output_dir / f"prpd_swg_panel{panel_no}_us.png"
-                us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
-            except Exception:
-                us_png = None
+    if mode == "option_b":
+        # 1. Ultrasonic Graph (Option B)
+        us_dir = find_latest_measurement_dir(feeder_dir, "US")
+        if us_dir:
+            us_file = us_dir / "ultrasonic_phase_plot.js"
+            if us_file.exists():
+                try:
+                    events = decode_ultrasonic_phase_plot(us_file)
+                    us_out = output_dir / f"prpd_swg_panel{panel_no}_us.png"
+                    us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
+                except Exception:
+                    us_png = None
 
-    # 2. TEV Graph
-    tev_dir = find_latest_measurement_dir(feeder_dir, "TEV")
-    if tev_dir:
-        tev_file = tev_dir / "eventData.js"
-        if tev_file.exists():
-            try:
-                events = decode_tev_event_data(tev_file)
-                tev_out = output_dir / f"prpd_swg_panel{panel_no}_tev.png"
-                tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
-            except Exception:
-                tev_png = None
+        # 2. TEV Graph (Option B)
+        tev_dir = find_latest_measurement_dir(feeder_dir, "TEV")
+        if tev_dir:
+            tev_file = tev_dir / "eventData.js"
+            if tev_file.exists():
+                try:
+                    events = decode_tev_event_data(tev_file)
+                    tev_out = output_dir / f"prpd_swg_panel{panel_no}_tev.png"
+                    tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
+                except Exception:
+                    tev_png = None
+    else:
+        # Option C: Headless Chrome
+        us_dir = find_latest_measurement_dir(feeder_dir, "US")
+        tev_dir = find_latest_measurement_dir(feeder_dir, "TEV")
+        if not us_dir and not tev_dir:
+            return None, None
+
+        def _do_render(port: int, chrome: str) -> tuple[Path | None, Path | None]:
+            u_png, t_png = None, None
+            if us_dir:
+                us_html = us_dir / "Ultrasonic.html"
+                if us_html.exists():
+                    us_out = output_dir / f"prpd_swg_panel{panel_no}_us.png"
+                    u_png = render_prpd_option_c_image(
+                        html_file=us_html,
+                        output_png=us_out,
+                        survey_root=survey_root,
+                        http_port=port,
+                        chrome_path=chrome,
+                    )
+            if tev_dir:
+                tev_html = tev_dir / "TEV.html"
+                if tev_html.exists():
+                    tev_out = output_dir / f"prpd_swg_panel{panel_no}_tev.png"
+                    t_png = render_prpd_option_c_image(
+                        html_file=tev_html,
+                        output_png=tev_out,
+                        survey_root=survey_root,
+                        http_port=port,
+                        chrome_path=chrome,
+                    )
+            return u_png, t_png
+
+        try:
+            resolved_chrome = chrome_path or find_chrome_executable()
+        except FileNotFoundError as exc:
+            logging.warning("Option C rendering skipped: %s", exc)
+            return None, None
+
+        if http_port is not None:
+            us_png, tev_png = _do_render(http_port, resolved_chrome)
+        else:
+            with SurveyHttpServer(survey_root) as port:
+                us_png, tev_png = _do_render(port, resolved_chrome)
 
     return us_png, tev_png
 
@@ -499,9 +787,13 @@ def generate_prpd_graphs_for_transformer(
     survey_root: Path | None,
     tx_idx: int,
     output_dir: Path,
+    mode: str = "option_c",
+    http_port: int | None = None,
+    chrome_path: str | None = None,
 ) -> tuple[Path | None, Path | None]:
     """Generate US and TEV PRPD PNG graph images for a transformer.
 
+    Supports mode='option_c' (Headless Chrome) and mode='option_b' (Native Python).
     Returns (us_png_path, tev_png_path).
     """
     if not survey_root:
@@ -514,29 +806,74 @@ def generate_prpd_graphs_for_transformer(
     us_png: Path | None = None
     tev_png: Path | None = None
 
-    # 1. Ultrasonic Graph
-    us_dir = find_latest_measurement_dir(tx_dir, "US")
-    if us_dir:
-        us_file = us_dir / "ultrasonic_phase_plot.js"
-        if us_file.exists():
-            try:
-                events = decode_ultrasonic_phase_plot(us_file)
-                us_out = output_dir / f"prpd_tx{tx_idx}_us.png"
-                us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
-            except Exception:
-                us_png = None
+    if mode == "option_b":
+        # 1. Ultrasonic Graph (Option B)
+        us_dir = find_latest_measurement_dir(tx_dir, "US")
+        if us_dir:
+            us_file = us_dir / "ultrasonic_phase_plot.js"
+            if us_file.exists():
+                try:
+                    events = decode_ultrasonic_phase_plot(us_file)
+                    us_out = output_dir / f"prpd_tx{tx_idx}_us.png"
+                    us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
+                except Exception:
+                    us_png = None
 
-    # 2. TEV Graph (if any recorded on TX)
-    tev_dir = find_latest_measurement_dir(tx_dir, "TEV")
-    if tev_dir:
-        tev_file = tev_dir / "eventData.js"
-        if tev_file.exists():
-            try:
-                events = decode_tev_event_data(tev_file)
-                tev_out = output_dir / f"prpd_tx{tx_idx}_tev.png"
-                tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
-            except Exception:
-                tev_png = None
+        # 2. TEV Graph (Option B)
+        tev_dir = find_latest_measurement_dir(tx_dir, "TEV")
+        if tev_dir:
+            tev_file = tev_dir / "eventData.js"
+            if tev_file.exists():
+                try:
+                    events = decode_tev_event_data(tev_file)
+                    tev_out = output_dir / f"prpd_tx{tx_idx}_tev.png"
+                    tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
+                except Exception:
+                    tev_png = None
+    else:
+        # Option C: Headless Chrome
+        us_dir = find_latest_measurement_dir(tx_dir, "US")
+        tev_dir = find_latest_measurement_dir(tx_dir, "TEV")
+        if not us_dir and not tev_dir:
+            return None, None
+
+        def _do_render(port: int, chrome: str) -> tuple[Path | None, Path | None]:
+            u_png, t_png = None, None
+            if us_dir:
+                us_html = us_dir / "Ultrasonic.html"
+                if us_html.exists():
+                    us_out = output_dir / f"prpd_tx{tx_idx}_us.png"
+                    u_png = render_prpd_option_c_image(
+                        html_file=us_html,
+                        output_png=us_out,
+                        survey_root=survey_root,
+                        http_port=port,
+                        chrome_path=chrome,
+                    )
+            if tev_dir:
+                tev_html = tev_dir / "TEV.html"
+                if tev_html.exists():
+                    tev_out = output_dir / f"prpd_tx{tx_idx}_tev.png"
+                    t_png = render_prpd_option_c_image(
+                        html_file=tev_html,
+                        output_png=tev_out,
+                        survey_root=survey_root,
+                        http_port=port,
+                        chrome_path=chrome,
+                    )
+            return u_png, t_png
+
+        try:
+            resolved_chrome = chrome_path or find_chrome_executable()
+        except FileNotFoundError as exc:
+            logging.warning("Option C rendering skipped: %s", exc)
+            return None, None
+
+        if http_port is not None:
+            us_png, tev_png = _do_render(http_port, resolved_chrome)
+        else:
+            with SurveyHttpServer(survey_root) as port:
+                us_png, tev_png = _do_render(port, resolved_chrome)
 
     return us_png, tev_png
 
@@ -544,8 +881,11 @@ def generate_prpd_graphs_for_transformer(
 def generate_all_substation_prpd_graphs(
     survey_root: Path | str | None,
     output_dir: Path | str,
+    mode: str = "option_c",
 ) -> dict[str, Any]:
     """Discover all SWG feeders and TX units and generate all PRPD PNG graphs in one pass.
+
+    Supports mode='option_c' (Headless Chrome) and mode='option_b' (Native Python).
 
     Returns structured catalog:
     {
@@ -585,54 +925,6 @@ def generate_all_substation_prpd_graphs(
         swg_dirs = []
     swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU") else 1, d.name.upper()))
 
-    for s_dir in swg_dirs:
-        try:
-            candidate_feeders = [d for d in s_dir.iterdir() if d.is_dir()]
-        except OSError:
-            continue
-        for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
-            digits = re.findall(r"\d+", feeder_dir.name)
-            if digits:
-                try:
-                    panel_idx = int(digits[0])
-                except ValueError:
-                    panel_idx = len(catalog["swg"]) + 1
-            else:
-                panel_idx = len(catalog["swg"]) + 1
-
-            while panel_idx in catalog["swg"]:
-                panel_idx += 1
-
-            us_png: Path | None = None
-            tev_png: Path | None = None
-
-            us_meas = find_latest_measurement_dir(feeder_dir, "US")
-            if us_meas:
-                us_file = us_meas / "ultrasonic_phase_plot.js"
-                if us_file.exists():
-                    try:
-                        events = decode_ultrasonic_phase_plot(us_file)
-                        us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
-                        us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
-                    except Exception:
-                        us_png = None
-
-            tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
-            if tev_meas:
-                tev_file = tev_meas / "eventData.js"
-                if tev_file.exists():
-                    try:
-                        events = decode_tev_event_data(tev_file)
-                        tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
-                        tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
-                    except Exception:
-                        tev_png = None
-
-            catalog["swg"][panel_idx] = {
-                "us": us_png,
-                "tev": tev_png,
-            }
-
     # 2. Transformer (TX) units
     candidate_tx_indices: set[int] = set()
     try:
@@ -651,40 +943,189 @@ def generate_all_substation_prpd_graphs(
         if (survey_path / "TX").exists():
             candidate_tx_indices.add(1)
 
-    for tx_idx in sorted(candidate_tx_indices):
-        tx_dir = find_tx_survey_dir(survey_path, tx_idx=tx_idx)
-        if not tx_dir or not tx_dir.exists():
-            continue
+    if mode == "option_b":
+        # Option B generation (Native Python FlatBuffers/JSON decoding)
+        for s_dir in swg_dirs:
+            try:
+                candidate_feeders = [d for d in s_dir.iterdir() if d.is_dir()]
+            except OSError:
+                continue
+            for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
+                digits = re.findall(r"\d+", feeder_dir.name)
+                if digits:
+                    try:
+                        panel_idx = int(digits[0])
+                    except ValueError:
+                        panel_idx = len(catalog["swg"]) + 1
+                else:
+                    panel_idx = len(catalog["swg"]) + 1
 
-        us_png = None
-        tev_png = None
+                while panel_idx in catalog["swg"]:
+                    panel_idx += 1
 
-        us_meas = find_latest_measurement_dir(tx_dir, "US")
-        if us_meas:
-            us_file = us_meas / "ultrasonic_phase_plot.js"
-            if us_file.exists():
+                us_png: Path | None = None
+                tev_png: Path | None = None
+
+                us_meas = find_latest_measurement_dir(feeder_dir, "US")
+                if us_meas:
+                    us_file = us_meas / "ultrasonic_phase_plot.js"
+                    if us_file.exists():
+                        try:
+                            events = decode_ultrasonic_phase_plot(us_file)
+                            us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
+                            us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
+                        except Exception:
+                            us_png = None
+
+                tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
+                if tev_meas:
+                    tev_file = tev_meas / "eventData.js"
+                    if tev_file.exists():
+                        try:
+                            events = decode_tev_event_data(tev_file)
+                            tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
+                            tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
+                        except Exception:
+                            tev_png = None
+
+                catalog["swg"][panel_idx] = {
+                    "us": us_png,
+                    "tev": tev_png,
+                }
+
+        for tx_idx in sorted(candidate_tx_indices):
+            tx_dir = find_tx_survey_dir(survey_path, tx_idx=tx_idx)
+            if not tx_dir or not tx_dir.exists():
+                continue
+
+            us_png = None
+            tev_png = None
+
+            us_meas = find_latest_measurement_dir(tx_dir, "US")
+            if us_meas:
+                us_file = us_meas / "ultrasonic_phase_plot.js"
+                if us_file.exists():
+                    try:
+                        events = decode_ultrasonic_phase_plot(us_file)
+                        us_out = out_path / f"prpd_tx{tx_idx}_us.png"
+                        us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
+                    except Exception:
+                        us_png = None
+
+            tev_meas = find_latest_measurement_dir(tx_dir, "TEV")
+            if tev_meas:
+                tev_file = tev_meas / "eventData.js"
+                if tev_file.exists():
+                    try:
+                        events = decode_tev_event_data(tev_file)
+                        tev_out = out_path / f"prpd_tx{tx_idx}_tev.png"
+                        tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
+                    except Exception:
+                        tev_png = None
+
+            catalog["tx"][tx_idx] = {
+                "us": us_png,
+                "tev": tev_png,
+            }
+    else:
+        # Option C generation with Headless Chrome and localhost HTTP server
+        try:
+            chrome_path = find_chrome_executable()
+        except FileNotFoundError as exc:
+            logging.warning("Option C rendering skipped: %s", exc)
+            return catalog
+
+        with SurveyHttpServer(survey_path) as port:
+            for s_dir in swg_dirs:
                 try:
-                    events = decode_ultrasonic_phase_plot(us_file)
-                    us_out = out_path / f"prpd_tx{tx_idx}_us.png"
-                    us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
-                except Exception:
-                    us_png = None
+                    candidate_feeders = [d for d in s_dir.iterdir() if d.is_dir()]
+                except OSError:
+                    continue
+                for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
+                    digits = re.findall(r"\d+", feeder_dir.name)
+                    if digits:
+                        try:
+                            panel_idx = int(digits[0])
+                        except ValueError:
+                            panel_idx = len(catalog["swg"]) + 1
+                    else:
+                        panel_idx = len(catalog["swg"]) + 1
 
-        tev_meas = find_latest_measurement_dir(tx_dir, "TEV")
-        if tev_meas:
-            tev_file = tev_meas / "eventData.js"
-            if tev_file.exists():
-                try:
-                    events = decode_tev_event_data(tev_file)
-                    tev_out = out_path / f"prpd_tx{tx_idx}_tev.png"
-                    tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
-                except Exception:
-                    tev_png = None
+                    while panel_idx in catalog["swg"]:
+                        panel_idx += 1
 
-        catalog["tx"][tx_idx] = {
-            "us": us_png,
-            "tev": tev_png,
-        }
+                    us_png: Path | None = None
+                    tev_png: Path | None = None
+
+                    us_meas = find_latest_measurement_dir(feeder_dir, "US")
+                    if us_meas:
+                        us_html = us_meas / "Ultrasonic.html"
+                        if us_html.exists():
+                            us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
+                            us_png = render_prpd_option_c_image(
+                                html_file=us_html,
+                                output_png=us_out,
+                                survey_root=survey_path,
+                                http_port=port,
+                                chrome_path=chrome_path,
+                            )
+
+                    tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
+                    if tev_meas:
+                        tev_html = tev_meas / "TEV.html"
+                        if tev_html.exists():
+                            tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
+                            tev_png = render_prpd_option_c_image(
+                                html_file=tev_html,
+                                output_png=tev_out,
+                                survey_root=survey_path,
+                                http_port=port,
+                                chrome_path=chrome_path,
+                            )
+
+                    catalog["swg"][panel_idx] = {
+                        "us": us_png,
+                        "tev": tev_png,
+                    }
+
+            for tx_idx in sorted(candidate_tx_indices):
+                tx_dir = find_tx_survey_dir(survey_path, tx_idx=tx_idx)
+                if not tx_dir or not tx_dir.exists():
+                    continue
+
+                us_png = None
+                tev_png = None
+
+                us_meas = find_latest_measurement_dir(tx_dir, "US")
+                if us_meas:
+                    us_html = us_meas / "Ultrasonic.html"
+                    if us_html.exists():
+                        us_out = out_path / f"prpd_tx{tx_idx}_us.png"
+                        us_png = render_prpd_option_c_image(
+                            html_file=us_html,
+                            output_png=us_out,
+                            survey_root=survey_path,
+                            http_port=port,
+                            chrome_path=chrome_path,
+                        )
+
+                tev_meas = find_latest_measurement_dir(tx_dir, "TEV")
+                if tev_meas:
+                    tev_html = tev_meas / "TEV.html"
+                    if tev_html.exists():
+                        tev_out = out_path / f"prpd_tx{tx_idx}_tev.png"
+                        tev_png = render_prpd_option_c_image(
+                            html_file=tev_html,
+                            output_png=tev_out,
+                            survey_root=survey_path,
+                            http_port=port,
+                            chrome_path=chrome_path,
+                        )
+
+                catalog["tx"][tx_idx] = {
+                    "us": us_png,
+                    "tev": tev_png,
+                }
 
     return catalog
 
@@ -709,10 +1150,14 @@ def build_prpd_inline_images(
 
 
 __all__ = [
+    "OPTION_C_INJECTION_TEMPLATE",
+    "SurveyHttpServer",
     "build_prpd_inline_images",
     "decode_tev_event_data",
     "decode_ultrasonic_phase_plot",
     "discover_ultratev_survey_dir",
+    "find_chrome_executable",
+    "find_free_port",
     "find_latest_measurement_dir",
     "find_swg_feeder_survey_dir",
     "find_tx_survey_dir",
@@ -720,6 +1165,7 @@ __all__ = [
     "generate_prpd_figure",
     "generate_prpd_graphs_for_swg_panel",
     "generate_prpd_graphs_for_transformer",
+    "render_prpd_option_c_image",
     "safe_path",
 ]
 

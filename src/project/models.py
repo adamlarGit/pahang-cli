@@ -102,6 +102,35 @@ class CameraConfig:
         )
 
 
+VALID_PRPD_MODES: tuple[str, ...] = ("option_c", "option_b")
+
+
+@dataclass
+class PrpdConfig:
+    """Configuration for PRPD graph generation style (Option C or Option B)."""
+    mode: str = "option_c"
+
+    def __post_init__(self) -> None:
+        if self.mode and self.mode not in VALID_PRPD_MODES:
+            self.mode = "option_c"
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize configuration to dictionary."""
+        return {
+            "mode": self.mode,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> PrpdConfig:
+        """Create PrpdConfig instance from dictionary with fallback defaults."""
+        if not data or not isinstance(data, dict):
+            return cls()
+        mode_val = str(data.get("mode", "option_c")).strip().lower()
+        if mode_val not in VALID_PRPD_MODES:
+            mode_val = "option_c"
+        return cls(mode=mode_val)
+
+
 @dataclass(frozen=True)
 class HealthCheckItem:
     """Represents the existence and health status of a workspace folder or file."""

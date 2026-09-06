@@ -1,6 +1,6 @@
 # Project & Utility Automation CLI (`pahang-cli`)
 
-A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.14.7`).
+A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.15.0`).
 
 ---
 
@@ -152,6 +152,7 @@ Batch processing and file utilities invokable across any specified folder withou
 | :--- | :--- |
 | **Manage Projects** | View current project info & health status badges (`[OK]`, `[MISSING]`), switch active projects, add/register new projects, update workspace directory paths, or unregister projects. |
 | **Configure Camera Photo Patterns** | Configure and manage IR and DG camera photo filename patterns (FLIR single, IR/DC dual-pair, custom presets) per project with active pattern auto-reversion. |
+| **Configure PRPD Graph Style** | Switch between Option C (Measurement Table + PRPD Graph via Headless Chrome) and Option B (Pure PRPD Scatter Graph via native Python) for Quick Report CBM defect detail pages. |
 | **Rollback Version** | Interactively lists recent commit history, allowing safe application version rollback with automatic `git reset --hard` and `uv sync`. |
 
 ---

@@ -120,6 +120,7 @@ def select_settings_action() -> str | SessionCommand | None:
     items = [
         MenuItem("📁 Manage Projects & Workspace Storage", "manage_projects"),
         MenuItem("Configure Camera Patterns", "configure_cameras"),
+        MenuItem("Configure PRPD Graph Style", "configure_prpd"),
         MenuItem("Rollback Version", "rollback"),
         MenuItem("Back", SessionCommand.BACK),
     ]

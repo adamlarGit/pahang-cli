@@ -13,6 +13,13 @@ An interface (`src/project/repository.py`) providing methods for accessing and p
 ### ProjectEnvironment
 A composite facade (`src/project/environment.py`) combining `ProjectMetadata` and `WorkspaceStorage`.
 
+### PrpdConfig & PrpdMode
+Domain configuration model (`src/project/models.py`) controlling the Phase-Resolved Partial Discharge (PRPD) graph generation strategy across Quick Report CBM defect detail pages.
+- **`PrpdMode`**: Supported generation modes:
+  - `"option_c"` (Default): High-fidelity composite rendering (1200x380 px) combining the UltraTEV measurement table (`.panel-info`, 320 px) and native Flot PRPD scatter graph (840 px) executed via Headless Chromium / Edge.
+  - `"option_b"`: Pure PRPD scatter graph generated via native Python Matplotlib decoding binary FlatBuffers (`eventData.js`, UE01) and JSON acoustic events (`ultrasonic_phase_plot.js`).
+- Persisted in `project_config.json` alongside `CameraConfig` via `ProjectRepository.get_prpd_config()` and `save_prpd_config()`. Configurable interactively via CLI Settings menu (`Configure PRPD Graph Style`).
+
 ### WorkspaceStorage
 A deep module interface (`src/project/storage.py`) acting as the authoritative seam for physical workspace directory (`TESTSHEET/`, `PYTHON/`, `QUICK REPORT/`, `RAW MATERIAL/`, `WHATSAPP/`) and template path resolution.
 

@@ -20,6 +20,7 @@ def test_select_settings_action_menu_items() -> None:
         option_values = [opt.value for opt in options]
         assert "manage_projects" in option_values
         assert "configure_cameras" in option_values
+        assert "configure_prpd" in option_values
         assert "rollback" in option_values
         assert SessionCommand.BACK in option_values
 
@@ -81,3 +82,35 @@ def test_run_settings_menu_manage_projects_dispatch() -> None:
             _run_settings_menu(session)
 
             mock_pm_menu.assert_called_once_with(session)
+
+
+def test_run_settings_menu_configure_prpd_dispatch() -> None:
+    session = MagicMock(spec=CliSession)
+
+    settings_selections = ["configure_prpd", SessionCommand.BACK]
+
+    with patch("src.cli_menu.select_settings_action", side_effect=settings_selections):
+        with patch("src.settings_actions.run_configure_prpd_style") as mock_prpd_action:
+            _run_settings_menu(session)
+
+            mock_prpd_action.assert_called_once()
+
+
+def test_run_configure_prpd_style_switch_to_option_b() -> None:
+    from src.settings_actions import run_configure_prpd_style
+    from src.project.models import PrpdConfig
+
+    with patch("src.settings_actions.JsonFileProjectRepository") as mock_repo_cls, \
+         patch("src.settings_actions.cli_selectors.select_one") as mock_select:
+        mock_repo = MagicMock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.get_prpd_config.return_value = PrpdConfig(mode="option_c")
+
+        # Select option_b
+        mock_select.return_value = "option_b"
+
+        run_configure_prpd_style()
+
+        mock_repo.save_prpd_config.assert_called_once()
+        saved_cfg = mock_repo.save_prpd_config.call_args[0][0]
+        assert saved_cfg.mode == "option_b"
