@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Resilient Multi-Path Chromium Locator (`src/quick_report/prpd.py`)**: Added `find_chrome_executable()` checking 64-bit, 32-bit, and LocalAppData Google Chrome installations with Microsoft Edge (`msedge.exe`) fallback.
 - **Architectural Decision Record (`docs/adr/0001-prpd-graph-generation-strategy.md`)**: Documented context, decisions, and trade-offs for PRPD generation strategies.
 
+### Changed
+- **Unified Substation Asset Discovery (`src/quick_report/prpd.py`)**: Extracted `_discover_substation_assets()` helper scanning SWG feeders (with panel number regex extraction and collision resolution) and transformer folders in a single pass, eliminating ~190 lines of duplicate asset crawling across generator paths.
+
+### Fixed
+- **Domain Model Typing & Repository Seam (`src/project/models.py`, `src/project/environment.py`, `src/project/__init__.py`)**: Defined `PrpdMode` Literal type alias (`"option_c" | "option_b"`) and immutable `VALID_PRPD_MODES` tuple, strictly typing `PrpdConfig`. Fixed feature envy in `ProjectEnvironment.get_prpd_config()` and `save_prpd_config()` by delegating directly through `self._get_repository()`.
+- **Uniform Catalog Schema on Missing Chromium (`src/quick_report/prpd.py`)**: Guaranteed `generate_all_substation_prpd_graphs()` returns a uniform catalog populated with `{"us": None, "tev": None}` for all discovered assets rather than an empty dictionary when Headless Chromium is unavailable.
+- **Isolated Option C Render Temp Files (`src/quick_report/prpd.py`)**: Modified `render_prpd_option_c_image()` to write PID- and timestamp-unique temporary HTML files (`_temp_render_c_<pid>_<timestamp>.html`) strictly to `output_dir` rather than raw input survey directories, accompanied by dynamic HTTP handler routing and guaranteed cleanup in `finally`.
+- **CBM Defect Page On-Demand Fallback Wiring (`src/quick_report/cbm_render.py`)**: Wired `mode=pe_info.get("prpd_mode", "option_c")` into fallback calls for `generate_prpd_graphs_for_swg_panel()` and `generate_prpd_graphs_for_transformer()`.
+
 ## [1.14.7] - 2026-09-07
 
 ### Changed

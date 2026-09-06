@@ -14,6 +14,7 @@ import pytest
 from src.quick_report.prpd import (
     OPTION_C_INJECTION_TEMPLATE,
     SurveyHttpServer,
+    _discover_substation_assets,
     build_prpd_inline_images,
     decode_tev_event_data,
     decode_ultrasonic_phase_plot,
@@ -709,6 +710,95 @@ def test_generate_prpd_graphs_for_swg_panel_and_tx_option_c(tmp_path: Path, monk
     )
     assert tx_us is None
     assert tx_tev is None
+
+
+def test_discover_substation_assets_unified(tmp_path: Path):
+    """Test _discover_substation_assets scans SWG panels (with collision resolution) and TX units."""
+    survey_root = tmp_path / "SURVEY_DISCOVER"
+    (survey_root / "SWG" / "FEEDER_1").mkdir(parents=True)
+    (survey_root / "SWG" / "FEEDER_1_DUPE").mkdir(parents=True)  # Should resolve collision to panel 2
+    (survey_root / "SWG" / "NO_DIGITS").mkdir(parents=True)     # Should resolve to next free index
+    (survey_root / "TX1" / "Transformer").mkdir(parents=True)
+    (survey_root / "TX2").mkdir(parents=True)
+
+    swg_panels, tx_units = _discover_substation_assets(survey_root)
+
+    assert len(swg_panels) == 3
+    assert 1 in swg_panels and swg_panels[1].name == "FEEDER_1"
+    assert 2 in swg_panels
+    assert 3 in swg_panels
+    assert len(tx_units) == 2
+    assert 1 in tx_units
+    assert 2 in tx_units
+
+
+def test_generate_all_substation_prpd_graphs_missing_chrome(tmp_path: Path, monkeypatch):
+    """Test Option C populates discovered assets with None when Chrome is missing (no empty dict)."""
+    survey_root = tmp_path / "SURVEY_NO_CHROME"
+    (survey_root / "SWG" / "PANEL_1").mkdir(parents=True)
+    (survey_root / "TX").mkdir(parents=True)
+    out_dir = tmp_path / "out_no_chrome"
+
+    # Simulate missing Chrome
+    def _raise_missing():
+        raise FileNotFoundError("No Chrome")
+
+    monkeypatch.setattr("src.quick_report.prpd.find_chrome_executable", _raise_missing)
+
+    catalog = generate_all_substation_prpd_graphs(survey_root, out_dir, mode="option_c")
+
+    assert "swg" in catalog and 1 in catalog["swg"]
+    assert catalog["swg"][1] == {"us": None, "tev": None}
+    assert "tx" in catalog and 1 in catalog["tx"]
+    assert catalog["tx"][1] == {"us": None, "tev": None}
+
+
+def test_render_prpd_option_c_image_isolates_temp_file_in_output_dir(tmp_path: Path, monkeypatch):
+    """Test render_prpd_option_c_image writes temporary HTML in output_dir, not survey_root."""
+    survey_root = tmp_path / "SURVEY_TEMP_TEST"
+    meas_dir = survey_root / "SWG" / "FEEDER_1" / "MEAS_DIR"
+    meas_dir.mkdir(parents=True)
+    html_file = meas_dir / "Ultrasonic.html"
+    html_file.write_text("<html><head></head><body>test</body></html>", encoding="utf-8")
+
+    out_dir = tmp_path / "out_temp_test"
+    out_png = out_dir / "rendered.png"
+
+    captured_temp_files = []
+
+    def _mock_run(cmd, check=True, capture_output=True, timeout=15.0):
+        # Inspect temp files inside out_dir during execution
+        temp_files_out = list(out_dir.glob("_temp_render_c_*.html"))
+        captured_temp_files.extend(temp_files_out)
+        # Verify survey directory has ZERO temp files
+        temp_files_survey = list(survey_root.rglob("_temp_render_c_*.html"))
+        assert len(temp_files_survey) == 0
+        # Write fake output png
+        out_png.parent.mkdir(parents=True, exist_ok=True)
+        out_png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+
+    monkeypatch.setattr("subprocess.run", _mock_run)
+
+    server = SurveyHttpServer(survey_root, temp_dir=out_dir)
+    port = server.start()
+    try:
+        result = render_prpd_option_c_image(
+            html_file=html_file,
+            output_png=out_png,
+            survey_root=survey_root,
+            http_port=port,
+            chrome_path="fake_chrome.exe",
+        )
+    finally:
+        server.stop()
+
+    assert result == out_png
+    # Temp file was located in out_dir during run
+    assert len(captured_temp_files) >= 1
+    # Temp file was cleaned up in finally
+    assert len(list(out_dir.glob("_temp_render_c_*.html"))) == 0
+    assert len(list(survey_root.rglob("_temp_render_c_*.html"))) == 0
+
 
 
 

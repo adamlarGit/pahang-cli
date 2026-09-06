@@ -177,12 +177,15 @@ class ProjectEnvironment:
     def resolve_template_path(self, key: str) -> Path:
         return self.get_template(key)
 
-    @property
-    def repository(self) -> ProjectRepository:
+    def _get_repository(self) -> ProjectRepository:
         if self._repository is not None:
             return self._repository
         config_path = self.base_path / "project_config.json"
         return JsonFileProjectRepository(config_path)
+
+    @property
+    def repository(self) -> ProjectRepository:
+        return self._get_repository()
 
     def get_camera_config(self) -> CameraConfig:
         config_path = self.base_path / "project_config.json"
@@ -205,29 +208,10 @@ class ProjectEnvironment:
                 pass
 
     def get_prpd_config(self) -> PrpdConfig:
-        config_path = self.base_path / "project_config.json"
-        if config_path.exists():
-            data = JsonFileProjectRepository._read_json(config_path)
-            raw_cfg = data.get("prpd_config")
-            if raw_cfg and isinstance(raw_cfg, dict):
-                return PrpdConfig.from_dict(raw_cfg)
-        if self._repository is not None:
-            try:
-                return self._repository.get_prpd_config()
-            except Exception:
-                pass
-        return PrpdConfig()
+        return self._get_repository().get_prpd_config()
 
     def save_prpd_config(self, prpd_config: PrpdConfig) -> None:
-        config_path = self.base_path / "project_config.json"
-        data = JsonFileProjectRepository._read_json(config_path)
-        data["prpd_config"] = prpd_config.to_dict()
-        JsonFileProjectRepository._write_json(config_path, data)
-        if self._repository is not None:
-            try:
-                self._repository.save_prpd_config(prpd_config)
-            except Exception:
-                pass
+        self._get_repository().save_prpd_config(prpd_config)
 
 
 def create_project_environment(

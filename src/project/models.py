@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TypeAlias
 
 VALID_VOLTAGE_TYPES: tuple[str, ...] = ("11kV", "33kV")
 
@@ -102,16 +102,17 @@ class CameraConfig:
         )
 
 
-VALID_PRPD_MODES: tuple[str, ...] = ("option_c", "option_b")
+PrpdMode: TypeAlias = Literal["option_c", "option_b"]
+VALID_PRPD_MODES: tuple[PrpdMode, ...] = ("option_c", "option_b")
 
 
 @dataclass
 class PrpdConfig:
     """Configuration for PRPD graph generation style (Option C or Option B)."""
-    mode: str = "option_c"
+    mode: PrpdMode = "option_c"
 
     def __post_init__(self) -> None:
-        if self.mode and self.mode not in VALID_PRPD_MODES:
+        if self.mode not in VALID_PRPD_MODES:
             self.mode = "option_c"
 
     def to_dict(self) -> dict[str, Any]:
@@ -125,10 +126,11 @@ class PrpdConfig:
         """Create PrpdConfig instance from dictionary with fallback defaults."""
         if not data or not isinstance(data, dict):
             return cls()
-        mode_val = str(data.get("mode", "option_c")).strip().lower()
+        raw_mode = data.get("mode", "option_c")
+        mode_val = str(raw_mode).strip().lower() if raw_mode is not None else "option_c"
         if mode_val not in VALID_PRPD_MODES:
             mode_val = "option_c"
-        return cls(mode=mode_val)
+        return cls(mode=mode_val)  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -145,4 +147,17 @@ class WorkspaceHealth:
     """Aggregated workspace directory structure health evaluation."""
     is_healthy: bool
     items: tuple[HealthCheckItem, ...]
+
+
+__all__ = [
+    "VALID_VOLTAGE_TYPES",
+    "ProjectMetadata",
+    "CameraConfig",
+    "PrpdMode",
+    "VALID_PRPD_MODES",
+    "PrpdConfig",
+    "HealthCheckItem",
+    "WorkspaceHealth",
+]
+
 

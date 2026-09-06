@@ -8,12 +8,14 @@ from src.project.environment import (
     is_known_project_key,
     list_project_keys,
 )
-from src.project.models import ProjectMetadata
+from src.project.models import ProjectMetadata, PrpdConfig, PrpdMode
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
 
 __all__ = [
     "ProjectMetadata",
+    "PrpdConfig",
+    "PrpdMode",
     "ProjectRepository",
     "JsonFileProjectRepository",
     "WorkspaceStorage",

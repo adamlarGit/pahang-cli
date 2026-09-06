@@ -1,12 +1,20 @@
-﻿"""Unit tests for PrpdConfig and ProjectRepository settings persistence."""
+"""Unit tests for PrpdConfig and ProjectRepository settings persistence."""
 
 from pathlib import Path
 import pytest
 
-from src.project.models import ProjectMetadata, PrpdConfig, VALID_PRPD_MODES
+from src.project.models import ProjectMetadata, PrpdConfig, PrpdMode, VALID_PRPD_MODES
+import src.project.models as project_models
 from src.project.repository import JsonFileProjectRepository
 from src.project.environment import ProjectEnvironment
 from src.project.storage import LocalWorkspaceStorage
+
+
+def test_prpd_mode_type_and_all_export():
+    """Test PrpdMode is exported in __all__ and VALID_PRPD_MODES is immutable."""
+    assert "PrpdMode" in project_models.__all__
+    assert "VALID_PRPD_MODES" in project_models.__all__
+    assert VALID_PRPD_MODES == ("option_c", "option_b")
 
 
 def test_prpd_config_defaults():

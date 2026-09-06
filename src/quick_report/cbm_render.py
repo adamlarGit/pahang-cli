@@ -589,6 +589,7 @@ def _build_swg_render_context(
                     output_dir=Path(prpd_out_dir),
                     feeder_no=panel_match_target,
                     panel_name=panel_name,
+                    mode=pe_info.get("prpd_mode", "option_c"),
                 )
                 if us_png:
                     us_prpd = us_png
@@ -760,6 +761,7 @@ def _build_tx_render_context(
                     survey_root=survey_root,
                     tx_idx=tx_idx,
                     output_dir=Path(prpd_out_dir),
+                    mode=pe_info.get("prpd_mode", "option_c"),
                 )
                 if us_png:
                     us_prpd = us_png
