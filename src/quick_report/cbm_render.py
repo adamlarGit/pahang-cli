@@ -12,7 +12,9 @@ from docx.shared import Mm
 from jinja2 import Environment, Undefined
 
 from src.core.normalizers import (
+    format_busbar_position,
     format_db_int,
+    format_heater_amp,
     format_temperature_float,
     normalize_us_characteristic,
 )
@@ -502,17 +504,24 @@ def _build_swg_render_context(
     equipment_pkg = _extract_equipment_package(pe_info)
     swg_spec = equipment_pkg.switchgear if equipment_pkg and equipment_pkg.switchgears else None
 
+    # Match panel in testsheet
+    all_panels = [p for swg in (equipment_pkg.switchgears if equipment_pkg else ()) for p in swg.panels]
+    panel_match_target = record.equipment_id or resolved_item_suffix or resolved_item_key or equipment
+    matched_panel = _find_matching_switchgear_panel(all_panels, panel_match_target)
+
+    # Match switchgear for this panel if multiple switchgears exist
+    if equipment_pkg and equipment_pkg.switchgears:
+        for s in equipment_pkg.switchgears:
+            if matched_panel and matched_panel in s.panels:
+                swg_spec = s
+                break
+
     # SWG header fields
     swg_manufacturer = (swg_spec.manufacturer if swg_spec and swg_spec.manufacturer else "") or _text_or_empty(record.brand)
     swg_model = _text_or_empty(record.model) or (swg_spec.model if swg_spec else "")
     swg_rating = _text_or_empty(record.rating) or (swg_spec.rating if swg_spec else "")
     swg_serial = swg_spec.serial_no if swg_spec else ""
-    swg_type = equipment or (swg_spec.switchgear_type if swg_spec else "")
-
-    # Match panel in testsheet
-    all_panels = [p for swg in (equipment_pkg.switchgears if equipment_pkg else ()) for p in swg.panels]
-    panel_match_target = record.equipment_id or resolved_item_suffix or resolved_item_key or equipment
-    matched_panel = _find_matching_switchgear_panel(all_panels, panel_match_target)
+    swg_type = (swg_spec.switchgear_type if swg_spec and swg_spec.switchgear_type else "") or equipment
 
     if matched_panel:
         panel_loadamp = matched_panel.load_amp
@@ -544,6 +553,21 @@ def _build_swg_render_context(
     else:
         panel_name = panel_match_target
         panel_linknumber = panel_match_target
+
+    is_vcb = bool(
+        (swg_spec and "VCB" in (swg_spec.switchgear_type or "").upper())
+        or ("VCB" in swg_type.upper())
+        or (matched_panel and "VCB" in (matched_panel.panel_type or "").upper())
+    )
+    panel_heateramp_formatted = format_heater_amp(
+        panel_heateramp,
+        switchgear_type="VCB" if is_vcb else (swg_type or "OTHER"),
+    )
+    panel_name_check = f"{panel_name} {matched_panel.name if matched_panel else ''}"
+    panel_busbarposition = format_busbar_position(
+        panel_name_check,
+        switchgear_type="VCB" if is_vcb else (swg_type or "OTHER"),
+    )
 
     tev_bg = _extract_tev_background(pe_info)
     ir_sev = "-" if overview else "__SEVERITY_IR__"
@@ -612,9 +636,9 @@ def _build_swg_render_context(
             "linknumber": _fallback_dash(panel_linknumber),
             "area": area,
             "breakerstatus": _fallback_dash(panel_breakerstatus),
-            "busbarposition": "-",
+            "busbarposition": panel_busbarposition,
             "cabletype": _fallback_dash(panel_cabletype),
-            "heateramp": _fallback_dash(panel_heateramp),
+            "heateramp": panel_heateramp_formatted,
             "loadamp": _fallback_dash(panel_loadamp),
             "serialnumber": _fallback_dash(panel_serialnumber),
             "ir": {
@@ -623,7 +647,7 @@ def _build_swg_render_context(
             },
             "us": {
                 "reading": format_db_int(panel_us_reading),
-                "char": normalize_us_characteristic(panel_us_char),
+                "char": normalize_us_characteristic(panel_us_char, default="NORMAL"),
                 "severity": us_sev,
                 "prpd": us_prpd,
             },
@@ -642,7 +666,7 @@ def _build_swg_render_context(
         },
         "us": {
             "reading": format_db_int(panel_us_reading),
-            "char": normalize_us_characteristic(panel_us_char),
+            "char": normalize_us_characteristic(panel_us_char, default="NORMAL"),
             "severity": us_sev,
             "prpd": us_prpd,
         },
@@ -786,7 +810,7 @@ def _build_tx_render_context(
             },
             "us": {
                 "reading": format_db_int(tx_us_reading),
-                "char": normalize_us_characteristic(tx_us_char),
+                "char": normalize_us_characteristic(tx_us_char, default="NORMAL"),
                 "severity": us_sev,
                 "prpd": us_prpd,
             },
@@ -804,7 +828,7 @@ def _build_tx_render_context(
         },
         "us": {
             "reading": format_db_int(tx_us_reading),
-            "char": normalize_us_characteristic(tx_us_char),
+            "char": normalize_us_characteristic(tx_us_char, default="NORMAL"),
             "severity": us_sev,
             "prpd": us_prpd,
         },

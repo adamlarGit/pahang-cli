@@ -8,10 +8,12 @@ from decimal import Decimal
 
 from src.core.normalizers import (
     extract_background_temperature,
+    format_busbar_position,
     format_cbm_reading,
     format_date_cbm,
     format_date_front_page,
     format_db_int,
+    format_heater_amp,
     format_humidity_str,
     format_iso8601,
     format_month_folder,
@@ -476,6 +478,22 @@ def test_normalize_us_characteristic() -> None:
     assert normalize_us_characteristic("PARTIAL DISCHARGE") == "PARTIAL DISCHARGE"
     assert normalize_us_characteristic("  Custom Sound Pattern  ") == "Custom Sound Pattern"
 
+    # 7. Unspecified with default="NORMAL" (detail pages)
+    assert normalize_us_characteristic(None, default="NORMAL") == "NORMAL"
+    assert normalize_us_characteristic("", default="NORMAL") == "NORMAL"
+    assert normalize_us_characteristic("   ", default="NORMAL") == "NORMAL"
+    assert normalize_us_characteristic("-", default="NORMAL") == "NORMAL"
+    assert normalize_us_characteristic("--", default="NORMAL") == "NORMAL"
+    assert normalize_us_characteristic("N/A", default="NORMAL") == "NORMAL"
+    assert normalize_us_characteristic("nan", default="NORMAL") == "NORMAL"
+    assert normalize_us_characteristic(float("nan"), default="NORMAL") == "NORMAL"
+    assert normalize_us_characteristic("C", default="NORMAL") == "CORONA DISCHARGE"
+    assert normalize_us_characteristic("T", default="NORMAL") == "TRACKING"
+    assert normalize_us_characteristic("A", default="NORMAL") == "ARCING"
+    assert normalize_us_characteristic("MV", default="NORMAL") == "MECHANICAL VIBRATION"
+    assert normalize_us_characteristic("NORMAL", default="NORMAL") == "NORMAL"
+
+
 
 def test_format_db_int() -> None:
     """Verify format_db_int formats US and TEV dB readings as 0-decimal integer strings."""
@@ -620,5 +638,83 @@ def test_format_cbm_reading() -> None:
     assert format_cbm_reading("Oil Leakage", "VISUAL") == "Oil Leakage"
     assert format_cbm_reading(None, None) == "-"
     assert format_cbm_reading("", "") == "-"
+
+
+def test_format_heater_amp() -> None:
+    """Verify format_heater_amp formats anti-condensation heater current per domain rules."""
+    # 1. Numeric and string formatting with VCB switchgear or default
+    assert format_heater_amp("0.5A") == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp("0.5a") == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp("0.5 A") == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp("0.55") == "ON:0.6A/OFF:0.0A"
+    assert format_heater_amp("0.54") == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp(0.5) == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp(0.55) == "ON:0.6A/OFF:0.0A"
+    assert format_heater_amp(1) == "ON:1.0A/OFF:0.0A"
+    assert format_heater_amp("1") == "ON:1.0A/OFF:0.0A"
+    assert format_heater_amp(0) == "ON:0.0A/OFF:0.0A"
+    assert format_heater_amp("0") == "ON:0.0A/OFF:0.0A"
+    assert format_heater_amp("0.0A") == "ON:0.0A/OFF:0.0A"
+    assert format_heater_amp(Decimal("0.55")) == "ON:0.6A/OFF:0.0A"
+
+    # Explicit VCB switchgear_type
+    assert format_heater_amp("0.5A", switchgear_type="VCB") == "ON:0.5A/OFF:0.0A"
+    assert format_heater_amp("0.55", switchgear_type="VCB") == "ON:0.6A/OFF:0.0A"
+    assert format_heater_amp("1", switchgear_type="AIS VCB") == "ON:1.0A/OFF:0.0A"
+    assert format_heater_amp("0", switchgear_type="vcb") == "ON:0.0A/OFF:0.0A"
+
+    # 2. Non-VCB switchgear always outputs '-'
+    assert format_heater_amp("0.5A", switchgear_type="RMU SF6") == "-"
+    assert format_heater_amp("0.5A", switchgear_type="RMU OIL") == "-"
+    assert format_heater_amp("0.5A", switchgear_type="MRMU") == "-"
+    assert format_heater_amp("0.5A", switchgear_type="OCB") == "-"
+    assert format_heater_amp("0.5A", switchgear_type="OTHER") == "-"
+    assert format_heater_amp(1.0, switchgear_type="RMU SF6") == "-"
+
+    # 3. Empty, blank, '-', 'N/A', or non-numeric outputs '-'
+    assert format_heater_amp(None) == "-"
+    assert format_heater_amp("") == "-"
+    assert format_heater_amp("   ") == "-"
+    assert format_heater_amp("-") == "-"
+    assert format_heater_amp("--") == "-"
+    assert format_heater_amp("N/A") == "-"
+    assert format_heater_amp("n/a") == "-"
+    assert format_heater_amp("None") == "-"
+    assert format_heater_amp("null") == "-"
+    assert format_heater_amp("NOT WORKING") == "-"
+    assert format_heater_amp("DAMAGED") == "-"
+    assert format_heater_amp(float("nan")) == "-"
+    assert format_heater_amp(True) == "-"
+    assert format_heater_amp(False) == "-"
+
+
+def test_format_busbar_position() -> None:
+    """Verify format_busbar_position presents busbar position per domain rules."""
+    # 1. Transition panels -> '-' regardless of switchgear type
+    assert format_busbar_position("TRANSITION PANEL", "VCB") == "-"
+    assert format_busbar_position("TRANSITION", "VCB") == "-"
+    assert format_busbar_position("transition panel", "VCB") == "-"
+    assert format_busbar_position("Panel Transition", "VCB") == "-"
+    assert format_busbar_position("TRANSITION PANEL", "RMU SF6") == "-"
+    assert format_busbar_position("TRANSITION PANEL", None) == "-"
+
+    # 2. VCB switchgear (non-transition) -> 'MAIN'
+    assert format_busbar_position("INCOMING 1", "VCB") == "MAIN"
+    assert format_busbar_position("PANEL 1", "VCB") == "MAIN"
+    assert format_busbar_position("TX 1", "AIS VCB") == "MAIN"
+    assert format_busbar_position("BUS COUPLER", "vcb") == "MAIN"
+    assert format_busbar_position("", "VCB") == "MAIN"
+    assert format_busbar_position(None, "VCB") == "MAIN"
+
+    # 3. Non-VCB switchgear (RMU, MRMU, OIL, OCB, etc.) -> '-'
+    assert format_busbar_position("PANEL 1", "RMU SF6") == "-"
+    assert format_busbar_position("PANEL 1", "RMU OIL") == "-"
+    assert format_busbar_position("PANEL 1", "MRMU") == "-"
+    assert format_busbar_position("PANEL 1", "OCB") == "-"
+    assert format_busbar_position("PANEL 1", "OTHER") == "-"
+    assert format_busbar_position("PANEL 1", "") == "-"
+    assert format_busbar_position("PANEL 1", None) == "-"
+
+
 
 

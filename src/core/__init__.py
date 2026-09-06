@@ -2,10 +2,12 @@
 
 from src.core.normalizers import (
     extract_background_temperature,
+    format_busbar_position,
     format_cbm_reading,
     format_date_cbm,
     format_date_front_page,
     format_db_int,
+    format_heater_amp,
     format_humidity_str,
     format_iso8601,
     format_month_folder,
@@ -22,10 +24,12 @@ from src.core.normalizers import (
 
 __all__ = [
     "extract_background_temperature",
+    "format_busbar_position",
     "format_cbm_reading",
     "format_date_cbm",
     "format_date_front_page",
     "format_db_int",
+    "format_heater_amp",
     "format_humidity_str",
     "format_iso8601",
     "format_month_folder",

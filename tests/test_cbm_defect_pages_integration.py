@@ -80,6 +80,7 @@ def test_generate_cbm_defect_pages_swg_with_prpd_and_severity(tmp_path: Path):
         panel_no=1,
         panel_feeder_no="F01",
         name="INCOMING 1",
+        heater_amp="0.5A",
         us_reading="14.2",
         us_char="CORONA",
         tev_reading="25.5",
@@ -172,6 +173,13 @@ def test_generate_cbm_defect_pages_swg_with_prpd_and_severity(tmp_path: Path):
 
     # Verify PRPD images were embedded into detail doc
     assert len(detail_doc.inline_shapes) >= 2
+
+    # Verify rendered domain values in tables: heateramp, busbarposition, us.char
+    full_table_text = " ".join(cell.text for row in t.rows for cell in row.cells)
+    assert "ON:0.5A/OFF:0.0A" in full_table_text
+    assert "MAIN" in full_table_text
+    assert "CORONA DISCHARGE" in full_table_text
+
 
 
 def test_generate_cbm_defect_pages_missing_survey_dir_graceful_fallback(tmp_path: Path):

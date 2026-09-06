@@ -2091,16 +2091,17 @@ def test_swg_render_context_with_testsheet_match():
     assert ctx["panel"]["linknumber"] == "PANEL 1"
     assert ctx["panel"]["area"] == "Cable Compartment/ Phase R Hotspot"
     assert ctx["panel"]["loadamp"] == "120A"
-    assert ctx["panel"]["heateramp"] == "0.5A"
+    assert ctx["panel"]["heateramp"] == "-"
     assert ctx["panel"]["breakerstatus"] == "CLOSE"
     assert ctx["panel"]["cabletype"] == "XLPE 300mm"
     assert ctx["panel"]["serialnumber"] == "PNL-SN-001"
     assert ctx["panel"]["busbarposition"] == "-"
     assert ctx["panel"]["ir"]["reading"] == "55.2"
     assert ctx["panel"]["us"]["reading"] == "-"
-    assert ctx["panel"]["us"]["char"] == "-"
+    assert ctx["panel"]["us"]["char"] == "NORMAL"
     assert ctx["panel"]["tev"]["reading"] == "-"
     assert ctx["panel"]["tev"]["char"] == "-"
+
 
 
 def test_swg_render_context_without_testsheet_fallback_dash():
@@ -2224,6 +2225,131 @@ def test_tx_render_context_with_and_without_testsheet():
     )
     ctx_body = _build_family_render_context(spec, rec_body, overview=False, item_key="TX 1", pe_info=pe_info)
     assert ctx_body["tx"]["location"] == "-"
+    assert ctx_body["tx"]["us"]["char"] == "NORMAL"
+    assert ctx_body["us"]["char"] == "NORMAL"
+
+
+def test_swg_render_context_vcb_heater_and_busbar_rules():
+    """Verify VCB switchgear heater formatting, busbar position, and US char default on detail page."""
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import SubstationEquipmentPackage, SwitchgearPanelSpec, SwitchgearSpec
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
+
+    # 1. Standard VCB panel with heater 0.55A -> ON:0.6A/OFF:0.0A, busbar -> MAIN, us.char -> NORMAL
+    panel_incoming = SwitchgearPanelSpec(
+        panel_no=1,
+        panel_feeder_no="F01",
+        name="INCOMING 1",
+        panel_type="VCB",
+        load_amp="200A",
+        heater_amp="0.55",
+        us_reading="",
+        us_char="",
+    )
+    # Transition panel on VCB -> busbar -> '-'
+    panel_transition = SwitchgearPanelSpec(
+        panel_no=2,
+        panel_feeder_no="F02",
+        name="TRANSITION PANEL",
+        panel_type="VCB",
+        load_amp="0A",
+        heater_amp="1.0A",
+        us_reading="15",
+        us_char="C",
+    )
+    swg_vcb = SwitchgearSpec(
+        switchgear_type="VCB",
+        manufacturer="TAMCO",
+        model="GV3",
+        rating="11kV",
+        serial_no="SN-VCB-001",
+        panels=(panel_incoming, panel_transition),
+    )
+    equipment_pkg = SubstationEquipmentPackage(switchgears=(swg_vcb,))
+    pe_info = {"equipment_specs": equipment_pkg, "substation": {"name_erms": "PE VCB"}}
+
+    rec_vcb = CbmDefectRecord(
+        equipment="VCB",
+        equipment_id="INCOMING 1",
+        technology="IR",
+        defect_area="Cable Compartment",
+        ir_reading="45.0",
+    )
+    ctx_incoming = _build_family_render_context(
+        spec,
+        rec_vcb,
+        overview=False,
+        item_key="INCOMING 1",
+        pe_info=pe_info,
+    )
+    assert ctx_incoming["swg"]["type"] == "VCB"
+    assert ctx_incoming["panel"]["name"] == "INCOMING 1"
+    assert ctx_incoming["panel"]["heateramp"] == "ON:0.6A/OFF:0.0A"
+    assert ctx_incoming["panel"]["busbarposition"] == "MAIN"
+    assert ctx_incoming["panel"]["us"]["char"] == "NORMAL"
+    assert ctx_incoming["us"]["char"] == "NORMAL"
+
+    # Transition panel verification
+    rec_trans = CbmDefectRecord(
+        equipment="VCB",
+        equipment_id="TRANSITION PANEL",
+        technology="US",
+        defect_area="Busbar",
+        us_reading="15",
+        us_char="C",
+    )
+    ctx_trans = _build_family_render_context(
+        spec,
+        rec_trans,
+        overview=False,
+        item_key="TRANSITION PANEL",
+        pe_info=pe_info,
+    )
+    assert ctx_trans["panel"]["name"] == "TRANSITION PANEL"
+    assert ctx_trans["panel"]["heateramp"] == "ON:1.0A/OFF:0.0A"
+    assert ctx_trans["panel"]["busbarposition"] == "-"
+    assert ctx_trans["panel"]["us"]["char"] == "CORONA DISCHARGE"
+    assert ctx_trans["us"]["char"] == "CORONA DISCHARGE"
+
+
+def test_tx_render_context_unspecified_us_char_defaults_to_normal():
+    """Verify transformer detail page ultrasound characteristic defaults to NORMAL when unspecified."""
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import SubstationEquipmentPackage, TransformerSpec
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["tx"]
+    tx_spec = TransformerSpec(
+        tx_id="Tx 1",
+        rating_kva="500kVA",
+        manufacturer="Tamini",
+        us_reading="12",
+        us_char="-",
+    )
+    equipment_pkg = SubstationEquipmentPackage(transformers=(tx_spec,))
+    pe_info = {"equipment_specs": equipment_pkg, "substation": {"name_erms": "PE TX"}}
+
+    rec = CbmDefectRecord(
+        equipment="TX 1",
+        technology="US",
+        defect_area="LV Bushing",
+        us_reading="12",
+        us_char="-",
+    )
+    ctx = _build_family_render_context(
+        spec,
+        rec,
+        overview=False,
+        item_key="TX 1",
+        pe_info=pe_info,
+    )
+    assert ctx["tx"]["us"]["char"] == "NORMAL"
+    assert ctx["us"]["char"] == "NORMAL"
+
 
 
 def test_fp_lvdb_render_context_splitting_and_testsheet():

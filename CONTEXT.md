@@ -133,6 +133,17 @@ Clear separation between data representation and document presentation:
 - **Extractor & Domain Model Representation (Stage 2)**: Missing, empty, or unparseable spreadsheet cells are normalized to empty string `""` (or `None` for optional typed dates/integers) within immutable domain models. Non-fatal extraction warnings are logged where applicable.
 - **Document Presentation Representation (Stage 4/5)**: The transformation and rendering stage converts empty string `""` (or missing values) into human-readable dash `"-"` in Jinja template rendering contexts for DOCX / PDF outputs.
 
+### CbmDefectDetailSwitchgearPolicy
+Domain rendering rules governing switchgear panel CBM defect detail pages (`swg-panel.docx`):
+- **Anti-Condensation Heater (`panel.heateramp`)**:
+  - For `VCB` switchgear: Formatted strictly as `"ON:{amp}A/OFF:0.0A"`, where `{amp}` is normalized to a 1-decimal float using half-up rounding (e.g., `0.5` $\to$ `0.5`, `0.55` $\to$ `0.6`, `1` $\to$ `1.0`, `0` $\to$ `0.0`, stripping any trailing `"A"`/`"a"` or whitespace). If cell H in `PCE Testsheet` is unpopulated, empty, `"-"`, or `"N/A"`, it outputs `"-"`.
+  - For Non-VCB switchgear (`RMU SF6`, `RMU OIL`, `MRMU`, `OCB`): Strictly outputs `"-"` because these switchgear types do not have anti-condensation heaters.
+- **Ultrasound Characteristic Presentation (`us.char` / `panel.us.char`)**:
+  - On CBM defect detail pages displaying ultrasound measurements (switchgear panels and transformers), an unspecified characteristic defaults to `"NORMAL"` instead of `"-"`. Standard shorthand defect codes (`C` $\to$ `CORONA DISCHARGE`, `T` $\to$ `TRACKING`, `A` $\to$ `ARCING`, `MV` $\to$ `MECHANICAL VIBRATION`) are preserved and expanded. CBM summary table severity remains untouched (only populated when an active defect characteristic is present).
+- **Busbar Position (`panel.busbarposition`)**:
+  - For `VCB` switchgear: Defaults to `"MAIN"`. If the panel name contains `"TRANSITION"` (e.g., `"TRANSITION PANEL"`), it outputs `"-"`.
+  - For Non-VCB switchgear (`RMU SF6`, `RMU OIL`, `MRMU`, `OCB`): Strictly outputs `"-"`.
+
 ### SubstationConditionPairBuilderPolicy
 Canonical 2-column condition page generation rules for Quick Report Word output:
 - **Singular vs Plural Naming**:
@@ -180,4 +191,7 @@ The cross-platform document rendering and PDF export fidelity policy governing Q
 3. **Runtime COM Image Compression Suppression**: Enforces `word_app.Options.DoNotCompressImages = True` and `doc.DoNotCompressImages = True` across batch runs.
 4. **Native COM Fixed Format Export**: Uses `doc.ExportAsFixedFormat` (`OptimizeFor=0` / `wdExportOptimizeForPrint`, `BitmapMissingFonts=True`, `DocStructureTags=True`) for Word, and `ws.ExportAsFixedFormat` (`Quality=0` / `xlQualityStandard`, `PaperSize=9` A4, `Orientation=2` Landscape) for Excel.
 5. **Orientation Partitioning**: Strictly maintains Portrait orientation for Quick Report Word document pages and Landscape orientation for Excel testsheet pages during final client deliverable PDF merging.
+
+### FlirActiveXIsolationPolicy
+The architectural rule governing Quick Report compilation in `src/quick_report/composer.py`. Mandates that multi-part documents containing FLIR Tools+ ActiveX controls (`CIRViewer`) merge through Microsoft Word COM Automation (`Documents.Add()`, read-only part opening, clipboard copy, page break, and paste). Prohibits pure Python OpenXML concatenation (`docxcompose`, `python-docx`) to prevent control identifier collisions and binary compound file corruption.
 
