@@ -5,6 +5,16 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-09-07
+
+### Added
+- **CBM Defect Detail Switchgear Domain Policy (`CONTEXT.md`, `src/quick_report/cbm_render.py`)**: Defined canonical presentation rules for Switchgear panel defect detail pages (`swg-panel.docx`), covering anti-condensation heater current, ultrasound defect characteristic defaulting, and busbar position resolution.
+- **Anti-Condensation Heater Normalization (`src/core/normalizers.py`)**: Added `format_heater_amp` helper formatting VCB switchgear panel heater currents as `ON:<amp>A/OFF:0.0A` with 1-decimal rounding (`ROUND_HALF_UP`) and unit stripping (`"0.5A"`, `"0.55"` -> `"ON:0.6A/OFF:0.0A"`). Empty/unpopulated values and non-VCB switchgears (`RMU SF6`, `RMU OIL`, `MRMU`, `OCB`) strictly output `"-"`.
+- **Busbar Position Resolution (`src/core/normalizers.py`)**: Added `format_busbar_position` helper resolving busbar position to `"MAIN"` on VCB switchgear, while returning `"-"` for transition panels (panel name containing `"TRANSITION"`) and all non-VCB switchgear.
+
+### Changed
+- **Ultrasound Characteristic Presentation (`src/core/normalizers.py`, `src/quick_report/cbm_render.py`, `src/quick_report/cbm_summary.py`)**: Updated `normalize_us_characteristic` to support configurable defaults and added case-insensitive `"NORMAL"` mapping. CBM defect detail pages (`swg-panel.docx`, `tx-hv-sides.docx`) default unspecified characteristics to `"NORMAL"` (preserving shorthand codes `C`, `T`, `A`, `MV`), while overview pages keep `"-"` and CBM summary table severity strictly excludes `"NORMAL"`.
+
 ## [1.15.0] - 2026-09-07
  
 ### Added
