@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
+import ctypes
 import gc
 import logging
 from pathlib import Path
 import shutil
 import time
-
-logger = logging.getLogger(__name__)
-
-try:
-    import pywintypes
-except ImportError:
-    pywintypes = None
 
 from src.quick_report.cbm_defect_pages import generate_cbm_defect_pages
 from src.quick_report.cbm_summary import generate_cbm_tech_summary
@@ -23,6 +17,27 @@ from src.quick_report.sticker_page import generate_sticker_page
 from src.quick_report.substation_condition import generate_substation_condition_pages
 from src.quick_report.vi_defect_pages import generate_vi_defect_pages
 from src.quick_report.vi_summary import generate_vi_summary
+
+logger = logging.getLogger(__name__)
+
+try:
+    import pywintypes
+except ImportError:
+    pywintypes = None
+
+
+def _clear_clipboard() -> None:
+    """Clear Windows clipboard to eliminate Word COM OLE serialization stall on document close."""
+    for _ in range(3):
+        try:
+            if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "user32"):
+                if ctypes.windll.user32.OpenClipboard(None):
+                    ctypes.windll.user32.EmptyClipboard()
+                    ctypes.windll.user32.CloseClipboard()
+                    return
+        except Exception:
+            pass
+        time.sleep(0.01)
 
 
 def _collapse_and_escape_table(main_doc):
@@ -205,6 +220,7 @@ class QuickReportComposer:
 
                     _paste_with_retry(rng)
                 finally:
+                    _clear_clipboard()
                     if part_doc is not None:
                         try:
                             part_doc.Close(False)
@@ -216,6 +232,7 @@ class QuickReportComposer:
             main_doc.Close(False)
             main_doc = None
         finally:
+            _clear_clipboard()
             if main_doc is not None:
                 try:
                     main_doc.Close(False)

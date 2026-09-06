@@ -713,6 +713,8 @@ def format_cbm_reading(val: Any, technology: str | None) -> str:
 
 
 __all__ = [
+    "FL_PREFIX_TO_STATION",
+    "STATION_NAME_TO_CODE",
     "extract_background_temperature",
     "format_cbm_reading",
     "format_date_cbm",
@@ -730,4 +732,104 @@ __all__ = [
     "normalize_for_report",
     "normalize_us_characteristic",
     "parse_background_temp",
+    "resolve_station_code",
+    "resolve_station_from_fl",
 ]
+
+
+FL_PREFIX_TO_STATION: dict[str, str] = {
+    "CRAU": "RAUB",
+    "CKTN": "KUANTAN",
+    "CCHL": "CAMERON HIGHLAND",
+    "CBTO": "BENTONG",
+    "CBTG": "BENTONG",
+    "CTMH": "TEMERLOH",
+    "CTML": "TEMERLOH",
+    "CPKN": "PEKAN",
+    "CPEK": "PEKAN",
+    "CMRN": "MARAN",
+    "CJEN": "JENGKA",
+    "CBMS": "MUADZAM SHAH",
+    "CBGB": "GEBENG",
+    "CROM": "ROMPIN",
+    "CTRI": "TRIANG",
+    "CKLS": "KUALA LIPIS",
+    "CJRT": "JERANTUT",
+}
+
+STATION_NAME_TO_CODE: dict[str, str] = {
+    "RAUB": "RAU",
+    "RAU": "RAU",
+    "KUANTAN": "KTN",
+    "KTN": "KTN",
+    "CAMERON HIGHLAND": "CHL",
+    "CAMERON HIGHLANDS": "CHL",
+    "CAMERON": "CHL",
+    "CHL": "CHL",
+    "BENTONG": "BTG",
+    "BTO": "BTG",
+    "BTG": "BTG",
+    "TEMERLOH": "TMH",
+    "TMH": "TMH",
+    "TML": "TMH",
+    "PEKAN": "PKN",
+    "PKN": "PKN",
+    "PEK": "PKN",
+    "MARAN": "MRN",
+    "MRN": "MRN",
+    "JENGKA": "JEN",
+    "JEN": "JEN",
+    "MUADZAM SHAH": "BMS",
+    "BMS": "BMS",
+    "GEBENG": "GBG",
+    "GBG": "GBG",
+    "ROMPIN": "ROM",
+    "ROM": "ROM",
+    "TRIANG": "TRI",
+    "TRI": "TRI",
+    "KUALA LIPIS": "KLS",
+    "KLS": "KLS",
+    "JERANTUT": "JRT",
+    "JRT": "JRT",
+}
+
+
+def resolve_station_code(station: str | None) -> str | None:
+    """Resolve a station name or abbreviation to canonical 3-letter ENGR station code.
+
+    Maps:
+        RAUB -> RAU
+        KUANTAN -> KTN
+        CAMERON HIGHLAND -> CHL
+        BENTONG -> BTG
+        TEMERLOH -> TMH
+        PEKAN -> PKN
+    """
+    if not station or not str(station).strip():
+        return None
+    s = str(station).strip().upper()
+    if s in STATION_NAME_TO_CODE:
+        return STATION_NAME_TO_CODE[s]
+    for name, code in STATION_NAME_TO_CODE.items():
+        if len(name) > 3 and (name in s or s in name):
+            return code
+    return None
+
+
+def resolve_station_from_fl(fl: str | None) -> str | None:
+    """Infer station name from standard 4-character functional location prefix.
+
+    Maps:
+        CRAU -> RAUB
+        CKTN -> KUANTAN
+        CCHL -> CAMERON HIGHLAND
+        CBTO / CBTG -> BENTONG
+        CTMH / CTML -> TEMERLOH
+        CPKN / CPEK -> PEKAN
+    """
+    if not fl or not str(fl).strip():
+        return None
+    s = str(fl).strip().upper().replace("/", "").replace("-", "")
+    prefix = s[:4]
+    return FL_PREFIX_TO_STATION.get(prefix, None)
+
