@@ -454,15 +454,12 @@ def test_normalize_us_characteristic() -> None:
     assert normalize_us_characteristic("arcing") == "ARCING"
     assert normalize_us_characteristic("  ARCING  ") == "ARCING"
 
-    # 4. Tracking mappings (T, TRACKING, SURFACE TRACKING)
+    # 4. Tracking mappings (T, TRACKING)
     assert normalize_us_characteristic("T") == "TRACKING"
     assert normalize_us_characteristic("t") == "TRACKING"
     assert normalize_us_characteristic("  t  ") == "TRACKING"
     assert normalize_us_characteristic("TRACKING") == "TRACKING"
     assert normalize_us_characteristic("tracking") == "TRACKING"
-    assert normalize_us_characteristic("SURFACE TRACKING") == "TRACKING"
-    assert normalize_us_characteristic("surface tracking") == "TRACKING"
-    assert normalize_us_characteristic("  SURFACE TRACKING  ") == "TRACKING"
 
     # 5. Mechanical Vibration mappings (MV, MECHANICAL VIBRATION)
     assert normalize_us_characteristic("MV") == "MECHANICAL VIBRATION"
@@ -475,6 +472,7 @@ def test_normalize_us_characteristic() -> None:
     # 6. Other / non-mapped strings -> return cleaned string representation
     assert normalize_us_characteristic("NORMAL") == "NORMAL"
     assert normalize_us_characteristic("normal") == "NORMAL"
+    assert normalize_us_characteristic("SURFACE TRACKING") == "SURFACE TRACKING"
     assert normalize_us_characteristic("PARTIAL DISCHARGE") == "PARTIAL DISCHARGE"
     assert normalize_us_characteristic("  Custom Sound Pattern  ") == "Custom Sound Pattern"
 

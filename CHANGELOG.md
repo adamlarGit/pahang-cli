@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Ultrasound Characteristic Presentation (`src/core/normalizers.py`, `src/quick_report/cbm_render.py`, `src/quick_report/cbm_summary.py`)**: Updated `normalize_us_characteristic` to support configurable defaults and added case-insensitive `"NORMAL"` mapping. CBM defect detail pages (`swg-panel.docx`, `tx-hv-sides.docx`) default unspecified characteristics to `"NORMAL"` (preserving shorthand codes `C`, `T`, `A`, `MV`), while overview pages keep `"-"` and CBM summary table severity strictly excludes `"NORMAL"`.
 
+### Removed
+- **Non-Standard US Characteristic Alias (`src/core/normalizers.py`)**: Removed extraneous `"SURFACE TRACKING"` alias from `US_CHARACTERISTIC_MAP`, strictly restricting tracking normalization to canonical codes `"T"` and `"TRACKING"`.
+
 ## [1.15.0] - 2026-09-07
  
 ### Added

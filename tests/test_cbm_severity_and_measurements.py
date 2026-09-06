@@ -187,7 +187,7 @@ def test_testsheet_extractor_us_tev_measurements(tmp_path: Path):
     # Transformer 1 (Row 33)
     ws_pce["A33"] = "TX1"
     ws_pce["K33"] = "11.7"  # TX1 US dB
-    ws_pce["L33"] = "SURFACE TRACKING"  # TX1 US char
+    ws_pce["L33"] = "TRACKING"  # TX1 US char
 
     # Transformer 2 (Row 38)
     ws_pce["A38"] = "TX2"

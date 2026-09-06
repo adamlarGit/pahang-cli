@@ -541,7 +541,6 @@ US_CHARACTERISTIC_MAP: dict[str, str] = {
     "ARCING": "ARCING",
     "T": "TRACKING",
     "TRACKING": "TRACKING",
-    "SURFACE TRACKING": "TRACKING",
     "MV": "MECHANICAL VIBRATION",
     "MECHANICAL VIBRATION": "MECHANICAL VIBRATION",
     "NORMAL": "NORMAL",
@@ -554,7 +553,7 @@ def normalize_us_characteristic(val: Any, default: str = "-") -> str:
     Mapping:
     - C, CORONA, CORONA DISCHARGE -> CORONA DISCHARGE
     - A, ARCING -> ARCING
-    - T, TRACKING, SURFACE TRACKING -> TRACKING
+    - T, TRACKING -> TRACKING
     - MV, MECHANICAL VIBRATION -> MECHANICAL VIBRATION
     - None, empty, '-', 'N/A', 'NAN', etc. -> default (defaults to '-')
     - Other strings -> cleaned string representation
