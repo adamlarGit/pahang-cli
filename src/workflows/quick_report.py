@@ -20,18 +20,16 @@ except ImportError:
     win32com = None
 from src.quick_report.composer import QuickReportComposer
 from src.quick_report.extractor import QuickReportExtractor
-from src.quick_report.filter import QuickReportFilter
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.transformer import QuickReportTransformer
 from src.quick_report.utils import (
     is_pahang_date_str,
+    normalize_functional_location_input,
     sanitize_filename,
     validate_date_string,
 )
 from src.workflows.models import (
     QuickReportInspection,
-    QuickReportMode,
-    QuickReportRequest,
     QuickReportResult,
     SubstationInspectionItem,
 )
@@ -80,7 +78,6 @@ class QuickReportWorkflow:
         self,
         compiler: DocumentCompiler | None = None,
         extractor: QuickReportExtractor | None = None,
-        filter_stage: QuickReportFilter | None = None,
         transformer: QuickReportTransformer | None = None,
         composer: QuickReportComposer | None = None,
     ) -> None:
@@ -92,7 +89,6 @@ class QuickReportWorkflow:
             self._compiler = WordComDocumentCompiler()
 
         self._extractor = extractor or QuickReportExtractor()
-        self._filter = filter_stage or QuickReportFilter()
         self._transformer = transformer or QuickReportTransformer()
         self._composer = composer or QuickReportComposer(compiler=self._compiler)
 
@@ -103,14 +99,6 @@ class QuickReportWorkflow:
     @extractor.setter
     def extractor(self, val: QuickReportExtractor) -> None:
         self._extractor = val
-
-    @property
-    def filter_stage(self) -> QuickReportFilter:
-        return self._filter
-
-    @filter_stage.setter
-    def filter_stage(self, val: QuickReportFilter) -> None:
-        self._filter = val
 
     @property
     def transformer(self) -> QuickReportTransformer:
@@ -231,17 +219,9 @@ class QuickReportWorkflow:
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
-        request = self._resolve_request(
-            target,
-            environment,
-            condition_template=condition_template,
-            progress_sink=progress_sink,
-            station=station,
-        )
-
-        missing_templates = self._validate_templates(
-            environment, request.substation_condition_template_path
-        )
+        folders, fls = self._resolve_target(target, environment)
+        cond_tpl = self._resolve_condition_template(environment, condition_template)
+        missing_templates = self._validate_templates(environment, cond_tpl)
 
         warnings: list[str] = []
         errors: list[str] = []
@@ -249,8 +229,34 @@ class QuickReportWorkflow:
         plans: list[QuickReportStationPlan] = []
 
         try:
-            packages = self._extractor.extract(environment, request)
-            filtered_packages = self._filter.filter(packages, request, station=station)
+            packages = self._extractor.extract(
+                environment,
+                folders=folders,
+                fls=fls,
+                station=station,
+                progress_sink=progress_sink,
+            )
+            filtered_packages = [pkg for pkg in packages if pkg.data is not None]
+            if station:
+                norm_station = station.strip().upper()
+                filtered_packages = [
+                    pkg
+                    for pkg in filtered_packages
+                    if (pkg.station and pkg.station.strip().upper() == norm_station)
+                    or (
+                        getattr(pkg, "data", None)
+                        and getattr(pkg.data, "station_name", "")
+                        and getattr(pkg.data, "station_name", "").strip().upper() == norm_station
+                    )
+                ]
+            if fls:
+                target_fls = {normalize_functional_location_input(fl) for fl in fls}
+                filtered_packages = [
+                    pkg
+                    for pkg in filtered_packages
+                    if getattr(pkg, "data", None)
+                    and normalize_functional_location_input(pkg.data.fl_erms) in target_fls
+                ]
         except Exception as exc:
             errors.append(f"Package discovery failed: {exc}")
             inspection = QuickReportInspection(
@@ -277,7 +283,7 @@ class QuickReportWorkflow:
                     cbm_defects=cbm_defects,
                     vi_defects=vi_defects,
                     environment=environment,
-                    cond_template_path=request.substation_condition_template_path,
+                    cond_template_path=cond_tpl,
                 )
                 plans.append(plan)
 
@@ -318,29 +324,6 @@ class QuickReportWorkflow:
         )
         return inspection, plans
 
-    def execute(
-        self, environment: ProjectEnvironment, request: QuickReportRequest
-    ) -> QuickReportResult:
-        """Legacy execute() entry point for backward compatibility."""
-        self._validate_preconditions(environment, request)
-
-        if getattr(request.mode, "value", str(request.mode)).lower() == "fl":
-            target: ReportTarget = list(request.target_package_names)
-        else:
-            target = (
-                Path(request.target_folders[0])
-                if request.target_folders
-                else environment.get_testsheet_dir()
-            )
-
-        return self.generate(
-            target,
-            environment,
-            station=request.station,
-            condition_template=request.substation_condition_template_path,
-            progress_sink=request.progress_sink,
-        )
-
     def _resolve_condition_template(
         self, environment: ProjectEnvironment, condition_template: Path | None
     ) -> Path | None:
@@ -356,35 +339,18 @@ class QuickReportWorkflow:
                 pass
         return None
 
-    def _resolve_request(
+    def _resolve_target(
         self,
         target: ReportTarget,
         environment: ProjectEnvironment,
-        condition_template: Path | None = None,
-        progress_sink: ProgressSink | None = None,
-        station: str | None = None,
-    ) -> QuickReportRequest:
-        """Convert polymorphic ReportTarget into an internal QuickReportRequest."""
-        cond_tpl = self._resolve_condition_template(environment, condition_template)
-
+    ) -> tuple[list[str] | None, list[str] | None]:
+        """Convert polymorphic ReportTarget into (folders, fls) pair."""
         if isinstance(target, Path):
             validate_date_string(target.name)
-            return QuickReportRequest(
-                mode=QuickReportMode.FOLDER,
-                target_folders=(str(target),),
-                substation_condition_template_path=cond_tpl,
-                progress_sink=progress_sink,
-                station=station,
-            )
+            return [str(target)], None
         elif isinstance(target, str):
             validate_date_string(target)
-            return QuickReportRequest(
-                mode=QuickReportMode.FOLDER,
-                target_folders=(target,),
-                substation_condition_template_path=cond_tpl,
-                progress_sink=progress_sink,
-                station=station,
-            )
+            return [target], None
         elif isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
             items = list(target)
             for item in items:
@@ -394,21 +360,9 @@ class QuickReportWorkflow:
                     validate_date_string(item.name)
 
             if any(_is_date_or_folder(item, environment) for item in items):
-                return QuickReportRequest(
-                    mode=QuickReportMode.FOLDER,
-                    target_folders=tuple(str(item) for item in items),
-                    substation_condition_template_path=cond_tpl,
-                    progress_sink=progress_sink,
-                    station=station,
-                )
+                return [str(item) for item in items], None
             else:
-                return QuickReportRequest(
-                    mode=QuickReportMode.FL,
-                    target_package_names=tuple(str(item) for item in items),
-                    substation_condition_template_path=cond_tpl,
-                    progress_sink=progress_sink,
-                    station=station,
-                )
+                return None, [str(item) for item in items]
         else:
             raise TypeError(
                 f"Unsupported target type: {type(target)}. Expected Path, str, or Sequence[Path | str]."
@@ -439,21 +393,6 @@ class QuickReportWorkflow:
             )
 
         return tuple(missing)
-
-    def _validate_preconditions(
-        self, environment: ProjectEnvironment, request: QuickReportRequest
-    ) -> None:
-        """Validate input request parameters and environment template preconditions (legacy)."""
-        if request is None:
-            raise ValueError("QuickReportRequest cannot be None.")
-        if environment is None:
-            raise ValueError("ProjectEnvironment cannot be None.")
-
-        missing = self._validate_templates(
-            environment, request.substation_condition_template_path
-        )
-        if missing:
-            raise FileNotFoundError(missing[0])
 
     def _audit_and_build_result(
         self,

@@ -25,12 +25,6 @@ class PopulateMode(Enum):
     SPECIFIC_FOLDERS = "specific"
 
 
-class QuickReportMode(Enum):
-    """Selection mode enum for Quick Report generation."""
-
-    FL = "fl"
-    FOLDER = "folder"
-
 
 @dataclass(frozen=True)
 class PopulateTotalPeRequest:
@@ -88,18 +82,6 @@ class UpdateQr02CbaResult:
     processed_folders: Sequence[str] = ()
     warnings: Sequence[str] = ()
     errors: Sequence[str] = ()
-
-
-@dataclass(frozen=True)
-class QuickReportRequest:
-    """Request model for Quick Report generation workflow."""
-
-    mode: QuickReportMode
-    target_package_names: Sequence[str] = ()
-    target_folders: Sequence[str] = ()
-    substation_condition_template_path: Path | None = None
-    progress_sink: ProgressSink | None = None
-    station: str | None = None
 
 
 @dataclass(frozen=True)

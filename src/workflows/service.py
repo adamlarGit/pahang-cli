@@ -22,8 +22,6 @@ from src.workflows.models import (
     PropagateWoRequest,
 
     PropagateWoResult,
-    QuickReportRequest,
-    QuickReportResult,
     RawMaterialRequest,
     RawMaterialResult,
     UpdateQr02CbaRequest,
@@ -78,31 +76,6 @@ class WorkflowService:
         from src.workflows.update_qr02_cba import UpdateQr02CbaWorkflow
         workflow = UpdateQr02CbaWorkflow()
         return workflow.execute(environment, request)
-
-    def run_quick_report(
-        self, environment: ProjectEnvironment, request: QuickReportRequest
-    ) -> QuickReportResult:
-        if request.progress_sink:
-            request.progress_sink("Executing Quick Report generation...")
-        from src.workflows.quick_report import QuickReportWorkflow
-
-        workflow = QuickReportWorkflow()
-        if getattr(request.mode, "value", str(request.mode)).lower() == "fl":
-            target = list(request.target_package_names)
-        elif len(request.target_folders) > 1:
-            target = list(request.target_folders)
-        elif len(request.target_folders) == 1:
-            target = request.target_folders[0]
-        else:
-            target = environment.get_testsheet_dir()
-
-        return workflow.generate(
-            target,
-            environment,
-            station=request.station,
-            condition_template=request.substation_condition_template_path,
-            progress_sink=request.progress_sink,
-        )
 
 
     def run_whatsapp(

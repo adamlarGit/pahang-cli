@@ -28,7 +28,6 @@ from src.testsheet.repository import SubstationTestsheetRepository
 if TYPE_CHECKING:
     from src.project.environment import ProjectEnvironment
     from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
-    from src.workflows.models import QuickReportRequest
 
 
 _resolve_station_from_fl = resolve_station_from_fl
@@ -42,18 +41,24 @@ class QuickReportExtractor:
         self._defect_repo: MasterQr03DefectRepository | None = None
 
     def extract(
-        self, environment: ProjectEnvironment, request: QuickReportRequest
+        self,
+        environment: ProjectEnvironment,
+        folders: Sequence[Path | str] | None = None,
+        fls: Sequence[str] | None = None,
+        station: str | None = None,
+        progress_sink: Any | None = None,
     ) -> list[SubstationTestsheetPackage]:
         """Discover testsheet packages strictly via read I/O (without domain filtering)."""
-        mode_val = getattr(request.mode, "value", str(request.mode)).lower()
-        if mode_val == "fl":
-            return self._extract_fl_mode(environment, request)
-
-        if mode_val == "folder":
-            packages: list[SubstationTestsheetPackage] = []
+        if fls is not None:
+            packages = self._extract_fl_mode(environment, fls)
+        elif folders is not None:
+            if isinstance(folders, (str, Path)):
+                folders = [folders]
+            packages = []
             testsheet_dir = environment.get_testsheet_dir()
-            for folder_str in request.target_folders:
-                candidate = Path(folder_str)
+            for folder_item in folders:
+                folder_str = str(folder_item)
+                candidate = Path(folder_item)
                 target_dirs: list[Path] = []
 
                 if candidate.is_absolute() and candidate.exists():
@@ -79,17 +84,33 @@ class QuickReportExtractor:
 
                 for folder_path in target_dirs:
                     packages.extend(self.repository.discover_packages(folder_path))
-            return packages
+        else:
+            packages = self.repository.discover_packages(environment.get_testsheet_dir())
 
-        return self.repository.discover_packages(environment.get_testsheet_dir())
+        if station:
+            norm_station = station.strip().upper()
+            packages = [
+                pkg
+                for pkg in packages
+                if (pkg.station and pkg.station.strip().upper() == norm_station)
+                or (
+                    getattr(pkg, "data", None)
+                    and getattr(pkg.data, "station_name", "")
+                    and getattr(pkg.data, "station_name", "").strip().upper() == norm_station
+                )
+            ]
+
+        return packages
 
     def _extract_fl_mode(
-        self, environment: ProjectEnvironment, request: QuickReportRequest
+        self, environment: ProjectEnvironment, fls: Sequence[str]
     ) -> list[SubstationTestsheetPackage]:
         """Targeted package discovery for FL mode with lazy hydration."""
+        if isinstance(fls, str):
+            fls = [fls]
         target_fls = {
             normalize_functional_location_input(name)
-            for name in (request.target_package_names or ())
+            for name in (fls or ())
             if name and str(name).strip()
         }
         if not target_fls:

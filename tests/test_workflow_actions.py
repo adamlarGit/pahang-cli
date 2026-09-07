@@ -11,7 +11,7 @@ from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
 from src.project_workflow_actions import PopulateTotalPeAction, QuickReportAction, RawMaterialAction
-from src.workflows.models import PopulateTotalPeResult, QuickReportMode, QuickReportResult, RawMaterialResult
+from src.workflows.models import PopulateTotalPeResult, QuickReportResult, RawMaterialResult
 
 
 @pytest.fixture

@@ -18,7 +18,7 @@ from src.quick_report.extractor import QuickReportExtractor
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.transformer import QuickReportTransformer
 from src.quick_report.utils import normalize_functional_location_input
-from src.workflows.models import QuickReportMode, QuickReportRequest, QuickReportResult
+from src.workflows.models import QuickReportResult
 from src.workflows.quick_report import QuickReportWorkflow
 
 
@@ -113,10 +113,9 @@ def test_preflight_validation_missing_templates(tmp_path: Path):
     env.get_template.return_value = tpl_file
 
     workflow = QuickReportWorkflow()
-    req = QuickReportRequest(mode=QuickReportMode.FOLDER, target_folders=["01-01-2026"])
 
     with pytest.raises(FileNotFoundError, match="VI front page template missing"):
-        workflow._validate_preconditions(env, req)
+        workflow.generate("01-01-2026", env)
 
 
 @patch("src.quick_report.extractor.SubstationTestsheetRepository")
@@ -162,16 +161,13 @@ def test_workflow_error_isolation(mock_repo_cls, tmp_path: Path):
     mock_composer.load.side_effect = [Exception("Mock Error"), out2_file]
 
     workflow = QuickReportWorkflow(composer=mock_composer)
-    req = QuickReportRequest(
-        mode=QuickReportMode.FOLDER, target_folders=["01-01-2026"]
-    )
 
     with (
         patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
         patch("src.workflows.quick_report.win32com"),
         patch("src.workflows.quick_report.pythoncom"),
     ):
-        result = workflow.execute(env, req)
+        result = workflow.generate("01-01-2026", env)
 
     assert result.reports_generated == 1
     assert len(result.generated_paths) == 1
@@ -226,17 +222,11 @@ def test_extractor_folder_path_resolution(mock_repo_cls, tmp_path: Path):
     extractor = QuickReportExtractor(repository=mock_repo)
 
     # Test direct path (Path(str) exists)
-    req_direct = QuickReportRequest(
-        mode=QuickReportMode.FOLDER, target_folders=[str(direct_folder)]
-    )
-    extractor.extract(env, req_direct)
+    extractor.extract(env, folders=[str(direct_folder)])
     mock_repo.discover_packages.assert_called_with(direct_folder)
 
     # Test relative path under testsheet dir
-    req_rel = QuickReportRequest(
-        mode=QuickReportMode.FOLDER, target_folders=["01-01-2026"]
-    )
-    extractor.extract(env, req_rel)
+    extractor.extract(env, folders=["01-01-2026"])
     mock_repo.discover_packages.assert_called_with(rel_folder)
 
 
@@ -249,12 +239,9 @@ def test_extractor_raises_for_missing_folder(tmp_path: Path):
     env.get_testsheet_dir.return_value = testsheet_dir
 
     extractor = QuickReportExtractor()
-    req = QuickReportRequest(
-        mode=QuickReportMode.FOLDER, target_folders=["nonexistent_folder"]
-    )
 
     with pytest.raises(FileNotFoundError, match="Requested target folder does not exist"):
-        extractor.extract(env, req)
+        extractor.extract(env, folders=["nonexistent_folder"])
 
 
 def test_transformer_output_dir_resolution(tmp_path: Path):
@@ -847,11 +834,6 @@ def test_quick_report_fl_mode_fl_erms_matching(monkeypatch, tmp_path: Path):
     env.get_vi_defect_template.return_value = tpl_file
     env.get_template.return_value = tpl_file
 
-    req = QuickReportRequest(
-        mode=QuickReportMode.FL,
-        target_package_names=("CCHL/PCE/J00059",),
-    )
-
     dummy_path = tmp_path / "dummy.docx"
     dummy_path.write_text("content")
 
@@ -864,7 +846,7 @@ def test_quick_report_fl_mode_fl_erms_matching(monkeypatch, tmp_path: Path):
         patch("src.workflows.quick_report.pythoncom"),
         patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
     ):
-        result = workflow.execute(env, req)
+        result = workflow.generate(["CCHL/PCE/J00059"], env)
     assert result.reports_generated == 1
     assert len(result.generated_paths) == 1
 
@@ -903,10 +885,6 @@ def test_workflow_fetches_defects_from_repository(tmp_path: Path):
     env.get_vi_defect_template.return_value = tpl_file
     env.get_template.return_value = tpl_file
 
-    req = QuickReportRequest(
-        mode=QuickReportMode.FL, target_package_names=("CCHL/PCE/J00059",)
-    )
-
     dummy_path = tmp_path / "dummy.docx"
     dummy_path.write_text("content")
 
@@ -934,7 +912,7 @@ def test_workflow_fetches_defects_from_repository(tmp_path: Path):
         defect_repo_instance.fetch_vi_defects.return_value = sample_vi
 
         workflow = QuickReportWorkflow(composer=mock_composer)
-        workflow.execute(env, req)
+        workflow.generate(["CCHL/PCE/J00059"], env)
 
     assert "plan" in captured_plan
     plan = captured_plan["plan"]

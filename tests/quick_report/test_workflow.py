@@ -255,23 +255,23 @@ def test_target_polymorphism(tmp_path: Path):
 
     # Case 1: Path target
     folder_path = tmp_path / "TESTSHEET" / "01-09-2026"
-    req_path = workflow._resolve_request(folder_path, env)
-    assert req_path.mode.value == "folder"
-    assert req_path.target_folders == (str(folder_path),)
+    folders, fls = workflow._resolve_target(folder_path, env)
+    assert folders == [str(folder_path)]
+    assert fls is None
 
     # Case 2: str target (date string)
-    req_str = workflow._resolve_request("01-09-2026", env)
-    assert req_str.mode.value == "folder"
-    assert req_str.target_folders == ("01-09-2026",)
+    folders, fls = workflow._resolve_target("01-09-2026", env)
+    assert folders == ["01-09-2026"]
+    assert fls is None
 
     # Case 3: Sequence[str] target (FLs)
-    req_seq = workflow._resolve_request(["FL001", "FL002"], env)
-    assert req_seq.mode.value == "fl"
-    assert req_seq.target_package_names == ("FL001", "FL002")
+    folders, fls = workflow._resolve_target(["FL001", "FL002"], env)
+    assert folders is None
+    assert fls == ["FL001", "FL002"]
 
     # Case 4: Invalid target type raises TypeError
     with pytest.raises(TypeError, match="Unsupported target type"):
-        workflow._resolve_request(12345, env)  # type: ignore[arg-type]
+        workflow._resolve_target(12345, env)  # type: ignore[arg-type]
 
 
 def test_fake_document_compiler_standalone_and_session(tmp_path: Path):
@@ -429,21 +429,21 @@ def test_target_sequence_disambiguation_dates_vs_fls(tmp_path: Path):
     workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
 
     # Sequence of date strings -> FOLDER
-    req_dates = workflow._resolve_request(["01-09-2026", "02-09-2026"], env)
-    assert req_dates.mode.value == "folder"
-    assert req_dates.target_folders == ("01-09-2026", "02-09-2026")
+    folders, fls = workflow._resolve_target(["01-09-2026", "02-09-2026"], env)
+    assert folders == ["01-09-2026", "02-09-2026"]
+    assert fls is None
 
     # Sequence of Paths -> FOLDER
     p1 = tmp_path / "TESTSHEET" / "ROMPIN"
     p2 = tmp_path / "TESTSHEET" / "KUANTAN"
-    req_paths = workflow._resolve_request([p1, p2], env)
-    assert req_paths.mode.value == "folder"
-    assert req_paths.target_folders == (str(p1), str(p2))
+    folders, fls = workflow._resolve_target([p1, p2], env)
+    assert folders == [str(p1), str(p2)]
+    assert fls is None
 
     # Sequence of FL strings -> FL
-    req_fls = workflow._resolve_request(["FL001", "FL002", "CCHL/PCE/J00059"], env)
-    assert req_fls.mode.value == "fl"
-    assert req_fls.target_package_names == ("FL001", "FL002", "CCHL/PCE/J00059")
+    folders, fls = workflow._resolve_target(["FL001", "FL002", "CCHL/PCE/J00059"], env)
+    assert folders is None
+    assert fls == ["FL001", "FL002", "CCHL/PCE/J00059"]
 
 
 def test_multi_station_date_resolution_discovers_all_stations_by_default(tmp_path: Path):

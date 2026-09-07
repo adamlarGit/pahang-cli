@@ -22,9 +22,7 @@ from src.quick_report.defects import (
 from src.quick_report.extractor import (
     QuickReportExtractor,
 )
-from src.quick_report.filter import QuickReportFilter
 from src.testsheet.models import SubstationTestsheetPackage, TestsheetData
-from src.workflows.models import QuickReportMode, QuickReportRequest
 from src.workflows.quick_report import QuickReportWorkflow
 
 
@@ -248,12 +246,7 @@ def test_extractor_fl_mode_tier1_total_pe_discovery(tmp_path: Path):
     mock_repo = MagicMock()
     extractor = QuickReportExtractor(repository=mock_repo)
 
-    req = QuickReportRequest(
-        mode=QuickReportMode.FL,
-        target_package_names=("CRAU/PCE/J00219",),
-    )
-
-    pkgs = extractor.extract(env, req)
+    pkgs = extractor.extract(env, fls=["CRAU/PCE/J00219"])
 
     # Repository discover_packages should NOT have been called (Tier 1 resolved it!)
     mock_repo.discover_packages.assert_not_called()
@@ -313,12 +306,7 @@ def test_extractor_fl_mode_tier2_station_prefix_fallback(tmp_path: Path):
     )
 
     extractor = QuickReportExtractor(repository=mock_repo)
-    req = QuickReportRequest(
-        mode=QuickReportMode.FL,
-        target_package_names=("CRAU/PCE/J00219",),
-    )
-
-    pkgs = extractor.extract(env, req)
+    pkgs = extractor.extract(env, fls=["CRAU/PCE/J00219"])
 
     # Verify discover_packages called with station directory and eager_extract=False
     mock_repo.discover_packages.assert_called_once_with(raub_dir, eager_extract=False)
@@ -434,12 +422,7 @@ def test_extractor_non_numeric_pe_falls_back_to_tier2(tmp_path: Path):
     )
 
     extractor = QuickReportExtractor(repository=mock_repo)
-    req = QuickReportRequest(
-        mode=QuickReportMode.FL,
-        target_package_names=("CRAU/PCE/J00219",),
-    )
-
-    pkgs = extractor.extract(env, req)
+    pkgs = extractor.extract(env, fls=["CRAU/PCE/J00219"])
 
     # Non-numeric PE in TOTAL PE was skipped, so Tier 2 discover_packages was called
     mock_repo.discover_packages.assert_called_once_with(raub_dir, eager_extract=False)
