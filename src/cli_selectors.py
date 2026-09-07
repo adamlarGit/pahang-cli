@@ -40,6 +40,7 @@ class SelectOption(Generic[T]):
     title: str
     value: T
     shortcut_key: str | None = None
+    checked: bool = False
 
 
 def _load_questionary() -> Any:
@@ -318,7 +319,11 @@ def select_multiple(
     if questionary is not None:
         try:
             choices = [
-                questionary.Choice(title=opt.title, value=opt.value)
+                questionary.Choice(
+                    title=opt.title,
+                    value=opt.value,
+                    checked=opt.checked,
+                )
                 for opt in options
             ]
             result = questionary.checkbox(message, choices=choices).ask()
@@ -338,16 +343,26 @@ def _fallback_select_multiple(
     while True:
         print(f"\n{message}")
         for index, option in enumerate(options, start=1):
-            print(f"{index}. {option.title}")
+            marker = " [X]" if option.checked else " [ ]"
+            print(f"{index}. {option.title}{marker}")
 
-        print("Enter comma-separated numbers (e.g. 1, 3, 4), 'all' to select everything, or 'c' to cancel: ", end="")
+        default_indexes = [str(i) for i, opt in enumerate(options, start=1) if opt.checked]
+        prompt = "Enter comma-separated numbers (e.g. 1, 3, 4), 'all' to select everything, or 'c' to cancel"
+        if default_indexes:
+            prompt += f" [Enter for checked ({', '.join(default_indexes)})]"
+        prompt += ": "
+        print(prompt, end="")
         try:
             raw_value = input().strip()
         except KeyboardInterrupt:
             print()
             return None
 
-        if not raw_value or raw_value.lower() in ("c", "cancel"):
+        if not raw_value:
+            if default_indexes:
+                return [opt.value for opt in options if opt.checked]
+            return None
+        if raw_value.lower() in ("c", "cancel"):
             return None
         if raw_value.lower() == "all":
             return [opt.value for opt in options]

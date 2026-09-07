@@ -77,7 +77,113 @@ def test_quick_report_action_folder_selection_cancel(mock_env: ProjectEnvironmen
     with patch("src.cli_selectors.select_one", return_value="folder"):
         with patch("src.cli_selectors.select_pahang_date_folder", return_value=None):
             res = action.execute(mock_env)
-            assert res is None
+def test_quick_report_action_manual_fl_input(mock_env: ProjectEnvironment) -> None:
+    """Verify manual FL input parses comma-separated strings and calls workflow.generate()."""
+    action = QuickReportAction("Generate Quick Report")
+
+    with (
+        patch("src.cli_selectors.select_one", return_value="manual"),
+        patch("builtins.input", return_value="  CCHL/PCE/J00059 ,  KNTN/PE/001  "),
+        patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate,
+    ):
+        mock_generate.return_value = QuickReportResult(reports_generated=2)
+        res = action.execute(mock_env)
+
+    assert res.reports_generated == 2
+    mock_generate.assert_called_once()
+    called_target = mock_generate.call_args[0][0]
+    assert called_target == ["CCHL/PCE/J00059", "KNTN/PE/001"]
+
+
+def test_quick_report_action_manual_fl_input_empty(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
+    """Verify empty manual FL input aborts with warning."""
+    action = QuickReportAction("Generate Quick Report")
+
+    with (
+        patch("src.cli_selectors.select_one", return_value="manual"),
+        patch("builtins.input", return_value="   "),
+    ):
+        res = action.execute(mock_env)
+
+    assert res is None
+    assert "No functional locations provided." in capsys.readouterr().out
+
+
+def test_quick_report_action_multi_station_selection_subset(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    """Verify selecting a subset of stations when target date spans multiple stations."""
+    action = QuickReportAction("Generate Quick Report")
+    testsheet_dir = mock_env.get_testsheet_dir()
+
+    rompin_dir = testsheet_dir / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
+    kuantan_dir = testsheet_dir / "KUANTAN" / "09. SEPTEMBER" / "01-09-2026"
+    rompin_dir.mkdir(parents=True, exist_ok=True)
+    kuantan_dir.mkdir(parents=True, exist_ok=True)
+
+    with (
+        patch("src.cli_selectors.select_one", return_value="folder"),
+        patch("src.cli_selectors.select_pahang_date_folder", return_value=rompin_dir),
+        patch("src.cli_selectors.select_multiple", return_value=["ROMPIN"]) as mock_select_multi,
+        patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate,
+    ):
+        mock_generate.return_value = QuickReportResult(reports_generated=1)
+        res = action.execute(mock_env)
+
+    assert res.reports_generated == 1
+    mock_select_multi.assert_called_once()
+    # Check that options had checked=True for all matching stations
+    options_passed = mock_select_multi.call_args[0][1]
+    assert len(options_passed) == 2
+    assert all(opt.checked for opt in options_passed)
+    assert {opt.value for opt in options_passed} == {"KUANTAN", "ROMPIN"}
+
+    # generate() called with station="ROMPIN"
+    mock_generate.assert_called_once()
+    assert mock_generate.call_args[1].get("station") == "ROMPIN"
+
+
+def test_quick_report_action_multi_station_selection_all(mock_env: ProjectEnvironment) -> None:
+    """Verify selecting all stations when target date spans multiple stations invokes generate across all."""
+    action = QuickReportAction("Generate Quick Report")
+    testsheet_dir = mock_env.get_testsheet_dir()
+
+    rompin_dir = testsheet_dir / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
+    kuantan_dir = testsheet_dir / "KUANTAN" / "09. SEPTEMBER" / "01-09-2026"
+    rompin_dir.mkdir(parents=True, exist_ok=True)
+    kuantan_dir.mkdir(parents=True, exist_ok=True)
+
+    with (
+        patch("src.cli_selectors.select_one", return_value="folder"),
+        patch("src.cli_selectors.select_pahang_date_folder", return_value=rompin_dir),
+        patch("src.cli_selectors.select_multiple", return_value=["KUANTAN", "ROMPIN"]),
+        patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate,
+    ):
+        mock_generate.return_value = QuickReportResult(reports_generated=2)
+        res = action.execute(mock_env)
+
+    assert res.reports_generated == 2
+    mock_generate.assert_called_once()
+    assert mock_generate.call_args[0][0] == "01-09-2026"
+
+
+def test_quick_report_action_multi_station_selection_cancel(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
+    """Verify cancelling or deselecting all stations aborts with processing cancelled message."""
+    action = QuickReportAction("Generate Quick Report")
+    testsheet_dir = mock_env.get_testsheet_dir()
+
+    rompin_dir = testsheet_dir / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
+    kuantan_dir = testsheet_dir / "KUANTAN" / "09. SEPTEMBER" / "01-09-2026"
+    rompin_dir.mkdir(parents=True, exist_ok=True)
+    kuantan_dir.mkdir(parents=True, exist_ok=True)
+
+    with (
+        patch("src.cli_selectors.select_one", return_value="folder"),
+        patch("src.cli_selectors.select_pahang_date_folder", return_value=rompin_dir),
+        patch("src.cli_selectors.select_multiple", return_value=None),
+    ):
+        res = action.execute(mock_env)
+
+    assert res is None
+    assert "Processing cancelled." in capsys.readouterr().out
 
 
 def test_print_quick_report_batch_summary(capsys: pytest.CaptureFixture[str]) -> None:
