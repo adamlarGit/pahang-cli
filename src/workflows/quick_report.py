@@ -23,6 +23,11 @@ from src.quick_report.extractor import QuickReportExtractor
 from src.quick_report.filter import QuickReportFilter
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.transformer import QuickReportTransformer
+from src.quick_report.utils import (
+    is_pahang_date_str,
+    sanitize_filename,
+    validate_date_string,
+)
 from src.workflows.models import (
     QuickReportInspection,
     QuickReportMode,
@@ -36,8 +41,31 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-ReportTarget = Path | str | Sequence[str]
+ReportTarget = Path | str | Sequence[Path] | Sequence[str] | Sequence[Path | str]
 ProgressSink = Callable[[str], None]
+
+
+def _is_date_or_folder(item: Path | str, environment: ProjectEnvironment) -> bool:
+    """Check if an item represents a Pahang date string or an existing folder path."""
+    if isinstance(item, Path):
+        return True
+    if is_pahang_date_str(item):
+        return True
+    s = str(item).strip()
+    try:
+        p = Path(s)
+        if p.is_dir() is True:
+            return True
+    except Exception:
+        pass
+    try:
+        if hasattr(environment, "get_testsheet_dir"):
+            ts_dir = environment.get_testsheet_dir()
+            if isinstance(ts_dir, Path) and (ts_dir / s).is_dir() is True:
+                return True
+    except Exception:
+        pass
+    return False
 
 
 class QuickReportWorkflow:
@@ -105,6 +133,7 @@ class QuickReportWorkflow:
         target: ReportTarget,
         environment: ProjectEnvironment,
         *,
+        station: str | None = None,
         condition_template: Path | None = None,
         progress_sink: ProgressSink | None = None,
     ) -> QuickReportResult:
@@ -112,49 +141,44 @@ class QuickReportWorkflow:
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
-        request = self._resolve_request(
-            target, environment, condition_template, progress_sink=progress_sink
-        )
-
-        missing_templates = self._validate_templates(
-            environment, request.substation_condition_template_path
-        )
-        if missing_templates:
-            return QuickReportResult(
-                reports_generated=0,
-                generated_paths=(),
-                warnings=(),
-                errors=tuple(f"Required template missing: {t}" for t in missing_templates),
-            )
-
         if progress_sink:
             progress_sink("Discovering target packages for Quick Report...")
 
-        try:
-            packages = self._extractor.extract(environment, request)
-            filtered_packages = self._filter.filter(packages, request)
-        except Exception as exc:
+        inspection, plans = self._plan(
+            target,
+            environment,
+            station=station,
+            condition_template=condition_template,
+            progress_sink=progress_sink,
+        )
+
+        if inspection.missing_templates:
             return QuickReportResult(
                 reports_generated=0,
                 generated_paths=(),
-                warnings=(),
-                errors=(f"Package discovery failed: {exc}",),
+                warnings=inspection.warnings,
+                errors=tuple(
+                    f"Required template missing: {t}" for t in inspection.missing_templates
+                ),
             )
 
-        if not filtered_packages:
+        if not plans:
+            errors = inspection.errors
+            if not errors and not inspection.targets:
+                errors = (f"No testsheet packages found for target: {target}",)
             return QuickReportResult(
                 reports_generated=0,
                 generated_paths=(),
-                warnings=(),
-                errors=(f"No testsheet packages found for target: {target}",),
+                warnings=inspection.warnings,
+                errors=errors,
             )
 
         if progress_sink:
-            progress_sink(f"Found {len(filtered_packages)} packages to process.")
+            progress_sink(f"Found {len(plans)} packages to process.")
 
         generated_paths: list[Path] = []
-        warnings: list[str] = []
-        errors: list[str] = []
+        warnings: list[str] = list(inspection.warnings)
+        errors: list[str] = list(inspection.errors)
 
         session_fn = getattr(self._compiler, "session", None)
         session_cm = session_fn() if callable(session_fn) else nullcontext()
@@ -162,26 +186,18 @@ class QuickReportWorkflow:
             session_cm = nullcontext()
 
         with session_cm:
-            for i, pkg in enumerate(filtered_packages, start=1):
+            for i, plan in enumerate(plans, start=1):
                 station_name = (
-                    getattr(pkg, "station", "")
-                    or getattr(getattr(pkg, "data", None), "station_name", "")
-                    or f"substation {getattr(pkg, 'substation_number', '?')}"
+                    getattr(plan.package, "station", "")
+                    or getattr(getattr(plan.package, "data", None), "station_name", "")
+                    or f"substation {plan.substation_number}"
                 )
                 if progress_sink:
                     progress_sink(
-                        f"[{i}/{len(filtered_packages)}] Generating quick report for {station_name}..."
+                        f"[{i}/{len(plans)}] Generating quick report for {station_name}..."
                     )
 
                 try:
-                    cbm_defects, vi_defects = self._extractor.extract_defects(pkg, environment)
-                    plan = self._transformer.transform(
-                        pkg=pkg,
-                        cbm_defects=cbm_defects,
-                        vi_defects=vi_defects,
-                        environment=environment,
-                        cond_template_path=request.substation_condition_template_path,
-                    )
                     out_path = self._composer.load(plan)
                     if out_path:
                         generated_paths.append(out_path)
@@ -197,13 +213,39 @@ class QuickReportWorkflow:
         target: ReportTarget,
         environment: ProjectEnvironment,
         *,
+        station: str | None = None,
         condition_template: Path | None = None,
     ) -> QuickReportInspection:
         """Dry-run discovery and plan synthesis without COM or disk writes."""
+        inspection, _ = self._plan(
+            target,
+            environment,
+            station=station,
+            condition_template=condition_template,
+        )
+        return inspection
+
+    def _plan(
+        self,
+        target: ReportTarget,
+        environment: ProjectEnvironment,
+        *,
+        station: str | None = None,
+        condition_template: Path | None = None,
+        progress_sink: ProgressSink | None = None,
+    ) -> tuple[QuickReportInspection, list[QuickReportStationPlan]]:
+        """Synthesize dry-run discovery, filtering, and defect transformation."""
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
-        request = self._resolve_request(target, environment, condition_template)
+        request = self._resolve_request(
+            target,
+            environment,
+            condition_template=condition_template,
+            progress_sink=progress_sink,
+            station=station,
+        )
+
         missing_templates = self._validate_templates(
             environment, request.substation_condition_template_path
         )
@@ -211,23 +253,30 @@ class QuickReportWorkflow:
         warnings: list[str] = []
         errors: list[str] = []
         items: list[SubstationInspectionItem] = []
+        plans: list[QuickReportStationPlan] = []
 
         try:
             packages = self._extractor.extract(environment, request)
-            filtered_packages = self._filter.filter(packages, request)
+            filtered_packages = self._filter.filter(packages, request, station=station)
         except Exception as exc:
-            errors.append(f"Failed to discover packages: {exc}")
-            return QuickReportInspection(
+            errors.append(f"Package discovery failed: {exc}")
+            inspection = QuickReportInspection(
                 targets=(),
                 missing_templates=missing_templates,
                 warnings=tuple(warnings),
                 errors=tuple(errors),
             )
+            return inspection, []
 
         if not filtered_packages:
-            warnings.append(f"No packages found for target: {target}")
+            warnings.append(f"No testsheet packages found for target: {target}")
 
         for pkg in filtered_packages:
+            station_name = (
+                getattr(pkg, "station", "")
+                or getattr(getattr(pkg, "data", None), "station_name", "")
+                or f"substation {getattr(pkg, 'substation_number', '?')}"
+            )
             try:
                 cbm_defects, vi_defects = self._extractor.extract_defects(pkg, environment)
                 plan = self._transformer.transform(
@@ -237,11 +286,12 @@ class QuickReportWorkflow:
                     environment=environment,
                     cond_template_path=request.substation_condition_template_path,
                 )
+                plans.append(plan)
 
                 sub_name = (
-                    getattr(getattr(pkg, "data", None), "substation_name_erms", "")
-                    or getattr(pkg, "station", "")
-                    or ""
+                    sanitize_filename(pkg.data.substation_name_erms or pkg.data.station_name)
+                    if pkg.data
+                    else sanitize_filename(pkg.station or "")
                 )
                 fl_name = getattr(getattr(pkg, "data", None), "fl_erms", "") or ""
                 stem = (
@@ -263,20 +313,17 @@ class QuickReportWorkflow:
                 )
                 items.append(item)
             except Exception as e:
-                station_name = (
-                    getattr(pkg, "station", "")
-                    or getattr(getattr(pkg, "data", None), "station_name", "")
-                    or f"substation {getattr(pkg, 'substation_number', '?')}"
-                )
-                errors.append(f"Failed to inspect {station_name}: {e}")
-                logger.exception(f"Failed to inspect {station_name}")
+                # SubstationIsolatedBatchResiliencePolicy
+                errors.append(f"Failed to process {station_name}: {e}")
+                logger.exception(f"Failed to process {station_name}")
 
-        return QuickReportInspection(
+        inspection = QuickReportInspection(
             targets=tuple(items),
             missing_templates=missing_templates,
             warnings=tuple(warnings),
             errors=tuple(errors),
         )
+        return inspection, plans
 
     def execute(
         self, environment: ProjectEnvironment, request: QuickReportRequest
@@ -296,6 +343,7 @@ class QuickReportWorkflow:
         return self.generate(
             target,
             environment,
+            station=request.station,
             condition_template=request.substation_condition_template_path,
             progress_sink=request.progress_sink,
         )
@@ -321,34 +369,56 @@ class QuickReportWorkflow:
         environment: ProjectEnvironment,
         condition_template: Path | None = None,
         progress_sink: ProgressSink | None = None,
+        station: str | None = None,
     ) -> QuickReportRequest:
         """Convert polymorphic ReportTarget into an internal QuickReportRequest."""
         cond_tpl = self._resolve_condition_template(environment, condition_template)
 
         if isinstance(target, Path):
+            validate_date_string(target.name)
             return QuickReportRequest(
                 mode=QuickReportMode.FOLDER,
                 target_folders=(str(target),),
                 substation_condition_template_path=cond_tpl,
                 progress_sink=progress_sink,
+                station=station,
             )
         elif isinstance(target, str):
+            validate_date_string(target)
             return QuickReportRequest(
                 mode=QuickReportMode.FOLDER,
                 target_folders=(target,),
                 substation_condition_template_path=cond_tpl,
                 progress_sink=progress_sink,
+                station=station,
             )
-        elif isinstance(target, Sequence):
-            return QuickReportRequest(
-                mode=QuickReportMode.FL,
-                target_package_names=tuple(target),
-                substation_condition_template_path=cond_tpl,
-                progress_sink=progress_sink,
-            )
+        elif isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
+            items = list(target)
+            for item in items:
+                if isinstance(item, str):
+                    validate_date_string(item)
+                elif isinstance(item, Path):
+                    validate_date_string(item.name)
+
+            if any(_is_date_or_folder(item, environment) for item in items):
+                return QuickReportRequest(
+                    mode=QuickReportMode.FOLDER,
+                    target_folders=tuple(str(item) for item in items),
+                    substation_condition_template_path=cond_tpl,
+                    progress_sink=progress_sink,
+                    station=station,
+                )
+            else:
+                return QuickReportRequest(
+                    mode=QuickReportMode.FL,
+                    target_package_names=tuple(str(item) for item in items),
+                    substation_condition_template_path=cond_tpl,
+                    progress_sink=progress_sink,
+                    station=station,
+                )
         else:
             raise TypeError(
-                f"Unsupported target type: {type(target)}. Expected Path, str, or Sequence[str]."
+                f"Unsupported target type: {type(target)}. Expected Path, str, or Sequence[Path | str]."
             )
 
     def _validate_templates(

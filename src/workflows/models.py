@@ -99,6 +99,7 @@ class QuickReportRequest:
     target_folders: Sequence[str] = ()
     substation_condition_template_path: Path | None = None
     progress_sink: ProgressSink | None = None
+    station: str | None = None
 
 
 @dataclass(frozen=True)

@@ -381,3 +381,206 @@ def test_word_com_document_compiler_session_teardown_on_error(tmp_path: Path):
         mock_terminate.assert_called_once_with(7777)
         mock_pythoncom.CoUninitialize.assert_called_once()
 
+
+def test_strict_date_validation_rejects_non_pahang_dates(tmp_path: Path):
+    """Verify strict date validation enforces DD-MM-YYYY and rejects non-Pahang formats."""
+    env = _setup_mock_environment(tmp_path)
+    workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
+
+    invalid_dates = [
+        "2026-09-01",  # YYYY-MM-DD
+        "2026/09/01",  # YYYY/MM/DD
+        "2026.09.01",  # YYYY.MM.DD
+        "01/09/2026",  # DD/MM/YYYY
+        "01.09.2026",  # DD.MM.YYYY
+        "1-9-2026",    # D-M-YYYY
+        "01-9-2026",   # DD-M-YYYY
+        "1-09-2026",   # D-MM-YYYY
+        "01-09-26",    # 2-digit year
+        "20260901",    # YYYYMMDD
+        "32-09-2026",  # Invalid calendar day
+        "01-13-2026",  # Invalid calendar month
+    ]
+
+    for inv in invalid_dates:
+        # Single string target
+        with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
+            workflow.inspect(inv, env)
+
+        with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
+            workflow.generate(inv, env)
+
+        # Sequence target
+        with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
+            workflow.inspect([inv], env)
+
+        with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
+            workflow.generate([inv], env)
+
+    # Valid Pahang date format DD-MM-YYYY does not raise ValueError
+    with patch.object(workflow.extractor, "extract", return_value=[]):
+        res = workflow.inspect("01-09-2026", env)
+        assert isinstance(res, QuickReportInspection)
+
+
+def test_target_sequence_disambiguation_dates_vs_fls(tmp_path: Path):
+    """Verify sequences of date strings or folder paths resolve as FOLDER, other strings as FL."""
+    env = _setup_mock_environment(tmp_path)
+    workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
+
+    # Sequence of date strings -> FOLDER
+    req_dates = workflow._resolve_request(["01-09-2026", "02-09-2026"], env)
+    assert req_dates.mode.value == "folder"
+    assert req_dates.target_folders == ("01-09-2026", "02-09-2026")
+
+    # Sequence of Paths -> FOLDER
+    p1 = tmp_path / "TESTSHEET" / "ROMPIN"
+    p2 = tmp_path / "TESTSHEET" / "KUANTAN"
+    req_paths = workflow._resolve_request([p1, p2], env)
+    assert req_paths.mode.value == "folder"
+    assert req_paths.target_folders == (str(p1), str(p2))
+
+    # Sequence of FL strings -> FL
+    req_fls = workflow._resolve_request(["FL001", "FL002", "CCHL/PCE/J00059"], env)
+    assert req_fls.mode.value == "fl"
+    assert req_fls.target_package_names == ("FL001", "FL002", "CCHL/PCE/J00059")
+
+
+def test_multi_station_date_resolution_discovers_all_stations_by_default(tmp_path: Path):
+    """Verify bare date string matching multiple station folders discovers all stations by default."""
+    env = _setup_mock_environment(tmp_path)
+    testsheet_dir = env.get_testsheet_dir.return_value
+
+    rompin_dir = testsheet_dir / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
+    kuantan_dir = testsheet_dir / "KUANTAN" / "09. SEPTEMBER" / "01-09-2026"
+    rompin_dir.mkdir(parents=True, exist_ok=True)
+    kuantan_dir.mkdir(parents=True, exist_ok=True)
+
+    pkg_rompin = _make_mock_package(
+        station="ROMPIN", substation_number=1, substation_name="PE ROMPIN 1", fl="ROMP/01"
+    )
+    pkg_kuantan = _make_mock_package(
+        station="KUANTAN", substation_number=2, substation_name="PE KUANTAN 1", fl="KNTN/01"
+    )
+
+    def mock_discover(folder_path):
+        f_str = str(folder_path)
+        if "ROMPIN" in f_str:
+            return [pkg_rompin]
+        if "KUANTAN" in f_str:
+            return [pkg_kuantan]
+        return []
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    with (
+        patch.object(workflow.extractor.repository, "discover_packages", side_effect=mock_discover),
+        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+    ):
+        inspection = workflow.inspect("01-09-2026", env)
+
+    assert inspection.ready_to_generate is True
+    assert len(inspection.targets) == 2
+    stations = {t.substation_name for t in inspection.targets}
+    assert stations == {"PE ROMPIN 1", "PE KUANTAN 1"}
+    pe_numbers = {t.pe_number for t in inspection.targets}
+    assert pe_numbers == {1, 2}
+    # Dry-run: no compile calls
+    assert len(compiler.compiled_calls) == 0
+
+
+def test_station_filtering_inspect_and_generate(tmp_path: Path):
+    """Verify station filter restricts package inclusion in both inspect() and generate()."""
+    env = _setup_mock_environment(tmp_path)
+    testsheet_dir = env.get_testsheet_dir.return_value
+
+    rompin_dir = testsheet_dir / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
+    kuantan_dir = testsheet_dir / "KUANTAN" / "09. SEPTEMBER" / "01-09-2026"
+    rompin_dir.mkdir(parents=True, exist_ok=True)
+    kuantan_dir.mkdir(parents=True, exist_ok=True)
+
+    pkg_rompin = _make_mock_package(
+        station="ROMPIN", substation_number=1, substation_name="PE ROMPIN 1", fl="ROMP/01"
+    )
+    pkg_kuantan = _make_mock_package(
+        station="KUANTAN", substation_number=2, substation_name="PE KUANTAN 1", fl="KNTN/01"
+    )
+
+    def mock_discover(folder_path):
+        f_str = str(folder_path)
+        if "ROMPIN" in f_str:
+            return [pkg_rompin]
+        if "KUANTAN" in f_str:
+            return [pkg_kuantan]
+        return []
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    with (
+        patch.object(workflow.extractor.repository, "discover_packages", side_effect=mock_discover),
+        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+    ):
+        # 1. Filter inspect to ROMPIN
+        insp_rompin = workflow.inspect("01-09-2026", env, station="ROMPIN")
+        assert len(insp_rompin.targets) == 1
+        assert insp_rompin.targets[0].substation_name == "PE ROMPIN 1"
+
+        # 2. Filter generate to KUANTAN (case-insensitive)
+        gen_kuantan = workflow.generate("01-09-2026", env, station="kuantan")
+        assert gen_kuantan.is_success is True
+        assert gen_kuantan.reports_generated == 1
+        assert len(compiler.compiled_calls) == 1
+        # Final output path should be under KUANTAN
+        compiled_output = compiler.compiled_calls[0][1]
+        assert "KUANTAN" in str(compiled_output)
+
+
+def test_inspect_previews_expose_defect_counts_and_stem(tmp_path: Path):
+    """Verify SubstationInspectionItem exposes sanitized name, stem, canonical suffix, and defect counts."""
+    env = _setup_mock_environment(tmp_path)
+    pkg = _make_mock_package(
+        station="CAMERON HIGHLAND",
+        substation_number=5,
+        substation_name='PE TEST / DIRTY "NAME"?',
+        fl="CCHL/PCE/J00059",
+    )
+
+    cbm_defects = [
+        CbmDefectRecord(equipment="RMU", defect_area="Cable Box", technology="IR"),
+        CbmDefectRecord(equipment="TRF", defect_area="Bushing", technology="US"),
+    ]
+    vi_defects = [
+        ViDefectRecord(equipment="SWG", defect_area="Door", additional_remarks="Rust"),
+    ]
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    with (
+        patch.object(workflow.extractor, "extract", return_value=[pkg]),
+        patch.object(workflow.extractor, "extract_defects", return_value=(cbm_defects, vi_defects)),
+    ):
+        inspection = workflow.inspect(["CCHL/PCE/J00059"], env)
+
+    assert inspection.ready_to_generate is True
+    assert len(inspection.targets) == 1
+    target = inspection.targets[0]
+
+    assert target.pe_number == 5
+    # Sanitized name without illegal Windows filename chars (<>:"/\|?*)
+    assert "/" not in target.substation_name
+    assert '"' not in target.substation_name
+    assert "?" not in target.substation_name
+    assert target.substation_name == "PE TEST  DIRTY NAME"
+
+    assert target.functional_location == "CCHL/PCE/J00059"
+    assert target.defect_suffix == " (IR+US+VI)"
+    assert target.stem == "005. PE TEST  DIRTY NAME (IR+US+VI)"
+    assert target.cbm_defect_count == 2
+    assert target.vi_defect_count == 1
+    assert target.condition_pair_count > 0
+    # No COM calls or disk writes
+    assert len(compiler.compiled_calls) == 0
+

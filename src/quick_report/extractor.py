@@ -17,7 +17,10 @@ from src.core.normalizers import (
     resolve_station_from_fl,
 )
 from src.quick_report.defects import MasterQr03DefectRepository
-from src.quick_report.utils import normalize_functional_location_input
+from src.quick_report.utils import (
+    PAHANG_DATE_PATTERN,
+    normalize_functional_location_input,
+)
 from src.testsheet.extractor import to_excel_date
 from src.testsheet.models import SubstationTestsheetPackage
 from src.testsheet.repository import SubstationTestsheetRepository
@@ -48,18 +51,34 @@ class QuickReportExtractor:
 
         if mode_val == "folder":
             packages: list[SubstationTestsheetPackage] = []
+            testsheet_dir = environment.get_testsheet_dir()
             for folder_str in request.target_folders:
                 candidate = Path(folder_str)
-                if candidate.exists():
-                    folder_path = candidate
+                target_dirs: list[Path] = []
+
+                if candidate.is_absolute() and candidate.exists():
+                    target_dirs.append(candidate)
                 else:
-                    folder_path = environment.get_testsheet_dir() / folder_str
-                    if not folder_path.exists():
-                        raise FileNotFoundError(
-                            f"Requested target folder does not exist: '{folder_str}' "
-                            f"(checked: {candidate}, {folder_path})"
-                        )
-                packages.extend(self.repository.discover_packages(folder_path))
+                    if candidate.exists():
+                        target_dirs.append(candidate)
+                    flat_path = testsheet_dir / folder_str
+                    if flat_path.exists() and flat_path not in target_dirs:
+                        target_dirs.append(flat_path)
+
+                    # Multi-station date resolution: discover date folders across all stations under testsheet_dir
+                    if PAHANG_DATE_PATTERN.match(folder_str):
+                        for p in sorted(testsheet_dir.rglob(folder_str)):
+                            if p.is_dir() and p not in target_dirs:
+                                target_dirs.append(p)
+
+                if not target_dirs:
+                    raise FileNotFoundError(
+                        f"Requested target folder does not exist: '{folder_str}' "
+                        f"(checked: {candidate}, {testsheet_dir / folder_str})"
+                    )
+
+                for folder_path in target_dirs:
+                    packages.extend(self.repository.discover_packages(folder_path))
             return packages
 
         return self.repository.discover_packages(environment.get_testsheet_dir())

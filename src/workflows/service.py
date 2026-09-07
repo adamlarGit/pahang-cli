@@ -89,15 +89,17 @@ class WorkflowService:
         workflow = QuickReportWorkflow()
         if getattr(request.mode, "value", str(request.mode)).lower() == "fl":
             target = list(request.target_package_names)
+        elif len(request.target_folders) > 1:
+            target = list(request.target_folders)
+        elif len(request.target_folders) == 1:
+            target = request.target_folders[0]
         else:
-            target = (
-                Path(request.target_folders[0])
-                if request.target_folders
-                else environment.get_testsheet_dir()
-            )
+            target = environment.get_testsheet_dir()
+
         return workflow.generate(
             target,
             environment,
+            station=request.station,
             condition_template=request.substation_condition_template_path,
             progress_sink=request.progress_sink,
         )

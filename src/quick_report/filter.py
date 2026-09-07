@@ -18,9 +18,24 @@ class QuickReportFilter:
         self,
         packages: list[SubstationTestsheetPackage],
         request: QuickReportRequest,
+        station: str | None = None,
     ) -> list[SubstationTestsheetPackage]:
         """Filter target substation packages, ensuring valid data state and matching predicates."""
         valid_packages = [pkg for pkg in packages if pkg.data is not None]
+
+        target_station = station or getattr(request, "station", None)
+        if target_station:
+            norm_station = target_station.strip().upper()
+            valid_packages = [
+                pkg
+                for pkg in valid_packages
+                if (pkg.station and pkg.station.strip().upper() == norm_station)
+                or (
+                    getattr(pkg, "data", None)
+                    and getattr(pkg.data, "station_name", "")
+                    and getattr(pkg.data, "station_name", "").strip().upper() == norm_station
+                )
+            ]
 
         is_fl_mode = getattr(request.mode, "value", str(request.mode)).lower() == "fl"
         if is_fl_mode and request.target_package_names:
