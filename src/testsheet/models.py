@@ -246,18 +246,6 @@ class SubstationTestsheetPackage:
     substation_number: int
     data: TestsheetData | None = None
 
-    @property
-    def fl(self) -> str:
-        """Return ERMS functional location string if available."""
-        return getattr(self.data, "fl_erms", "") or ""
-
-    @property
-    def substation_name(self) -> str:
-        """Return canonical substation name or station fallback."""
-        if self.data:
-            return self.data.substation_name_erms or self.data.station_name or self.station
-        return self.station
-
 
 @dataclass(frozen=True)
 class SubstationPackage:

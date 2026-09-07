@@ -54,16 +54,6 @@ MONTH_ABBR_MAP = {
     12: "DEC",
 }
 
-DAILY_DATE_FOLDER_PATTERN = re.compile(r"^\d{2}-\d{2}-\d{4}$")
-
-
-def is_daily_date_folder(name_or_path: object) -> bool:
-    """Return True if name or path basename matches the daily inspection folder pattern DD-MM-YYYY."""
-    if not name_or_path:
-        return False
-    name = getattr(name_or_path, "name", str(name_or_path)).strip()
-    return bool(DAILY_DATE_FOLDER_PATTERN.match(name))
-
 
 def _parse_date_object(date_input: str | date | datetime | None) -> date | None:
     """Parse date input into a datetime.date instance, returning None if unparseable."""
@@ -806,7 +796,6 @@ def format_busbar_position(
 
 
 __all__ = [
-    "DAILY_DATE_FOLDER_PATTERN",
     "FL_PREFIX_TO_STATION",
     "STATION_NAME_TO_CODE",
     "extract_background_temperature",
@@ -821,7 +810,6 @@ __all__ = [
     "format_month_folder",
     "format_temperature_float",
     "format_testsheet_time",
-    "is_daily_date_folder",
     "normalize_date_str",
     "normalize_fl_erms",
     "normalize_for_csv",

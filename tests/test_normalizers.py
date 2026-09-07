@@ -7,7 +7,6 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from src.core.normalizers import (
-    DAILY_DATE_FOLDER_PATTERN,
     extract_background_temperature,
     format_busbar_position,
     format_cbm_reading,
@@ -20,7 +19,6 @@ from src.core.normalizers import (
     format_month_folder,
     format_temperature_float,
     format_testsheet_time,
-    is_daily_date_folder,
     normalize_date_str,
     normalize_fl_erms,
     normalize_for_csv,
@@ -723,34 +721,6 @@ def test_format_busbar_position() -> None:
     assert format_busbar_position("PANEL 1", switchgear_type="") == "-"
     assert format_busbar_position("PANEL 1", switchgear_type=None) == "-"
     assert format_busbar_position("PANEL 1") == "-"
-
-
-def test_daily_date_folder_pattern_and_is_daily_date_folder() -> None:
-    from pathlib import Path
-
-    # Valid DD-MM-YYYY patterns
-    assert DAILY_DATE_FOLDER_PATTERN.match("01-09-2026") is not None
-    assert DAILY_DATE_FOLDER_PATTERN.match("31-12-2025") is not None
-    assert is_daily_date_folder("01-09-2026") is True
-    assert is_daily_date_folder("  01-09-2026  ") is True
-    assert is_daily_date_folder(Path("01-09-2026")) is True
-    assert is_daily_date_folder(Path("/testsheet/KUANTAN/09. SEPTEMBER/01-09-2026")) is True
-    assert is_daily_date_folder(Path("C:/testsheet/KUANTAN/09. SEPTEMBER/01-09-2026")) is True
-
-    # Invalid patterns
-    assert DAILY_DATE_FOLDER_PATTERN.match("1-9-2026") is None
-    assert DAILY_DATE_FOLDER_PATTERN.match("2026-09-01") is None
-    assert DAILY_DATE_FOLDER_PATTERN.match("01/09/2026") is None
-    assert DAILY_DATE_FOLDER_PATTERN.match("09. SEPTEMBER") is None
-    assert DAILY_DATE_FOLDER_PATTERN.match("KUANTAN") is None
-    assert is_daily_date_folder("1-9-2026") is False
-    assert is_daily_date_folder("2026-09-01") is False
-    assert is_daily_date_folder("01/09/2026") is False
-    assert is_daily_date_folder("09. SEPTEMBER") is False
-    assert is_daily_date_folder(Path("/testsheet/KUANTAN/09. SEPTEMBER")) is False
-    assert is_daily_date_folder(None) is False
-    assert is_daily_date_folder("") is False
-
 
 
 

@@ -292,8 +292,8 @@ def test_target_polymorphism(tmp_path: Path):
     assert folders is None
     assert fls == ("FL001", "FL002", "FL003")
 
-    # Case 5: Invalid target type raises TypeError
-    with pytest.raises(TypeError, match="Unsupported target type"):
+    # Case 5: Invalid target type raises ValueError
+    with pytest.raises(ValueError, match="Unsupported target type"):
         workflow._resolve_target(12345, env)  # type: ignore[arg-type]
 
 
@@ -913,8 +913,9 @@ def test_invalid_calendar_date_raises_value_error(tmp_path: Path):
             workflow._resolve_target([inv_date], env)
 
 
-def test_substation_testsheet_package_fl_and_substation_name_properties():
-    """Verify SubstationTestsheetPackage convenience properties .fl and .substation_name."""
+def test_substation_testsheet_package_convenience_properties():
+    """Verify QuickReportWorkflow helpers ._resolve_fl and ._resolve_station_display_name."""
+    workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
     # 1. Full data with both ERMS name and station_name
     pkg1 = _make_mock_package(
         station="CAMERON HIGHLAND",
@@ -922,8 +923,8 @@ def test_substation_testsheet_package_fl_and_substation_name_properties():
         substation_name="PE ERMS NAME",
         fl="CCHL/PCE/J00059",
     )
-    assert pkg1.fl == "CCHL/PCE/J00059"
-    assert pkg1.substation_name == "PE ERMS NAME"
+    assert workflow._resolve_fl(pkg1) == "CCHL/PCE/J00059"
+    assert workflow._resolve_station_display_name(pkg1) == "PE ERMS NAME"
 
     # 2. Substation name falling back to station_name
     data2 = TestsheetData(
@@ -941,8 +942,8 @@ def test_substation_testsheet_package_fl_and_substation_name_properties():
         substation_number=2,
         data=data2,
     )
-    assert pkg2.fl == "FL2"
-    assert pkg2.substation_name == "PE STATION FALLBACK"
+    assert workflow._resolve_fl(pkg2) == "FL2"
+    assert workflow._resolve_station_display_name(pkg2) == "PE STATION FALLBACK"
 
     # 3. Substation name falling back to package station
     data3 = TestsheetData(
@@ -960,8 +961,8 @@ def test_substation_testsheet_package_fl_and_substation_name_properties():
         substation_number=3,
         data=data3,
     )
-    assert pkg3.fl == ""
-    assert pkg3.substation_name == "ROMPIN"
+    assert workflow._resolve_fl(pkg3) == ""
+    assert workflow._resolve_station_display_name(pkg3) == "ROMPIN"
 
     # 4. Package without data (None)
     pkg4 = SubstationTestsheetPackage(
@@ -973,8 +974,13 @@ def test_substation_testsheet_package_fl_and_substation_name_properties():
         substation_number=4,
         data=None,
     )
-    assert pkg4.fl == ""
-    assert pkg4.substation_name == "TEMERLOH"
+    assert workflow._resolve_fl(pkg4) == ""
+    assert workflow._resolve_station_display_name(pkg4) == "TEMERLOH"
+
+
+test_substation_testsheet_package_fl_and_substation_name_properties = (
+    test_substation_testsheet_package_convenience_properties
+)
 
 
 

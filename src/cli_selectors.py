@@ -10,7 +10,7 @@ import re
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Sequence, TypeVar
 
-from src.core.normalizers import is_daily_date_folder, normalize_date_str
+from src.core.normalizers import normalize_date_str
 
 if TYPE_CHECKING:
     from src.project.environment import ProjectEnvironment
@@ -525,7 +525,7 @@ def _relative_parts(root: Path, current: Path) -> tuple[str, ...]:
 
 def is_pahang_date_folder(path: Path) -> bool:
     """Return True if path is a daily inspection date folder formatted DD-MM-YYYY."""
-    return bool(path.is_dir() and is_daily_date_folder(path.name))
+    return bool(path.is_dir() and re.match(r"^\d{2}-\d{2}-\d{4}$", path.name))
 
 
 def select_pahang_date_folder(

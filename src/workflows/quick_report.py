@@ -8,13 +8,15 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence
 
-from src.core.normalizers import DAILY_DATE_FOLDER_PATTERN
 from src.quick_report.compiler import (
     DocumentCompiler,
     WordComDocumentCompiler,
 )
 from src.quick_report.composer import QuickReportComposer
-from src.quick_report.extractor import QuickReportExtractor
+from src.quick_report.extractor import (
+    DAILY_DATE_FOLDER_PATTERN,
+    QuickReportExtractor,
+)
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.transformer import QuickReportTransformer
 from src.quick_report.utils import (
@@ -82,20 +84,12 @@ class QuickReportWorkflow:
 
         # Fail fast if an explicit Path target was given but missing
         if isinstance(target, Path):
-            if not target.is_absolute() and hasattr(environment, "get_testsheet_dir"):
-                exists = target.exists() or (environment.get_testsheet_dir() / target).exists()
-            else:
-                exists = target.exists()
-            if not exists:
+            if not self._target_path_exists(target, environment):
                 raise FileNotFoundError(f"Target path does not exist: {target}")
         elif isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
             for item in target:
                 if isinstance(item, Path):
-                    if not item.is_absolute() and hasattr(environment, "get_testsheet_dir"):
-                        exists = item.exists() or (environment.get_testsheet_dir() / item).exists()
-                    else:
-                        exists = item.exists()
-                    if not exists:
+                    if not self._target_path_exists(item, environment):
                         raise FileNotFoundError(f"Target path does not exist: {item}")
 
         if progress_sink:
@@ -238,22 +232,8 @@ class QuickReportWorkflow:
                 )
                 plans.append(plan)
 
-                sub_name_val = getattr(pkg, "substation_name", None)
-                if not isinstance(sub_name_val, str) or not sub_name_val:
-                    if getattr(pkg, "data", None):
-                        sub_name_val = (
-                            getattr(pkg.data, "substation_name_erms", None)
-                            or getattr(pkg.data, "station_name", None)
-                            or getattr(pkg, "station", "")
-                        )
-                    else:
-                        sub_name_val = getattr(pkg, "station", "")
-                sub_name = sanitize_filename(str(sub_name_val or ""))
-
-                fl_val = getattr(pkg, "fl", None)
-                if not isinstance(fl_val, str):
-                    fl_val = getattr(getattr(pkg, "data", None), "fl_erms", "") or ""
-                fl_name = str(fl_val or "")
+                sub_name = sanitize_filename(self._resolve_station_display_name(pkg))
+                fl_name = self._resolve_fl(pkg)
 
                 stem = (
                     plan.output_filename[:-5]
@@ -303,13 +283,20 @@ class QuickReportWorkflow:
 
     def _resolve_station_display_name(self, pkg: SubstationTestsheetPackage) -> str:
         """Return canonical station display name or fallback for progress and logging."""
-        sub_name = getattr(pkg, "substation_name", None)
-        station = getattr(pkg, "station", None)
-        name = sub_name if isinstance(sub_name, str) and sub_name else (station if isinstance(station, str) else None)
-        if name:
-            return name
+        if getattr(pkg, "data", None):
+            name = pkg.data.substation_name_erms or pkg.data.station_name or pkg.station
+            if name:
+                return str(name)
+        if getattr(pkg, "station", ""):
+            return str(pkg.station)
         sub_num = getattr(pkg, "substation_number", None)
         return f"substation {sub_num}" if sub_num is not None else "unknown substation"
+
+    def _resolve_fl(self, pkg: SubstationTestsheetPackage) -> str:
+        """Return ERMS functional location string if available."""
+        if getattr(pkg, "data", None):
+            return str(getattr(pkg.data, "fl_erms", "") or "")
+        return ""
 
     def _matches_station(
         self,
@@ -341,10 +328,10 @@ class QuickReportWorkflow:
 
         return (pkg_station_str in target_stations) or (data_station_str in target_stations)
 
-    def _is_dir_or_date(self, s: str, environment: ProjectEnvironment) -> bool:
-        """Return True if s is an existing directory path or valid DD-MM-YYYY calendar date."""
+    def _is_dir_or_date(self, target_str: str, environment: ProjectEnvironment) -> bool:
+        """Return True if target_str is an existing directory path or valid DD-MM-YYYY calendar date."""
         try:
-            p = Path(s)
+            p = Path(target_str)
             if p.is_absolute() and p.is_dir():
                 return True
         except Exception:
@@ -352,19 +339,28 @@ class QuickReportWorkflow:
         if hasattr(environment, "get_testsheet_dir"):
             try:
                 ts_dir = environment.get_testsheet_dir()
-                if isinstance(ts_dir, Path) and (ts_dir / s).is_dir():
+                if isinstance(ts_dir, Path) and (ts_dir / target_str).is_dir():
                     return True
             except Exception:
                 pass
-        if DAILY_DATE_FOLDER_PATTERN.match(s):
+        if DAILY_DATE_FOLDER_PATTERN.match(target_str):
             try:
-                datetime.strptime(s, "%d-%m-%Y")
+                datetime.strptime(target_str, "%d-%m-%Y")
             except ValueError as exc:
                 raise ValueError(
-                    f"Invalid calendar date '{s}': {exc}. Expected valid DD-MM-YYYY date."
+                    f"Invalid calendar date '{target_str}': {exc}. Expected valid DD-MM-YYYY date."
                 ) from exc
             return True
         return False
+
+    def _target_path_exists(
+        self, target: Path | str, environment: ProjectEnvironment
+    ) -> bool:
+        """Return True if target exists either directly or relative to testsheet directory."""
+        path = Path(target)
+        if not path.is_absolute() and hasattr(environment, "get_testsheet_dir"):
+            return path.exists() or (environment.get_testsheet_dir() / path).exists()
+        return path.exists()
 
     def _resolve_target(
         self,
@@ -401,7 +397,7 @@ class QuickReportWorkflow:
                     fl_list.extend([tok.strip() for tok in str(item).split(",") if tok.strip()])
                 return None, tuple(fl_list)
         else:
-            raise TypeError(
+            raise ValueError(
                 f"Unsupported target type: {type(target)}. Expected Path, str, or Sequence[Path | str]."
             )
 
