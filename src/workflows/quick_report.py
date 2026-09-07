@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 import logging
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Any, Callable, Sequence
 
 from src.quick_report.compiler import (
@@ -23,11 +24,8 @@ from src.quick_report.extractor import QuickReportExtractor
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.transformer import QuickReportTransformer
 from src.quick_report.utils import (
-    PAHANG_DATE_PATTERN,
-    is_pahang_date_str,
     normalize_functional_location_input,
     sanitize_filename,
-    validate_date_string,
 )
 from src.workflows.models import (
     QuickReportInspection,
@@ -42,37 +40,19 @@ logger = logging.getLogger(__name__)
 
 ReportTarget = Path | str | Sequence[Path] | Sequence[str] | Sequence[Path | str]
 ProgressSink = Callable[[str], None]
-
-
-def _is_date_or_folder(item: Path | str, environment: ProjectEnvironment) -> bool:
-    """Check if an item strictly represents a Pahang date pattern or an existing directory."""
-    if isinstance(item, Path):
-        return True
-    s = str(item).strip()
-    if PAHANG_DATE_PATTERN.match(s):
-        return True
-    try:
-        p = Path(s)
-        if p.is_absolute() and p.is_dir():
-            return True
-    except Exception:
-        pass
-    try:
-        if hasattr(environment, "get_testsheet_dir"):
-            ts_dir = environment.get_testsheet_dir()
-            if isinstance(ts_dir, Path) and (ts_dir / s).is_dir():
-                return True
-    except Exception:
-        pass
-    return False
+_DAILY_DATE_FOLDER_PATTERN = re.compile(r"^\d{2}-\d{2}-\d{4}$")
 
 
 class QuickReportWorkflow:
-    """Deep module orchestrating the 6-stage Quick Report ETL pipeline.
+    """Deep module orchestrating the 6-stage Quick Report ETL pipeline under SubstationIsolatedBatchResiliencePolicy.
 
     Presents exactly two primary entry points:
     - generate(): End-to-end extraction, planning, rendering, and COM compilation.
     - inspect(): In-process dry-run planning, suffix calculations, and template audits.
+
+    Resilience Policy:
+    SubstationIsolatedBatchResiliencePolicy isolates failures at the individual substation
+    level, allowing non-failing substations in a batch to compile and generate successfully.
     """
 
     def __init__(
@@ -105,6 +85,24 @@ class QuickReportWorkflow:
         """End-to-end: discover -> filter -> transform -> compile."""
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
+
+        # Fail fast if an explicit Path target was given but missing
+        if isinstance(target, Path):
+            if not target.is_absolute() and hasattr(environment, "get_testsheet_dir"):
+                exists = target.exists() or (environment.get_testsheet_dir() / target).exists()
+            else:
+                exists = target.exists()
+            if not exists:
+                raise FileNotFoundError(f"Target path does not exist: {target}")
+        elif isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
+            for item in target:
+                if isinstance(item, Path):
+                    if not item.is_absolute() and hasattr(environment, "get_testsheet_dir"):
+                        exists = item.exists() or (environment.get_testsheet_dir() / item).exists()
+                    else:
+                        exists = item.exists()
+                    if not exists:
+                        raise FileNotFoundError(f"Target path does not exist: {item}")
 
         if progress_sink:
             progress_sink("Discovering target packages for Quick Report...")
@@ -331,15 +329,10 @@ class QuickReportWorkflow:
         self,
         target: ReportTarget,
         environment: ProjectEnvironment,
-    ) -> tuple[list[str] | None, list[str] | None]:
+    ) -> tuple[Sequence[str] | None, Sequence[str] | None]:
         """Convert polymorphic ReportTarget into (folders, fls) pair."""
         if isinstance(target, Path):
-            if not ((target.is_absolute() and target.is_dir()) or (
-                hasattr(environment, "get_testsheet_dir")
-                and (environment.get_testsheet_dir() / target).is_dir()
-            )):
-                validate_date_string(target.name)
-            return [str(target)], None
+            return (str(target),), None
         elif isinstance(target, str):
             s = target.strip()
             is_dir = False
@@ -358,23 +351,43 @@ class QuickReportWorkflow:
                     pass
 
             if is_dir:
-                return [s], None
-            validate_date_string(s)
-            return [s], None
+                return (s,), None
+            if _DAILY_DATE_FOLDER_PATTERN.match(s):
+                return (s,), None
+            return None, [s]
         elif isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
             items = list(target)
             if not items:
-                return None, []
+                return None, ()
 
-            is_folder_mode = all(_is_date_or_folder(item, environment) for item in items)
-            if is_folder_mode:
-                for item in items:
-                    s_item = item.name if isinstance(item, Path) else str(item).strip()
-                    if PAHANG_DATE_PATTERN.match(s_item):
-                        validate_date_string(s_item)
-                return [str(item) for item in items], None
+            if all(isinstance(item, Path) for item in items):
+                return tuple(str(p) for p in items), None
+
+            def _is_dir_or_date(item: Path | str) -> bool:
+                if isinstance(item, Path):
+                    return True
+                val = str(item).strip()
+                if _DAILY_DATE_FOLDER_PATTERN.match(val):
+                    return True
+                try:
+                    p = Path(val)
+                    if p.is_absolute() and p.is_dir():
+                        return True
+                except Exception:
+                    pass
+                try:
+                    if hasattr(environment, "get_testsheet_dir"):
+                        ts_dir = environment.get_testsheet_dir()
+                        if isinstance(ts_dir, Path) and (ts_dir / val).is_dir():
+                            return True
+                except Exception:
+                    pass
+                return False
+
+            if all(_is_dir_or_date(item) for item in items):
+                return tuple(str(item) for item in items), None
             else:
-                return None, [str(item) for item in items]
+                return None, tuple(str(item) for item in items)
         else:
             raise TypeError(
                 f"Unsupported target type: {type(target)}. Expected Path, str, or Sequence[Path | str]."

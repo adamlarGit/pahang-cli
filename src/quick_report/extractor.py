@@ -18,7 +18,6 @@ from src.core.normalizers import (
 )
 from src.quick_report.defects import MasterQr03DefectRepository
 from src.quick_report.utils import (
-    PAHANG_DATE_PATTERN,
     normalize_functional_location_input,
 )
 from src.testsheet.extractor import to_excel_date
@@ -31,6 +30,7 @@ if TYPE_CHECKING:
 
 
 _resolve_station_from_fl = resolve_station_from_fl
+_DAILY_DATE_FOLDER_PATTERN = re.compile(r"^\d{2}-\d{2}-\d{4}$")
 
 
 class QuickReportExtractor:
@@ -59,22 +59,20 @@ class QuickReportExtractor:
                 candidate = Path(folder_item)
                 target_dirs: list[Path] = []
 
-                if candidate.is_absolute() and candidate.exists():
+                if candidate.is_absolute() and candidate.is_dir():
                     target_dirs.append(candidate)
+                elif _DAILY_DATE_FOLDER_PATTERN.match(folder_str):
+                    for p in sorted(testsheet_dir.rglob(folder_str)):
+                        if p.is_dir() and p not in target_dirs:
+                            target_dirs.append(p)
                 else:
-                    if candidate.exists():
+                    if candidate.is_dir():
                         target_dirs.append(candidate)
                     flat_path = testsheet_dir / folder_str
-                    if flat_path.exists() and flat_path not in target_dirs:
+                    if flat_path.is_dir() and flat_path not in target_dirs:
                         target_dirs.append(flat_path)
 
-                    # Multi-station date resolution: discover date folders across all stations under testsheet_dir
-                    if PAHANG_DATE_PATTERN.match(folder_str):
-                        for p in sorted(testsheet_dir.rglob(folder_str)):
-                            if p.is_dir() and p not in target_dirs:
-                                target_dirs.append(p)
-
-                if not target_dirs:
+                if not target_dirs and not _DAILY_DATE_FOLDER_PATTERN.match(folder_str):
                     raise FileNotFoundError(
                         f"Requested target folder does not exist: '{folder_str}' "
                         f"(checked: {candidate}, {testsheet_dir / folder_str})"

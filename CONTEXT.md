@@ -30,7 +30,7 @@ Regional station location (e.g. `RAUB`, `KUANTAN`, `CAMERON HIGHLAND`, `BENTONG`
 Monthly tracking folder inside station directories strictly formatted as `<INDEX_2DIGITS>. <FULL_MONTH_NAME>` (e.g., `01. JANUARY`, `02. FEBRUARY`, `03. MARCH`, `04. APRIL`, `05. MAY`, `06. JUNE`, `07. JULY`, `08. AUGUST`, `09. SEPTEMBER`, `10. OCTOBER`, `11. NOVEMBER`, `12. DECEMBER`). Enforced via `format_month_folder()`.
 
 ### DailyDateFolder
-Daily inspection folder inside month folders formatted as `DD-MM-YYYY` (e.g., `01-05-2026`, `09-05-2026`).
+Daily inspection folder inside month folders formatted as `DD-MM-YYYY` (e.g., `01-05-2026`, `09-05-2026`). In the CLI and workflows, operators select an existing inspection date folder from `TESTSHEET/<STATION>/<MONTH>/<DD-MM-YYYY>/`. The folder name itself represents the canonical date of the inspection run.
 
 ### InitialSubstationFolder
 The numerical PE subdirectory (`001/`, `002/`, `003/`) created inside `RAW MATERIAL/<STATION>/<MONTH>/<DD-MM-YYYY>/` during initial raw material sorting. Contains `RAW DATA/` with `IR/`, `DG/`, and `US+TEV/` subfolders.

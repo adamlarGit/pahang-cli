@@ -260,7 +260,8 @@ class QuickReportAction(ProjectWorkflowAction):
                 print("Processing cancelled.")
                 return None
 
-            inspection = workflow.inspect(selected_path, environment)
+            date_str = selected_path.name
+            inspection = workflow.inspect(date_str, environment)
             if inspection.errors and not inspection.targets:
                 print(f"Inspection found {len(inspection.errors)} error(s):")
                 for err in inspection.errors:
@@ -278,14 +279,14 @@ class QuickReportAction(ProjectWorkflowAction):
                     print("Processing cancelled.")
                     return None
                 result = workflow.generate(
-                    selected_path,
+                    date_str,
                     environment,
                     station=chosen_stations,
                     progress_sink=_cli_progress_sink,
                 )
             else:
                 result = workflow.generate(
-                    selected_path,
+                    date_str,
                     environment,
                     progress_sink=_cli_progress_sink,
                 )

@@ -262,20 +262,25 @@ def test_target_polymorphism(tmp_path: Path):
     # Case 1: Path target
     folder_path = tmp_path / "TESTSHEET" / "01-09-2026"
     folders, fls = workflow._resolve_target(folder_path, env)
-    assert folders == [str(folder_path)]
+    assert folders == (str(folder_path),)
     assert fls is None
 
     # Case 2: str target (date string)
     folders, fls = workflow._resolve_target("01-09-2026", env)
-    assert folders == ["01-09-2026"]
+    assert folders == ("01-09-2026",)
     assert fls is None
 
     # Case 3: Sequence[str] target (FLs)
     folders, fls = workflow._resolve_target(["FL001", "FL002"], env)
     assert folders is None
-    assert fls == ["FL001", "FL002"]
+    assert fls == ("FL001", "FL002")
 
-    # Case 4: Invalid target type raises TypeError
+    # Case 4: Single str target (FL)
+    folders, fls = workflow._resolve_target("FL001", env)
+    assert folders is None
+    assert fls == ["FL001"]
+
+    # Case 5: Invalid target type raises TypeError
     with pytest.raises(TypeError, match="Unsupported target type"):
         workflow._resolve_target(12345, env)  # type: ignore[arg-type]
 
@@ -388,46 +393,77 @@ def test_word_com_document_compiler_session_teardown_on_error(tmp_path: Path):
         mock_pythoncom.CoUninitialize.assert_called_once()
 
 
-def test_strict_date_validation_rejects_non_pahang_dates(tmp_path: Path):
-    """Verify strict date validation enforces DD-MM-YYYY and rejects non-Pahang formats."""
+def test_non_matching_date_formats_treated_as_fls(tmp_path: Path):
+    """Verify non-matching date formats (e.g. 2026-09-01) resolve as FLs without raising ValueError."""
     env = _setup_mock_environment(tmp_path)
     workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
 
-    invalid_dates = [
+    formats = [
         "2026-09-01",  # YYYY-MM-DD
-        "2026/09/01",  # YYYY/MM/DD
-        "2026.09.01",  # YYYY.MM.DD
         "01/09/2026",  # DD/MM/YYYY
-        "01.09.2026",  # DD.MM.YYYY
-        "1-9-2026",    # D-M-YYYY
-        "01-9-2026",   # DD-M-YYYY
-        "1-09-2026",   # D-MM-YYYY
-        "01-09-26",    # 2-digit year
         "20260901",    # YYYYMMDD
-        "32-09-2026",  # Invalid calendar day
-        "01-13-2026",  # Invalid calendar month
     ]
 
-    for inv in invalid_dates:
-        # Single string target
-        with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
-            workflow.inspect(inv, env)
+    for fmt in formats:
+        folders, fls = workflow._resolve_target(fmt, env)
+        assert folders is None
+        assert fls == [fmt]
 
-        with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
-            workflow.generate(inv, env)
+        res = workflow.generate(fmt, env)
+        assert res.reports_generated == 0
+        assert any(f"No testsheet packages found for target: {fmt}" in err for err in res.errors)
 
-    # Valid Pahang date format DD-MM-YYYY does not raise ValueError
+    # Any DD-MM-YYYY string matches daily date folder pattern without calendar date validation
+    folders, fls = workflow._resolve_target("32-09-2026", env)
+    assert folders == ("32-09-2026",)
+    assert fls is None
+
+    # When generated, missing date folder returns error outcome rather than ValueError
+    res_cal = workflow.generate("32-09-2026", env)
+    assert res_cal.reports_generated == 0
+    assert any("No testsheet packages found for target: 32-09-2026" in err for err in res_cal.errors)
+
+    # Valid daily date format DD-MM-YYYY resolves as folder target
     with patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[]):
         res = workflow.inspect("01-09-2026", env)
         assert isinstance(res, QuickReportInspection)
 
-    # Sequence with invalid calendar dates matching Pahang regex pattern raises ValueError
-    for inv_cal in ["32-09-2026", "01-13-2026"]:
-        with pytest.raises(ValueError, match="Invalid calendar date"):
-            workflow.inspect([inv_cal], env)
 
-        with pytest.raises(ValueError, match="Invalid calendar date"):
-            workflow.generate([inv_cal], env)
+def test_explicit_missing_path_target_raises_file_not_found(tmp_path: Path):
+    """Verify generate() raises FileNotFoundError when an explicit Path target is missing."""
+    env = _setup_mock_environment(tmp_path)
+    workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
+
+    missing_path = tmp_path / "NONEXISTENT_DIR"
+    with pytest.raises(FileNotFoundError, match="Target path does not exist"):
+        workflow.generate(missing_path, env)
+
+    with pytest.raises(FileNotFoundError, match="Target path does not exist"):
+        workflow.generate([missing_path], env)
+
+
+def test_direct_path_target_discovers_packages(tmp_path: Path):
+    """Verify passing a direct Path target discovers packages and generates report."""
+    env = _setup_mock_environment(tmp_path)
+    target_folder = tmp_path / "TESTSHEET" / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
+    target_folder.mkdir(parents=True, exist_ok=True)
+
+    pkg = _make_mock_package(station="ROMPIN", substation_number=1, substation_name="PE ROMPIN")
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    with (
+        patch("src.testsheet.repository.SubstationTestsheetRepository.discover_packages", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
+    ):
+        insp = workflow.inspect(target_folder, env)
+        assert insp.ready_to_generate is True
+        assert len(insp.targets) == 1
+        assert insp.targets[0].station == "ROMPIN"
+
+        res = workflow.generate(target_folder, env)
+        assert res.is_success is True
+        assert res.reports_generated == 1
 
 
 def test_target_sequence_disambiguation_dates_vs_fls(tmp_path: Path):
@@ -437,20 +473,20 @@ def test_target_sequence_disambiguation_dates_vs_fls(tmp_path: Path):
 
     # Sequence of date strings -> FOLDER
     folders, fls = workflow._resolve_target(["01-09-2026", "02-09-2026"], env)
-    assert folders == ["01-09-2026", "02-09-2026"]
+    assert folders == ("01-09-2026", "02-09-2026")
     assert fls is None
 
     # Sequence of Paths -> FOLDER
     p1 = tmp_path / "TESTSHEET" / "ROMPIN"
     p2 = tmp_path / "TESTSHEET" / "KUANTAN"
     folders, fls = workflow._resolve_target([p1, p2], env)
-    assert folders == [str(p1), str(p2)]
+    assert folders == (str(p1), str(p2))
     assert fls is None
 
     # Sequence of FL strings -> FL
     folders, fls = workflow._resolve_target(["FL001", "FL002", "CCHL/PCE/J00059"], env)
     assert folders is None
-    assert fls == ["FL001", "FL002", "CCHL/PCE/J00059"]
+    assert fls == ("FL001", "FL002", "CCHL/PCE/J00059")
 
 
 def test_multi_station_date_resolution_discovers_all_stations_by_default(tmp_path: Path):
@@ -711,7 +747,7 @@ def test_hyphenated_fl_strings_not_rejected_by_date_validation(tmp_path: Path):
 
     folders, fls = workflow._resolve_target(fl_inputs, env)
     assert folders is None
-    assert fls == fl_inputs
+    assert fls == tuple(fl_inputs)
 
     pkg = _make_mock_package(fl="CCHL/PCE/J00059-01")
     with (
