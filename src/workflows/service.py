@@ -85,8 +85,22 @@ class WorkflowService:
         if request.progress_sink:
             request.progress_sink("Executing Quick Report generation...")
         from src.workflows.quick_report import QuickReportWorkflow
+
         workflow = QuickReportWorkflow()
-        return workflow.execute(environment, request)
+        if getattr(request.mode, "value", str(request.mode)).lower() == "fl":
+            target = list(request.target_package_names)
+        else:
+            target = (
+                Path(request.target_folders[0])
+                if request.target_folders
+                else environment.get_testsheet_dir()
+            )
+        return workflow.generate(
+            target,
+            environment,
+            condition_template=request.substation_condition_template_path,
+            progress_sink=request.progress_sink,
+        )
 
 
     def run_whatsapp(

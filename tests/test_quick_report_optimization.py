@@ -12,6 +12,7 @@ from src.core.normalizers import (
     resolve_station_code,
     resolve_station_from_fl,
 )
+from src.quick_report.compiler import WordComDocumentCompiler
 from src.quick_report.composer import QuickReportComposer, _clear_clipboard
 from src.quick_report.defects import (
     CbmDefectRecord,
@@ -332,46 +333,29 @@ def test_extractor_fl_mode_tier2_station_prefix_fallback(tmp_path: Path):
 
 
 def test_quick_report_workflow_sets_screen_updating_false(tmp_path: Path):
-    """Verify QuickReportWorkflow sets word_app.ScreenUpdating = False during execution."""
-    env = MagicMock()
-    tpl = tmp_path / "tpl.docx"
-    tpl.touch()
-    env.get_vi_front_page_template.return_value = tpl
-    env.get_template.return_value = tpl
-    env.get_quick_report_dir.return_value = tmp_path
+    """Verify WordComDocumentCompiler sets word_app.ScreenUpdating = False during execution."""
+    p1 = tmp_path / "part1.docx"
+    p1.touch()
+    out = tmp_path / "out.docx"
 
+    compiler = WordComDocumentCompiler()
     mock_word = MagicMock()
-    mock_composer = MagicMock()
-    mock_composer.load.return_value = tmp_path / "out.docx"
-    (tmp_path / "out.docx").touch()
+    mock_main = MagicMock()
+    mock_part = MagicMock()
+    mock_rng = MagicMock()
 
-    mock_pkg = MagicMock()
-    mock_pkg.data.fl_erms = "CRAU/PCE/J00219"
-
-    mock_extractor = MagicMock()
-    mock_extractor.extract.return_value = [mock_pkg]
-    mock_extractor.extract_defects.return_value = ([], [])
-
-    mock_filter = MagicMock()
-    mock_filter.filter.return_value = [mock_pkg]
-
-    workflow = QuickReportWorkflow(
-        extractor=mock_extractor,
-        filter_stage=mock_filter,
-        composer=mock_composer,
-    )
-
-    req = QuickReportRequest(
-        mode=QuickReportMode.FL,
-        target_package_names=("CRAU/PCE/J00219",),
-    )
+    mock_word.Documents.Add.return_value = mock_main
+    mock_word.Documents.Open.return_value = mock_part
+    mock_main.Content = mock_rng
+    mock_main.Tables.Count = 0
+    mock_rng.Information.return_value = False
 
     with (
-        patch("src.workflows.quick_report.win32com") as mock_win32,
-        patch("src.workflows.quick_report.pythoncom"),
+        patch("src.quick_report.compiler.win32com") as mock_win32,
+        patch("src.quick_report.compiler.pythoncom"),
     ):
         mock_win32.client.Dispatch.return_value = mock_word
-        result = workflow.execute(env, req)
+        compiler.compile([p1], out)
 
     assert mock_word.ScreenUpdating is True or mock_word.ScreenUpdating is False
     assert mock_word.DisplayAlerts == 0
@@ -464,48 +448,31 @@ def test_extractor_non_numeric_pe_falls_back_to_tier2(tmp_path: Path):
 
 def test_quick_report_workflow_tracks_and_terminates_word_pid(tmp_path: Path):
     """Verify Word process PID is captured and terminated if still running in finally."""
-    env = MagicMock()
-    tpl = tmp_path / "tpl.docx"
-    tpl.touch()
-    env.get_vi_front_page_template.return_value = tpl
-    env.get_template.return_value = tpl
-    env.get_quick_report_dir.return_value = tmp_path
+    p1 = tmp_path / "part1.docx"
+    p1.touch()
+    out = tmp_path / "out.docx"
 
+    compiler = WordComDocumentCompiler()
     mock_word = MagicMock()
     mock_word.Hwnd = 12345
-    mock_composer = MagicMock()
-    mock_composer.load.return_value = tmp_path / "out.docx"
-    (tmp_path / "out.docx").touch()
+    mock_main = MagicMock()
+    mock_part = MagicMock()
+    mock_rng = MagicMock()
 
-    mock_pkg = MagicMock()
-    mock_pkg.data.fl_erms = "CRAU/PCE/J00219"
-
-    mock_extractor = MagicMock()
-    mock_extractor.extract.return_value = [mock_pkg]
-    mock_extractor.extract_defects.return_value = ([], [])
-
-    mock_filter = MagicMock()
-    mock_filter.filter.return_value = [mock_pkg]
-
-    workflow = QuickReportWorkflow(
-        extractor=mock_extractor,
-        filter_stage=mock_filter,
-        composer=mock_composer,
-    )
-
-    req = QuickReportRequest(
-        mode=QuickReportMode.FL,
-        target_package_names=("CRAU/PCE/J00219",),
-    )
+    mock_word.Documents.Add.return_value = mock_main
+    mock_word.Documents.Open.return_value = mock_part
+    mock_main.Content = mock_rng
+    mock_main.Tables.Count = 0
+    mock_rng.Information.return_value = False
 
     with (
-        patch("src.workflows.quick_report.win32com") as mock_win32,
-        patch("src.workflows.quick_report.pythoncom"),
-        patch("src.workflows.quick_report._terminate_word_process") as mock_terminate,
+        patch("src.quick_report.compiler.win32com") as mock_win32,
+        patch("src.quick_report.compiler.pythoncom"),
+        patch("src.quick_report.compiler._terminate_word_process") as mock_terminate,
         patch("win32process.GetWindowThreadProcessId", return_value=(0, 9999)),
     ):
         mock_win32.client.Dispatch.return_value = mock_word
-        result = workflow.execute(env, req)
+        compiler.compile([p1], out)
 
     mock_word.Quit.assert_called_once()
     mock_terminate.assert_called_once_with(9999)

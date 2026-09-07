@@ -62,15 +62,13 @@ def test_quick_report_action_folder_selection(mock_env: ProjectEnvironment, tmp_
 
     with patch("src.cli_selectors.select_one", return_value="folder"):
         with patch("src.cli_selectors.select_pahang_date_folder", return_value=target_folder) as mock_select:
-            with patch("src.workflows.service.WorkflowService.run_quick_report") as mock_run:
-                mock_run.return_value = QuickReportResult(reports_generated=1)
+            with patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate:
+                mock_generate.return_value = QuickReportResult(reports_generated=1)
                 res = action.execute(mock_env)
                 assert res.reports_generated == 1
                 mock_select.assert_called_once_with(environment=mock_env)
-                mock_run.assert_called_once()
-                req = mock_run.call_args[0][1]
-                assert req.mode == QuickReportMode.FOLDER
-                assert req.target_folders == (str(target_folder),)
+                mock_generate.assert_called_once()
+                assert mock_generate.call_args[0][0] == target_folder
 
 
 def test_quick_report_action_folder_selection_cancel(mock_env: ProjectEnvironment) -> None:

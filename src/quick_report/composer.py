@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-import ctypes
 import gc
 import logging
 from pathlib import Path
 import shutil
-import time
+from typing import Any, Sequence
 
 from src.quick_report.cbm_defect_pages import generate_cbm_defect_pages
 from src.quick_report.cbm_summary import generate_cbm_tech_summary
+from src.quick_report.compiler import (
+    DocumentCompiler,
+    WordComDocumentCompiler,
+    _clear_clipboard,
+    _collapse_and_escape_table,
+    _paste_with_retry,
+)
 from src.quick_report.front_page import generate_front_page
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.sticker_page import generate_sticker_page
@@ -20,78 +26,14 @@ from src.quick_report.vi_summary import generate_vi_summary
 
 logger = logging.getLogger(__name__)
 
-try:
-    import pywintypes
-except ImportError:
-    pywintypes = None
-
-
-def _clear_clipboard() -> None:
-    """Clear Windows clipboard to eliminate Word COM OLE serialization stall on document close."""
-    for _ in range(3):
-        try:
-            if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "user32"):
-                if ctypes.windll.user32.OpenClipboard(None):
-                    ctypes.windll.user32.EmptyClipboard()
-                    ctypes.windll.user32.CloseClipboard()
-                    return
-        except Exception:
-            pass
-        time.sleep(0.01)
-
-
-def _collapse_and_escape_table(main_doc):
-    """Collapse range to document end, inserting a minimal paragraph after table if selection is inside a table."""
-    rng = main_doc.Content
-    rng.Collapse(0)  # wdCollapseEnd = 0
-    if rng.Information(12):  # 12 = wdWithInTable
-        if main_doc.Tables.Count > 0:
-            last_table = main_doc.Tables(main_doc.Tables.Count)
-            last_table.Range.InsertParagraphAfter()
-            # Minimize the escape paragraph to prevent blank page overflow.
-            escape_rng = last_table.Range
-            escape_rng.Collapse(0)  # wdCollapseEnd
-            escape_rng.MoveEnd(1, 1)  # wdCharacter = 1, extend by 1 char
-            escape_rng.Font.Size = 1
-            escape_rng.ParagraphFormat.SpaceBefore = 0
-            escape_rng.ParagraphFormat.SpaceAfter = 0
-            escape_rng.ParagraphFormat.LineSpacingRule = 0  # wdLineSpaceSingle
-        rng = main_doc.Content
-        rng.Collapse(0)
-    return rng
-
-
-def _paste_with_retry(rng, max_attempts: int = 5, delay: float = 0.15) -> None:
-    """Retry rng.PasteAndFormat(16) / rng.Paste() up to max_attempts times to preserve source formatting and handle COM errors."""
-    exceptions: tuple[type[BaseException], ...]
-    if pywintypes and hasattr(pywintypes, "com_error"):
-        exceptions = (pywintypes.com_error, Exception)
-    else:
-        exceptions = (Exception,)
-
-    for attempt in range(1, max_attempts + 1):
-        try:
-            if hasattr(rng, "PasteAndFormat"):
-                try:
-                    rng.PasteAndFormat(16)  # 16 = wdFormatOriginalFormatting
-                    return
-                except (AttributeError, TypeError):
-                    rng.Paste()
-                    return
-            else:
-                rng.Paste()
-                return
-        except exceptions as exc:
-            if attempt == max_attempts:
-                logger.error("rng paste failed after %d attempts: %s", max_attempts, exc)
-                raise
-            time.sleep(delay)
-
 
 class QuickReportComposer:
     """Loader stage: renders docx report parts and compiles final Word document."""
 
-    def load(self, plan: QuickReportStationPlan, word_app) -> Path:
+    def __init__(self, compiler: DocumentCompiler | None = None) -> None:
+        self.compiler = compiler or WordComDocumentCompiler()
+
+    def load(self, plan: QuickReportStationPlan, word_app: Any = None) -> Path:
         """Render docx parts, compile final document, and clean up temporary files."""
         plan.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -100,7 +42,10 @@ class QuickReportComposer:
 
         try:
             parts = self._generate_parts(plan, temp_dir)
-            self._compile_document(parts, plan.final_output_path, word_app=word_app)
+            if word_app is not None:
+                self._compile_document(parts, plan.final_output_path, word_app=word_app)
+            else:
+                self.compiler.compile(parts, plan.final_output_path)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
             gc.collect()
@@ -195,46 +140,19 @@ class QuickReportComposer:
         return parts
 
     def _compile_document(
-        self, parts: list[Path], output_path: Path, word_app
+        self, parts: Sequence[Path], output_path: Path, word_app: Any = None
     ) -> None:
-        """Compile document parts into final output file via Word COM ActiveX Recopy & Paste."""
+        """Compile document parts into final output file via compiler."""
         if not parts:
             return
-        if word_app is None:
+        if word_app is None and isinstance(self.compiler, WordComDocumentCompiler):
             raise RuntimeError("word_app is required for Quick Report compilation.")
 
-        main_doc = None
-        try:
-            main_doc = word_app.Documents.Add()
-            for idx, part in enumerate(parts):
-                part_path = str(Path(part).resolve())
-                part_doc = None
-                try:
-                    part_doc = word_app.Documents.Open(part_path, False, True)
-                    part_doc.Content.Copy()
+        if hasattr(self.compiler, "compile"):
+            import inspect
 
-                    rng = _collapse_and_escape_table(main_doc)
-                    if idx > 0:
-                        rng.InsertBreak(7)  # wdPageBreak = 7
-                        rng = _collapse_and_escape_table(main_doc)
-
-                    _paste_with_retry(rng)
-                finally:
-                    _clear_clipboard()
-                    if part_doc is not None:
-                        try:
-                            part_doc.Close(False)
-                        except Exception:
-                            pass
-                        part_doc = None
-
-            main_doc.SaveAs2(str(Path(output_path).resolve()))
-            main_doc.Close(False)
-            main_doc = None
-        finally:
-            _clear_clipboard()
-            if main_doc is not None:
-                try:
-                    main_doc.Close(False)
-                except Exception:
-                    pass
+            sig = inspect.signature(self.compiler.compile)
+            if "word_app" in sig.parameters:
+                self.compiler.compile(parts, output_path, word_app=word_app)
+            else:
+                self.compiler.compile(parts, output_path)

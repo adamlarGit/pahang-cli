@@ -102,13 +102,68 @@ class QuickReportRequest:
 
 
 @dataclass(frozen=True)
+class SubstationInspectionItem:
+    """Dry-run inspection data for a single substation."""
+
+    pe_number: int
+    substation_name: str
+    functional_location: str
+    defect_suffix: str
+    stem: str
+    target_output_path: Path
+    cbm_defect_count: int
+    vi_defect_count: int
+    condition_pair_count: int
+
+
+@dataclass(frozen=True)
+class QuickReportInspection:
+    """Dry-run outcome returned by inspect()."""
+
+    targets: tuple[SubstationInspectionItem, ...]
+    missing_templates: tuple[str, ...]
+    warnings: tuple[str, ...]
+    errors: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.targets, tuple):
+            object.__setattr__(self, "targets", tuple(self.targets))
+        if not isinstance(self.missing_templates, tuple):
+            object.__setattr__(self, "missing_templates", tuple(self.missing_templates))
+        if not isinstance(self.warnings, tuple):
+            object.__setattr__(self, "warnings", tuple(self.warnings))
+        if not isinstance(self.errors, tuple):
+            object.__setattr__(self, "errors", tuple(self.errors))
+
+    @property
+    def ready_to_generate(self) -> bool:
+        return (
+            len(self.missing_templates) == 0
+            and len(self.errors) == 0
+            and len(self.targets) > 0
+        )
+
+
+@dataclass(frozen=True)
 class QuickReportResult:
-    """Result model for Quick Report generation workflow."""
+    """Consolidated execution outcome returned by generate()."""
 
     reports_generated: int = 0
-    generated_paths: Sequence[Path] = ()
-    warnings: Sequence[str] = ()
-    errors: Sequence[str] = ()
+    generated_paths: tuple[Path, ...] = ()
+    warnings: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.generated_paths, tuple):
+            object.__setattr__(self, "generated_paths", tuple(self.generated_paths))
+        if not isinstance(self.warnings, tuple):
+            object.__setattr__(self, "warnings", tuple(self.warnings))
+        if not isinstance(self.errors, tuple):
+            object.__setattr__(self, "errors", tuple(self.errors))
+
+    @property
+    def is_success(self) -> bool:
+        return len(self.errors) == 0 and self.reports_generated > 0
 
 
 @dataclass(frozen=True)

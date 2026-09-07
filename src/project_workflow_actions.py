@@ -14,13 +14,12 @@ from src.workflows.models import (
     PostProcessingMode,
     PostProcessingRequest,
     PostProcessingSummary,
-    QuickReportMode,
-    QuickReportRequest,
     QuickReportResult,
     RawMaterialRequest,
     UpdateQr02CbaRequest,
     WhatsAppReportRequest,
 )
+from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.service import WorkflowService
 
 if TYPE_CHECKING:
@@ -237,9 +236,6 @@ class QuickReportAction(ProjectWorkflowAction):
             print("Processing cancelled.")
             return None
 
-        request = None
-        default_cond_template = environment.get_sub_cond_dir() / "MASTER_SUBSTATION_CONDITION.docx"
-
         if mode_str == "manual":
             print('Enter comma-separated Functional Locations.')
             input_locs = input("Functional Locations: ").strip()
@@ -247,27 +243,20 @@ class QuickReportAction(ProjectWorkflowAction):
             if not fl_numbers:
                 print("No functional locations provided.")
                 return None
-            request = QuickReportRequest(
-                mode=QuickReportMode.FL,
-                target_package_names=fl_numbers,
-                substation_condition_template_path=default_cond_template,
-                progress_sink=_cli_progress_sink,
-            )
+            target: list[str] | Path = list(fl_numbers)
         else:
             selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
             if selected_path is None:
                 print("Processing cancelled.")
                 return None
+            target = selected_path
 
-            request = QuickReportRequest(
-                mode=QuickReportMode.FOLDER,
-                target_folders=(str(selected_path),),
-                substation_condition_template_path=default_cond_template,
-                progress_sink=_cli_progress_sink,
-            )
-
-        service = WorkflowService()
-        result = service.run_quick_report(environment, request)
+        workflow = QuickReportWorkflow()
+        result = workflow.generate(
+            target,
+            environment,
+            progress_sink=_cli_progress_sink,
+        )
         _print_quick_report_batch_summary(result)
         return result
 
