@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from datetime import datetime
 import logging
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, Callable, Sequence
 
+from src.core.normalizers import (
+    DAILY_DATE_FOLDER_PATTERN,
+    is_daily_date_folder,
+)
 from src.quick_report.compiler import (
     DocumentCompiler,
     WordComDocumentCompiler,
@@ -27,6 +32,7 @@ from src.quick_report.utils import (
     normalize_functional_location_input,
     sanitize_filename,
 )
+from src.testsheet.models import SubstationTestsheetPackage
 from src.workflows.models import (
     QuickReportInspection,
     QuickReportResult,
@@ -40,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 ReportTarget = Path | str | Sequence[Path] | Sequence[str] | Sequence[Path | str]
 ProgressSink = Callable[[str], None]
-_DAILY_DATE_FOLDER_PATTERN = re.compile(r"^\d{2}-\d{2}-\d{4}$")
+_DAILY_DATE_FOLDER_PATTERN = DAILY_DATE_FOLDER_PATTERN
 
 
 class QuickReportWorkflow:
@@ -143,11 +149,7 @@ class QuickReportWorkflow:
 
         with session_cm:
             for i, plan in enumerate(plans, start=1):
-                station_name = (
-                    getattr(plan.package, "station", "")
-                    or getattr(getattr(plan.package, "data", None), "station_name", "")
-                    or f"substation {getattr(plan.package, 'substation_number', '?')}"
-                )
+                station_name = self._resolve_station_display_name(plan.package)
                 if progress_sink:
                     progress_sink(
                         f"[{i}/{len(plans)}] Generating quick report for {station_name}..."
@@ -211,30 +213,9 @@ class QuickReportWorkflow:
             )
             filtered_packages = [pkg for pkg in packages if pkg.data is not None]
             if station:
-                if isinstance(station, str):
-                    norm_station = station.strip().upper()
-                    filtered_packages = [
-                        pkg
-                        for pkg in filtered_packages
-                        if (pkg.station and pkg.station.strip().upper() == norm_station)
-                        or (
-                            getattr(pkg, "data", None)
-                            and getattr(pkg.data, "station_name", "")
-                            and getattr(pkg.data, "station_name", "").strip().upper() == norm_station
-                        )
-                    ]
-                elif isinstance(station, Sequence):
-                    norm_stations = {s.strip().upper() for s in station if s and str(s).strip()}
-                    filtered_packages = [
-                        pkg
-                        for pkg in filtered_packages
-                        if (pkg.station and pkg.station.strip().upper() in norm_stations)
-                        or (
-                            getattr(pkg, "data", None)
-                            and getattr(pkg.data, "station_name", "")
-                            and getattr(pkg.data, "station_name", "").strip().upper() in norm_stations
-                        )
-                    ]
+                filtered_packages = [
+                    pkg for pkg in filtered_packages if self._matches_station(pkg, station)
+                ]
             if fls:
                 target_fls = {normalize_functional_location_input(fl) for fl in fls}
                 filtered_packages = [
@@ -257,11 +238,7 @@ class QuickReportWorkflow:
             warnings.append(f"No testsheet packages found for target: {target}")
 
         for pkg in filtered_packages:
-            station_name = (
-                getattr(pkg, "station", "")
-                or getattr(getattr(pkg, "data", None), "station_name", "")
-                or f"substation {getattr(pkg, 'substation_number', '?')}"
-            )
+            station_name = self._resolve_station_display_name(pkg)
             try:
                 cbm_defects, vi_defects = self._extractor.extract_defects(pkg, environment)
                 plan = self._transformer.transform(
@@ -273,12 +250,23 @@ class QuickReportWorkflow:
                 )
                 plans.append(plan)
 
-                sub_name = (
-                    sanitize_filename(pkg.data.substation_name_erms or pkg.data.station_name)
-                    if pkg.data
-                    else sanitize_filename(pkg.station or "")
-                )
-                fl_name = getattr(getattr(pkg, "data", None), "fl_erms", "") or ""
+                sub_name_val = getattr(pkg, "substation_name", None)
+                if not isinstance(sub_name_val, str) or not sub_name_val:
+                    if getattr(pkg, "data", None):
+                        sub_name_val = (
+                            getattr(pkg.data, "substation_name_erms", None)
+                            or getattr(pkg.data, "station_name", None)
+                            or getattr(pkg, "station", "")
+                        )
+                    else:
+                        sub_name_val = getattr(pkg, "station", "")
+                sub_name = sanitize_filename(str(sub_name_val or ""))
+
+                fl_val = getattr(pkg, "fl", None)
+                if not isinstance(fl_val, str):
+                    fl_val = getattr(getattr(pkg, "data", None), "fl_erms", "") or ""
+                fl_name = str(fl_val or "")
+
                 stem = (
                     plan.output_filename[:-5]
                     if plan.output_filename.endswith(".docx")
@@ -325,6 +313,55 @@ class QuickReportWorkflow:
                 pass
         return None
 
+    def _resolve_station_display_name(self, pkg: SubstationTestsheetPackage) -> str:
+        """Return canonical station display name or fallback for progress and logging."""
+        sub_name = getattr(pkg, "substation_name", None)
+        if isinstance(sub_name, str) and sub_name:
+            return sub_name
+        data = getattr(pkg, "data", None)
+        if data is not None:
+            name_erms = getattr(data, "substation_name_erms", None)
+            if isinstance(name_erms, str) and name_erms:
+                return name_erms
+            st_name = getattr(data, "station_name", None)
+            if isinstance(st_name, str) and st_name:
+                return st_name
+        station = getattr(pkg, "station", None)
+        if isinstance(station, str) and station:
+            return station
+        sub_num = getattr(pkg, "substation_number", None)
+        return f"substation {sub_num}" if sub_num is not None else "unknown substation"
+
+    def _matches_station(
+        self,
+        pkg: SubstationTestsheetPackage,
+        station_filter: str | Sequence[str] | None,
+    ) -> bool:
+        """Centralize station matching logic for single strings and sequences."""
+        if station_filter is None:
+            return True
+
+        if isinstance(station_filter, str):
+            clean = station_filter.strip().upper()
+            target_stations = {clean} if clean else set()
+        elif isinstance(station_filter, Sequence):
+            target_stations = {
+                str(s).strip().upper() for s in station_filter if s and str(s).strip()
+            }
+        else:
+            return False
+
+        if not target_stations:
+            return True
+
+        pkg_station = getattr(pkg, "station", "")
+        pkg_station_str = str(pkg_station).strip().upper() if isinstance(pkg_station, str) else ""
+
+        data_station = getattr(pkg.data, "station_name", "") if getattr(pkg, "data", None) else ""
+        data_station_str = str(data_station).strip().upper() if isinstance(data_station, str) else ""
+
+        return (pkg_station_str in target_stations) or (data_station_str in target_stations)
+
     def _resolve_target(
         self,
         target: ReportTarget,
@@ -352,9 +389,18 @@ class QuickReportWorkflow:
 
             if is_dir:
                 return (s,), None
-            if _DAILY_DATE_FOLDER_PATTERN.match(s):
+            if DAILY_DATE_FOLDER_PATTERN.match(s):
+                try:
+                    datetime.strptime(s, "%d-%m-%Y")
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Invalid calendar date '{s}': {exc}. Expected valid DD-MM-YYYY date."
+                    ) from exc
                 return (s,), None
-            return None, [s]
+            if "," in s:
+                tokens = [tok.strip() for tok in s.split(",") if tok.strip()]
+                return None, tuple(tokens)
+            return None, (s,)
         elif isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
             items = list(target)
             if not items:
@@ -367,7 +413,13 @@ class QuickReportWorkflow:
                 if isinstance(item, Path):
                     return True
                 val = str(item).strip()
-                if _DAILY_DATE_FOLDER_PATTERN.match(val):
+                if DAILY_DATE_FOLDER_PATTERN.match(val):
+                    try:
+                        datetime.strptime(val, "%d-%m-%Y")
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"Invalid calendar date '{val}': {exc}. Expected valid DD-MM-YYYY date."
+                        ) from exc
                     return True
                 try:
                     p = Path(val)
@@ -387,7 +439,10 @@ class QuickReportWorkflow:
             if all(_is_dir_or_date(item) for item in items):
                 return tuple(str(item) for item in items), None
             else:
-                return None, tuple(str(item) for item in items)
+                fl_list: list[str] = []
+                for item in items:
+                    fl_list.extend([tok.strip() for tok in str(item).split(",") if tok.strip()])
+                return None, tuple(fl_list)
         else:
             raise TypeError(
                 f"Unsupported target type: {type(target)}. Expected Path, str, or Sequence[Path | str]."

@@ -12,8 +12,10 @@ import warnings
 import openpyxl
 
 from src.core.normalizers import (
+    DAILY_DATE_FOLDER_PATTERN,
     FL_PREFIX_TO_STATION,
     format_month_folder,
+    is_daily_date_folder,
     resolve_station_from_fl,
 )
 from src.quick_report.defects import MasterQr03DefectRepository
@@ -30,7 +32,7 @@ if TYPE_CHECKING:
 
 
 _resolve_station_from_fl = resolve_station_from_fl
-_DAILY_DATE_FOLDER_PATTERN = re.compile(r"^\d{2}-\d{2}-\d{4}$")
+_DAILY_DATE_FOLDER_PATTERN = DAILY_DATE_FOLDER_PATTERN
 
 
 class QuickReportExtractor:

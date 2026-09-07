@@ -278,7 +278,17 @@ def test_target_polymorphism(tmp_path: Path):
     # Case 4: Single str target (FL)
     folders, fls = workflow._resolve_target("FL001", env)
     assert folders is None
-    assert fls == ["FL001"]
+    assert fls == ("FL001",)
+
+    # Case 4b: Comma-separated str target (FLs)
+    folders, fls = workflow._resolve_target("FL001, FL002", env)
+    assert folders is None
+    assert fls == ("FL001", "FL002")
+
+    # Case 4c: Sequence[str] with comma-separated elements (FLs)
+    folders, fls = workflow._resolve_target(["FL001, FL002", "FL003"], env)
+    assert folders is None
+    assert fls == ("FL001", "FL002", "FL003")
 
     # Case 5: Invalid target type raises TypeError
     with pytest.raises(TypeError, match="Unsupported target type"):
@@ -407,21 +417,24 @@ def test_non_matching_date_formats_treated_as_fls(tmp_path: Path):
     for fmt in formats:
         folders, fls = workflow._resolve_target(fmt, env)
         assert folders is None
-        assert fls == [fmt]
+        assert fls == (fmt,)
 
         res = workflow.generate(fmt, env)
         assert res.reports_generated == 0
         assert any(f"No testsheet packages found for target: {fmt}" in err for err in res.errors)
 
-    # Any DD-MM-YYYY string matches daily date folder pattern without calendar date validation
-    folders, fls = workflow._resolve_target("32-09-2026", env)
-    assert folders == ("32-09-2026",)
-    assert fls is None
+    # Invalid calendar date DD-MM-YYYY raises ValueError
+    with pytest.raises(ValueError, match="Invalid calendar date '32-09-2026'"):
+        workflow._resolve_target("32-09-2026", env)
 
-    # When generated, missing date folder returns error outcome rather than ValueError
-    res_cal = workflow.generate("32-09-2026", env)
-    assert res_cal.reports_generated == 0
-    assert any("No testsheet packages found for target: 32-09-2026" in err for err in res_cal.errors)
+    with pytest.raises(ValueError, match="Invalid calendar date '32-09-2026'"):
+        workflow.generate("32-09-2026", env)
+
+    with pytest.raises(ValueError, match="Invalid calendar date '32-09-2026'"):
+        workflow.inspect("32-09-2026", env)
+
+    with pytest.raises(ValueError, match="Invalid calendar date '32-09-2026'"):
+        workflow._resolve_target(["32-09-2026"], env)
 
     # Valid daily date format DD-MM-YYYY resolves as folder target
     with patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[]):
@@ -833,5 +846,133 @@ def test_substation_inspection_item_station_populated(tmp_path: Path):
         item = inspection.targets[0]
         assert item.station == "ROMPIN"
         assert item.substation_name == "PE ROMPIN TEST"
+
+
+def test_comma_separated_fl_string_target(tmp_path: Path):
+    """Verify comma-separated FL string target resolves tokens and generates reports properly."""
+    env = _setup_mock_environment(tmp_path)
+    pkg1 = _make_mock_package(
+        substation_number=1, substation_name="PE SUB 1", fl="CCHL/PCE/J00059"
+    )
+    pkg2 = _make_mock_package(
+        substation_number=2, substation_name="PE SUB 2", fl="CCHL/PCE/J00060"
+    )
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    # 1. Verification of target resolution
+    target_str = "CCHL/PCE/J00059, CCHL/PCE/J00060"
+    folders, fls = workflow._resolve_target(target_str, env)
+    assert folders is None
+    assert fls == ("CCHL/PCE/J00059", "CCHL/PCE/J00060")
+
+    # 2. inspect() with comma-separated FL string
+    with (
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg1, pkg2]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
+    ):
+        inspection = workflow.inspect(target_str, env)
+        assert inspection.ready_to_generate is True
+        assert len(inspection.targets) == 2
+        fl_results = {t.functional_location for t in inspection.targets}
+        assert fl_results == {"CCHL/PCE/J00059", "CCHL/PCE/J00060"}
+
+        # 3. generate() with comma-separated FL string
+        result = workflow.generate(target_str, env)
+        assert result.is_success is True
+        assert result.reports_generated == 2
+        assert len(compiler.compiled_calls) == 2
+
+
+def test_invalid_calendar_date_raises_value_error(tmp_path: Path):
+    """Verify invalid calendar dates in DD-MM-YYYY format raise descriptive ValueError."""
+    env = _setup_mock_environment(tmp_path)
+    workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
+
+    invalid_dates = [
+        "32-09-2026",  # day 32
+        "29-02-2025",  # non-leap year Feb 29
+        "00-01-2026",  # day 00
+        "15-13-2026",  # month 13
+    ]
+
+    for inv_date in invalid_dates:
+        with pytest.raises(ValueError, match=f"Invalid calendar date '{inv_date}'"):
+            workflow._resolve_target(inv_date, env)
+
+        with pytest.raises(ValueError, match=f"Invalid calendar date '{inv_date}'"):
+            workflow.generate(inv_date, env)
+
+        with pytest.raises(ValueError, match=f"Invalid calendar date '{inv_date}'"):
+            workflow.inspect(inv_date, env)
+
+        with pytest.raises(ValueError, match=f"Invalid calendar date '{inv_date}'"):
+            workflow._resolve_target([inv_date], env)
+
+
+def test_substation_testsheet_package_fl_and_substation_name_properties():
+    """Verify SubstationTestsheetPackage convenience properties .fl and .substation_name."""
+    # 1. Full data with both ERMS name and station_name
+    pkg1 = _make_mock_package(
+        station="CAMERON HIGHLAND",
+        substation_number=1,
+        substation_name="PE ERMS NAME",
+        fl="CCHL/PCE/J00059",
+    )
+    assert pkg1.fl == "CCHL/PCE/J00059"
+    assert pkg1.substation_name == "PE ERMS NAME"
+
+    # 2. Substation name falling back to station_name
+    data2 = TestsheetData(
+        substation_number=2,
+        substation_name_erms="",
+        station_name="PE STATION FALLBACK",
+        fl_erms="FL2",
+    )
+    pkg2 = SubstationTestsheetPackage(
+        testsheet_path=Path("dummy.xlsx"),
+        unsorted_raw_data_dir=Path("dummy_raw"),
+        station="KUANTAN",
+        month="09. SEPTEMBER",
+        date_str="01-09-2026",
+        substation_number=2,
+        data=data2,
+    )
+    assert pkg2.fl == "FL2"
+    assert pkg2.substation_name == "PE STATION FALLBACK"
+
+    # 3. Substation name falling back to package station
+    data3 = TestsheetData(
+        substation_number=3,
+        substation_name_erms="",
+        station_name="",
+        fl_erms="",
+    )
+    pkg3 = SubstationTestsheetPackage(
+        testsheet_path=Path("dummy.xlsx"),
+        unsorted_raw_data_dir=Path("dummy_raw"),
+        station="ROMPIN",
+        month="09. SEPTEMBER",
+        date_str="01-09-2026",
+        substation_number=3,
+        data=data3,
+    )
+    assert pkg3.fl == ""
+    assert pkg3.substation_name == "ROMPIN"
+
+    # 4. Package without data (None)
+    pkg4 = SubstationTestsheetPackage(
+        testsheet_path=Path("dummy.xlsx"),
+        unsorted_raw_data_dir=Path("dummy_raw"),
+        station="TEMERLOH",
+        month="09. SEPTEMBER",
+        date_str="01-09-2026",
+        substation_number=4,
+        data=None,
+    )
+    assert pkg4.fl == ""
+    assert pkg4.substation_name == "TEMERLOH"
+
 
 

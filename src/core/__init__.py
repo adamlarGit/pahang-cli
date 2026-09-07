@@ -1,6 +1,7 @@
 """Core module for Pahang CLI."""
 
 from src.core.normalizers import (
+    DAILY_DATE_FOLDER_PATTERN,
     extract_background_temperature,
     format_busbar_position,
     format_cbm_reading,
@@ -13,6 +14,7 @@ from src.core.normalizers import (
     format_month_folder,
     format_temperature_float,
     format_testsheet_time,
+    is_daily_date_folder,
     normalize_date_str,
     normalize_fl_erms,
     normalize_for_csv,
@@ -23,6 +25,7 @@ from src.core.normalizers import (
 )
 
 __all__ = [
+    "DAILY_DATE_FOLDER_PATTERN",
     "extract_background_temperature",
     "format_busbar_position",
     "format_cbm_reading",
@@ -35,6 +38,7 @@ __all__ = [
     "format_month_folder",
     "format_temperature_float",
     "format_testsheet_time",
+    "is_daily_date_folder",
     "normalize_date_str",
     "normalize_fl_erms",
     "normalize_for_csv",
