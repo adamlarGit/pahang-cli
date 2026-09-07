@@ -11,6 +11,7 @@ import pytest
 from src.project.environment import ProjectEnvironment
 from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
 from src.quick_report.cbm_summary import prepare_tech_summary_rows
+from src.quick_report.compiler import WordComDocumentCompiler
 from src.quick_report.composer import QuickReportComposer
 from src.quick_report.defects import CbmDefectRecord, MasterQr03DefectRepository, ViDefectRecord
 from src.quick_report.extractor import QuickReportExtractor
@@ -570,9 +571,7 @@ def test_composer_cbm_defect_pages_with_cbm_defects(tmp_path: Path):
 
 
 def test_compile_document_word_com_success(tmp_path: Path):
-    """Verify _compile_document uses Documents.Add and Recopy & Paste to combine document parts."""
-    composer = QuickReportComposer()
-
+    """Verify WordComDocumentCompiler uses Documents.Add and Recopy & Paste to combine document parts."""
     mock_word = MagicMock()
     mock_main_doc = MagicMock()
     mock_part_doc = MagicMock()
@@ -591,7 +590,8 @@ def test_compile_document_word_com_success(tmp_path: Path):
     part1.touch()
     part2.touch()
 
-    composer._compile_document([part1, part2], output_path, word_app=mock_word)
+    compiler = WordComDocumentCompiler(word_app=mock_word)
+    compiler.compile([part1, part2], output_path)
 
     # Verification
     mock_word.Documents.Add.assert_called_once()
@@ -607,9 +607,7 @@ def test_compile_document_word_com_success(tmp_path: Path):
 
 
 def test_compile_document_word_com_cleanup_on_error(tmp_path: Path):
-    """Verify _compile_document executes cleanup (Close) and re-raises exception when COM fails."""
-    composer = QuickReportComposer()
-
+    """Verify WordComDocumentCompiler executes cleanup (Close) and re-raises exception when COM fails."""
     mock_word = MagicMock()
     mock_main_doc = MagicMock()
 
@@ -620,8 +618,9 @@ def test_compile_document_word_com_cleanup_on_error(tmp_path: Path):
     output_path = tmp_path / "output.docx"
     part1.touch()
 
+    compiler = WordComDocumentCompiler(word_app=mock_word)
     with pytest.raises(RuntimeError, match="Open failed"):
-        composer._compile_document([part1], output_path, word_app=mock_word)
+        compiler.compile([part1], output_path)
 
     # Verification of cleanup in finally block
     mock_main_doc.Close.assert_called_once_with(False)

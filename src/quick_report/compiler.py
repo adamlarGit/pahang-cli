@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import ctypes
 import gc
 import logging
 from pathlib import Path
-import sys
 import time
-from typing import Any, Protocol, Sequence, runtime_checkable
+from typing import Any, Iterator, Protocol, Sequence, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +27,6 @@ except ImportError:
 
 def _clear_clipboard() -> None:
     """Clear Windows clipboard to eliminate Word COM OLE serialization stall on document close."""
-    comp_mod = sys.modules.get("src.quick_report.composer")
-    if (
-        comp_mod
-        and hasattr(comp_mod, "_clear_clipboard")
-        and getattr(comp_mod, "_clear_clipboard") is not _clear_clipboard
-    ):
-        getattr(comp_mod, "_clear_clipboard")()
-        return
-
     for _ in range(3):
         try:
             if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "user32"):
@@ -96,56 +87,31 @@ def _paste_with_retry(rng: Any, max_attempts: int = 5, delay: float = 0.15) -> N
             time.sleep(delay)
 
 
-def _terminate_word_process(pid: int | None) -> None:
+def _terminate_word_process(pid: int | None, timeout_ms: int = 500) -> None:
     """Safely terminate Word COM process if still running in background after Quit."""
     if not pid:
         return
     try:
-        is_alive = False
         if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "kernel32"):
-            handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, pid)
+            # SYNCHRONIZE (0x00100000) | PROCESS_QUERY_LIMITED_INFORMATION (0x1000)
+            handle = ctypes.windll.kernel32.OpenProcess(0x00101000, False, pid)
             if handle:
+                wait_res = ctypes.windll.kernel32.WaitForSingleObject(handle, timeout_ms)
                 ctypes.windll.kernel32.CloseHandle(handle)
-                is_alive = True
-        else:
-            is_alive = True
+                # WAIT_OBJECT_0 = 0 (process exited cleanly on its own)
+                if wait_res == 0:
+                    return
 
-        if is_alive:
-            import subprocess
+        import subprocess
 
-            subprocess.run(
-                ["taskkill", "/F", "/PID", str(pid)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
+        subprocess.run(
+            ["taskkill", "/F", "/PID", str(pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
     except Exception:
         pass
-
-
-def _get_win32com() -> Any:
-    wf_mod = sys.modules.get("src.workflows.quick_report")
-    if wf_mod and hasattr(wf_mod, "win32com") and getattr(wf_mod, "win32com") is not win32com:
-        return getattr(wf_mod, "win32com")
-    return win32com
-
-
-def _get_pythoncom() -> Any:
-    wf_mod = sys.modules.get("src.workflows.quick_report")
-    if wf_mod and hasattr(wf_mod, "pythoncom") and getattr(wf_mod, "pythoncom") is not pythoncom:
-        return getattr(wf_mod, "pythoncom")
-    return pythoncom
-
-
-def _get_terminate_fn() -> Any:
-    wf_mod = sys.modules.get("src.workflows.quick_report")
-    if (
-        wf_mod
-        and hasattr(wf_mod, "_terminate_word_process")
-        and getattr(wf_mod, "_terminate_word_process") is not _terminate_word_process
-    ):
-        return getattr(wf_mod, "_terminate_word_process")
-    return _terminate_word_process
 
 
 @runtime_checkable
@@ -158,61 +124,22 @@ class DocumentCompiler(Protocol):
 class WordComDocumentCompiler:
     """Production adapter: assembles parts via Word COM copy/paste pipeline."""
 
-    def compile(
-        self, parts: Sequence[Path], output_path: Path, word_app: Any = None
-    ) -> Path:
-        if not parts:
-            return output_path
+    def __init__(self, word_app: Any = None) -> None:
+        self._word_app: Any = word_app
 
-        output_path = Path(output_path).resolve()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if word_app is not None:
-            main_doc = None
-            try:
-                main_doc = word_app.Documents.Add()
-                for idx, part in enumerate(parts):
-                    part_path = str(Path(part).resolve())
-                    part_doc = None
-                    try:
-                        part_doc = word_app.Documents.Open(part_path, False, True)
-                        part_doc.Content.Copy()
-
-                        rng = _collapse_and_escape_table(main_doc)
-                        if idx > 0:
-                            rng.InsertBreak(7)  # wdPageBreak = 7
-                            rng = _collapse_and_escape_table(main_doc)
-
-                        _paste_with_retry(rng)
-                    finally:
-                        _clear_clipboard()
-                        if part_doc is not None:
-                            try:
-                                part_doc.Close(False)
-                            except Exception:
-                                pass
-                            part_doc = None
-
-                main_doc.SaveAs2(str(output_path))
-                main_doc.Close(False)
-                main_doc = None
-                return output_path
-            finally:
-                _clear_clipboard()
-                if main_doc is not None:
-                    try:
-                        main_doc.Close(False)
-                    except Exception:
-                        pass
-                    main_doc = None
+    @contextmanager
+    def session(self) -> Iterator[WordComDocumentCompiler]:
+        """Context manager managing an active Word COM application session across batch runs."""
+        if self._word_app is not None:
+            yield self
+            return
 
         if not (win32com and getattr(win32com, "client", None) and pythoncom):
             raise RuntimeError("win32com is required for Quick Report compilation.")
 
         co_initialized = False
         dispatched_word = None
-        word_pid = None
-        main_doc = None
+        word_pid: int | None = None
         try:
             pythoncom.CoInitialize()
             co_initialized = True
@@ -229,13 +156,54 @@ class WordComDocumentCompiler:
             dispatched_word.Visible = False
             dispatched_word.ScreenUpdating = False
             dispatched_word.DisplayAlerts = 0
+            self._word_app = dispatched_word
 
-            main_doc = dispatched_word.Documents.Add()
+            yield self
+        finally:
+            self._word_app = None
+            if dispatched_word is not None:
+                try:
+                    dispatched_word.ScreenUpdating = True
+                except Exception:
+                    pass
+                try:
+                    dispatched_word.Quit()
+                except Exception:
+                    pass
+                del dispatched_word
+                dispatched_word = None
+                gc.collect()
+
+            if word_pid is not None:
+                _terminate_word_process(word_pid)
+
+            if co_initialized:
+                try:
+                    pythoncom.CoUninitialize()
+                except Exception:
+                    pass
+
+    def compile(self, parts: Sequence[Path], output_path: Path) -> Path:
+        """Compile document parts into final deliverable via Word COM recopy & paste."""
+        if not parts:
+            return output_path
+
+        if self._word_app is None:
+            with self.session():
+                return self.compile(parts, output_path)
+
+        output_path = Path(output_path).resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        word_app = self._word_app
+        main_doc = None
+        try:
+            main_doc = word_app.Documents.Add()
             for idx, part in enumerate(parts):
                 part_path = str(Path(part).resolve())
                 part_doc = None
                 try:
-                    part_doc = dispatched_word.Documents.Open(part_path, False, True)
+                    part_doc = word_app.Documents.Open(part_path, False, True)
                     part_doc.Content.Copy()
 
                     rng = _collapse_and_escape_table(main_doc)
@@ -265,24 +233,3 @@ class WordComDocumentCompiler:
                 except Exception:
                     pass
                 main_doc = None
-
-            if dispatched_word is not None:
-                try:
-                    dispatched_word.ScreenUpdating = True
-                except Exception:
-                    pass
-                try:
-                    dispatched_word.Quit()
-                except Exception:
-                    pass
-                dispatched_word = None
-                gc.collect()
-
-            if word_pid is not None:
-                _terminate_word_process(word_pid)
-
-            if co_initialized:
-                try:
-                    pythoncom.CoUninitialize()
-                except Exception:
-                    pass

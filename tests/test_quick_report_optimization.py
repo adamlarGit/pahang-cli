@@ -12,8 +12,8 @@ from src.core.normalizers import (
     resolve_station_code,
     resolve_station_from_fl,
 )
-from src.quick_report.compiler import WordComDocumentCompiler
-from src.quick_report.composer import QuickReportComposer, _clear_clipboard
+from src.quick_report.compiler import WordComDocumentCompiler, _clear_clipboard
+from src.quick_report.composer import QuickReportComposer
 from src.quick_report.defects import (
     CbmDefectRecord,
     MasterQr03DefectRepository,
@@ -369,7 +369,6 @@ def test_composer_clears_clipboard_on_part_close(tmp_path: Path):
     p1.touch()
     out = tmp_path / "out.docx"
 
-    composer = QuickReportComposer()
     mock_word = MagicMock()
     mock_main = MagicMock()
     mock_part = MagicMock()
@@ -381,8 +380,10 @@ def test_composer_clears_clipboard_on_part_close(tmp_path: Path):
     mock_main.Tables.Count = 0
     mock_rng.Information.return_value = False
 
-    with patch("src.quick_report.composer._clear_clipboard") as mock_clear_clip:
-        composer._compile_document([p1], out, word_app=mock_word)
+    compiler = WordComDocumentCompiler(word_app=mock_word)
+
+    with patch("src.quick_report.compiler._clear_clipboard") as mock_clear_clip:
+        compiler.compile([p1], out)
         # Should be called at least after part paste and in outer finally
         assert mock_clear_clip.call_count >= 2
 

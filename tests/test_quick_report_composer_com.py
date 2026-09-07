@@ -2,19 +2,24 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
 
-from src.quick_report.composer import QuickReportComposer, _paste_with_retry
+from src.quick_report.compiler import (
+    DocumentCompiler,
+    WordComDocumentCompiler,
+    _clear_clipboard,
+    _collapse_and_escape_table,
+    _paste_with_retry,
+)
+from src.quick_report.composer import QuickReportComposer
 
 
 def test_compile_document_com_recopy_paste(tmp_path: Path):
-    """Verify _compile_document calls Add(), Open(), Copy(), Paste(), SaveAs2() when compiled."""
+    """Verify WordComDocumentCompiler calls Add(), Open(), Copy(), Paste(), SaveAs2() when compiled."""
     p1 = tmp_path / "part1.docx"
     p2 = tmp_path / "part2.docx"
     out = tmp_path / "out.docx"
 
     p1.touch()
     p2.touch()
-
-    composer = QuickReportComposer()
 
     mock_word = MagicMock()
     mock_main_doc = MagicMock()
@@ -28,7 +33,8 @@ def test_compile_document_com_recopy_paste(tmp_path: Path):
     mock_main_doc.Tables.Count = 0
     mock_rng.Information.return_value = False
 
-    composer._compile_document([p1, p2], out, word_app=mock_word)
+    compiler = WordComDocumentCompiler(word_app=mock_word)
+    compiler.compile([p1, p2], out)
 
     mock_word.Documents.Add.assert_called_once()
     assert mock_word.Documents.Open.call_count == 2
@@ -44,12 +50,10 @@ def test_compile_document_com_recopy_paste(tmp_path: Path):
 
 
 def test_compile_document_with_external_word_app(tmp_path: Path):
-    """Verify _compile_document reuses provided word_app without quitting it."""
+    """Verify WordComDocumentCompiler reuses provided word_app without quitting it."""
     p1 = tmp_path / "part1.docx"
     out = tmp_path / "out.docx"
     p1.touch()
-
-    composer = QuickReportComposer()
 
     mock_word = MagicMock()
     mock_main_doc = MagicMock()
@@ -62,7 +66,8 @@ def test_compile_document_with_external_word_app(tmp_path: Path):
     mock_main_doc.Tables.Count = 0
     mock_rng.Information.return_value = False
 
-    composer._compile_document([p1], out, word_app=mock_word)
+    compiler = WordComDocumentCompiler(word_app=mock_word)
+    compiler.compile([p1], out)
 
     mock_word.Documents.Add.assert_called_once()
     mock_part_doc.Content.Copy.assert_called_once()
@@ -70,16 +75,20 @@ def test_compile_document_with_external_word_app(tmp_path: Path):
     assert mock_rng.PasteAndFormat.call_count == 1 or mock_rng.Paste.call_count == 1
     mock_main_doc.SaveAs2.assert_called_once_with(str(out.resolve()))
     mock_main_doc.Close.assert_called_once_with(False)
+    # Word app must not be quit when provided externally
+    mock_word.Quit.assert_not_called()
 
 
 def test_compile_document_raises_when_win32com_missing(tmp_path: Path):
-    """Verify _compile_document raises RuntimeError when word_app is None."""
-    composer = QuickReportComposer()
+    """Verify compile() raises RuntimeError when win32com is missing."""
+    compiler = WordComDocumentCompiler()
     p1 = tmp_path / "part1.docx"
     out = tmp_path / "out.docx"
+    p1.touch()
 
-    with pytest.raises(RuntimeError, match="word_app is required for Quick Report compilation."):
-        composer._compile_document([p1], out, word_app=None)
+    with patch("src.quick_report.compiler.win32com", None):
+        with pytest.raises(RuntimeError, match="win32com is required for Quick Report compilation."):
+            compiler.compile([p1], out)
 
 
 def test_paste_with_retry_success_first_attempt():
@@ -115,14 +124,12 @@ def test_paste_with_retry_fails_and_reraises():
 
 
 def test_compile_document_escapes_table_cell(tmp_path: Path):
-    """Verify _compile_document escapes table cells when rng is inside a table."""
+    """Verify WordComDocumentCompiler escapes table cells when rng is inside a table."""
     p1 = tmp_path / "part1.docx"
     p2 = tmp_path / "part2.docx"
     out = tmp_path / "out.docx"
     p1.touch()
     p2.touch()
-
-    composer = QuickReportComposer()
 
     mock_word = MagicMock()
     mock_main_doc = MagicMock()
@@ -137,11 +144,21 @@ def test_compile_document_escapes_table_cell(tmp_path: Path):
     mock_main_doc.Tables.return_value = mock_table
     mock_rng.Information.return_value = True  # wdWithInTable = True
 
-    composer._compile_document([p1, p2], out, word_app=mock_word)
+    compiler = WordComDocumentCompiler(word_app=mock_word)
+    compiler.compile([p1, p2], out)
 
     # Verify InsertParagraphAfter was called to escape table cell
     assert mock_table.Range.InsertParagraphAfter.call_count >= 2
     mock_main_doc.Tables.assert_called_with(1)
+
+
+def test_composer_delegates_to_compiler_without_compile_document():
+    """Verify QuickReportComposer delegates to compiler without residual _compile_document method."""
+    mock_compiler = MagicMock(spec=DocumentCompiler)
+    composer = QuickReportComposer(compiler=mock_compiler)
+
+    assert not hasattr(composer, "_compile_document")
+    assert composer.compiler is mock_compiler
 
 
 def _create_mock_template(path: Path, is_table: bool = False, rows: int = 1, cols: int = 1) -> Path:

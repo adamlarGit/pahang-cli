@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Sequence
@@ -9,10 +10,14 @@ from typing import TYPE_CHECKING, Any, Callable, Sequence
 from src.quick_report.compiler import (
     DocumentCompiler,
     WordComDocumentCompiler,
-    _terminate_word_process,
-    pythoncom,
-    win32com,
 )
+
+try:
+    import pythoncom
+    import win32com.client
+except ImportError:
+    pythoncom = None
+    win32com = None
 from src.quick_report.composer import QuickReportComposer
 from src.quick_report.extractor import QuickReportExtractor
 from src.quick_report.filter import QuickReportFilter
@@ -51,7 +56,13 @@ class QuickReportWorkflow:
         transformer: QuickReportTransformer | None = None,
         composer: QuickReportComposer | None = None,
     ) -> None:
-        self._compiler = compiler or WordComDocumentCompiler()
+        if compiler is not None:
+            self._compiler = compiler
+        elif composer is not None and getattr(composer, "compiler", None) is not None:
+            self._compiler = composer.compiler
+        else:
+            self._compiler = WordComDocumentCompiler()
+
         self._extractor = extractor or QuickReportExtractor()
         self._filter = filter_stage or QuickReportFilter()
         self._transformer = transformer or QuickReportTransformer()
@@ -145,33 +156,39 @@ class QuickReportWorkflow:
         warnings: list[str] = []
         errors: list[str] = []
 
-        for i, pkg in enumerate(filtered_packages, start=1):
-            station_name = (
-                getattr(pkg, "station", "")
-                or getattr(getattr(pkg, "data", None), "station_name", "")
-                or f"substation {getattr(pkg, 'substation_number', '?')}"
-            )
-            if progress_sink:
-                progress_sink(
-                    f"[{i}/{len(filtered_packages)}] Generating quick report for {station_name}..."
-                )
+        session_fn = getattr(self._compiler, "session", None)
+        session_cm = session_fn() if callable(session_fn) else nullcontext()
+        if not hasattr(session_cm, "__enter__"):
+            session_cm = nullcontext()
 
-            try:
-                cbm_defects, vi_defects = self._extractor.extract_defects(pkg, environment)
-                plan = self._transformer.transform(
-                    pkg=pkg,
-                    cbm_defects=cbm_defects,
-                    vi_defects=vi_defects,
-                    environment=environment,
-                    cond_template_path=request.substation_condition_template_path,
+        with session_cm:
+            for i, pkg in enumerate(filtered_packages, start=1):
+                station_name = (
+                    getattr(pkg, "station", "")
+                    or getattr(getattr(pkg, "data", None), "station_name", "")
+                    or f"substation {getattr(pkg, 'substation_number', '?')}"
                 )
-                out_path = self._composer.load(plan)
-                if out_path:
-                    generated_paths.append(out_path)
-            except Exception as e:
-                # SubstationIsolatedBatchResiliencePolicy
-                errors.append(f"Failed to process {station_name}: {e}")
-                logger.exception(f"Failed to process {station_name}")
+                if progress_sink:
+                    progress_sink(
+                        f"[{i}/{len(filtered_packages)}] Generating quick report for {station_name}..."
+                    )
+
+                try:
+                    cbm_defects, vi_defects = self._extractor.extract_defects(pkg, environment)
+                    plan = self._transformer.transform(
+                        pkg=pkg,
+                        cbm_defects=cbm_defects,
+                        vi_defects=vi_defects,
+                        environment=environment,
+                        cond_template_path=request.substation_condition_template_path,
+                    )
+                    out_path = self._composer.load(plan)
+                    if out_path:
+                        generated_paths.append(out_path)
+                except Exception as e:
+                    # SubstationIsolatedBatchResiliencePolicy
+                    errors.append(f"Failed to process {station_name}: {e}")
+                    logger.exception(f"Failed to process {station_name}")
 
         return self._audit_and_build_result(generated_paths, warnings, errors)
 

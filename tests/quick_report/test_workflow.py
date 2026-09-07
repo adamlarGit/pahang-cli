@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Sequence
+from typing import Iterator, Sequence
 from unittest.mock import MagicMock, patch
 from docx import Document
 import pytest
@@ -25,6 +26,10 @@ class FakeDocumentCompiler:
 
     def __init__(self) -> None:
         self.compiled_calls: list[tuple[tuple[Path, ...], Path]] = []
+
+    @contextmanager
+    def session(self) -> Iterator[FakeDocumentCompiler]:
+        yield self
 
     def compile(self, parts: Sequence[Path], output_path: Path) -> Path:
         output_path = Path(output_path).resolve()
@@ -91,6 +96,11 @@ def test_compiler_protocol_conformance():
 
     com = WordComDocumentCompiler()
     assert isinstance(com, DocumentCompiler)
+
+    class NonConformingCompiler:
+        pass
+
+    assert not isinstance(NonConformingCompiler(), DocumentCompiler)
 
 
 def test_inspect_returns_targets_for_known_fl(tmp_path: Path):
@@ -262,3 +272,112 @@ def test_target_polymorphism(tmp_path: Path):
     # Case 4: Invalid target type raises TypeError
     with pytest.raises(TypeError, match="Unsupported target type"):
         workflow._resolve_request(12345, env)  # type: ignore[arg-type]
+
+
+def test_fake_document_compiler_standalone_and_session(tmp_path: Path):
+    """Verify FakeDocumentCompiler produces valid stub files and supports session context manager headlessly."""
+    compiler = FakeDocumentCompiler()
+    p1 = tmp_path / "part1.docx"
+    p1.touch()
+    out1 = tmp_path / "out1.docx"
+    out2 = tmp_path / "out2.docx"
+
+    with compiler.session() as sess:
+        assert sess is compiler
+        res1 = compiler.compile([p1], out1)
+        res2 = compiler.compile([p1], out2)
+
+    assert res1 == out1
+    assert res2 == out2
+    assert out1.read_bytes().startswith(b"PK\x03\x04")
+    assert out2.read_bytes().startswith(b"PK\x03\x04")
+    assert len(compiler.compiled_calls) == 2
+
+
+def test_word_com_document_compiler_session_batch_reuse(tmp_path: Path):
+    """Verify WordComDocumentCompiler batch session reuses single Word app and isolates ActiveX containers."""
+    p1 = tmp_path / "part1.docx"
+    p1.touch()
+    out1 = tmp_path / "out1.docx"
+    out2 = tmp_path / "out2.docx"
+
+    compiler = WordComDocumentCompiler()
+    mock_word = MagicMock()
+    mock_word.Hwnd = 5555
+    mock_doc1 = MagicMock()
+    mock_doc2 = MagicMock()
+    mock_part = MagicMock()
+    mock_rng = MagicMock()
+
+    mock_word.Documents.Add.side_effect = [mock_doc1, mock_doc2]
+    mock_word.Documents.Open.return_value = mock_part
+    mock_doc1.Content = mock_rng
+    mock_doc2.Content = mock_rng
+    mock_doc1.Tables.Count = 0
+    mock_doc2.Tables.Count = 0
+    mock_rng.Information.return_value = False
+
+    mock_win32 = MagicMock()
+    mock_win32.client.Dispatch.return_value = mock_word
+
+    with (
+        patch("src.quick_report.compiler.win32com", mock_win32),
+        patch("src.quick_report.compiler.pythoncom") as mock_pythoncom,
+        patch("win32process.GetWindowThreadProcessId", return_value=(0, 5555)),
+        patch("src.quick_report.compiler._terminate_word_process") as mock_terminate,
+        patch("src.quick_report.compiler._clear_clipboard") as mock_clear_clip,
+    ):
+        with compiler.session() as sess:
+            assert sess is compiler
+            assert compiler._word_app is mock_word
+            assert mock_word.Visible is False
+            assert mock_word.ScreenUpdating is False
+            assert mock_word.DisplayAlerts == 0
+
+            # Compile report 1
+            compiler.compile([p1], out1)
+            # Compile report 2
+            compiler.compile([p1], out2)
+
+            # Word app must NOT be quit between compilations
+            mock_word.Quit.assert_not_called()
+
+        # After session exit
+        assert compiler._word_app is None
+        mock_word.Quit.assert_called_once()
+        mock_terminate.assert_called_once_with(5555)
+        mock_pythoncom.CoUninitialize.assert_called_once()
+
+    # Verify 2 distinct Add() calls creating fresh OLE containers per ADR 0002
+    assert mock_word.Documents.Add.call_count == 2
+    mock_doc1.SaveAs2.assert_called_once_with(str(out1.resolve()))
+    mock_doc2.SaveAs2.assert_called_once_with(str(out2.resolve()))
+    mock_doc1.Close.assert_called_once_with(False)
+    mock_doc2.Close.assert_called_once_with(False)
+    # Clipboard cleared between parts and on doc close
+    assert mock_clear_clip.call_count >= 4
+
+
+def test_word_com_document_compiler_session_teardown_on_error(tmp_path: Path):
+    """Verify WordComDocumentCompiler session cleans up resources when an exception is raised."""
+    compiler = WordComDocumentCompiler()
+    mock_word = MagicMock()
+    mock_word.Hwnd = 7777
+    mock_win32 = MagicMock()
+    mock_win32.client.Dispatch.return_value = mock_word
+
+    with (
+        patch("src.quick_report.compiler.win32com", mock_win32),
+        patch("src.quick_report.compiler.pythoncom") as mock_pythoncom,
+        patch("win32process.GetWindowThreadProcessId", return_value=(0, 7777)),
+        patch("src.quick_report.compiler._terminate_word_process") as mock_terminate,
+    ):
+        with pytest.raises(RuntimeError, match="Batch abort"):
+            with compiler.session():
+                raise RuntimeError("Batch abort")
+
+        assert compiler._word_app is None
+        mock_word.Quit.assert_called_once()
+        mock_terminate.assert_called_once_with(7777)
+        mock_pythoncom.CoUninitialize.assert_called_once()
+

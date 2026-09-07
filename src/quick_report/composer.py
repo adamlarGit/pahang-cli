@@ -6,17 +6,11 @@ import gc
 import logging
 from pathlib import Path
 import shutil
-from typing import Any, Sequence
+from typing import Any
 
 from src.quick_report.cbm_defect_pages import generate_cbm_defect_pages
 from src.quick_report.cbm_summary import generate_cbm_tech_summary
-from src.quick_report.compiler import (
-    DocumentCompiler,
-    WordComDocumentCompiler,
-    _clear_clipboard,
-    _collapse_and_escape_table,
-    _paste_with_retry,
-)
+from src.quick_report.compiler import DocumentCompiler, WordComDocumentCompiler
 from src.quick_report.front_page import generate_front_page
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.sticker_page import generate_sticker_page
@@ -42,8 +36,12 @@ class QuickReportComposer:
 
         try:
             parts = self._generate_parts(plan, temp_dir)
-            if word_app is not None:
-                self._compile_document(parts, plan.final_output_path, word_app=word_app)
+            if word_app is not None and getattr(self.compiler, "_word_app", None) is None:
+                self.compiler._word_app = word_app  # type: ignore[union-attr]
+                try:
+                    self.compiler.compile(parts, plan.final_output_path)
+                finally:
+                    self.compiler._word_app = None  # type: ignore[union-attr]
             else:
                 self.compiler.compile(parts, plan.final_output_path)
         finally:
@@ -138,21 +136,3 @@ class QuickReportComposer:
         )
 
         return parts
-
-    def _compile_document(
-        self, parts: Sequence[Path], output_path: Path, word_app: Any = None
-    ) -> None:
-        """Compile document parts into final output file via compiler."""
-        if not parts:
-            return
-        if word_app is None and isinstance(self.compiler, WordComDocumentCompiler):
-            raise RuntimeError("word_app is required for Quick Report compilation.")
-
-        if hasattr(self.compiler, "compile"):
-            import inspect
-
-            sig = inspect.signature(self.compiler.compile)
-            if "word_app" in sig.parameters:
-                self.compiler.compile(parts, output_path, word_app=word_app)
-            else:
-                self.compiler.compile(parts, output_path)
