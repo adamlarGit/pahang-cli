@@ -30,8 +30,6 @@ if TYPE_CHECKING:
 
 
 DAILY_DATE_FOLDER_PATTERN = re.compile(r"^\d{2}-\d{2}-\d{4}$")
-_resolve_station_from_fl = resolve_station_from_fl
-_DAILY_DATE_FOLDER_PATTERN = DAILY_DATE_FOLDER_PATTERN
 
 
 class QuickReportExtractor:
@@ -62,7 +60,7 @@ class QuickReportExtractor:
 
                 if candidate.is_absolute() and candidate.is_dir():
                     target_dirs.append(candidate)
-                elif _DAILY_DATE_FOLDER_PATTERN.match(folder_str):
+                elif DAILY_DATE_FOLDER_PATTERN.match(folder_str):
                     for p in sorted(testsheet_dir.rglob(folder_str)):
                         if p.is_dir() and p not in target_dirs:
                             target_dirs.append(p)
@@ -73,7 +71,7 @@ class QuickReportExtractor:
                     if flat_path.is_dir() and flat_path not in target_dirs:
                         target_dirs.append(flat_path)
 
-                if not target_dirs and not _DAILY_DATE_FOLDER_PATTERN.match(folder_str):
+                if not target_dirs:
                     raise FileNotFoundError(
                         f"Requested target folder does not exist: '{folder_str}' "
                         f"(checked: {candidate}, {testsheet_dir / folder_str})"

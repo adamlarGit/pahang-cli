@@ -260,6 +260,12 @@ class QuickReportAction(ProjectWorkflowAction):
 
             date_str = selected_path.name
             inspection = workflow.inspect(date_str, environment)
+            if inspection.missing_templates:
+                print(f"Cannot generate Quick Report: {len(inspection.missing_templates)} required template(s) missing:")
+                for tpl in inspection.missing_templates:
+                    print(f"  - {tpl}")
+                return None
+
             if inspection.errors and not inspection.targets:
                 print(f"Inspection found {len(inspection.errors)} error(s):")
                 for err in inspection.errors:

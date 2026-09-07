@@ -100,7 +100,6 @@ class QuickReportWorkflow:
             environment,
             station=station,
             condition_template=condition_template,
-            progress_sink=progress_sink,
         )
 
         if inspection.missing_templates:
@@ -131,7 +130,7 @@ class QuickReportWorkflow:
 
         with session_cm:
             for i, plan in enumerate(plans, start=1):
-                station_name = self._resolve_station_display_name(plan.package)
+                station_name = self._resolve_substation_display_name(plan.package)
                 if progress_sink:
                     progress_sink(
                         f"[{i}/{len(plans)}] Generating quick report for {station_name}..."
@@ -172,7 +171,6 @@ class QuickReportWorkflow:
         *,
         station: str | Sequence[str] | None = None,
         condition_template: Path | None = None,
-        progress_sink: ProgressSink | None = None,
     ) -> tuple[QuickReportInspection, list[QuickReportStationPlan]]:
         """Synthesize dry-run discovery, filtering, and defect transformation."""
         if environment is None:
@@ -220,7 +218,7 @@ class QuickReportWorkflow:
             warnings.append(f"No testsheet packages found for target: {target}")
 
         for pkg in filtered_packages:
-            station_name = self._resolve_station_display_name(pkg)
+            station_name = self._resolve_substation_display_name(pkg)
             try:
                 cbm_defects, vi_defects = self._extractor.extract_defects(pkg, environment)
                 plan = self._transformer.transform(
@@ -232,7 +230,7 @@ class QuickReportWorkflow:
                 )
                 plans.append(plan)
 
-                sub_name = sanitize_filename(self._resolve_station_display_name(pkg))
+                sub_name = sanitize_filename(self._resolve_substation_display_name(pkg))
                 fl_name = self._resolve_fl(pkg)
 
                 stem = (
@@ -281,8 +279,8 @@ class QuickReportWorkflow:
                 pass
         return None
 
-    def _resolve_station_display_name(self, pkg: SubstationTestsheetPackage) -> str:
-        """Return canonical station display name or fallback for progress and logging."""
+    def _resolve_substation_display_name(self, pkg: SubstationTestsheetPackage) -> str:
+        """Return canonical substation display name or fallback for progress and logging."""
         if getattr(pkg, "data", None):
             name = pkg.data.substation_name_erms or pkg.data.station_name or pkg.station
             if name:
@@ -291,6 +289,8 @@ class QuickReportWorkflow:
             return str(pkg.station)
         sub_num = getattr(pkg, "substation_number", None)
         return f"substation {sub_num}" if sub_num is not None else "unknown substation"
+
+    _resolve_station_display_name = _resolve_substation_display_name
 
     def _resolve_fl(self, pkg: SubstationTestsheetPackage) -> str:
         """Return ERMS functional location string if available."""

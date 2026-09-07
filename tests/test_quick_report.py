@@ -248,6 +248,9 @@ def test_extractor_raises_for_missing_folder(tmp_path: Path):
     with pytest.raises(FileNotFoundError, match="Requested target folder does not exist"):
         extractor.extract(env, folders=["nonexistent_folder"])
 
+    with pytest.raises(FileNotFoundError, match="Requested target folder does not exist"):
+        extractor.extract(env, folders=["01-09-2026"])
+
 
 def test_transformer_output_dir_resolution(tmp_path: Path):
     """Verify 3-tier Pahang output directory structure in QuickReportTransformer._resolve_output_dir."""

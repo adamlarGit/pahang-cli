@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import Sequence
 from unittest.mock import MagicMock, patch
 from docx import Document
 import pytest
 
 from src.project.environment import ProjectEnvironment
-from src.quick_report.compiler import DocumentCompiler, WordComDocumentCompiler
+from src.quick_report import (
+    DocumentCompiler,
+    FakeDocumentCompiler,
+    WordComDocumentCompiler,
+)
 from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
 from src.testsheet.models import SubstationTestsheetPackage, TestsheetData
 from src.workflows.models import (
@@ -19,25 +22,6 @@ from src.workflows.models import (
     SubstationInspectionItem,
 )
 from src.workflows.quick_report import QuickReportWorkflow
-
-
-class FakeDocumentCompiler:
-    """Test adapter: records parts and writes a minimal valid .docx stub to output_path."""
-
-    def __init__(self) -> None:
-        self.compiled_calls: list[tuple[tuple[Path, ...], Path]] = []
-
-    @contextmanager
-    def session(self) -> Iterator[FakeDocumentCompiler]:
-        yield self
-
-    def compile(self, parts: Sequence[Path], output_path: Path) -> Path:
-        output_path = Path(output_path).resolve()
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        # Minimal zip header bytes simulating a .docx container
-        output_path.write_bytes(b"PK\x03\x04stub_docx_payload")
-        self.compiled_calls.append((tuple(parts), output_path))
-        return output_path
 
 
 def _make_mock_package(
@@ -914,7 +898,7 @@ def test_invalid_calendar_date_raises_value_error(tmp_path: Path):
 
 
 def test_substation_testsheet_package_convenience_properties():
-    """Verify QuickReportWorkflow helpers ._resolve_fl and ._resolve_station_display_name."""
+    """Verify QuickReportWorkflow helpers ._resolve_fl and ._resolve_substation_display_name."""
     workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
     # 1. Full data with both ERMS name and station_name
     pkg1 = _make_mock_package(
@@ -924,6 +908,7 @@ def test_substation_testsheet_package_convenience_properties():
         fl="CCHL/PCE/J00059",
     )
     assert workflow._resolve_fl(pkg1) == "CCHL/PCE/J00059"
+    assert workflow._resolve_substation_display_name(pkg1) == "PE ERMS NAME"
     assert workflow._resolve_station_display_name(pkg1) == "PE ERMS NAME"
 
     # 2. Substation name falling back to station_name
@@ -943,6 +928,7 @@ def test_substation_testsheet_package_convenience_properties():
         data=data2,
     )
     assert workflow._resolve_fl(pkg2) == "FL2"
+    assert workflow._resolve_substation_display_name(pkg2) == "PE STATION FALLBACK"
     assert workflow._resolve_station_display_name(pkg2) == "PE STATION FALLBACK"
 
     # 3. Substation name falling back to package station
@@ -962,6 +948,7 @@ def test_substation_testsheet_package_convenience_properties():
         data=data3,
     )
     assert workflow._resolve_fl(pkg3) == ""
+    assert workflow._resolve_substation_display_name(pkg3) == "ROMPIN"
     assert workflow._resolve_station_display_name(pkg3) == "ROMPIN"
 
     # 4. Package without data (None)
@@ -975,6 +962,7 @@ def test_substation_testsheet_package_convenience_properties():
         data=None,
     )
     assert workflow._resolve_fl(pkg4) == ""
+    assert workflow._resolve_substation_display_name(pkg4) == "TEMERLOH"
     assert workflow._resolve_station_display_name(pkg4) == "TEMERLOH"
 
 

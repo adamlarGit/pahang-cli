@@ -88,6 +88,34 @@ def test_quick_report_action_folder_selection(mock_env: ProjectEnvironment, tmp_
                     assert mock_generate.call_args[0][0] == "01-01-2026"
 
 
+def test_quick_report_action_folder_selection_missing_templates(
+    mock_env: ProjectEnvironment, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Verify QuickReportAction alerts and returns early when inspection reveals missing templates."""
+    action = QuickReportAction("Generate Quick Report")
+    target_folder = tmp_path / "TESTSHEET" / "KUANTAN" / "2026-01 (Jan)" / "01-01-2026"
+
+    mock_insp = QuickReportInspection(
+        targets=(
+            SubstationInspectionItem(1, "PE 1", "FL1", "", "", Path("out1"), 0, 0, 0, station="KUANTAN"),
+        ),
+        missing_templates=("VI front page template missing at: /path/to/missing.docx",),
+        warnings=(),
+        errors=(),
+    )
+
+    with patch("src.cli_selectors.select_one", return_value="folder"):
+        with patch("src.cli_selectors.select_pahang_date_folder", return_value=target_folder):
+            with patch("src.workflows.quick_report.QuickReportWorkflow.inspect", return_value=mock_insp):
+                with patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate:
+                    res = action.execute(mock_env)
+                    assert res is None
+                    mock_generate.assert_not_called()
+                    out = capsys.readouterr().out
+                    assert "Cannot generate Quick Report: 1 required template(s) missing:" in out
+                    assert "VI front page template missing" in out
+
+
 def test_quick_report_action_folder_selection_cancel(mock_env: ProjectEnvironment) -> None:
     action = QuickReportAction("Generate Quick Report")
 

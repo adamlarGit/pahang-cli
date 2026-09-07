@@ -24,6 +24,12 @@ try:
 except ImportError:
     pywintypes = None
 
+__all__ = [
+    "DocumentCompiler",
+    "FakeDocumentCompiler",
+    "WordComDocumentCompiler",
+]
+
 
 def _clear_clipboard() -> None:
     """Clear Windows clipboard to eliminate Word COM OLE serialization stall on document close."""
@@ -121,6 +127,24 @@ class DocumentCompiler(Protocol):
     def compile(self, parts: Sequence[Path], output_path: Path) -> Path: ...
 
 
+class FakeDocumentCompiler:
+    """Headless test adapter conforming to DocumentCompiler: writes stub bytes."""
+
+    def __init__(self) -> None:
+        self.compiled_calls: list[tuple[tuple[Path, ...], Path]] = []
+
+    @contextmanager
+    def session(self) -> Iterator[FakeDocumentCompiler]:
+        yield self
+
+    def compile(self, parts: Sequence[Path], output_path: Path) -> Path:
+        output_path = Path(output_path).resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"PK\x03\x04stub_docx_payload")
+        self.compiled_calls.append((tuple(parts), output_path))
+        return output_path
+
+
 class WordComDocumentCompiler:
     """Production adapter: assembles parts via Word COM copy/paste pipeline."""
 
@@ -148,6 +172,17 @@ class WordComDocumentCompiler:
                 import win32process
 
                 hwnd = getattr(dispatched_word, "Hwnd", None)
+                if not hwnd:
+                    try:
+                        hwnd = getattr(dispatched_word.ActiveWindow, "Hwnd", None)
+                    except Exception:
+                        pass
+                if not hwnd:
+                    try:
+                        import win32gui
+                        hwnd = win32gui.FindWindow("OpusApp", None)
+                    except Exception:
+                        pass
                 if hwnd:
                     _, word_pid = win32process.GetWindowThreadProcessId(hwnd)
             except Exception:
