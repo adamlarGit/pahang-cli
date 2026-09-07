@@ -15,7 +15,6 @@ from src.core.normalizers import (
     DAILY_DATE_FOLDER_PATTERN,
     FL_PREFIX_TO_STATION,
     format_month_folder,
-    is_daily_date_folder,
     resolve_station_from_fl,
 )
 from src.quick_report.defects import MasterQr03DefectRepository

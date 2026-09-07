@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 from pathlib import Path
-import re
 from typing import TYPE_CHECKING, Callable
 
 from src import cli_selectors

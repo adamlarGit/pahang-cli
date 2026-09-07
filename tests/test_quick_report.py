@@ -169,8 +169,8 @@ def test_workflow_error_isolation(mock_repo_cls, tmp_path: Path):
     workflow = QuickReportWorkflow(extractor=mock_extractor, composer=mock_composer)
 
     with (
-        patch("src.workflows.quick_report.win32com"),
-        patch("src.workflows.quick_report.pythoncom"),
+        patch("src.quick_report.compiler.win32com"),
+        patch("src.quick_report.compiler.pythoncom"),
     ):
         result = workflow.generate("01-01-2026", env)
 
@@ -850,8 +850,8 @@ def test_quick_report_fl_mode_fl_erms_matching(monkeypatch, tmp_path: Path):
 
     workflow = QuickReportWorkflow(composer=mock_composer)
     with (
-        patch("src.workflows.quick_report.win32com"),
-        patch("src.workflows.quick_report.pythoncom"),
+        patch("src.quick_report.compiler.win32com"),
+        patch("src.quick_report.compiler.pythoncom"),
         patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
     ):
         result = workflow.generate(["CCHL/PCE/J00059"], env)
@@ -906,8 +906,8 @@ def test_workflow_fetches_defects_from_repository(tmp_path: Path):
     mock_composer.load.side_effect = spy_load
 
     with (
-        patch("src.workflows.quick_report.win32com"),
-        patch("src.workflows.quick_report.pythoncom"),
+        patch("src.quick_report.compiler.win32com"),
+        patch("src.quick_report.compiler.pythoncom"),
         patch("src.quick_report.extractor.SubstationTestsheetRepository") as MockRepo,
         patch(
             "src.quick_report.extractor.MasterQr03DefectRepository"

@@ -199,6 +199,7 @@ def test_generate_produces_result_for_known_fl(tmp_path: Path):
 
     assert isinstance(result, QuickReportResult)
     assert result.is_success is True
+    assert result.is_successful is True
     assert result.reports_generated == 1
     assert len(result.generated_paths) == 1
     assert len(result.errors) == 0
@@ -236,6 +237,7 @@ def test_generate_batch_resilience_continues_past_station_failure(tmp_path: Path
     assert len(result.errors) == 1
     assert "Database connection corrupted" in result.errors[0]
     assert result.is_success is False  # is_success requires zero errors
+    assert result.is_successful is False
 
 
 def test_generate_returns_error_when_no_packages_found(tmp_path: Path):

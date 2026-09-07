@@ -20,6 +20,7 @@ Refactor Quick Report into a deep module (`QuickReportWorkflow`) exposing exactl
    - `QuickReportWorkflow.generate(target: ReportTarget, environment: ProjectEnvironment, *, station: str | Sequence[str] | None = None, condition_template: Path | None = None, progress_sink: ProgressSink | None = None) -> QuickReportResult`
    - `QuickReportWorkflow.inspect(target: ReportTarget, environment: ProjectEnvironment, *, station: str | Sequence[str] | None = None, condition_template: Path | None = None) -> QuickReportInspection`
    - `ReportTarget` polymorphically accepts a `Path`, date `str` (`DD-MM-YYYY`), single or comma-separated functional location `str` (e.g. `"CCHL/PCE/J00059, CCHL/PCE/J00060"`), or sequence of `Path` / functional location `str`.
+   - `QuickReportResult` exposes `is_success` / `is_successful` boolean properties to standardize outcome checking across workflow models.
 2. **Unified Planning Pipeline (`_plan()`)**:
    - Discovery, station filtering, and defect transformation are unified in `_plan()`.
    - `inspect()` executes `_plan()` to verify targets, defect counts, stems, and required templates without launching Microsoft Word or writing to disk.

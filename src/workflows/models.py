@@ -150,6 +150,11 @@ class QuickReportResult:
     def is_success(self) -> bool:
         return len(self.errors) == 0 and self.reports_generated > 0
 
+    @property
+    def is_successful(self) -> bool:
+        """Standardized alias for is_success across workflow models."""
+        return self.is_success
+
 
 @dataclass(frozen=True)
 class WhatsAppReportRequest:

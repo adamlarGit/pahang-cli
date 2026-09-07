@@ -6,24 +6,13 @@ from contextlib import nullcontext
 from datetime import datetime
 import logging
 from pathlib import Path
-import re
-from typing import TYPE_CHECKING, Any, Callable, Sequence
+from typing import TYPE_CHECKING, Callable, Sequence
 
-from src.core.normalizers import (
-    DAILY_DATE_FOLDER_PATTERN,
-    is_daily_date_folder,
-)
+from src.core.normalizers import DAILY_DATE_FOLDER_PATTERN
 from src.quick_report.compiler import (
     DocumentCompiler,
     WordComDocumentCompiler,
 )
-
-try:
-    import pythoncom
-    import win32com.client
-except ImportError:
-    pythoncom = None
-    win32com = None
 from src.quick_report.composer import QuickReportComposer
 from src.quick_report.extractor import QuickReportExtractor
 from src.quick_report.models import QuickReportStationPlan
@@ -46,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 ReportTarget = Path | str | Sequence[Path] | Sequence[str] | Sequence[Path | str]
 ProgressSink = Callable[[str], None]
-_DAILY_DATE_FOLDER_PATTERN = DAILY_DATE_FOLDER_PATTERN
 
 
 class QuickReportWorkflow:
@@ -316,19 +304,10 @@ class QuickReportWorkflow:
     def _resolve_station_display_name(self, pkg: SubstationTestsheetPackage) -> str:
         """Return canonical station display name or fallback for progress and logging."""
         sub_name = getattr(pkg, "substation_name", None)
-        if isinstance(sub_name, str) and sub_name:
-            return sub_name
-        data = getattr(pkg, "data", None)
-        if data is not None:
-            name_erms = getattr(data, "substation_name_erms", None)
-            if isinstance(name_erms, str) and name_erms:
-                return name_erms
-            st_name = getattr(data, "station_name", None)
-            if isinstance(st_name, str) and st_name:
-                return st_name
         station = getattr(pkg, "station", None)
-        if isinstance(station, str) and station:
-            return station
+        name = sub_name if isinstance(sub_name, str) and sub_name else (station if isinstance(station, str) else None)
+        if name:
+            return name
         sub_num = getattr(pkg, "substation_number", None)
         return f"substation {sub_num}" if sub_num is not None else "unknown substation"
 
@@ -362,6 +341,31 @@ class QuickReportWorkflow:
 
         return (pkg_station_str in target_stations) or (data_station_str in target_stations)
 
+    def _is_dir_or_date(self, s: str, environment: ProjectEnvironment) -> bool:
+        """Return True if s is an existing directory path or valid DD-MM-YYYY calendar date."""
+        try:
+            p = Path(s)
+            if p.is_absolute() and p.is_dir():
+                return True
+        except Exception:
+            pass
+        if hasattr(environment, "get_testsheet_dir"):
+            try:
+                ts_dir = environment.get_testsheet_dir()
+                if isinstance(ts_dir, Path) and (ts_dir / s).is_dir():
+                    return True
+            except Exception:
+                pass
+        if DAILY_DATE_FOLDER_PATTERN.match(s):
+            try:
+                datetime.strptime(s, "%d-%m-%Y")
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid calendar date '{s}': {exc}. Expected valid DD-MM-YYYY date."
+                ) from exc
+            return True
+        return False
+
     def _resolve_target(
         self,
         target: ReportTarget,
@@ -372,30 +376,7 @@ class QuickReportWorkflow:
             return (str(target),), None
         elif isinstance(target, str):
             s = target.strip()
-            is_dir = False
-            try:
-                p = Path(s)
-                if p.is_absolute() and p.is_dir():
-                    is_dir = True
-            except Exception:
-                pass
-            if not is_dir and hasattr(environment, "get_testsheet_dir"):
-                try:
-                    ts_dir = environment.get_testsheet_dir()
-                    if isinstance(ts_dir, Path) and (ts_dir / s).is_dir():
-                        is_dir = True
-                except Exception:
-                    pass
-
-            if is_dir:
-                return (s,), None
-            if DAILY_DATE_FOLDER_PATTERN.match(s):
-                try:
-                    datetime.strptime(s, "%d-%m-%Y")
-                except ValueError as exc:
-                    raise ValueError(
-                        f"Invalid calendar date '{s}': {exc}. Expected valid DD-MM-YYYY date."
-                    ) from exc
+            if self._is_dir_or_date(s, environment):
                 return (s,), None
             if "," in s:
                 tokens = [tok.strip() for tok in s.split(",") if tok.strip()]
@@ -409,34 +390,10 @@ class QuickReportWorkflow:
             if all(isinstance(item, Path) for item in items):
                 return tuple(str(p) for p in items), None
 
-            def _is_dir_or_date(item: Path | str) -> bool:
-                if isinstance(item, Path):
-                    return True
-                val = str(item).strip()
-                if DAILY_DATE_FOLDER_PATTERN.match(val):
-                    try:
-                        datetime.strptime(val, "%d-%m-%Y")
-                    except ValueError as exc:
-                        raise ValueError(
-                            f"Invalid calendar date '{val}': {exc}. Expected valid DD-MM-YYYY date."
-                        ) from exc
-                    return True
-                try:
-                    p = Path(val)
-                    if p.is_absolute() and p.is_dir():
-                        return True
-                except Exception:
-                    pass
-                try:
-                    if hasattr(environment, "get_testsheet_dir"):
-                        ts_dir = environment.get_testsheet_dir()
-                        if isinstance(ts_dir, Path) and (ts_dir / val).is_dir():
-                            return True
-                except Exception:
-                    pass
-                return False
-
-            if all(_is_dir_or_date(item) for item in items):
+            if all(
+                isinstance(item, Path) or self._is_dir_or_date(str(item).strip(), environment)
+                for item in items
+            ):
                 return tuple(str(item) for item in items), None
             else:
                 fl_list: list[str] = []
