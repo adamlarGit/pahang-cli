@@ -11,7 +11,13 @@ from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
 from src.project_workflow_actions import PopulateTotalPeAction, QuickReportAction, RawMaterialAction
-from src.workflows.models import PopulateTotalPeResult, QuickReportResult, RawMaterialResult
+from src.workflows.models import (
+    PopulateTotalPeResult,
+    QuickReportInspection,
+    QuickReportResult,
+    RawMaterialResult,
+    SubstationInspectionItem,
+)
 
 
 @pytest.fixture
@@ -60,15 +66,25 @@ def test_quick_report_action_folder_selection(mock_env: ProjectEnvironment, tmp_
     action = QuickReportAction("Generate Quick Report")
     target_folder = tmp_path / "TESTSHEET" / "KUANTAN" / "2026-01 (Jan)" / "01-01-2026"
 
+    mock_insp = QuickReportInspection(
+        targets=(
+            SubstationInspectionItem(1, "PE 1", "FL1", "", "", Path("out1"), 0, 0, 0, station="KUANTAN"),
+        ),
+        missing_templates=(),
+        warnings=(),
+        errors=(),
+    )
+
     with patch("src.cli_selectors.select_one", return_value="folder"):
         with patch("src.cli_selectors.select_pahang_date_folder", return_value=target_folder) as mock_select:
-            with patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate:
-                mock_generate.return_value = QuickReportResult(reports_generated=1)
-                res = action.execute(mock_env)
-                assert res.reports_generated == 1
-                mock_select.assert_called_once_with(environment=mock_env)
-                mock_generate.assert_called_once()
-                assert mock_generate.call_args[0][0] == target_folder
+            with patch("src.workflows.quick_report.QuickReportWorkflow.inspect", return_value=mock_insp):
+                with patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate:
+                    mock_generate.return_value = QuickReportResult(reports_generated=1)
+                    res = action.execute(mock_env)
+                    assert res.reports_generated == 1
+                    mock_select.assert_called_once_with(environment=mock_env)
+                    mock_generate.assert_called_once()
+                    assert mock_generate.call_args[0][0] == target_folder
 
 
 def test_quick_report_action_folder_selection_cancel(mock_env: ProjectEnvironment) -> None:
@@ -113,15 +129,23 @@ def test_quick_report_action_multi_station_selection_subset(mock_env: ProjectEnv
     """Verify selecting a subset of stations when target date spans multiple stations."""
     action = QuickReportAction("Generate Quick Report")
     testsheet_dir = mock_env.get_testsheet_dir()
-
     rompin_dir = testsheet_dir / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
-    kuantan_dir = testsheet_dir / "KUANTAN" / "09. SEPTEMBER" / "01-09-2026"
     rompin_dir.mkdir(parents=True, exist_ok=True)
-    kuantan_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_multi_inspection = QuickReportInspection(
+        targets=(
+            SubstationInspectionItem(1, "PE 1", "FL1", "", "", Path("out1"), 0, 0, 0, station="KUANTAN"),
+            SubstationInspectionItem(2, "PE 2", "FL2", "", "", Path("out2"), 0, 0, 0, station="ROMPIN"),
+        ),
+        missing_templates=(),
+        warnings=(),
+        errors=(),
+    )
 
     with (
         patch("src.cli_selectors.select_one", return_value="folder"),
         patch("src.cli_selectors.select_pahang_date_folder", return_value=rompin_dir),
+        patch("src.workflows.quick_report.QuickReportWorkflow.inspect", return_value=mock_multi_inspection),
         patch("src.cli_selectors.select_multiple", return_value=["ROMPIN"]) as mock_select_multi,
         patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate,
     ):
@@ -130,30 +154,40 @@ def test_quick_report_action_multi_station_selection_subset(mock_env: ProjectEnv
 
     assert res.reports_generated == 1
     mock_select_multi.assert_called_once()
+    assert mock_select_multi.call_args[0][0] == "Select stations to process"
     # Check that options had checked=True for all matching stations
     options_passed = mock_select_multi.call_args[0][1]
     assert len(options_passed) == 2
     assert all(opt.checked for opt in options_passed)
     assert {opt.value for opt in options_passed} == {"KUANTAN", "ROMPIN"}
 
-    # generate() called with station="ROMPIN"
+    # generate() called with station=["ROMPIN"]
     mock_generate.assert_called_once()
-    assert mock_generate.call_args[1].get("station") == "ROMPIN"
+    assert mock_generate.call_args[0][0] == rompin_dir
+    assert mock_generate.call_args[1].get("station") == ["ROMPIN"]
 
 
 def test_quick_report_action_multi_station_selection_all(mock_env: ProjectEnvironment) -> None:
     """Verify selecting all stations when target date spans multiple stations invokes generate across all."""
     action = QuickReportAction("Generate Quick Report")
     testsheet_dir = mock_env.get_testsheet_dir()
-
     rompin_dir = testsheet_dir / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
-    kuantan_dir = testsheet_dir / "KUANTAN" / "09. SEPTEMBER" / "01-09-2026"
     rompin_dir.mkdir(parents=True, exist_ok=True)
-    kuantan_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_multi_inspection = QuickReportInspection(
+        targets=(
+            SubstationInspectionItem(1, "PE 1", "FL1", "", "", Path("out1"), 0, 0, 0, station="KUANTAN"),
+            SubstationInspectionItem(2, "PE 2", "FL2", "", "", Path("out2"), 0, 0, 0, station="ROMPIN"),
+        ),
+        missing_templates=(),
+        warnings=(),
+        errors=(),
+    )
 
     with (
         patch("src.cli_selectors.select_one", return_value="folder"),
         patch("src.cli_selectors.select_pahang_date_folder", return_value=rompin_dir),
+        patch("src.workflows.quick_report.QuickReportWorkflow.inspect", return_value=mock_multi_inspection),
         patch("src.cli_selectors.select_multiple", return_value=["KUANTAN", "ROMPIN"]),
         patch("src.workflows.quick_report.QuickReportWorkflow.generate") as mock_generate,
     ):
@@ -162,22 +196,31 @@ def test_quick_report_action_multi_station_selection_all(mock_env: ProjectEnviro
 
     assert res.reports_generated == 2
     mock_generate.assert_called_once()
-    assert mock_generate.call_args[0][0] == "01-09-2026"
+    assert mock_generate.call_args[0][0] == rompin_dir
+    assert mock_generate.call_args[1].get("station") == ["KUANTAN", "ROMPIN"]
 
 
 def test_quick_report_action_multi_station_selection_cancel(mock_env: ProjectEnvironment, capsys: pytest.CaptureFixture[str]) -> None:
     """Verify cancelling or deselecting all stations aborts with processing cancelled message."""
     action = QuickReportAction("Generate Quick Report")
     testsheet_dir = mock_env.get_testsheet_dir()
-
     rompin_dir = testsheet_dir / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
-    kuantan_dir = testsheet_dir / "KUANTAN" / "09. SEPTEMBER" / "01-09-2026"
     rompin_dir.mkdir(parents=True, exist_ok=True)
-    kuantan_dir.mkdir(parents=True, exist_ok=True)
+
+    mock_multi_inspection = QuickReportInspection(
+        targets=(
+            SubstationInspectionItem(1, "PE 1", "FL1", "", "", Path("out1"), 0, 0, 0, station="KUANTAN"),
+            SubstationInspectionItem(2, "PE 2", "FL2", "", "", Path("out2"), 0, 0, 0, station="ROMPIN"),
+        ),
+        missing_templates=(),
+        warnings=(),
+        errors=(),
+    )
 
     with (
         patch("src.cli_selectors.select_one", return_value="folder"),
         patch("src.cli_selectors.select_pahang_date_folder", return_value=rompin_dir),
+        patch("src.workflows.quick_report.QuickReportWorkflow.inspect", return_value=mock_multi_inspection),
         patch("src.cli_selectors.select_multiple", return_value=None),
     ):
         res = action.execute(mock_env)

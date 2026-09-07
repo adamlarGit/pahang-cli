@@ -97,6 +97,8 @@ class SubstationInspectionItem:
     cbm_defect_count: int
     vi_defect_count: int
     condition_pair_count: int
+    station: str = ""
+
 
 
 @dataclass(frozen=True)

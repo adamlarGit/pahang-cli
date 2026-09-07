@@ -195,3 +195,16 @@ The cross-platform document rendering and PDF export fidelity policy governing Q
 ### FlirActiveXIsolationPolicy
 The architectural rule governing Quick Report compilation in `src/quick_report/composer.py`. Mandates that multi-part documents containing FLIR Tools+ ActiveX controls (`CIRViewer`) merge through Microsoft Word COM Automation (`Documents.Add()`, read-only part opening, clipboard copy, page break, and paste). Prohibits pure Python OpenXML concatenation (`docxcompose`, `python-docx`) to prevent control identifier collisions and binary compound file corruption.
 
+### ReportTarget
+The polymorphic target identifier accepted by `QuickReportWorkflow` entry points (`generate()` and `inspect()`). Supports `Path` (direct folder path), bare date string formatted as `DD-MM-YYYY`, or a `Sequence[str]` of date strings or Functional Locations (`Sequence[str]`, e.g. `["CCHL/PCE/J00059-01", "ROMP/PCE/J00120"]`). Disambiguates folder vs. FL modes strictly based on directory existence or calendar date format matching.
+
+### QuickReportInspection & SubstationInspectionItem
+Immutable dry-run telemetry models (`src/workflows/models.py`) returned by `QuickReportWorkflow.inspect()`. Captures proposed substation output stems, defect counts, target deliverable paths, station identifiers, missing template diagnostics, and warnings without initializing Word COM automation or performing disk writes.
+
+### DocumentCompiler
+The abstract compilation interface (`src/quick_report/compiler.py`) isolating Microsoft Word COM automation from document composition. Implemented by `WordComDocumentCompiler` for production multi-part assembly via Word COM automation, and `FakeDocumentCompiler` for rapid, headless unit testing without external COM dependencies.
+
+### MultiStationSelectionPolicy
+The presentation policy governing Quick Report batch generation when an inspection date spans multiple stations. Presents all matching stations pre-selected by default in an interactive CLI checkbox prompt (`cli_selectors.select_multiple`), and delegates batch compilation of selected stations through a single Word COM session via `QuickReportWorkflow.generate(target, station=chosen_stations)`.
+
+

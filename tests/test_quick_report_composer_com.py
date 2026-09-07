@@ -634,8 +634,10 @@ def test_composer_load_end_to_end_lifecycle_and_cleanup(tmp_path: Path):
     mock_main_doc.Tables.Count = 0
     mock_rng.Information.return_value = False
 
-    composer = QuickReportComposer()
-    result_path = composer.load(plan, word_app=mock_word)
+    compiler = WordComDocumentCompiler()
+    compiler._word_app = mock_word
+    composer = QuickReportComposer(compiler=compiler)
+    result_path = composer.load(plan)
 
     assert result_path == final_output
     # 7 parts generated: front, cbm_sum, vi_sum, swg_ov, swg_det, cond, vi_def, sticker (8 files)
@@ -688,9 +690,11 @@ def test_composer_load_cleans_temp_dir_on_compilation_error(tmp_path: Path):
     mock_word = MagicMock()
     mock_word.Documents.Add.side_effect = RuntimeError("COM initialization failure")
 
-    composer = QuickReportComposer()
+    compiler = WordComDocumentCompiler()
+    compiler._word_app = mock_word
+    composer = QuickReportComposer(compiler=compiler)
     with pytest.raises(RuntimeError, match="COM initialization failure"):
-        composer.load(plan, word_app=mock_word)
+        composer.load(plan)
 
     # Verify temp_parts is still cleaned up
     temp_dir = out_dir / "temp_parts"

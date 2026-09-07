@@ -23,6 +23,7 @@ from src.quick_report.extractor import QuickReportExtractor
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.transformer import QuickReportTransformer
 from src.quick_report.utils import (
+    PAHANG_DATE_PATTERN,
     is_pahang_date_str,
     normalize_functional_location_input,
     sanitize_filename,
@@ -44,22 +45,22 @@ ProgressSink = Callable[[str], None]
 
 
 def _is_date_or_folder(item: Path | str, environment: ProjectEnvironment) -> bool:
-    """Check if an item represents a Pahang date string or an existing folder path."""
+    """Check if an item strictly represents a Pahang date pattern or an existing directory."""
     if isinstance(item, Path):
         return True
-    if is_pahang_date_str(item):
-        return True
     s = str(item).strip()
+    if PAHANG_DATE_PATTERN.match(s):
+        return True
     try:
         p = Path(s)
-        if p.is_dir() is True:
+        if p.is_absolute() and p.is_dir():
             return True
     except Exception:
         pass
     try:
         if hasattr(environment, "get_testsheet_dir"):
             ts_dir = environment.get_testsheet_dir()
-            if isinstance(ts_dir, Path) and (ts_dir / s).is_dir() is True:
+            if isinstance(ts_dir, Path) and (ts_dir / s).is_dir():
                 return True
     except Exception:
         pass
@@ -92,36 +93,12 @@ class QuickReportWorkflow:
         self._transformer = transformer or QuickReportTransformer()
         self._composer = composer or QuickReportComposer(compiler=self._compiler)
 
-    @property
-    def extractor(self) -> QuickReportExtractor:
-        return self._extractor
-
-    @extractor.setter
-    def extractor(self, val: QuickReportExtractor) -> None:
-        self._extractor = val
-
-    @property
-    def transformer(self) -> QuickReportTransformer:
-        return self._transformer
-
-    @transformer.setter
-    def transformer(self, val: QuickReportTransformer) -> None:
-        self._transformer = val
-
-    @property
-    def composer(self) -> QuickReportComposer:
-        return self._composer
-
-    @composer.setter
-    def composer(self, val: QuickReportComposer) -> None:
-        self._composer = val
-
     def generate(
         self,
         target: ReportTarget,
         environment: ProjectEnvironment,
         *,
-        station: str | None = None,
+        station: str | Sequence[str] | None = None,
         condition_template: Path | None = None,
         progress_sink: ProgressSink | None = None,
     ) -> QuickReportResult:
@@ -194,7 +171,7 @@ class QuickReportWorkflow:
         target: ReportTarget,
         environment: ProjectEnvironment,
         *,
-        station: str | None = None,
+        station: str | Sequence[str] | None = None,
         condition_template: Path | None = None,
     ) -> QuickReportInspection:
         """Dry-run discovery and plan synthesis without COM or disk writes."""
@@ -211,7 +188,7 @@ class QuickReportWorkflow:
         target: ReportTarget,
         environment: ProjectEnvironment,
         *,
-        station: str | None = None,
+        station: str | Sequence[str] | None = None,
         condition_template: Path | None = None,
         progress_sink: ProgressSink | None = None,
     ) -> tuple[QuickReportInspection, list[QuickReportStationPlan]]:
@@ -233,22 +210,33 @@ class QuickReportWorkflow:
                 environment,
                 folders=folders,
                 fls=fls,
-                station=station,
-                progress_sink=progress_sink,
             )
             filtered_packages = [pkg for pkg in packages if pkg.data is not None]
             if station:
-                norm_station = station.strip().upper()
-                filtered_packages = [
-                    pkg
-                    for pkg in filtered_packages
-                    if (pkg.station and pkg.station.strip().upper() == norm_station)
-                    or (
-                        getattr(pkg, "data", None)
-                        and getattr(pkg.data, "station_name", "")
-                        and getattr(pkg.data, "station_name", "").strip().upper() == norm_station
-                    )
-                ]
+                if isinstance(station, str):
+                    norm_station = station.strip().upper()
+                    filtered_packages = [
+                        pkg
+                        for pkg in filtered_packages
+                        if (pkg.station and pkg.station.strip().upper() == norm_station)
+                        or (
+                            getattr(pkg, "data", None)
+                            and getattr(pkg.data, "station_name", "")
+                            and getattr(pkg.data, "station_name", "").strip().upper() == norm_station
+                        )
+                    ]
+                elif isinstance(station, Sequence):
+                    norm_stations = {s.strip().upper() for s in station if s and str(s).strip()}
+                    filtered_packages = [
+                        pkg
+                        for pkg in filtered_packages
+                        if (pkg.station and pkg.station.strip().upper() in norm_stations)
+                        or (
+                            getattr(pkg, "data", None)
+                            and getattr(pkg.data, "station_name", "")
+                            and getattr(pkg.data, "station_name", "").strip().upper() in norm_stations
+                        )
+                    ]
             if fls:
                 target_fls = {normalize_functional_location_input(fl) for fl in fls}
                 filtered_packages = [
@@ -309,6 +297,7 @@ class QuickReportWorkflow:
                     cbm_defect_count=len(plan.cbm_defects),
                     vi_defect_count=len(plan.vi_defects),
                     condition_pair_count=len(plan.condition_pairs),
+                    station=pkg.station or (pkg.data.station_name if pkg.data else "") or "",
                 )
                 items.append(item)
             except Exception as e:
@@ -333,8 +322,7 @@ class QuickReportWorkflow:
         if hasattr(environment, "get_sub_cond_dir"):
             try:
                 candidate = environment.get_sub_cond_dir() / "MASTER_SUBSTATION_CONDITION.docx"
-                if candidate.exists():
-                    return candidate
+                return candidate
             except Exception:
                 pass
         return None
@@ -346,20 +334,44 @@ class QuickReportWorkflow:
     ) -> tuple[list[str] | None, list[str] | None]:
         """Convert polymorphic ReportTarget into (folders, fls) pair."""
         if isinstance(target, Path):
-            validate_date_string(target.name)
+            if not ((target.is_absolute() and target.is_dir()) or (
+                hasattr(environment, "get_testsheet_dir")
+                and (environment.get_testsheet_dir() / target).is_dir()
+            )):
+                validate_date_string(target.name)
             return [str(target)], None
         elif isinstance(target, str):
-            validate_date_string(target)
-            return [target], None
+            s = target.strip()
+            is_dir = False
+            try:
+                p = Path(s)
+                if p.is_absolute() and p.is_dir():
+                    is_dir = True
+            except Exception:
+                pass
+            if not is_dir and hasattr(environment, "get_testsheet_dir"):
+                try:
+                    ts_dir = environment.get_testsheet_dir()
+                    if isinstance(ts_dir, Path) and (ts_dir / s).is_dir():
+                        is_dir = True
+                except Exception:
+                    pass
+
+            if is_dir:
+                return [s], None
+            validate_date_string(s)
+            return [s], None
         elif isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
             items = list(target)
-            for item in items:
-                if isinstance(item, str):
-                    validate_date_string(item)
-                elif isinstance(item, Path):
-                    validate_date_string(item.name)
+            if not items:
+                return None, []
 
-            if any(_is_date_or_folder(item, environment) for item in items):
+            is_folder_mode = all(_is_date_or_folder(item, environment) for item in items)
+            if is_folder_mode:
+                for item in items:
+                    s_item = item.name if isinstance(item, Path) else str(item).strip()
+                    if PAHANG_DATE_PATTERN.match(s_item):
+                        validate_date_string(s_item)
                 return [str(item) for item in items], None
             else:
                 return None, [str(item) for item in items]
@@ -387,7 +399,7 @@ class QuickReportWorkflow:
         except Exception as e:
             missing.append(f"Sticker page template missing: {e}")
 
-        if condition_template is not None and not condition_template.exists():
+        if condition_template is None or not condition_template.exists():
             missing.append(
                 f"Substation condition template missing at: {condition_template}"
             )

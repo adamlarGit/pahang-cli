@@ -260,58 +260,29 @@ class QuickReportAction(ProjectWorkflowAction):
                 print("Processing cancelled.")
                 return None
 
-            date_str = selected_path.name if isinstance(selected_path, Path) else str(selected_path)
-            matching_stations = self._detect_matching_stations(date_str, environment)
+            inspection = workflow.inspect(selected_path, environment)
+            if inspection.errors and not inspection.targets:
+                print(f"Inspection found {len(inspection.errors)} error(s):")
+                for err in inspection.errors:
+                    print(f"  - {err}")
+                return None
 
-            if len(matching_stations) > 1:
+            unique_stations = sorted({t.station for t in inspection.targets if t.station})
+            if len(unique_stations) > 1:
                 station_options = [
-                    cli_selectors.SelectOption(title=st, value=st, checked=True)
-                    for st in matching_stations
+                    cli_selectors.SelectOption(title=s, value=s, checked=True)
+                    for s in unique_stations
                 ]
-                selected_stations = cli_selectors.select_multiple(
-                    f"Multiple stations found for {date_str}. Select stations to process:",
-                    station_options,
-                )
-                if not selected_stations:
+                chosen_stations = cli_selectors.select_multiple("Select stations to process", station_options)
+                if chosen_stations is None or len(chosen_stations) == 0:
                     print("Processing cancelled.")
                     return None
-
-                if len(selected_stations) == len(matching_stations):
-                    result = workflow.generate(
-                        date_str,
-                        environment,
-                        progress_sink=_cli_progress_sink,
-                    )
-                elif len(selected_stations) == 1:
-                    result = workflow.generate(
-                        date_str,
-                        environment,
-                        station=selected_stations[0],
-                        progress_sink=_cli_progress_sink,
-                    )
-                else:
-                    results: list[QuickReportResult] = []
-                    session_fn = getattr(workflow._compiler, "session", None)
-                    session_cm = session_fn() if callable(session_fn) else nullcontext()
-                    if not hasattr(session_cm, "__enter__"):
-                        session_cm = nullcontext()
-
-                    with session_cm:
-                        for st in selected_stations:
-                            res = workflow.generate(
-                                date_str,
-                                environment,
-                                station=st,
-                                progress_sink=_cli_progress_sink,
-                            )
-                            results.append(res)
-
-                    result = QuickReportResult(
-                        reports_generated=sum(r.reports_generated for r in results),
-                        generated_paths=tuple(p for r in results for p in r.generated_paths),
-                        warnings=tuple(w for r in results for w in r.warnings),
-                        errors=tuple(e for r in results for e in r.errors),
-                    )
+                result = workflow.generate(
+                    selected_path,
+                    environment,
+                    station=chosen_stations,
+                    progress_sink=_cli_progress_sink,
+                )
             else:
                 result = workflow.generate(
                     selected_path,
@@ -321,44 +292,6 @@ class QuickReportAction(ProjectWorkflowAction):
 
             _print_quick_report_batch_summary(result)
             return result
-
-    def _detect_matching_stations(
-        self, date_str: str, environment: ProjectEnvironment
-    ) -> list[str]:
-        """Find stations that have testsheets for the given date string."""
-        if not re.match(r"^\d{2}-\d{2}-\d{4}$", date_str):
-            return []
-
-        testsheet_dir = None
-        if hasattr(environment, "get_testsheet_dir"):
-            try:
-                testsheet_dir = environment.get_testsheet_dir()
-            except Exception:
-                pass
-        if testsheet_dir is None and hasattr(environment, "storage") and hasattr(environment.storage, "get_testsheet_dir"):
-            try:
-                testsheet_dir = environment.storage.get_testsheet_dir()
-            except Exception:
-                pass
-
-        if not testsheet_dir or not Path(testsheet_dir).exists():
-            return []
-
-        stations: set[str] = set()
-        for d_dir in Path(testsheet_dir).rglob(date_str):
-            if not d_dir.is_dir():
-                continue
-            st = ""
-            for idx, part in enumerate(d_dir.parts):
-                if part.upper() in ("TESTSHEET", "RAW MATERIAL") and idx + 1 < len(d_dir.parts):
-                    st = d_dir.parts[idx + 1]
-                    break
-            if not st and d_dir.parent and d_dir.parent.parent:
-                st = d_dir.parent.parent.name
-            if st:
-                stations.add(st)
-
-        return sorted(stations)
 
 
 def _print_quick_report_batch_summary(result: QuickReportResult) -> None:

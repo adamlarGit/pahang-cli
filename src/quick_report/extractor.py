@@ -6,7 +6,7 @@ import dataclasses
 from datetime import date, datetime
 from pathlib import Path
 import re
-from typing import Any, TYPE_CHECKING
+from typing import Any, Sequence, TYPE_CHECKING
 import warnings
 
 import openpyxl
@@ -45,8 +45,6 @@ class QuickReportExtractor:
         environment: ProjectEnvironment,
         folders: Sequence[Path | str] | None = None,
         fls: Sequence[str] | None = None,
-        station: str | None = None,
-        progress_sink: Any | None = None,
     ) -> list[SubstationTestsheetPackage]:
         """Discover testsheet packages strictly via read I/O (without domain filtering)."""
         if fls is not None:
@@ -86,19 +84,6 @@ class QuickReportExtractor:
                     packages.extend(self.repository.discover_packages(folder_path))
         else:
             packages = self.repository.discover_packages(environment.get_testsheet_dir())
-
-        if station:
-            norm_station = station.strip().upper()
-            packages = [
-                pkg
-                for pkg in packages
-                if (pkg.station and pkg.station.strip().upper() == norm_station)
-                or (
-                    getattr(pkg, "data", None)
-                    and getattr(pkg.data, "station_name", "")
-                    and getattr(pkg.data, "station_name", "").strip().upper() == norm_station
-                )
-            ]
 
         return packages
 

@@ -73,6 +73,11 @@ def _setup_mock_environment(tmp_path: Path) -> MagicMock:
     doc.add_paragraph("Mock Template")
     doc.save(tpl_file)
 
+    cond_file = tmp_path / "templates" / "MASTER_SUBSTATION_CONDITION.docx"
+    doc_cond = Document()
+    doc_cond.add_paragraph("Mock Condition")
+    doc_cond.save(cond_file)
+
     env = MagicMock(spec=ProjectEnvironment)
     env.po_number = "42360565"
     env.state = "PAHANG"
@@ -128,8 +133,8 @@ def test_inspect_returns_targets_for_known_fl(tmp_path: Path):
     workflow = QuickReportWorkflow(compiler=compiler)
 
     with (
-        patch.object(workflow.extractor, "extract", return_value=[pkg]),
-        patch.object(workflow.extractor, "extract_defects", return_value=(cbm_defects, vi_defects)),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=(cbm_defects, vi_defects)),
     ):
         inspection = workflow.inspect(["CCHL/PCE/J00059"], env)
 
@@ -144,6 +149,7 @@ def test_inspect_returns_targets_for_known_fl(tmp_path: Path):
     assert target.pe_number == 1
     assert target.substation_name == "PE TEST SUBSTATION"
     assert target.functional_location == "CCHL/PCE/J00059"
+    assert target.station == "CAMERON HIGHLAND"
     assert target.defect_suffix == " (IR+VI)"
     assert "001. PE TEST SUBSTATION (IR+VI)" in target.stem
     assert target.cbm_defect_count == 1
@@ -162,8 +168,8 @@ def test_inspect_ready_to_generate_false_when_template_missing(tmp_path: Path):
     workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
 
     with (
-        patch.object(workflow.extractor, "extract", return_value=[pkg]),
-        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
     ):
         inspection = workflow.inspect(["CCHL/PCE/J00059"], env)
 
@@ -181,8 +187,8 @@ def test_generate_produces_result_for_known_fl(tmp_path: Path):
     workflow = QuickReportWorkflow(compiler=compiler)
 
     with (
-        patch.object(workflow.extractor, "extract", return_value=[pkg]),
-        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
     ):
         progress_messages: list[str] = []
         result = workflow.generate(
@@ -220,8 +226,8 @@ def test_generate_batch_resilience_continues_past_station_failure(tmp_path: Path
         return ([], [])
 
     with (
-        patch.object(workflow.extractor, "extract", return_value=[pkg1, pkg2]),
-        patch.object(workflow.extractor, "extract_defects", side_effect=mock_extract_defects),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg1, pkg2]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", side_effect=mock_extract_defects),
     ):
         result = workflow.generate(["FL1", "FL2"], env)
 
@@ -238,7 +244,7 @@ def test_generate_returns_error_when_no_packages_found(tmp_path: Path):
 
     workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
 
-    with patch.object(workflow.extractor, "extract", return_value=[]):
+    with patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[]):
         result = workflow.generate(["UNKNOWN_FL"], env)
 
     assert result.reports_generated == 0
@@ -410,17 +416,18 @@ def test_strict_date_validation_rejects_non_pahang_dates(tmp_path: Path):
         with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
             workflow.generate(inv, env)
 
-        # Sequence target
-        with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
-            workflow.inspect([inv], env)
-
-        with pytest.raises(ValueError, match="Invalid (date format|calendar date)"):
-            workflow.generate([inv], env)
-
     # Valid Pahang date format DD-MM-YYYY does not raise ValueError
-    with patch.object(workflow.extractor, "extract", return_value=[]):
+    with patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[]):
         res = workflow.inspect("01-09-2026", env)
         assert isinstance(res, QuickReportInspection)
+
+    # Sequence with invalid calendar dates matching Pahang regex pattern raises ValueError
+    for inv_cal in ["32-09-2026", "01-13-2026"]:
+        with pytest.raises(ValueError, match="Invalid calendar date"):
+            workflow.inspect([inv_cal], env)
+
+        with pytest.raises(ValueError, match="Invalid calendar date"):
+            workflow.generate([inv_cal], env)
 
 
 def test_target_sequence_disambiguation_dates_vs_fls(tmp_path: Path):
@@ -475,8 +482,8 @@ def test_multi_station_date_resolution_discovers_all_stations_by_default(tmp_pat
     workflow = QuickReportWorkflow(compiler=compiler)
 
     with (
-        patch.object(workflow.extractor.repository, "discover_packages", side_effect=mock_discover),
-        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+        patch("src.testsheet.repository.SubstationTestsheetRepository.discover_packages", side_effect=mock_discover),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
     ):
         inspection = workflow.inspect("01-09-2026", env)
 
@@ -519,8 +526,8 @@ def test_station_filtering_inspect_and_generate(tmp_path: Path):
     workflow = QuickReportWorkflow(compiler=compiler)
 
     with (
-        patch.object(workflow.extractor.repository, "discover_packages", side_effect=mock_discover),
-        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+        patch("src.testsheet.repository.SubstationTestsheetRepository.discover_packages", side_effect=mock_discover),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
     ):
         # 1. Filter inspect to ROMPIN
         insp_rompin = workflow.inspect("01-09-2026", env, station="ROMPIN")
@@ -559,8 +566,8 @@ def test_inspect_previews_expose_defect_counts_and_stem(tmp_path: Path):
     workflow = QuickReportWorkflow(compiler=compiler)
 
     with (
-        patch.object(workflow.extractor, "extract", return_value=[pkg]),
-        patch.object(workflow.extractor, "extract_defects", return_value=(cbm_defects, vi_defects)),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=(cbm_defects, vi_defects)),
     ):
         inspection = workflow.inspect(["CCHL/PCE/J00059"], env)
 
@@ -594,7 +601,7 @@ def test_generate_fails_fast_with_file_not_found_error_on_missing_templates(tmp_
     compiler = FakeDocumentCompiler()
     workflow = QuickReportWorkflow(compiler=compiler)
 
-    with patch.object(workflow.extractor, "extract", return_value=[pkg]):
+    with patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]):
         with pytest.raises(FileNotFoundError, match="VI front page template missing"):
             workflow.generate(["CCHL/PCE/J00059"], env)
 
@@ -616,8 +623,8 @@ def test_generate_end_to_end_batch_mirrored_hierarchy(tmp_path: Path):
     workflow = QuickReportWorkflow(compiler=compiler)
 
     with (
-        patch.object(workflow.extractor, "extract", return_value=[pkg1, pkg2]),
-        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg1, pkg2]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
     ):
         result = workflow.generate(["FL1", "FL2"], env)
 
@@ -645,20 +652,18 @@ def test_generate_batch_fault_isolation_during_compilation(tmp_path: Path):
     pkg1 = _make_mock_package(substation_number=1, substation_name="FAILING SUB", fl="FL1")
     pkg2 = _make_mock_package(substation_number=2, substation_name="SUCCESS SUB", fl="FL2")
 
-    compiler = FakeDocumentCompiler()
+    class FailingOnFirstSubstationCompiler(FakeDocumentCompiler):
+        def compile(self, parts: Sequence[Path], output_path: Path) -> Path:
+            if "FAILING SUB" in str(output_path):
+                raise RuntimeError("Word COM HRESULT 0x80010108 RPC_E_DISCONNECTED")
+            return super().compile(parts, output_path)
+
+    compiler = FailingOnFirstSubstationCompiler()
     workflow = QuickReportWorkflow(compiler=compiler)
 
-    orig_load = workflow.composer.load
-
-    def mock_load(plan, word_app=None):
-        if plan.package.substation_number == 1:
-            raise RuntimeError("Word COM HRESULT 0x80010108 RPC_E_DISCONNECTED")
-        return orig_load(plan, word_app=word_app)
-
     with (
-        patch.object(workflow.extractor, "extract", return_value=[pkg1, pkg2]),
-        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
-        patch.object(workflow.composer, "load", side_effect=mock_load),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg1, pkg2]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
     ):
         result = workflow.generate(["FL1", "FL2"], env)
 
@@ -686,8 +691,8 @@ def test_generate_multi_defect_same_equipment_family_cbm(tmp_path: Path):
     workflow = QuickReportWorkflow(compiler=compiler)
 
     with (
-        patch.object(workflow.extractor, "extract", return_value=[pkg]),
-        patch.object(workflow.extractor, "extract_defects", return_value=(cbm_defects, [])),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=(cbm_defects, [])),
     ):
         result = workflow.generate(["ROMP/10"], env)
 
@@ -696,4 +701,101 @@ def test_generate_multi_defect_same_equipment_family_cbm(tmp_path: Path):
     output_path = result.generated_paths[0]
     assert output_path.exists()
     assert "(IR+US)" in output_path.name
+
+
+def test_hyphenated_fl_strings_not_rejected_by_date_validation(tmp_path: Path):
+    """Verify hyphenated FL strings (e.g. CCHL/PCE/J00059-01) in sequences are treated as FLs, not rejected."""
+    env = _setup_mock_environment(tmp_path)
+    workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
+    fl_inputs = ["CCHL/PCE/J00059-01", "ROMP/PCE/J00120"]
+
+    folders, fls = workflow._resolve_target(fl_inputs, env)
+    assert folders is None
+    assert fls == fl_inputs
+
+    pkg = _make_mock_package(fl="CCHL/PCE/J00059-01")
+    with (
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
+    ):
+        inspection = workflow.inspect(fl_inputs, env)
+        assert inspection.ready_to_generate is True
+        assert len(inspection.targets) == 1
+        assert inspection.targets[0].functional_location == "CCHL/PCE/J00059-01"
+
+
+def test_missing_condition_template_inspection_and_generate(tmp_path: Path):
+    """Verify missing condition template marks inspect() not ready and fails fast in generate()."""
+    env = _setup_mock_environment(tmp_path)
+    cond_file = tmp_path / "templates" / "MASTER_SUBSTATION_CONDITION.docx"
+    if cond_file.exists():
+        cond_file.unlink()
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    pkg = _make_mock_package()
+    with (
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
+    ):
+        # 1. inspect() records missing template and marks ready_to_generate as False without raising
+        inspection = workflow.inspect(["CCHL/PCE/J00059"], env)
+        assert inspection.ready_to_generate is False
+        assert any("Substation condition template missing" in t for t in inspection.missing_templates)
+        assert len(compiler.compiled_calls) == 0
+
+        # 2. generate() raises FileNotFoundError before running compiler
+        with pytest.raises(FileNotFoundError, match="Substation condition template missing"):
+            workflow.generate(["CCHL/PCE/J00059"], env)
+        assert len(compiler.compiled_calls) == 0
+
+
+def test_multi_station_sequence_filtering(tmp_path: Path):
+    """Verify passing a Sequence[str] of stations in generate() and inspect() filters correctly."""
+    env = _setup_mock_environment(tmp_path)
+    pkg_rompin = _make_mock_package(station="ROMPIN", substation_number=1, substation_name="PE ROMPIN")
+    pkg_kuantan = _make_mock_package(station="KUANTAN", substation_number=2, substation_name="PE KUANTAN")
+    pkg_cameron = _make_mock_package(station="CAMERON HIGHLAND", substation_number=3, substation_name="PE CAMERON")
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    with (
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg_rompin, pkg_kuantan, pkg_cameron]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
+    ):
+        # inspect() with sequence of stations
+        insp = workflow.inspect("01-09-2026", env, station=["kuantan", "rompin"])
+        assert len(insp.targets) == 2
+        stations_found = {t.station for t in insp.targets}
+        assert stations_found == {"KUANTAN", "ROMPIN"}
+
+        # generate() with sequence of stations
+        res = workflow.generate("01-09-2026", env, station=["KUANTAN", "ROMPIN"])
+        assert res.is_success is True
+        assert res.reports_generated == 2
+        assert len(compiler.compiled_calls) == 2
+        out_paths_str = [str(call[1]) for call in compiler.compiled_calls]
+        assert any("KUANTAN" in p for p in out_paths_str)
+        assert any("ROMPIN" in p for p in out_paths_str)
+        assert not any("CAMERON HIGHLAND" in p for p in out_paths_str)
+
+
+def test_substation_inspection_item_station_populated(tmp_path: Path):
+    """Verify SubstationInspectionItem.station is accurately populated during dry-run inspection."""
+    env = _setup_mock_environment(tmp_path)
+    pkg = _make_mock_package(station="ROMPIN", substation_name="PE ROMPIN TEST", fl="ROMP/01")
+
+    workflow = QuickReportWorkflow(compiler=FakeDocumentCompiler())
+    with (
+        patch("src.quick_report.extractor.QuickReportExtractor.extract", return_value=[pkg]),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
+    ):
+        inspection = workflow.inspect(["ROMP/01"], env)
+        assert len(inspection.targets) == 1
+        item = inspection.targets[0]
+        assert item.station == "ROMPIN"
+        assert item.substation_name == "PE ROMPIN TEST"
+
 

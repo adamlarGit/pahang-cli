@@ -27,7 +27,7 @@ class QuickReportComposer:
     def __init__(self, compiler: DocumentCompiler | None = None) -> None:
         self.compiler = compiler or WordComDocumentCompiler()
 
-    def load(self, plan: QuickReportStationPlan, word_app: Any = None) -> Path:
+    def load(self, plan: QuickReportStationPlan) -> Path:
         """Render docx parts, compile final document, and clean up temporary files."""
         plan.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -36,14 +36,7 @@ class QuickReportComposer:
 
         try:
             parts = self._generate_parts(plan, temp_dir)
-            if word_app is not None and getattr(self.compiler, "_word_app", None) is None:
-                self.compiler._word_app = word_app  # type: ignore[union-attr]
-                try:
-                    self.compiler.compile(parts, plan.final_output_path)
-                finally:
-                    self.compiler._word_app = None  # type: ignore[union-attr]
-            else:
-                self.compiler.compile(parts, plan.final_output_path)
+            self.compiler.compile(parts, plan.final_output_path)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
             gc.collect()

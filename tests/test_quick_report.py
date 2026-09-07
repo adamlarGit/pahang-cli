@@ -153,17 +153,22 @@ def test_workflow_error_isolation(mock_repo_cls, tmp_path: Path):
     env.state = "PAHANG"
     env.get_vi_front_page_template.return_value = tpl_file
     env.get_cbm_summary_template.return_value = tpl_file
-    env.get_vi_summary_template.return_value = tpl_file
     env.get_vi_defect_template.return_value = tpl_file
     env.get_template.return_value = tpl_file
+    cond_tpl = tmp_path / "MASTER_SUBSTATION_CONDITION.docx"
+    cond_tpl.touch()
+    env.get_sub_cond_dir.return_value = tmp_path
 
     mock_composer = Mock()
     mock_composer.load.side_effect = [Exception("Mock Error"), out2_file]
 
-    workflow = QuickReportWorkflow(composer=mock_composer)
+    mock_extractor = Mock()
+    mock_extractor.extract.return_value = [pkg1, pkg2]
+    mock_extractor.extract_defects.return_value = ([], [])
+
+    workflow = QuickReportWorkflow(extractor=mock_extractor, composer=mock_composer)
 
     with (
-        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
         patch("src.workflows.quick_report.win32com"),
         patch("src.workflows.quick_report.pythoncom"),
     ):
@@ -833,6 +838,9 @@ def test_quick_report_fl_mode_fl_erms_matching(monkeypatch, tmp_path: Path):
     env.get_vi_summary_template.return_value = tpl_file
     env.get_vi_defect_template.return_value = tpl_file
     env.get_template.return_value = tpl_file
+    cond_tpl = tmp_path / "MASTER_SUBSTATION_CONDITION.docx"
+    cond_tpl.touch()
+    env.get_sub_cond_dir.return_value = tmp_path
 
     dummy_path = tmp_path / "dummy.docx"
     dummy_path.write_text("content")
@@ -844,7 +852,7 @@ def test_quick_report_fl_mode_fl_erms_matching(monkeypatch, tmp_path: Path):
     with (
         patch("src.workflows.quick_report.win32com"),
         patch("src.workflows.quick_report.pythoncom"),
-        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+        patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])),
     ):
         result = workflow.generate(["CCHL/PCE/J00059"], env)
     assert result.reports_generated == 1
