@@ -584,3 +584,116 @@ def test_inspect_previews_expose_defect_counts_and_stem(tmp_path: Path):
     # No COM calls or disk writes
     assert len(compiler.compiled_calls) == 0
 
+
+def test_generate_fails_fast_with_file_not_found_error_on_missing_templates(tmp_path: Path):
+    """Verify generate() fails fast by raising FileNotFoundError before launching compiler when template missing."""
+    env = _setup_mock_environment(tmp_path)
+    env.get_vi_front_page_template.return_value = tmp_path / "missing_front_page.docx"
+
+    pkg = _make_mock_package()
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    with patch.object(workflow.extractor, "extract", return_value=[pkg]):
+        with pytest.raises(FileNotFoundError, match="VI front page template missing"):
+            workflow.generate(["CCHL/PCE/J00059"], env)
+
+    # Must fail fast before session or compile is called
+    assert len(compiler.compiled_calls) == 0
+
+
+def test_generate_end_to_end_batch_mirrored_hierarchy(tmp_path: Path):
+    """Verify generate() writes deliverables to mirrored hierarchy QUICK REPORT/<STATION>/<MONTH>/<DATE>/."""
+    env = _setup_mock_environment(tmp_path)
+    pkg1 = _make_mock_package(
+        station="CAMERON HIGHLAND", substation_number=1, substation_name="PE 1", fl="FL1", date_str="01-09-2026"
+    )
+    pkg2 = _make_mock_package(
+        station="CAMERON HIGHLAND", substation_number=2, substation_name="PE 2", fl="FL2", date_str="01-09-2026"
+    )
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    with (
+        patch.object(workflow.extractor, "extract", return_value=[pkg1, pkg2]),
+        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+    ):
+        result = workflow.generate(["FL1", "FL2"], env)
+
+    assert result.is_success is True
+    assert result.reports_generated == 2
+    assert len(result.generated_paths) == 2
+    assert len(result.errors) == 0
+
+    for path in result.generated_paths:
+        assert path.exists()
+        assert path.stat().st_size > 0
+        # Verify mirrored hierarchy: QUICK REPORT / CAMERON HIGHLAND / 09. SEPTEMBER / 01-09-2026
+        assert "QUICK REPORT" in path.parts
+        assert "CAMERON HIGHLAND" in path.parts
+        assert "09. SEPTEMBER" in path.parts
+        assert "01-09-2026" in path.parts
+
+    # Both documents compiled
+    assert len(compiler.compiled_calls) == 2
+
+
+def test_generate_batch_fault_isolation_during_compilation(tmp_path: Path):
+    """Verify SubstationIsolatedBatchResiliencePolicy when compilation of one substation fails."""
+    env = _setup_mock_environment(tmp_path)
+    pkg1 = _make_mock_package(substation_number=1, substation_name="FAILING SUB", fl="FL1")
+    pkg2 = _make_mock_package(substation_number=2, substation_name="SUCCESS SUB", fl="FL2")
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    orig_load = workflow.composer.load
+
+    def mock_load(plan, word_app=None):
+        if plan.package.substation_number == 1:
+            raise RuntimeError("Word COM HRESULT 0x80010108 RPC_E_DISCONNECTED")
+        return orig_load(plan, word_app=word_app)
+
+    with (
+        patch.object(workflow.extractor, "extract", return_value=[pkg1, pkg2]),
+        patch.object(workflow.extractor, "extract_defects", return_value=([], [])),
+        patch.object(workflow.composer, "load", side_effect=mock_load),
+    ):
+        result = workflow.generate(["FL1", "FL2"], env)
+
+    assert result.reports_generated == 1
+    assert len(result.generated_paths) == 1
+    assert len(result.errors) == 1
+    assert "RPC_E_DISCONNECTED" in result.errors[0]
+    assert result.is_success is False
+
+
+def test_generate_multi_defect_same_equipment_family_cbm(tmp_path: Path):
+    """Verify compiling report with multiple defects in same CBM family generates valid deliverable."""
+    env = _setup_mock_environment(tmp_path)
+    pkg = _make_mock_package(
+        station="ROMPIN", substation_number=10, substation_name="PE MULTI DEFECT", fl="ROMP/10"
+    )
+
+    # 2 defects in same SWG family (one IR, one US)
+    cbm_defects = [
+        CbmDefectRecord(equipment="SWG", defect_area="Cable Box 1", technology="IR"),
+        CbmDefectRecord(equipment="SWG", defect_area="Cable Box 2", technology="US"),
+    ]
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    with (
+        patch.object(workflow.extractor, "extract", return_value=[pkg]),
+        patch.object(workflow.extractor, "extract_defects", return_value=(cbm_defects, [])),
+    ):
+        result = workflow.generate(["ROMP/10"], env)
+
+    assert result.is_success is True
+    assert result.reports_generated == 1
+    output_path = result.generated_paths[0]
+    assert output_path.exists()
+    assert "(IR+US)" in output_path.name
+

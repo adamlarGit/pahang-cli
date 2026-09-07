@@ -153,14 +153,7 @@ class QuickReportWorkflow:
         )
 
         if inspection.missing_templates:
-            return QuickReportResult(
-                reports_generated=0,
-                generated_paths=(),
-                warnings=inspection.warnings,
-                errors=tuple(
-                    f"Required template missing: {t}" for t in inspection.missing_templates
-                ),
-            )
+            raise FileNotFoundError(inspection.missing_templates[0])
 
         if not plans:
             errors = inspection.errors
@@ -190,7 +183,7 @@ class QuickReportWorkflow:
                 station_name = (
                     getattr(plan.package, "station", "")
                     or getattr(getattr(plan.package, "data", None), "station_name", "")
-                    or f"substation {plan.substation_number}"
+                    or f"substation {getattr(plan.package, 'substation_number', '?')}"
                 )
                 if progress_sink:
                     progress_sink(
