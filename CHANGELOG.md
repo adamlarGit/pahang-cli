@@ -5,6 +5,29 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-09-07
+
+### Added
+- **Two-Method Deep Module Interface (`src/workflows/quick_report.py`)**: Replaced fragmented workflow execution with unified `generate()` and `inspect()` entry points accepting polymorphic `ReportTarget` (`Path`, `DD-MM-YYYY` string, comma-separated FL string, or sequences).
+- **DocumentCompiler Seam & Batch Word COM Session (`src/quick_report/compiler.py`)**: Introduced `DocumentCompiler` abstraction protocol with production adapter `WordComDocumentCompiler`. Implemented `@contextmanager session()` to initialize a single `WINWORD.EXE` instance across entire batches with background PID watchdog termination, while assembling each report in fresh `Documents.Add()` containers with table escaping, retry pasting (format 16), and Win32 clipboard clearing per ADR 0002.
+- **Reusable Headless Test Stub (`src/quick_report/compiler.py`, `src/quick_report/__init__.py`)**: Exported `FakeDocumentCompiler` test double for sub-second headless compilation in CI/Linux environments.
+- **Dry-Run Inspection Telemetry (`src/workflows/models.py`)**: Added immutable `QuickReportInspection` and `SubstationInspectionItem` telemetry data structures exposing target PE numbers, canonical substation names, defect status suffixes, and missing master template warnings without launching Word.
+- **Multi-Station Interactive Pre-Selection (`src/cli_selectors.py`, `src/project_workflow_actions.py`)**: Added `checked: bool` support to `SelectOption` and `select_multiple()`, presenting multi-station date runs with all matching stations pre-selected by default.
+- **Comma-Separated FL Target Parsing (`src/workflows/quick_report.py`)**: Added support for comma-separated FL strings (e.g. `"CCHL/PCE/J00059, CCHL/PCE/J00060"`) and sequences in target resolution.
+- **Architectural Decision Record (`docs/adr/0003-quick-report-deep-module-architecture.md`)**: Documented the deep module architecture, batch COM session reuse, and legacy model deprecation.
+
+### Changed
+- **CLI QuickReportAction Integration (`src/project_workflow_actions.py`)**: Migrated presentation action to delegate directly to `QuickReportWorkflow.inspect()` and `generate()`, completely removing external session management and raw filesystem scans.
+- **Batch Fault Isolation (`src/workflows/quick_report.py`)**: Implemented `SubstationIsolatedBatchResiliencePolicy`, catching per-station compilation failures and logging them to `result.errors` while continuing remaining batch items.
+- **Fail-Fast Template & Path Validation (`src/workflows/quick_report.py`, `src/quick_report/extractor.py`)**: Enforced upfront `FileNotFoundError` before Word dispatch when required master templates or requested date folder directories are missing.
+
+### Removed
+- **Legacy Request & Filter Models (`src/workflows/models.py`, `src/quick_report/filter.py`, `src/workflows/service.py`)**: Purged `QuickReportRequest`, `QuickReportMode`, `QuickReportFilter`, and `WorkflowService.run_quick_report` in favor of direct workflow calls.
+
+### Fixed
+- **ActiveX Isolation & Runtime Word COM PID Watchdog (`src/quick_report/compiler.py`)**: Fixed process handle tracking via `ActiveWindow.Hwnd` and `win32gui.FindWindow("OpusApp", None)` fallbacks so hanging background Word processes are reliably terminated on session exit.
+- **Universal Exception Taxonomy (`src/workflows/quick_report.py`)**: Replaced `TypeError` with `ValueError` for unsupported targets conforming to ETL pipeline refactoring methodology §6.
+
 ## [1.16.0] - 2026-09-07
 
 ### Added
