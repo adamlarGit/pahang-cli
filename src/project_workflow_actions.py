@@ -223,7 +223,7 @@ class UpdateQr02CbaAction(ProjectWorkflowAction):
 
 
 class QuickReportAction(ProjectWorkflowAction):
-    """CLI Presentation Adapter for Quick Report / Visual Report generation."""
+    """CLI Presentation Adapter for Quick Report generation."""
 
     def execute(self, environment: ProjectEnvironment) -> object:
         options = [
@@ -333,9 +333,6 @@ def _print_quick_report_batch_summary(result: QuickReportResult) -> None:
 
     print("  =======================================================\n")
 
-
-
-VisualReportAction = QuickReportAction
 
 
 class PostProcessingPipelineAction(ProjectWorkflowAction):
@@ -705,7 +702,7 @@ PROJECT_WORKFLOW_ACTIONS: tuple[ProjectWorkflowAction, ...] = (
     PopulateTotalPeAction("Populate TOTAL PE (from testsheets)"),
     RawMaterialAction("Automate Raw Material Creation & Sorting (from Testsheets)"),
     UpdateQr02CbaAction("Update QR02 CBA (from testsheets)"),
-    QuickReportAction("Generate Quick Report (Visual Report)"),
+    QuickReportAction("Generate Quick Report"),
     PostProcessingPipelineAction("Run Full Substation Post-Processing Pipeline (1-Click)"),
     WhatsAppReportAction("Generate WhatsApp Report"),
     ConsolidateMsmsAction("Consolidate MSMS (PYTHON/MSMS/*.xls -> DATA MSMS)"),

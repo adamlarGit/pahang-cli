@@ -463,7 +463,7 @@ def test_project_workflow_actions_registry() -> None:
         (PopulateTotalPeAction, "Populate TOTAL PE (from testsheets)"),
         (RawMaterialAction, "Automate Raw Material Creation & Sorting (from Testsheets)"),
         (UpdateQr02CbaAction, "Update QR02 CBA (from testsheets)"),
-        (QuickReportAction, "Generate Quick Report (Visual Report)"),
+        (QuickReportAction, "Generate Quick Report"),
         (PostProcessingPipelineAction, "Run Full Substation Post-Processing Pipeline (1-Click)"),
         (WhatsAppReportAction, "Generate WhatsApp Report"),
         (ConsolidateMsmsAction, "Consolidate MSMS (PYTHON/MSMS/*.xls -> DATA MSMS)"),

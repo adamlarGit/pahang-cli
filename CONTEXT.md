@@ -21,7 +21,7 @@ Domain configuration model (`src/project/models.py`) controlling the Phase-Resol
 - Persisted in `project_config.json` alongside `CameraConfig` via `ProjectRepository.get_prpd_config()` and `save_prpd_config()`. Configurable interactively via CLI Settings menu (`Configure PRPD Graph Style`).
 
 ### WorkspaceStorage
-A deep module interface (`src/project/storage.py`) acting as the authoritative seam for physical workspace directory (`TESTSHEET/`, `PYTHON/`, `QUICK REPORT/`, `RAW MATERIAL/`, `WHATSAPP/`) and template path resolution.
+A deep module interface (`src/project/storage.py`) acting as the authoritative seam for physical workspace directory (`TESTSHEET/`, `PYTHON/`, `QUICK REPORT/`, `FULL REPORT/`, `RAW MATERIAL/`, `WHATSAPP/`) and template path resolution.
 
 ### PahangStation
 Regional station location (e.g. `RAUB`, `KUANTAN`, `CAMERON HIGHLAND`, `BENTONG`, `TEMERLOH`, `PEKAN`).
@@ -67,6 +67,19 @@ The 6-stage ETL pipeline deep module in `src/workflows/update_qr02_cba.py` respo
 
 ### QuickReportWorkflow
 The 6-stage ETL pipeline deep module in `src/workflows/quick_report.py` responsible for discovering testsheet packages across `TESTSHEET/`, filtering targets, fetching per-station CBM and VI defects from master ENGR workbooks (`QR03 CBA.xlsx` and `QR03 VI.xlsx`), transforming station data into rendering plans with canonical defect status suffixes `(IR+US+TEV+VI)`, rendering multi-part `.docx` templates, and compiling final Word documents.
+
+- **Canonical 7-Part Document Sequence**:
+  The document assembly sequence executed by `QuickReportComposer`:
+  1. **Part 1: Front Page**: Substation metadata, PO number, crew and calibration details, and PE signboard photo.
+  2. **Part 2: CBM Defect Summary**: Tabular overview of diagnostic defects across IR, US, and TEV. Generated only when CBM defects exist.
+  3. **Part 3: VI Defect Summary**: Tabular kejanggalan inventory from the visual inspection checklist. Generated only when VI defects exist.
+  4. **Part 4: CBM Defect Detail Pages**: In-depth diagnostic defect reports (SWG, TX, FP, Blackbox, Battery) with thermal crosshairs, parameter tables, and PRPD graphs. Generated only when CBM defects exist.
+  5. **Part 5: Substation Condition Pages**: 2-column condition photo pairs capturing physical substation and asset baseline state.
+  6. **Part 6: VI Defect Detail Pages**: 2-column photo grid documenting each observed visual defect with callouts and captions. Generated only when VI defects exist.
+  7. **Part 7: Sticker Page**: On-site normal condition sticker and defect notification stickers.
+
+- **Deprecation of "Visual Report"**:
+  "Visual Report" is an obsolete legacy colloquialism that arose when early versions of the generator only handled visual defects. The canonical deliverable is strictly named **Quick Report**. Visual inspection defect deliverables are canonically defined as **VI Defect Summary** (Part 3) and **VI Defect Detail Pages** (Part 6) (collectively, "VI Defect Findings"). Code, CLI presentation labels, and documentation must avoid the term "Visual Report".
 
 ### SignatureReplacementWorkflow
 The deep module in `src/workflows/replace_signatures.py` responsible for processing Excel testsheet signature placeholders (`{{signvendor}}`, `{{signtnb}}`). Supports signature image insertion or explicit `None` placeholder text removal (stripping `{{signvendor}}` and `{{signtnb}}` without inserting drawings to facilitate paper signing), anchor positioning, and worksheet table definition sanitization (`ws._tables.clear()`) prior to saving. Reused by both utility action and `PostProcessingPipelineWorkflow`.
@@ -210,5 +223,18 @@ The abstract compilation interface (`src/quick_report/compiler.py`) isolating Mi
 
 ### MultiStationSelectionPolicy
 The presentation policy governing Quick Report batch generation when an inspection date spans multiple stations. Presents all matching stations pre-selected by default in an interactive CLI checkbox prompt (`cli_selectors.select_multiple`), and delegates batch compilation of selected stations through a single Word COM session via `QuickReportWorkflow.generate(target, station=chosen_stations)`.
+
+### FullReportDocument
+The exhaustive asset census report deliverable (`CONDITION BASED ASSESSMENT FULL SCANNING REPORT`). In contrast to the exception-oriented defect brief of `QuickReportDocument` (which captures only anomalous equipment and baseline condition), `FullReportDocument` documents every inspected asset across the substation regardless of condition. Adheres to the sibling directory convention `FULL REPORT/<STATION>/<MONTH>/<DATE>/` (using `PahangRenamedSubstationStem`) and is assembled through an independent, decoupled post-processing pipeline. Detailed domain analysis and specifications are established in `docs/full_report_domain_analysis.md`.
+
+### ExecutiveSummaryCensus
+The comprehensive asset inventory domain model in `FullReportDocument`. Lists every bay, panel, cable, and bushing across the substation with color-coded operational status: Green for `NORMAL` (healthy components) and Red for `DEFECT` (anomalous components with test readings populated).
+
+### ComponentScanPagePlan
+The domain model specifying per-component scanning records for all healthy equipment in `FullReportDocument`. Allocates dedicated 4-quadrant scanning pages (thermal IR image, digital photo, thermal and electrical parameter tables, ultrasound and TEV waveforms and readings) across switchgear bays, transformers, and feeder pillars.
+
+### DefectInterleavingPolicy
+The document assembly policy governing component scanning streams in `FullReportDocument`. Requires dynamic inline insertion of defect detail pages (thermal hotspot views, TEV PRPD scatter graphs, ultrasound phase plots) immediately following an anomalous component page, rather than grouping defects into a trailing appendix.
+
 
 
