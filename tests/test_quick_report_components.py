@@ -428,6 +428,7 @@ def test_cbm_defect_record_to_dict():
         "tev_char": "",
         "raw_measurement": "24.5",
         "equipment_id": "PANEL 2",
+        "hv_lv": "",
         "source_order": 3,
     }
 

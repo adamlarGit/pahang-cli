@@ -5,6 +5,20 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-09-08
+
+### Added
+- **Programmatic CBM Defect Analysis & Recommendation Engine (`src/quick_report/cbm_rules.py`)**: Pure-domain rule engine generating authoritative `{{ analysis }}` and `{{ recommendation }}` text for CBM defect detail and overview pages with 100% accuracy for LVDB/FP and $\ge 90\%$ for Switchgear and Transformers. Pure domain architecture with zero OpenXML/COM dependencies (closes #12, #16).
+- **Dynamic Phrasing Registry (`CBM_PHRASE_REGISTRY`)**: Structured phrase registry supporting modular `CbmPhraseTemplate` across equipment families (`fp_lvdb`, `swg`, `tx`, `battery`, `blackbox`, `overview`, `fallback`), preparing for dynamic technology configuration.
+- **Strict Acoustic False-Positive Gating (`src/quick_report/cbm_rules.py`)**: Airborne Ultrasound partial discharge text generates strictly when `technology == "US"` or `us_char` indicates anomalous activity (`CORONA`, `TRACKING`, `ARCING`, `MECHANICAL VIBRATION`, `C`, `T`, `A`, `MV`). Normal survey background (`NORMAL` or `"-"`) never emits false-positive PD prose.
+- **Canonical Transformer Phrasing & Droplist Tokens (`src/quick_report/cbm_rules.py`, `src/quick_report/defects.py`)**: Gated strictly on ENGR Column K (`HV` / `LV`) and Column Q master dropdown tokens (`HV CABLE TERMINATION`, `HV BUSHING`, `LV BUSHING`, `LV CABLE LUG CONNECTION`, `TX BODY`/`RADIATOR`/`CONSERVATOR`). Removed non-existent `HT CABLE` and eliminated arbitrary voltage threshold gating (`11kV`/`33kV`). Added `hv_lv: str = ""` to `CbmDefectRecord`.
+- **Overview Cell Post-Processing Shading (`src/quick_report/cbm_render.py`)**: Implemented `_post_process_overview_cell` for overview table cell background shading (`EE0000` red for defect, `00B050` green for no anomaly) cleanly separated in the rendering seam.
+- **Word Template Placeholders (`templates/QUICK REPORT/`)**: Replaced baked-in static text with `{{ analysis }}` and `{{ recommendation }}` placeholders across 10 defect templates in `DEFECT IR`, `DEFECT IR US`, and `DEFECT IR US TEV` for `fp-individual-defect.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`, and `swg-panel.docx`.
+- **CBM Defect Specification & Ground Truth Catalog (`docs/cbm_analysis_recommendation_spec.md`)**: Comprehensive specification cataloging 361 ground-truth defect pages across 243+ `.docx` files in `PO 42360565 - AZZAD` (closes #13, #14).
+
+### Fixed
+- **Direct Master Droplist Priority for LVDB/FP Defects (`src/quick_report/cbm_rules.py`)**: Resolved defect direction inversion where `equipment_id` circuit tags (`OUTGOING F1` / `INCOMING 1`) previously overrode `record.defect_area`. Master droplist tokens (`INCOMING FUSE CONNECTION`, `OUTGOING FUSE CONNECTION`, `INCOMING LINK CONNECTION`, `OUTGOING LINK CONNECTION`, `INCOMING CONTACT FINGER`, `OUTGOING CONTACT FINGER`, `FUSE COMPARTMENT`, `LINK COMPARTMENT`, `BUSBAR CONNECTION`, `CT`, `CUT OUT FUSE`) now directly dictate direction and phrasing, with feeder channel inference acting as fallback only.
+
 ## [1.17.1] - 2026-09-08
 
 ### Fixed

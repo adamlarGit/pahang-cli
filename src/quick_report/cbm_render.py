@@ -19,6 +19,7 @@ from src.core.normalizers import (
     normalize_us_characteristic,
 )
 from src.quick_report.cbm_family import QuickReportFamilySpec
+from src.quick_report.cbm_rules import generate_cbm_analysis_and_recommendation
 from src.quick_report.defects import CbmDefectRecord
 from src.quick_report.prpd import (
     discover_ultratev_survey_dir,
@@ -194,11 +195,26 @@ def _render_docx_template(
                         set_cell_shading(cell, "EE0000" if "TEV" in def_techs else "00B050")
                     else:
                         cell.paragraphs[0].text = "-"
+                elif is_overview:
+                    _post_process_overview_cell(cell)
 
     doc.save(output_path)
     del doc
     gc.collect()
     return output_path
+
+
+def _post_process_overview_cell(cell: Any) -> None:
+    """Apply overview cell shading based on status / analysis text.
+
+    - Defective rows ('Please refer to the following page for details defect.'): EE0000 (Red)
+    - Non-defective rows ('No Anomaly.'): 00B050 (Green)
+    """
+    text = cell.text.strip()
+    if "Please refer to the following page for detail" in text:
+        set_cell_shading(cell, "EE0000")
+    elif "No Anomaly" in text:
+        set_cell_shading(cell, "00B050")
 
 
 def _text_or_empty(value: Any) -> str:
@@ -437,10 +453,18 @@ def _build_fp_lvdb_render_context(
     us_sev = "-" if overview else "__SEVERITY_US__"
     tev_sev = "-" if overview else "__SEVERITY_TEV__"
     def_techs = {record.technology} if record.technology else set()
+    analysis, recommendation = generate_cbm_analysis_and_recommendation(
+        record,
+        equipment_type="fp_lvdb",
+        equipment_pkg=equipment_pkg,
+        is_overview=overview,
+    )
 
     return {
         "__is_overview__": overview,
         "__defective_technologies__": def_techs,
+        "analysis": analysis,
+        "recommendation": recommendation,
         "fp": {
             "labelsource": _fallback_dash(labelsource),
             "feederno": _fallback_dash(feederno),
@@ -450,6 +474,8 @@ def _build_fp_lvdb_render_context(
             "rating": _fallback_dash(fp_rating),
             "serialnumber": _fallback_dash(fp_serial),
             "cabletype": _fallback_dash(fp_cable),
+            "analysis": analysis,
+            "recommendation": recommendation,
             "ir": {
                 "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
@@ -623,9 +649,19 @@ def _build_swg_render_context(
                 if tev_png:
                     tev_prpd = tev_png
 
+    analysis, recommendation = generate_cbm_analysis_and_recommendation(
+        record,
+        equipment_type="swg",
+        equipment_pkg=equipment_pkg,
+        panel_spec=matched_panel,
+        is_overview=overview,
+    )
+
     return {
         "__is_overview__": overview,
         "__defective_technologies__": def_techs,
+        "analysis": analysis,
+        "recommendation": recommendation,
         "swg": {
             "area": area,
             "manufacturer": _fallback_dash(swg_manufacturer),
@@ -633,6 +669,8 @@ def _build_swg_render_context(
             "rating": _fallback_dash(swg_rating),
             "serialnumber": _fallback_dash(swg_serial),
             "type": _fallback_dash(swg_type),
+            "analysis": analysis,
+            "recommendation": recommendation,
         },
         "panel": {
             "name": _fallback_dash(panel_name),
@@ -644,6 +682,8 @@ def _build_swg_render_context(
             "heateramp": panel_heateramp_formatted,
             "loadamp": _fallback_dash(panel_loadamp),
             "serialnumber": _fallback_dash(panel_serialnumber),
+            "analysis": analysis,
+            "recommendation": recommendation,
             "ir": {
                 "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
@@ -798,9 +838,18 @@ def _build_tx_render_context(
     us_char_default = "-" if overview else "NORMAL"
     norm_tx_us_char = normalize_us_characteristic(tx_us_char, default=us_char_default)
 
+    analysis, recommendation = generate_cbm_analysis_and_recommendation(
+        record,
+        equipment_type="tx",
+        equipment_pkg=equipment_pkg,
+        is_overview=overview,
+    )
+
     return {
         "__is_overview__": overview,
         "__defective_technologies__": def_techs,
+        "analysis": analysis,
+        "recommendation": recommendation,
         "tx": {
             "number": _fallback_dash(tx_number),
             "location": _fallback_dash(tx_location),
@@ -810,6 +859,8 @@ def _build_tx_render_context(
             "rating": _fallback_dash(tx_rating),
             "serialnumber": _fallback_dash(tx_serial),
             "cabletype": _fallback_dash(tx_cable),
+            "analysis": analysis,
+            "recommendation": recommendation,
             "ir": {
                 "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
@@ -886,14 +937,25 @@ def _build_blackbox_render_context(
     us_sev = "-" if overview else "__SEVERITY_US__"
     tev_sev = "-" if overview else "__SEVERITY_TEV__"
     def_techs = {record.technology} if record.technology else set()
+    equipment_pkg = _extract_equipment_package(pe_info)
+    analysis, recommendation = generate_cbm_analysis_and_recommendation(
+        record,
+        equipment_type="blackbox",
+        equipment_pkg=equipment_pkg,
+        is_overview=overview,
+    )
 
     return {
         "__is_overview__": overview,
         "__defective_technologies__": def_techs,
+        "analysis": analysis,
+        "recommendation": recommendation,
         "bbox": {
             "number": _fallback_dash(bbox_number),
             "location": _fallback_dash(bbox_location),
             "area": area,
+            "analysis": analysis,
+            "recommendation": recommendation,
             "ir": {
                 "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,
@@ -960,16 +1022,26 @@ def _build_battery_render_context(
     us_sev = "-" if overview else "__SEVERITY_US__"
     tev_sev = "-" if overview else "__SEVERITY_TEV__"
     def_techs = {record.technology} if record.technology else set()
+    analysis, recommendation = generate_cbm_analysis_and_recommendation(
+        record,
+        equipment_type="battery",
+        equipment_pkg=equipment_pkg,
+        is_overview=overview,
+    )
 
     return {
         "__is_overview__": overview,
         "__defective_technologies__": def_techs,
+        "analysis": analysis,
+        "recommendation": recommendation,
         "batt": {
             "number": _fallback_dash(batt_number),
             "manufacturer": _fallback_dash(batt_mfg),
             "model": _fallback_dash(batt_model),
             "serialnumber": _fallback_dash(batt_serial),
             "area": area,
+            "analysis": analysis,
+            "recommendation": recommendation,
             "ir": {
                 "reading": format_temperature_float(record.ir_reading),
                 "severity": ir_sev,

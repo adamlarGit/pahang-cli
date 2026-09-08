@@ -1,6 +1,6 @@
 # Project & Utility Automation CLI (`pahang-cli`)
 
-A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.17.1`).
+A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.18.0`).
 
 ---
 
@@ -11,9 +11,10 @@ To keep this landing page concise and maintainable as the suite scales, detailed
 - **[System Architecture & Overview Guide](file:///docs/project_centric_architecture.md)** — Core design, deep modules (`src/project/` repository/storage seams and `src/postprocessing/converters.py`), and Windows COM automation rules.
 - **[ETL Pipeline Refactoring Methodology](file:///docs/etl_pipeline_refactoring_methodology.md)** — 6-stage ETL pipeline architecture, pre-flight guards, and repository seams across workflow engines.
 - **[Quick Report Deep Module Architecture (ADR 0003)](file:///docs/adr/0003-quick-report-deep-module-architecture.md)** — Two-method deep module (`generate`/`inspect`), batch Word COM session reuse, ActiveX isolation, and DocumentCompiler seams.
+- **[CBM Analysis & Recommendation Specification](file:///docs/cbm_analysis_recommendation_spec.md)** — Specification for pure-domain programmatic analysis and recommendation generation across all equipment families.
 - **[PRPD Graph Generation Guide](file:///docs/prpd_graph_generation_guide.md)** — Pure-Python PRPD decoders (UE01 FlatBuffers & JSON), 4-tier repetition density scatter bins, and dynamic CBM defect page embedding.
 - **[Utility Actions Guide](file:///docs/workflows/utility_actions.md)** — Deep dive into standalone tools (batch PDF conversions, diagonal borders, signature replacement, and separator PDF merging).
-- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.17.1`) following [Keep a Changelog](https://keepachangelog.com/).
+- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.18.0`) following [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
@@ -115,7 +116,7 @@ Automates end-to-end engineering tasks against the currently active workspace.
 | **2** | **Populate TOTAL PE (from testsheets)** | Scans daily `TESTSHEET/` input folders (`<STATION>/<MONTH>/<DD-MM-YYYY>/`), validates testsheets, updates `TOTAL PE.xlsx` (`DataCycle1` sheet), enforces duplicate PE protection, and sorts records numerically by `PE NO`. |
 | **3** | **Automate Raw Material Creation & Sorting (from Testsheets)** | Validates `TOTAL PE.xlsx` pre-checks, provisions `RAW MATERIAL/` destination folder hierarchies, copies `IR`/`DG` photos using testsheet bounds, and extracts `US+TEV` survey `.zip` archives into counterpart PE raw data directories. |
 | **4** | **Update QR02 CBA (from testsheets)** | Extracts testsheet metadata (`PCE Testsheet`, `PCE VI`) and upserts per-station ENGR `QR02 CBA` Excel worksheets with atomic transactions, exact FL matching, and ghost cell sanitization. |
-| **5** | **Generate Quick Report (Visual Report)** | Deep module (`generate`/`inspect`) compiling 7-part docx visual reports from inspection date folders (`<STATION>/<MONTH>/<DATE>/`) or manual FLs (single or comma-separated). Features multi-station checkbox pre-selection, batch Word COM session reuse (`WordComDocumentCompiler`), fresh OLE ActiveX container isolation (ADR 0002), table escape paragraphs, retry paste, preflight template fail-fast guards, pure-Python PRPD rendering, dynamic multi-technology template resolution (`DEFECT IR`, `DEFECT IR US`, `DEFECT IR US TEV`), and canonical `(IR+US+TEV+VI)` defect suffixes. |
+| **5** | **Generate Quick Report (Visual Report)** | Deep module (`generate`/`inspect`) compiling 7-part docx visual reports from inspection date folders (`<STATION>/<MONTH>/<DATE>/`) or manual FLs (single or comma-separated). Features multi-station checkbox pre-selection, batch Word COM session reuse (`WordComDocumentCompiler`), fresh OLE ActiveX container isolation (ADR 0002), table escape paragraphs, retry paste, preflight template fail-fast guards, pure-Python PRPD rendering, dynamic multi-technology template resolution (`DEFECT IR`, `DEFECT IR US`, `DEFECT IR US TEV`), canonical `(IR+US+TEV+VI)` defect suffixes, and pure-domain programmatic CBM defect analysis and recommendation generation across LVDB/FP, Switchgear, and Transformers with dynamic phrasing registries and overview table status cell shading. |
 | **6** | **Run Full Substation Post-Processing Pipeline (1-Click)** | **1-Click Automation**: 6-stage post-processing pipeline executing pre-flight integrity validation across 3-tier Pahang hierarchies, automated renaming sync, daily WhatsApp reporting, digital signature stamping / `mode="none"` placeholder sanitization, diagonal blank borders, shared COM session automation, per-substation error resilience, and deliverable PDF merging into `QUICK REPORT/<DATE>/<STEM>.pdf`. |
 | **7** | **Generate WhatsApp Report** | Interactively select quick report batches to generate formatted WhatsApp inspection summary reports (`.docx`) in `PYTHON/WHATSAPP/`. |
 | **8** | **Consolidate MSMS (PYTHON/MSMS/*.xls -> DATA MSMS)** | 6-stage ETL workflow reading scattered `.xls` work order files in `PYTHON/MSMS/`, deduplicating records, normalizing FL ERMS tokens, appending rows to `DATA MSMS.xlsx`, and archiving processed files to `COMPLETED/`. |

@@ -54,6 +54,7 @@ class CbmDefectRecord:
     tev_char: str = ""
     raw_measurement: str = ""
     equipment_id: str = ""
+    hv_lv: str = ""
     source_order: int = 0
 
     def __post_init__(self) -> None:
@@ -71,6 +72,7 @@ class CbmDefectRecord:
         object.__setattr__(self, "tev_char", _clean_val(self.tev_char))
         object.__setattr__(self, "raw_measurement", _clean_val(self.raw_measurement))
         object.__setattr__(self, "equipment_id", _clean_val(self.equipment_id))
+        object.__setattr__(self, "hv_lv", _clean_val(self.hv_lv).upper())
 
         tech = self.technology
         raw = self.raw_measurement
@@ -107,6 +109,7 @@ class CbmDefectRecord:
             "tev_char": self.tev_char,
             "raw_measurement": self.raw_measurement,
             "equipment_id": self.equipment_id,
+            "hv_lv": self.hv_lv,
             "source_order": self.source_order,
         }
 
@@ -382,6 +385,7 @@ class MasterQr03DefectRepository:
             brand = _get_val("BRAND")
             model = _get_val("MODEL")
             rating = _get_val("RATING")
+            hv_lv = _get_val("HV/LV", "HV_LV", "HV / LV", "VOLTAGE LEVEL", "VOLTAGE")
             defect_area = _get_val("DEFECT AREA", "DEFECT_AREA", "AREA")
             additional_remarks = _get_val(
                 "ADDITIONAL REMARKS", "REMARKS", "ADDITIONAL_REMARKS", "REMARK"
@@ -439,6 +443,7 @@ class MasterQr03DefectRepository:
                 tev_char=tev_char,
                 raw_measurement=reading,
                 equipment_id=equipment_id,
+                hv_lv=hv_lv,
                 source_order=idx,
             )
             defects.append(rec)
