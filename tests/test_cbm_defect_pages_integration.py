@@ -231,3 +231,227 @@ def test_generate_cbm_defect_pages_missing_survey_dir_graceful_fallback(tmp_path
 
     shd_us = t.rows[30].cells[4]._tc.get_or_add_tcPr().find(qn("w:shd"))
     assert shd_us is not None and shd_us.get(qn("w:fill")) == "00B050"
+
+
+def test_generate_cbm_defect_pages_panel_serial_number_docx_integration(tmp_path: Path):
+    """Integration test: verify rendered .docx table cells for panel serial number across RMU and VCB."""
+    swg_spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
+    overview_tpl = Path("templates/QUICK REPORT/DEFECT IR US TEV/swg-overview.docx")
+    detail_tpl = Path("templates/QUICK REPORT/DEFECT IR US TEV/swg-panel.docx")
+
+    if not overview_tpl.exists() or not detail_tpl.exists():
+        pytest.skip("SWG templates not found.")
+
+    # 1. RMU SF6 switchgear where panel has serial propagated from board
+    panel_rmu = SwitchgearPanelSpec(
+        panel_no=1,
+        panel_feeder_no="F01",
+        name="INCOMING 1",
+        serial_no="SG-SF6-DOCX-001",
+    )
+    swg_rmu = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        serial_no="SG-SF6-DOCX-001",
+        panels=(panel_rmu,),
+    )
+    equipment_rmu = SubstationEquipmentPackage(switchgears=(swg_rmu,))
+
+    rec_rmu = CbmDefectRecord(
+        equipment="INCOMING 1",
+        technology="IR",
+        defect_area="Cable Box",
+        ir_reading="60.0",
+    )
+    group_rmu = CbmDefectGroup(
+        item_key="INCOMING 1",
+        item_suffix="",
+        defects=(rec_rmu,),
+        overview=rec_rmu,
+        detail_groups=(CbmDefectDetailGroup(role_id="panel_area", defects=(rec_rmu,)),),
+    )
+    plan_rmu = CbmDefectFamilyPlan(
+        spec=swg_spec,
+        overview_template=overview_tpl,
+        detail_templates=(("panel_area", detail_tpl),),
+        groups=(group_rmu,),
+    )
+    out_rmu = tmp_path / "out_docx_rmu"
+    generated_rmu = generate_cbm_defect_pages(
+        plan=plan_rmu,
+        output_dir=out_rmu,
+        substation_number=1,
+        pe_info={"equipment": equipment_rmu, "substation": {"name_erms": "PE RMU DOCX"}},
+    )
+    assert len(generated_rmu) == 2
+    doc_rmu = docx.Document(generated_rmu[1])
+    # Table 0, Row 13, Col 19 is the Serial No. cell
+    serial_cell_rmu = doc_rmu.tables[0].rows[13].cells[19].text.strip()
+    assert serial_cell_rmu == "SG-SF6-DOCX-001"
+
+    # 2. VCB switchgear with breaker serial
+    panel_vcb = SwitchgearPanelSpec(
+        panel_no=1,
+        panel_feeder_no="F01",
+        name="INCOMING 1",
+        serial_no="BRK-VCB-DOCX-002",
+    )
+    swg_vcb = SwitchgearSpec(
+        switchgear_type="VCB",
+        serial_no="BOARD-VCB-001",
+        panels=(panel_vcb,),
+    )
+    equipment_vcb = SubstationEquipmentPackage(switchgears=(swg_vcb,))
+
+    rec_vcb = CbmDefectRecord(
+        equipment="INCOMING 1",
+        technology="IR",
+        defect_area="Cable Box",
+        ir_reading="58.0",
+    )
+    group_vcb = CbmDefectGroup(
+        item_key="INCOMING 1",
+        item_suffix="",
+        defects=(rec_vcb,),
+        overview=rec_vcb,
+        detail_groups=(CbmDefectDetailGroup(role_id="panel_area", defects=(rec_vcb,)),),
+    )
+    plan_vcb = CbmDefectFamilyPlan(
+        spec=swg_spec,
+        overview_template=overview_tpl,
+        detail_templates=(("panel_area", detail_tpl),),
+        groups=(group_vcb,),
+    )
+    out_vcb = tmp_path / "out_docx_vcb"
+    generated_vcb = generate_cbm_defect_pages(
+        plan=plan_vcb,
+        output_dir=out_vcb,
+        substation_number=2,
+        pe_info={"equipment": equipment_vcb, "substation": {"name_erms": "PE VCB DOCX"}},
+    )
+    assert len(generated_vcb) == 2
+    doc_vcb = docx.Document(generated_vcb[1])
+    serial_cell_vcb = doc_vcb.tables[0].rows[13].cells[19].text.strip()
+    assert serial_cell_vcb == "BRK-VCB-DOCX-002"
+
+    # 3. MRMU switchgear where panel has serial propagated from board
+    panel_mrmu = SwitchgearPanelSpec(
+        panel_no=1,
+        panel_feeder_no="F01",
+        name="INCOMING 1",
+        serial_no="SG-MRMU-DOCX-003",
+    )
+    swg_mrmu = SwitchgearSpec(
+        switchgear_type="MRMU",
+        serial_no="SG-MRMU-DOCX-003",
+        panels=(panel_mrmu,),
+    )
+    equipment_mrmu = SubstationEquipmentPackage(switchgears=(swg_mrmu,))
+
+    rec_mrmu = CbmDefectRecord(
+        equipment="INCOMING 1",
+        technology="IR",
+        defect_area="Cable Box",
+        ir_reading="52.0",
+    )
+    group_mrmu = CbmDefectGroup(
+        item_key="INCOMING 1",
+        item_suffix="",
+        defects=(rec_mrmu,),
+        overview=rec_mrmu,
+        detail_groups=(CbmDefectDetailGroup(role_id="panel_area", defects=(rec_mrmu,)),),
+    )
+    plan_mrmu = CbmDefectFamilyPlan(
+        spec=swg_spec,
+        overview_template=overview_tpl,
+        detail_templates=(("panel_area", detail_tpl),),
+        groups=(group_mrmu,),
+    )
+    out_mrmu = tmp_path / "out_docx_mrmu"
+    generated_mrmu = generate_cbm_defect_pages(
+        plan=plan_mrmu,
+        output_dir=out_mrmu,
+        substation_number=3,
+        pe_info={"equipment": equipment_mrmu, "substation": {"name_erms": "PE MRMU DOCX"}},
+    )
+    assert len(generated_mrmu) == 2
+    doc_mrmu = docx.Document(generated_mrmu[1])
+    serial_cell_mrmu = doc_mrmu.tables[0].rows[13].cells[19].text.strip()
+    assert serial_cell_mrmu == "SG-MRMU-DOCX-003"
+
+    # 4. RMU OIL switchgear with individual OLU serial
+    panel_oil = SwitchgearPanelSpec(
+        panel_no=1,
+        panel_feeder_no="F01",
+        name="INCOMING 1",
+        serial_no="OLU-OIL-DOCX-004",
+    )
+    swg_oil = SwitchgearSpec(
+        switchgear_type="RMU OIL",
+        serial_no="BOARD-OIL-DOCX-004",
+        panels=(panel_oil,),
+    )
+    equipment_oil = SubstationEquipmentPackage(switchgears=(swg_oil,))
+
+    rec_oil = CbmDefectRecord(
+        equipment="INCOMING 1",
+        technology="IR",
+        defect_area="Cable Box",
+        ir_reading="49.0",
+    )
+    group_oil = CbmDefectGroup(
+        item_key="INCOMING 1",
+        item_suffix="",
+        defects=(rec_oil,),
+        overview=rec_oil,
+        detail_groups=(CbmDefectDetailGroup(role_id="panel_area", defects=(rec_oil,)),),
+    )
+    plan_oil = CbmDefectFamilyPlan(
+        spec=swg_spec,
+        overview_template=overview_tpl,
+        detail_templates=(("panel_area", detail_tpl),),
+        groups=(group_oil,),
+    )
+    out_oil = tmp_path / "out_docx_oil"
+    generated_oil = generate_cbm_defect_pages(
+        plan=plan_oil,
+        output_dir=out_oil,
+        substation_number=4,
+        pe_info={"equipment": equipment_oil, "substation": {"name_erms": "PE OIL DOCX"}},
+    )
+    assert len(generated_oil) == 2
+    doc_oil = docx.Document(generated_oil[1])
+    serial_cell_oil = doc_oil.tables[0].rows[13].cells[19].text.strip()
+    assert serial_cell_oil == "OLU-OIL-DOCX-004"
+
+    # 5. Unlinked panel defect -> should render "-"
+    rec_unlinked = CbmDefectRecord(
+        equipment="UNKNOWN_PANEL",
+        technology="IR",
+        defect_area="Unknown Box",
+        ir_reading="50.0",
+    )
+    group_unlinked = CbmDefectGroup(
+        item_key="UNKNOWN_PANEL",
+        item_suffix="",
+        defects=(rec_unlinked,),
+        overview=rec_unlinked,
+        detail_groups=(CbmDefectDetailGroup(role_id="panel_area", defects=(rec_unlinked,)),),
+    )
+    plan_unlinked = CbmDefectFamilyPlan(
+        spec=swg_spec,
+        overview_template=overview_tpl,
+        detail_templates=(("panel_area", detail_tpl),),
+        groups=(group_unlinked,),
+    )
+    out_unlinked = tmp_path / "out_docx_unlinked"
+    generated_unlinked = generate_cbm_defect_pages(
+        plan=plan_unlinked,
+        output_dir=out_unlinked,
+        substation_number=5,
+        pe_info={"equipment": equipment_rmu, "substation": {"name_erms": "PE UNLINKED DOCX"}},
+    )
+    assert len(generated_unlinked) == 2
+    doc_unlinked = docx.Document(generated_unlinked[1])
+    serial_cell_unlinked = doc_unlinked.tables[0].rows[13].cells[19].text.strip()
+    assert serial_cell_unlinked == "-"
+

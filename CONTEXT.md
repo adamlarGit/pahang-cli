@@ -143,6 +143,10 @@ Domain rendering rules governing switchgear panel CBM defect detail pages (`swg-
 - **Busbar Position (`panel.busbarposition`)**:
   - For `VCB` switchgear: Defaults to `"MAIN"`. If the panel name contains `"TRANSITION"` (e.g., `"TRANSITION PANEL"`), it outputs `"-"`.
   - For Non-VCB switchgear (`RMU SF6`, `RMU OIL`, `MRMU`, `OCB`): Strictly outputs `"-"`.
+- **Panel Serial Number (`panel.serialnumber`)**:
+  - For `RMU SF6` and `MRMU` switchgear: Panels share the switchgear serial number from Column O in `PCE VI` sheet (`swg.serialnumber`). In `TestsheetExtractor` (Stage 2), `swg1_serial` propagates to attached panels with blank serial numbers onto `SwitchgearPanelSpec.serial_no`.
+  - For `VCB` and `RMU OIL` switchgear: Panel serial numbers represent individual breaker or OLU serial numbers extracted from Column I in `PCE Testsheet` (`"SERIAL NO (ONLY BREAKER & OLU)"`).
+  - Document Presentation (Stage 4/5): `panel.serialnumber` consumes `matched_panel.serial_no`. If a panel serial number is missing, unpopulated, or unlinked (`matched_panel is None`), `panel.serialnumber` resolves to `"-"`.
 
 ### SubstationConditionPairBuilderPolicy
 Canonical 2-column condition page generation rules for Quick Report Word output:

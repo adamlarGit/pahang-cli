@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 from datetime import date, datetime
 import re
 import warnings
@@ -582,74 +583,81 @@ class TestsheetExtractor:
         """Extract switchgear specifications and attached panels."""
         panels = self._extract_panels(pce_sheets)
 
-        sg1_type = ""
-        sg1_mfg = ""
-        sg1_model = ""
-        sg1_year = ""
-        sg1_rating = ""
-        sg1_serial = ""
+        swg1_type = ""
+        swg1_mfg = ""
+        swg1_model = ""
+        swg1_year = ""
+        swg1_rating = ""
+        swg1_serial = ""
 
-        sg2_type = ""
-        sg2_mfg = ""
-        sg2_model = ""
-        sg2_year = ""
-        sg2_rating = ""
-        sg2_serial = ""
+        swg2_type = ""
+        swg2_mfg = ""
+        swg2_model = ""
+        swg2_year = ""
+        swg2_rating = ""
+        swg2_serial = ""
 
         if ws_vi is not None:
             # Switchgear 1 (Rows 11-13)
-            sg1_type = self._extract_switchgear_type(ws_vi, 11)
-            sg1_mfg = clean_val(ws_vi["C12"].value) or ""
-            sg1_model = clean_val(ws_vi["G12"].value) or clean_val(ws_vi["F12"].value) or ""
-            if sg1_model in ("Manufacturer/Model:", "Manufacturer/Modal:"):
-                sg1_model = ""
-            sg1_year = clean_val(ws_vi["C13"].value) or ""
-            sg1_rating = clean_val(ws_vi["J13"].value) or clean_val(ws_vi["I13"].value) or ""
-            if not sg1_rating and clean_val(ws_vi["H13"].value) not in (None, "Switchgear Rating :"):
-                sg1_rating = clean_val(ws_vi["H13"].value) or ""
-            sg1_serial = clean_val(ws_vi["O13"].value) or clean_val(ws_vi["N13"].value) or ""
-            if not sg1_serial and clean_val(ws_vi["M13"].value) not in (None, "RMU SF6 / OIL S/N :"):
-                sg1_serial = clean_val(ws_vi["M13"].value) or ""
+            swg1_type = self._extract_switchgear_type(ws_vi, 11)
+            swg1_mfg = clean_val(ws_vi["C12"].value) or ""
+            swg1_model = clean_val(ws_vi["G12"].value) or clean_val(ws_vi["F12"].value) or ""
+            if swg1_model in ("Manufacturer/Model:", "Manufacturer/Modal:"):
+                swg1_model = ""
+            swg1_year = clean_val(ws_vi["C13"].value) or ""
+            swg1_rating = clean_val(ws_vi["J13"].value) or clean_val(ws_vi["I13"].value) or ""
+            if not swg1_rating and clean_val(ws_vi["H13"].value) not in (None, "Switchgear Rating :"):
+                swg1_rating = clean_val(ws_vi["H13"].value) or ""
+            swg1_serial = clean_val(ws_vi["O13"].value) or clean_val(ws_vi["N13"].value) or ""
+            if not swg1_serial and clean_val(ws_vi["M13"].value) not in (None, "RMU SF6 / OIL S/N :"):
+                swg1_serial = clean_val(ws_vi["M13"].value) or ""
 
             # Switchgear 2 (Rows 14-16)
-            sg2_type = self._extract_switchgear_type(ws_vi, 14)
-            sg2_mfg = clean_val(ws_vi["C15"].value) or ""
-            sg2_model = clean_val(ws_vi["G15"].value) or clean_val(ws_vi["F15"].value) or ""
-            if sg2_model in ("Manufacturer/Model:", "Manufacturer/Modal:"):
-                sg2_model = ""
-            sg2_year = clean_val(ws_vi["C16"].value) or ""
-            sg2_rating = clean_val(ws_vi["J16"].value) or clean_val(ws_vi["I16"].value) or ""
-            if not sg2_rating and clean_val(ws_vi["H16"].value) not in (None, "Switchgear Rating :"):
-                sg2_rating = clean_val(ws_vi["H16"].value) or ""
-            sg2_serial = clean_val(ws_vi["O16"].value) or clean_val(ws_vi["N16"].value) or ""
-            if not sg2_serial and clean_val(ws_vi["M16"].value) not in (None, "RMU SF6 / OIL S/N :"):
-                sg2_serial = clean_val(ws_vi["M16"].value) or ""
+            swg2_type = self._extract_switchgear_type(ws_vi, 14)
+            swg2_mfg = clean_val(ws_vi["C15"].value) or ""
+            swg2_model = clean_val(ws_vi["G15"].value) or clean_val(ws_vi["F15"].value) or ""
+            if swg2_model in ("Manufacturer/Model:", "Manufacturer/Modal:"):
+                swg2_model = ""
+            swg2_year = clean_val(ws_vi["C16"].value) or ""
+            swg2_rating = clean_val(ws_vi["J16"].value) or clean_val(ws_vi["I16"].value) or ""
+            if not swg2_rating and clean_val(ws_vi["H16"].value) not in (None, "Switchgear Rating :"):
+                swg2_rating = clean_val(ws_vi["H16"].value) or ""
+            swg2_serial = clean_val(ws_vi["O16"].value) or clean_val(ws_vi["N16"].value) or ""
+            if not swg2_serial and clean_val(ws_vi["M16"].value) not in (None, "RMU SF6 / OIL S/N :"):
+                swg2_serial = clean_val(ws_vi["M16"].value) or ""
 
-        sg1_active = bool(sg1_type or sg1_mfg or sg1_model or sg1_year or sg1_rating or sg1_serial or panels)
-        sg2_active = bool(sg2_type or sg2_mfg or sg2_model or sg2_year or sg2_rating or sg2_serial)
+        # For RMU SF6 and MRMU, panels share the switchgear serial number if panel serial is blank
+        if swg1_type.strip().upper() in ("RMU SF6", "MRMU") and swg1_serial:
+            panels = tuple(
+                replace(p, serial_no=swg1_serial) if not p.serial_no else p
+                for p in panels
+            )
+
+        swg1_active = bool(swg1_type or swg1_mfg or swg1_model or swg1_year or swg1_rating or swg1_serial or panels)
+        swg2_active = bool(swg2_type or swg2_mfg or swg2_model or swg2_year or swg2_rating or swg2_serial)
 
         result: list[SwitchgearSpec] = []
-        if sg1_active:
+        if swg1_active:
             result.append(
                 SwitchgearSpec(
-                    switchgear_type=sg1_type,
-                    manufacturer=sg1_mfg,
-                    model=sg1_model,
-                    manufactured_year=sg1_year,
-                    rating=sg1_rating,
-                    serial_no=sg1_serial,
+                    switchgear_type=swg1_type,
+                    manufacturer=swg1_mfg,
+                    model=swg1_model,
+                    manufactured_year=swg1_year,
+                    rating=swg1_rating,
+                    serial_no=swg1_serial,
                     panels=panels,
                 )
             )
-        if sg2_active:
+        if swg2_active:
             result.append(
                 SwitchgearSpec(
-                    switchgear_type=sg2_type,
-                    manufacturer=sg2_mfg,
-                    model=sg2_model,
-                    manufactured_year=sg2_year,
-                    rating=sg2_rating,
-                    serial_no=sg2_serial,
+                    switchgear_type=swg2_type,
+                    manufacturer=swg2_mfg,
+                    model=swg2_model,
+                    manufactured_year=swg2_year,
+                    rating=swg2_rating,
+                    serial_no=swg2_serial,
                     panels=(),
                 )
             )

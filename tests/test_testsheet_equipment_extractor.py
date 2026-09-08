@@ -913,4 +913,131 @@ def test_auxiliary_flags_combinations() -> None:
     assert flags_missing == (False, False, False, False)
 
 
+def test_rmu_sf6_and_mrmu_panel_serial_propagation(tmp_path: Path) -> None:
+    """Verify swg1_serial propagates to panels for RMU SF6 and MRMU when panel serial is blank."""
+    extractor = TestsheetExtractor()
+
+    # 1. RMU SF6 with blank panel serials in testsheet
+    p1 = tmp_path / "rmu_sf6.xlsx"
+    wb1 = openpyxl.Workbook()
+    ws_pce1 = wb1.active
+    ws_pce1.title = "PCE Testsheet"
+    ws_pce1["C5"] = "PE RMU"
+    ws_pce1["W5"] = "FL-RMU"
+    ws_pce1["P4"] = "2026-05-10"
+    ws_pce1["B10"] = "F01"
+    ws_pce1["C10"] = "INCOMING 1"
+    ws_pce1["I10"] = None  # Blank in testsheet
+    ws_pce1["B14"] = "F02"
+    ws_pce1["C14"] = "OUTGOING 1"
+    ws_pce1["I14"] = ""  # Blank in testsheet
+
+    ws_vi1 = wb1.create_sheet(title="PCE VI")
+    ws_vi1["N1"] = "PE"
+    ws_vi1["C7"] = "PE RMU SITE"
+    ws_vi1["G11"] = "/"  # RMU SF6
+    ws_vi1["C12"] = "ABB"
+    ws_vi1["O13"] = "ABB-SF6-BOARD-001"
+    wb1.save(p1)
+
+    data1 = extractor.extract_testsheet_data(p1)
+    sg1 = data1.equipment.switchgear
+    assert sg1.switchgear_type == "RMU SF6"
+    assert sg1.serial_no == "ABB-SF6-BOARD-001"
+    assert len(sg1.panels) == 2
+    assert sg1.panels[0].serial_no == "ABB-SF6-BOARD-001"
+    assert sg1.panels[1].serial_no == "ABB-SF6-BOARD-001"
+
+    # 2. MRMU with blank panel serials in testsheet
+    p2 = tmp_path / "mrmu.xlsx"
+    wb2 = openpyxl.Workbook()
+    ws_pce2 = wb2.active
+    ws_pce2.title = "PCE Testsheet"
+    ws_pce2["C5"] = "PE MRMU"
+    ws_pce2["W5"] = "FL-MRMU"
+    ws_pce2["P4"] = "2026-05-10"
+    ws_pce2["B10"] = "F01"
+    ws_pce2["C10"] = "TX 1"
+    ws_pce2["I10"] = "-"  # Dash in testsheet
+
+    ws_vi2 = wb2.create_sheet(title="PCE VI")
+    ws_vi2["N1"] = "PE"
+    ws_vi2["C7"] = "PE MRMU SITE"
+    ws_vi2["I11"] = "/"  # MRMU
+    ws_vi2["C12"] = "SCHNEIDER"
+    ws_vi2["O13"] = "SCH-MRMU-BOARD-002"
+    wb2.save(p2)
+
+    data2 = extractor.extract_testsheet_data(p2)
+    sg2 = data2.equipment.switchgear
+    assert sg2.switchgear_type == "MRMU"
+    assert sg2.serial_no == "SCH-MRMU-BOARD-002"
+    assert len(sg2.panels) == 1
+    assert sg2.panels[0].serial_no == "SCH-MRMU-BOARD-002"
+
+    # 3. VCB preserves individual breaker serial from Col I and keeps "" when blank
+    p3 = tmp_path / "vcb.xlsx"
+    wb3 = openpyxl.Workbook()
+    ws_pce3 = wb3.active
+    ws_pce3.title = "PCE Testsheet"
+    ws_pce3["C5"] = "PE VCB"
+    ws_pce3["W5"] = "FL-VCB"
+    ws_pce3["P4"] = "2026-05-10"
+    ws_pce3["B10"] = "F01"
+    ws_pce3["C10"] = "INCOMING 1"
+    ws_pce3["I10"] = "BRK-VCB-001"
+    ws_pce3["B14"] = "F02"
+    ws_pce3["C14"] = "OUTGOING 1"
+    ws_pce3["I14"] = None  # Blank in testsheet
+
+    ws_vi3 = wb3.create_sheet(title="PCE VI")
+    ws_vi3["N1"] = "PE"
+    ws_vi3["C7"] = "PE VCB SITE"
+    ws_vi3["K11"] = "/"  # VCB
+    ws_vi3["C12"] = "TAMCO"
+    ws_vi3["O13"] = "BOARD-VCB-999"
+    wb3.save(p3)
+
+    data3 = extractor.extract_testsheet_data(p3)
+    sg3 = data3.equipment.switchgear
+    assert sg3.switchgear_type == "VCB"
+    assert sg3.serial_no == "BOARD-VCB-999"
+    assert len(sg3.panels) == 2
+    assert sg3.panels[0].serial_no == "BRK-VCB-001"
+    assert sg3.panels[1].serial_no == ""
+
+    # 4. RMU OIL preserves individual OLU serial from Col I and keeps "" when blank
+    p4 = tmp_path / "rmu_oil.xlsx"
+    wb4 = openpyxl.Workbook()
+    ws_pce4 = wb4.active
+    ws_pce4.title = "PCE Testsheet"
+    ws_pce4["C5"] = "PE OIL"
+    ws_pce4["W5"] = "FL-OIL"
+    ws_pce4["P4"] = "2026-05-10"
+    ws_pce4["B10"] = "F01"
+    ws_pce4["C10"] = "INCOMING 1"
+    ws_pce4["I10"] = "OLU-OIL-001"
+    ws_pce4["B14"] = "F02"
+    ws_pce4["C14"] = "OUTGOING 1"
+    ws_pce4["I14"] = "-"  # Dash in testsheet
+
+    ws_vi4 = wb4.create_sheet(title="PCE VI")
+    ws_vi4["N1"] = "PE"
+    ws_vi4["C7"] = "PE OIL SITE"
+    ws_vi4["D11"] = "/"  # RMU OIL
+    ws_vi4["C12"] = "LUCY"
+    ws_vi4["O13"] = "BOARD-OIL-888"
+    wb4.save(p4)
+
+    data4 = extractor.extract_testsheet_data(p4)
+    sg4 = data4.equipment.switchgear
+    assert sg4.switchgear_type == "RMU OIL"
+    assert sg4.serial_no == "BOARD-OIL-888"
+    assert len(sg4.panels) == 2
+    assert sg4.panels[0].serial_no == "OLU-OIL-001"
+    assert sg4.panels[1].serial_no == ""
+
+
+
+
 

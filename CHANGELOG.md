@@ -5,6 +5,12 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.1] - 2026-09-08
+
+### Fixed
+- **Switchgear Panel Serial Number Propagation for RMU SF6 & MRMU (`src/testsheet/extractor.py`, `CONTEXT.md`)**: Resolved issue where switchgear panels under `RMU SF6` and `MRMU` switchgears defaulted to empty or missing serial numbers. For single-tank sealed units (`RMU SF6`, `MRMU`), `TestsheetExtractor` now automatically propagates `swg1_serial` (from Column O of `PCE VI`) to attached panels whose Column I is blank, while preserving distinct breaker and OLU serial numbers from Column I for `VCB` and `RMU OIL`. Documented under `CbmDefectDetailSwitchgearPolicy` in `CONTEXT.md` (closes #15).
+- **Switchgear Identifier Normalization (`src/testsheet/extractor.py`)**: Standardized all local `sg1_*`/`sg2_*` switchgear variables to canonical `swg1_*`/`swg2_*` naming.
+
 ## [1.17.0] - 2026-09-07
 
 ### Added

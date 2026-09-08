@@ -325,3 +325,81 @@ def test_build_swg_and_tx_render_contexts_measurement_flow():
     assert tx_ctx["us"]["reading"] == "14"
     assert tx_ctx["us"]["char"] == "PARTIAL DISCHARGE"
     assert tx_ctx["tev"]["bg"] == "8"
+
+
+def test_swg_panel_serial_number_resolution():
+    """Verify panel.serialnumber resolution for RMU SF6, MRMU, VCB, and RMU OIL (Ticket 106)."""
+    # 1. RMU SF6: panel serial resolved from domain model (propagated by TestsheetExtractor)
+    panel_rmu = SwitchgearPanelSpec(panel_no=1, panel_feeder_no="F01", name="INCOMING 1", serial_no="SG-SF6-9999")
+    swg_rmu = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        serial_no="SG-SF6-9999",
+        panels=(panel_rmu,),
+    )
+    pkg_rmu = SubstationEquipmentPackage(switchgears=(swg_rmu,))
+    pe_info_rmu = {"equipment": pkg_rmu}
+
+    rec_rmu = CbmDefectRecord(equipment="RMU SF6", equipment_id="F01")
+    ctx_rmu = _build_swg_render_context(rec_rmu, overview=False, pe_info=pe_info_rmu)
+    assert ctx_rmu["swg"]["serialnumber"] == "SG-SF6-9999"
+    assert ctx_rmu["panel"]["serialnumber"] == "SG-SF6-9999"
+
+    # 2. MRMU: panel serial resolved from domain model
+    panel_mrmu = SwitchgearPanelSpec(panel_no=1, panel_feeder_no="F01", name="TX 1", serial_no="SG-MRMU-8888")
+    swg_mrmu = SwitchgearSpec(
+        switchgear_type="MRMU",
+        serial_no="SG-MRMU-8888",
+        panels=(panel_mrmu,),
+    )
+    pkg_mrmu = SubstationEquipmentPackage(switchgears=(swg_mrmu,))
+    pe_info_mrmu = {"equipment": pkg_mrmu}
+
+    rec_mrmu = CbmDefectRecord(equipment="MRMU", equipment_id="F01")
+    ctx_mrmu = _build_swg_render_context(rec_mrmu, overview=False, pe_info=pe_info_mrmu)
+    assert ctx_mrmu["swg"]["serialnumber"] == "SG-MRMU-8888"
+    assert ctx_mrmu["panel"]["serialnumber"] == "SG-MRMU-8888"
+
+    # 3. VCB with breaker serial in panel and board serial in swg
+    panel_vcb = SwitchgearPanelSpec(panel_no=1, panel_feeder_no="F01", name="INCOMING 1", serial_no="BRK-VCB-001")
+    swg_vcb = SwitchgearSpec(
+        switchgear_type="VCB",
+        serial_no="BOARD-VCB-001",
+        panels=(panel_vcb,),
+    )
+    pkg_vcb = SubstationEquipmentPackage(switchgears=(swg_vcb,))
+    pe_info_vcb = {"equipment": pkg_vcb}
+
+    rec_vcb = CbmDefectRecord(equipment="VCB", equipment_id="F01")
+    ctx_vcb = _build_swg_render_context(rec_vcb, overview=False, pe_info=pe_info_vcb)
+    assert ctx_vcb["swg"]["serialnumber"] == "BOARD-VCB-001"
+    assert ctx_vcb["panel"]["serialnumber"] == "BRK-VCB-001"
+
+    # 4. RMU OIL with OLU serial in panel and board serial in swg
+    panel_oil = SwitchgearPanelSpec(panel_no=1, panel_feeder_no="F01", name="INCOMING 1", serial_no="OLU-OIL-002")
+    swg_oil = SwitchgearSpec(
+        switchgear_type="RMU OIL",
+        serial_no="BOARD-OIL-002",
+        panels=(panel_oil,),
+    )
+    pkg_oil = SubstationEquipmentPackage(switchgears=(swg_oil,))
+    pe_info_oil = {"equipment": pkg_oil}
+
+    rec_oil = CbmDefectRecord(equipment="RMU OIL", equipment_id="F01")
+    ctx_oil = _build_swg_render_context(rec_oil, overview=False, pe_info=pe_info_oil)
+    assert ctx_oil["swg"]["serialnumber"] == "BOARD-OIL-002"
+    assert ctx_oil["panel"]["serialnumber"] == "OLU-OIL-002"
+
+    # 5. Missing / unlinked serial numbers cleanly fallback to "-"
+    rec_missing = CbmDefectRecord(equipment="VCB", equipment_id="UNKNOWN")
+    ctx_missing = _build_swg_render_context(rec_missing, overview=False, pe_info=pe_info_vcb)
+    assert ctx_missing["panel"]["serialnumber"] == "-"
+
+    panel_empty = SwitchgearPanelSpec(panel_no=1, panel_feeder_no="F01", name="INCOMING 1", serial_no="")
+    swg_no_sn = SwitchgearSpec(switchgear_type="RMU SF6", serial_no="SG-SF6-9999", panels=(panel_empty,))
+    ctx_empty_sn = _build_swg_render_context(
+        rec_rmu,
+        overview=False,
+        pe_info={"equipment": SubstationEquipmentPackage(switchgears=(swg_no_sn,))},
+    )
+    assert ctx_empty_sn["panel"]["serialnumber"] == "-"
+
