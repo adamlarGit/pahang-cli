@@ -20,6 +20,13 @@ from src.full_report.slicer import (
     get_temp_parts_dir,
     temp_parts_workspace,
 )
+from src.full_report.defect_parser import (
+    CbmDefectHeaderParser,
+    CbmDefectSliceMetadata,
+    build_d37_defect_filename,
+    normalize_defect_area,
+    normalize_equipment_id,
+)
 
 __all__ = [
     # Pre-Flight
@@ -38,4 +45,10 @@ __all__ = [
     "WordComDocumentSlicer",
     "get_temp_parts_dir",
     "temp_parts_workspace",
+    # Defect Parser & D37 Naming
+    "CbmDefectHeaderParser",
+    "CbmDefectSliceMetadata",
+    "build_d37_defect_filename",
+    "normalize_defect_area",
+    "normalize_equipment_id",
 ]

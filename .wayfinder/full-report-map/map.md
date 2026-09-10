@@ -244,13 +244,14 @@ Provide an automated ingestion and pre-flight validation pipeline that:
 ##### T1.3b: Sliced CBM Defect Header Parsing & D37 Naming
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **Status**: Closed
 - **What to build**: An inspector that extracts individual CBM defect pages from Quick Report, parses Table 1 metadata (Equipment, ID, Defect Area, Severity), and saves them into `temp_parts/cbm_defects/` using the fine-tuned left-to-right naming grammar `{eq_instance}_{seq}_{id}_{area}_{idx}.docx` per D37.
 - **Blocked by**: T1.3a
 - **Acceptance criteria**:
-  - [ ] Parses Table 1 on each CBM defect page to extract equipment category, instance, ID, and defect area.
-  - [ ] Slices individual CBM defect pages into separate `.docx` files under `temp_parts/cbm_defects/`.
-  - [ ] Adheres strictly to D37 naming grammar (e.g. `swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx`).
-  - [ ] Unit tests verifying parsing against mock Switchgear, Transformer, and Feeder Pillar defect tables.
+  - [x] Parses Table 1 on each CBM defect page to extract equipment category, instance, ID, and defect area.
+  - [x] Slices individual CBM defect pages into separate `.docx` files under `temp_parts/cbm_defects/`.
+  - [x] Adheres strictly to D37 naming grammar (e.g. `swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx`).
+  - [x] Unit tests verifying parsing against mock Switchgear, Transformer, and Feeder Pillar defect tables.
 
 ---
 

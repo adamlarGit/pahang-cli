@@ -38,6 +38,12 @@ WD_FIND_STOP: int = 0
 WD_ACTIVE_END_PAGE_NUMBER: int = 3
 WD_FORMAT_ORIGINAL: int = 16
 
+from src.full_report.defect_parser import (
+    CbmDefectHeaderParser,
+    CbmDefectSliceMetadata,
+    build_d37_defect_filename,
+)
+
 __all__ = [
     "DocumentSlicer",
     "FakeDocumentSlicer",
@@ -46,6 +52,9 @@ __all__ = [
     "WordComDocumentSlicer",
     "get_temp_parts_dir",
     "temp_parts_workspace",
+    "CbmDefectHeaderParser",
+    "CbmDefectSliceMetadata",
+    "build_d37_defect_filename",
 ]
 
 
@@ -169,8 +178,9 @@ class DocumentSlicer(Protocol):
 class FakeDocumentSlicer:
     """Headless test adapter conforming to DocumentSlicer: writes minimal stub docx files."""
 
-    def __init__(self) -> None:
+    def __init__(self, mock_cbm_defects: Sequence[Path] | None = None) -> None:
         self.sliced_calls: list[tuple[Path, Path, str]] = []
+        self.mock_cbm_defects = list(mock_cbm_defects) if mock_cbm_defects is not None else None
 
     def slice_sections(
         self,
@@ -208,6 +218,18 @@ class FakeDocumentSlicer:
             vi_defect_pages = target_dir / "vi_defect_pages.docx"
             vi_defect_pages.write_bytes(stub_payload)
 
+        cbm_defect_pages: list[Path] = []
+        if self.mock_cbm_defects:
+            cbm_defects_dir = target_dir / "cbm_defects"
+            cbm_defects_dir.mkdir(parents=True, exist_ok=True)
+            for p in self.mock_cbm_defects:
+                dest = cbm_defects_dir / p.name
+                if p.exists() and p != dest:
+                    dest.write_bytes(p.read_bytes())
+                elif not dest.exists():
+                    dest.write_bytes(stub_payload)
+                cbm_defect_pages.append(dest)
+
         return SlicedSections(
             station=station_name,
             front_page=front_page,
@@ -215,7 +237,7 @@ class FakeDocumentSlicer:
             sticker_page=sticker_page,
             vi_summary=vi_summary,
             vi_defect_pages=vi_defect_pages,
-            cbm_defect_pages=(),
+            cbm_defect_pages=tuple(cbm_defect_pages),
         )
 
     def slice_cbm_defects(
@@ -223,6 +245,21 @@ class FakeDocumentSlicer:
         source_path: Path,
         target_dir: Path,
     ) -> Sequence[Path]:
+        source_path = Path(source_path).resolve()
+        target_dir = Path(target_dir).resolve()
+        cbm_defects_dir = target_dir if target_dir.name == "cbm_defects" else target_dir / "cbm_defects"
+        cbm_defects_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.mock_cbm_defects:
+            results: list[Path] = []
+            for p in self.mock_cbm_defects:
+                dest = cbm_defects_dir / p.name
+                if p.exists() and p != dest:
+                    dest.write_bytes(p.read_bytes())
+                elif not dest.exists():
+                    dest.write_bytes(b"PK\x03\x04fake_sliced_cbm_defect")
+                results.append(dest)
+            return tuple(results)
         return ()
 
 
@@ -429,11 +466,168 @@ def _slice_range_to_doc(
             pass
 
 
+def _slice_cbm_defects_from_doc(
+    word_app: Any,
+    source_doc: Any,
+    target_dir: Path,
+    total_pages: int,
+    cond_start: int | None,
+    p_cond: ParagraphBoundary | None,
+    vi_summary_start: int | None = None,
+    header_parser: CbmDefectHeaderParser | None = None,
+) -> tuple[Path, ...]:
+    """Slice individual CBM defect detail pages from source_doc into target_dir / 'cbm_defects'."""
+    parser = header_parser or CbmDefectHeaderParser()
+    target_dir = Path(target_dir).resolve()
+    cbm_defects_dir = target_dir if target_dir.name == "cbm_defects" else target_dir / "cbm_defects"
+    cbm_defects_dir.mkdir(parents=True, exist_ok=True)
+
+    cond_page = p_cond.page_number if p_cond else (total_pages + 1)
+    if cond_page <= 2:
+        return ()
+
+    # Discover CBM summary page if present
+    p_cbmsum = _find_paragraph(
+        source_doc,
+        "EXECUTIVE Summary",
+        start_pos=0,
+        end_pos=cond_start,
+    )
+    if not p_cbmsum:
+        p_cbmsum = _find_paragraph(
+            source_doc,
+            "CBM DEFECT SUMMARY",
+            start_pos=0,
+            end_pos=cond_start,
+        )
+    cbm_sum_page = p_cbmsum.page_number if p_cbmsum else None
+
+    # Discover VI summary page if present
+    p_visum = _find_paragraph(
+        source_doc,
+        "VISUAL DEFECT SUMMARY",
+        start_pos=0,
+        end_pos=cond_start,
+    )
+    vi_sum_page = p_visum.page_number if p_visum else None
+
+    candidate_slices: list[tuple[Path, CbmDefectSliceMetadata]] = []
+    temp_files: list[Path] = []
+
+    try:
+        for p_num in range(2, cond_page):
+            if p_num == cbm_sum_page or p_num == vi_sum_page:
+                continue
+
+            try:
+                p_start_rng = source_doc.GoTo(WD_GOTO_PAGE, WD_GOTO_ABSOLUTE, p_num)
+                p_start = p_start_rng.Start
+                if p_num < total_pages:
+                    p_next_rng = source_doc.GoTo(WD_GOTO_PAGE, WD_GOTO_ABSOLUTE, p_num + 1)
+                    p_end = min(p_next_rng.Start, cond_start) if cond_start else p_next_rng.Start
+                else:
+                    p_end = cond_start if cond_start else source_doc.Content.End
+            except Exception:
+                continue
+
+            if p_start >= p_end:
+                continue
+
+            temp_slice_path = cbm_defects_dir / f"_temp_defect_p{p_num}.docx"
+            temp_files.append(temp_slice_path)
+
+            try:
+                _slice_range_to_doc(
+                    word_app=word_app,
+                    source_doc=source_doc,
+                    start_pos=p_start,
+                    end_pos=p_end,
+                    output_path=temp_slice_path,
+                )
+            except Exception as e:
+                logger.warning("Failed to slice candidate CBM defect page %d: %s", p_num, e)
+                continue
+
+            try:
+                if not temp_slice_path.exists():
+                    temp_slice_path.touch()
+                meta = parser.parse(temp_slice_path, slice_path=temp_slice_path)
+                candidate_slices.append((temp_slice_path, meta))
+            except Exception as e:
+                logger.debug("Page %d is not a CBM defect detail page: %s", p_num, e)
+                try:
+                    temp_slice_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+        if not candidate_slices:
+            return ()
+
+        # Deduplicate and index multiple defects on same component / area
+        counts: dict[tuple[str, str, str, str], int] = {}
+        final_paths: list[Path] = []
+
+        for temp_path, meta in candidate_slices:
+            key = (meta.equipment_instance, meta.sequence, meta.equipment_id, meta.defect_area)
+            idx = counts.get(key, 0) + 1
+            counts[key] = idx
+
+            if idx > 1:
+                meta = CbmDefectSliceMetadata(
+                    equipment_category=meta.equipment_category,
+                    equipment_instance=meta.equipment_instance,
+                    sequence=meta.sequence,
+                    equipment_id=meta.equipment_id,
+                    defect_area=meta.defect_area,
+                    severity=meta.severity,
+                    index=idx,
+                    substation=meta.substation,
+                    manufacturer=meta.manufacturer,
+                    model=meta.model,
+                    filename=build_d37_defect_filename(
+                        CbmDefectSliceMetadata(
+                            equipment_category=meta.equipment_category,
+                            equipment_instance=meta.equipment_instance,
+                            sequence=meta.sequence,
+                            equipment_id=meta.equipment_id,
+                            defect_area=meta.defect_area,
+                            index=idx,
+                        )
+                    ),
+                    slice_path=temp_path,
+                )
+
+            final_filename = meta.filename or build_d37_defect_filename(meta)
+            final_path = cbm_defects_dir / final_filename
+
+            if temp_path.exists():
+                if final_path.exists():
+                    final_path.unlink(missing_ok=True)
+                temp_path.rename(final_path)
+
+            final_paths.append(final_path)
+
+        return tuple(final_paths)
+
+    finally:
+        for tf in temp_files:
+            if tf.exists() and tf.name.startswith("_temp_"):
+                try:
+                    tf.unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+
 class WordComDocumentSlicer:
     """Production adapter: slices finalized Quick Report sections using Microsoft Word COM Automation."""
 
-    def __init__(self, word_app: Any = None) -> None:
+    def __init__(
+        self,
+        word_app: Any = None,
+        header_parser: CbmDefectHeaderParser | None = None,
+    ) -> None:
         self._word_app: Any = word_app
+        self._header_parser: CbmDefectHeaderParser = header_parser or CbmDefectHeaderParser()
 
     @contextmanager
     def session(self) -> Iterator[WordComDocumentSlicer]:
@@ -641,6 +835,18 @@ class WordComDocumentSlicer:
                 output_path=target_dir / "sticker_page.docx",
             )
 
+            # Slice Section 6: CBM Defect Pages (into temp_parts/cbm_defects/ per D37)
+            cbm_defect_paths = _slice_cbm_defects_from_doc(
+                word_app=word_app,
+                source_doc=source_doc,
+                target_dir=target_dir,
+                total_pages=num_pages,
+                cond_start=cond_start,
+                p_cond=p_cond,
+                vi_summary_start=vi_summary_start,
+                header_parser=self._header_parser,
+            )
+
             return SlicedSections(
                 station=station_name,
                 front_page=front_page_path,
@@ -648,7 +854,7 @@ class WordComDocumentSlicer:
                 sticker_page=sticker_page_path,
                 vi_summary=vi_summary_path,
                 vi_defect_pages=vi_defect_pages_path,
-                cbm_defect_pages=(),
+                cbm_defect_pages=cbm_defect_paths,
             )
         finally:
             _clear_clipboard()
@@ -663,8 +869,47 @@ class WordComDocumentSlicer:
         source_path: Path,
         target_dir: Path,
     ) -> Sequence[Path]:
-        """Slice individual CBM defect detail pages into target_dir (implemented in T1.3b)."""
-        return ()
+        """Slice individual CBM defect detail pages into target_dir/cbm_defects per D37."""
+        if self._word_app is None:
+            with self.session():
+                return self.slice_cbm_defects(
+                    source_path=source_path,
+                    target_dir=target_dir,
+                )
+
+        source_path = Path(source_path).resolve()
+        target_dir = Path(target_dir).resolve()
+        if not source_path.exists():
+            raise FileNotFoundError(f"Quick report source document not found: {source_path}")
+
+        word_app = self._word_app
+        source_doc = None
+        try:
+            source_doc = word_app.Documents.Open(str(source_path), False, True)
+            total_pages = source_doc.ComputeStatistics(WD_STATISTIC_PAGES)
+            p_cond = _find_paragraph(source_doc, "SUBSTATION CONDITION")
+            cond_start = p_cond.start if p_cond else None
+
+            p_visum = _find_paragraph(source_doc, "VISUAL DEFECT SUMMARY", start_pos=0, end_pos=cond_start)
+            vi_summary_start = p_visum.start if p_visum else None
+
+            return _slice_cbm_defects_from_doc(
+                word_app=word_app,
+                source_doc=source_doc,
+                target_dir=target_dir,
+                total_pages=total_pages,
+                cond_start=cond_start,
+                p_cond=p_cond,
+                vi_summary_start=vi_summary_start,
+                header_parser=self._header_parser,
+            )
+        finally:
+            _clear_clipboard()
+            if source_doc is not None:
+                try:
+                    source_doc.Close(False)
+                except Exception:
+                    pass
 
 
 def get_temp_parts_dir(station: str, base_dir: Path | None = None) -> Path:

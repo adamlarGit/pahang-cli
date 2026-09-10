@@ -441,3 +441,110 @@ def test_slice_range_preserves_drawingml_and_shapes(tmp_path: Path):
     mock_dest_rng.PasteAndFormat.assert_called_once_with(16)  # WD_FORMAT_ORIGINAL = 16
     mock_target.SaveAs2.assert_called_once_with(str(out_file.resolve()))
 
+
+def test_fake_document_slicer_with_mock_cbm_defects(tmp_path: Path):
+    """Verify FakeDocumentSlicer populates and returns mock CBM defect paths."""
+    source_doc = tmp_path / "source.docx"
+    source_doc.touch()
+    target_dir = tmp_path / "temp_parts" / "CENDERAWASIH"
+
+    mock_defect_1 = tmp_path / "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx"
+    mock_defect_1.write_bytes(b"PK\x03\x04mock_defect_1")
+    mock_defect_2 = tmp_path / "swg1_p01_INCOMING_1_CABLE_COMPARTMENT_01.docx"
+    mock_defect_2.write_bytes(b"PK\x03\x04mock_defect_2")
+
+    slicer = FakeDocumentSlicer(mock_cbm_defects=[mock_defect_1, mock_defect_2])
+
+    # Test slice_cbm_defects
+    cbm_slices = slicer.slice_cbm_defects(source_doc, target_dir)
+    assert len(cbm_slices) == 2
+    assert cbm_slices[0].name == "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx"
+    assert cbm_slices[1].name == "swg1_p01_INCOMING_1_CABLE_COMPARTMENT_01.docx"
+    assert (target_dir / "cbm_defects" / "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx").exists()
+
+    # Test slice_sections includes cbm_defect_pages
+    sections = slicer.slice_sections(source_doc, target_dir, station="CENDERAWASIH")
+    assert len(sections.cbm_defect_pages) == 2
+    assert sections.cbm_defect_pages[0].name == "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx"
+
+
+def test_word_com_slicer_slices_cbm_defects_with_d37_names(tmp_path: Path):
+    """Verify WordComDocumentSlicer identifies, slices, and names CBM defect pages per D37."""
+    from unittest.mock import MagicMock
+    from src.full_report.defect_parser import CbmDefectSliceMetadata
+
+    source_doc_path = tmp_path / "source.docx"
+    source_doc_path.touch()
+    target_dir = tmp_path / "temp_parts" / "CENDERAWASIH"
+
+    mock_word = MagicMock()
+    mock_source_doc = MagicMock()
+    mock_new_doc = MagicMock()
+
+    mock_word.Documents.Open.return_value = mock_source_doc
+    mock_word.Documents.Add.return_value = mock_new_doc
+
+    mock_source_doc.Content.Start = 0
+    mock_source_doc.Content.End = 500
+    mock_source_doc.ComputeStatistics.return_value = 5
+
+    # Page navigation:
+    # Page 2 start at 50 (CBM Summary)
+    # Page 3 start at 100 (CBM Defect page)
+    # Page 4 start at 200 (SUBSTATION CONDITION)
+    # Page 5 start at 300 (NORMAL/DEFECT STICKER)
+    p_goto_map = {
+        2: MagicMock(Start=50),
+        3: MagicMock(Start=100),
+        4: MagicMock(Start=200),
+        5: MagicMock(Start=300),
+    }
+    mock_source_doc.GoTo.side_effect = lambda what, which, count: p_goto_map.get(count, MagicMock(Start=500))
+
+    # Paragraph boundaries:
+    p_cbmsum = MagicMock()
+    p_cbmsum.Range.Start = 50
+    p_cbmsum.Range.End = 80
+    p_cbmsum.Range.Text = "EXECUTIVE Summary\r"
+    p_cbmsum.Range.Information.return_value = 2
+
+    p_cond = MagicMock()
+    p_cond.Range.Start = 200
+    p_cond.Range.End = 230
+    p_cond.Range.Text = "SUBSTATION CONDITION\r"
+    p_cond.Range.Information.return_value = 4
+
+    p_sticker = MagicMock()
+    p_sticker.Range.Start = 300
+    p_sticker.Range.End = 330
+    p_sticker.Range.Text = "NORMAL/DEFECT STICKER\r"
+    p_sticker.Range.Information.return_value = 5
+
+    mock_source_doc.Paragraphs = [p_cbmsum, p_cond, p_sticker]
+    mock_source_doc.Content.Find.Execute.return_value = False
+
+    # Mock header parser to return D37 metadata for Page 3
+    mock_parser = MagicMock()
+    mock_parser.parse.return_value = CbmDefectSliceMetadata(
+        equipment_category="swg",
+        equipment_instance="swg1",
+        sequence="p04",
+        equipment_id="CKN01309",
+        defect_area="FUSE_COMPARTMENT",
+        index=1,
+        filename="swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx",
+    )
+
+    slicer = WordComDocumentSlicer(word_app=mock_word, header_parser=mock_parser)
+
+    # Test slice_cbm_defects directly
+    cbm_slices = slicer.slice_cbm_defects(source_doc_path, target_dir)
+    assert len(cbm_slices) == 1
+    assert cbm_slices[0].name == "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx"
+
+    # Test slice_sections includes CBM defect slices in SlicedSections
+    sections = slicer.slice_sections(source_doc_path, target_dir, station="CENDERAWASIH")
+    assert len(sections.cbm_defect_pages) == 1
+    assert sections.cbm_defect_pages[0].name == "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx"
+
+
