@@ -1,0 +1,426 @@
+"""Domain scan models and compartment matrix logic for Full Report (Ticket #26 / T2.3)."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+import re
+from typing import Sequence
+
+from src.testsheet.models import (
+    BatteryBankSpec,
+    LVDBFeederSpec,
+    LVDBSpec,
+    SubstationEquipmentPackage,
+    SwitchgearPanelSpec,
+    SwitchgearSpec,
+    TransformerSpec,
+)
+
+
+class SwitchgearCategory(str, Enum):
+    """Categorization of switchgear equipment driving compartment layout and page counts."""
+
+    INDKOM = "INDKOM"
+    TAMCO_LUCY = "TAMCO_LUCY"
+    OTHER_RMU = "OTHER_RMU"
+    VCB = "VCB"
+
+
+# Standard 7 compartments for VCB switchgear per D26
+VCB_STANDARD_COMPARTMENTS: tuple[str, ...] = (
+    "BREAKER COMPARTMENT",
+    "CABLE COMPARTMENT",
+    "BUSBAR COMPARTMENT",
+    "PT COMPARTMENT",
+    "SECONDARY COMPARTMENT",
+    "BACK COMPARTMENT",
+    "FRONT COMPARTMENT",
+)
+
+# Standard 7 components for distribution transformers per D31 / ADR 0004
+TRANSFORMER_STANDARD_COMPONENTS: tuple[str, ...] = (
+    "OVERVIEW",
+    "OVERVIEW TOP",
+    "HV BUSHING",
+    "HV CABLE",
+    "HV CABLE SPLIT",
+    "LV BUSHING",
+    "LV CABLE",
+)
+
+
+def classify_switchgear(
+    switchgear_type: str = "",
+    manufacturer: str = "",
+) -> SwitchgearCategory:
+    """Classify switchgear into one of 4 canonical categories per D26/D29."""
+    swg_type_upper = (switchgear_type or "").upper()
+    mfg_upper = (manufacturer or "").upper()
+
+    # VCB check takes highest precedence (even if made by TAMCO/EPE)
+    if "VCB" in swg_type_upper or "VCB" in mfg_upper:
+        return SwitchgearCategory.VCB
+
+    # INDKOM RMU
+    if "INDKOM" in mfg_upper:
+        return SwitchgearCategory.INDKOM
+
+    # TAMCO / LUCY / SSE LUCY
+    if any(k in mfg_upper for k in ("TAMCO", "LUCY", "SSE LUCY")):
+        return SwitchgearCategory.TAMCO_LUCY
+
+    # Other RMUs (SIEMENS, ABB, generic RMU SF6 / RMU OIL)
+    return SwitchgearCategory.OTHER_RMU
+
+
+def is_tx_feeder(name: str = "", feeder_no: str = "", panel_type: str = "") -> bool:
+    """Determine if a switchgear panel/bay is a transformer (TX) feeder."""
+    combined = f"{name} {feeder_no} {panel_type}".upper()
+    if any(k in combined for k in ("TRANSFORMER", "ALATUBAH", "TEE-OFF", "TEE OFF", "FUSE")):
+        return True
+    return bool(re.search(r"\bTX\d*\b", combined))
+
+
+def resolve_overview_compartments(category: SwitchgearCategory) -> tuple[str, ...]:
+    """Resolve overview scanning page compartments for switchgear category per D26."""
+    if category == SwitchgearCategory.TAMCO_LUCY:
+        return ("OVERVIEW", "OVERVIEW BOTTOM")
+    return ("OVERVIEW", "OVERVIEW TOP")
+
+
+def resolve_switchgear_compartments(
+    category: SwitchgearCategory,
+    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec,
+) -> tuple[str, ...]:
+    """Resolve panel scanning compartments based on manufacturer category per D26."""
+    if category == SwitchgearCategory.INDKOM:
+        if is_tx_feeder(panel.name, panel.panel_feeder_no, panel.panel_type):
+            return ("FUSE COMPARTMENT",)
+        return ("CABLE COMPARTMENT",)
+
+    if category == SwitchgearCategory.TAMCO_LUCY:
+        return ("CABLE COMPARTMENT", "CABLE ENTRY")
+
+    if category == SwitchgearCategory.VCB:
+        return VCB_STANDARD_COMPARTMENTS
+
+    # OTHER_RMU
+    return ("CABLE COMPARTMENT",)
+
+
+def resolve_panel_page_count(
+    category: SwitchgearCategory,
+    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec,
+    active_compartments: Sequence[str] | None = None,
+) -> int:
+    """Resolve number of scanning pages for a panel per D29."""
+    if category == SwitchgearCategory.TAMCO_LUCY:
+        return 2
+
+    if category in (SwitchgearCategory.INDKOM, SwitchgearCategory.OTHER_RMU):
+        return 1
+
+    if category == SwitchgearCategory.VCB:
+        if active_compartments is not None and len(active_compartments) > 0:
+            return len(active_compartments)
+        panel_active = getattr(panel, "active_compartments", ())
+        if panel_active:
+            return len(panel_active)
+        return len(VCB_STANDARD_COMPARTMENTS)
+
+    return 1
+
+
+def build_switchgear_panel_scan_spec(
+    panel: SwitchgearPanelSpec,
+    category: SwitchgearCategory,
+    active_compartments: Sequence[str] | None = None,
+) -> SwitchgearPanelScanSpec:
+    """Construct strongly-typed SwitchgearPanelScanSpec applying D26 compartments and D29 page counts."""
+    compartments = resolve_switchgear_compartments(category, panel)
+    act_comps = tuple(active_compartments) if active_compartments is not None else ()
+    page_count = resolve_panel_page_count(category, panel, active_compartments=act_comps or None)
+
+    return SwitchgearPanelScanSpec(
+        panel_no=panel.panel_no,
+        panel_feeder_no=panel.panel_feeder_no,
+        name=panel.name,
+        panel_type=panel.panel_type,
+        serial_no=panel.serial_no,
+        status=panel.status,
+        load_amp=panel.load_amp,
+        heater_amp=panel.heater_amp,
+        cable_type=panel.cable_type,
+        us_reading=panel.us_reading,
+        us_char=panel.us_char,
+        tev_reading=panel.tev_reading,
+        tev_ppc=panel.tev_ppc,
+        tev_char=panel.tev_char,
+        photo_numbers=panel.photo_numbers,
+        compartments=compartments,
+        active_compartments=act_comps,
+        page_count=page_count,
+    )
+
+
+def build_switchgear_scan_spec(swg: SwitchgearSpec) -> SwitchgearScanSpec:
+    """Construct strongly-typed SwitchgearScanSpec from SwitchgearSpec."""
+    category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
+    overview_compartments = resolve_overview_compartments(category)
+    panels = tuple(build_switchgear_panel_scan_spec(p, category) for p in swg.panels)
+
+    return SwitchgearScanSpec(
+        switchgear_type=swg.switchgear_type,
+        manufacturer=swg.manufacturer,
+        model=swg.model,
+        manufactured_year=swg.manufactured_year,
+        rating=swg.rating,
+        serial_no=swg.serial_no,
+        category=category,
+        overview_compartments=overview_compartments,
+        panels=panels,
+        photo_numbers=swg.photo_numbers,
+    )
+
+
+def build_transformer_scan_spec(tx: TransformerSpec) -> TransformerScanSpec:
+    """Construct strongly-typed TransformerScanSpec from TransformerSpec per D31 / ADR 0004."""
+    return TransformerScanSpec(
+        tx_id=tx.tx_id,
+        rating_kva=tx.rating_kva,
+        construction_year=tx.construction_year,
+        manufacturer=tx.manufacturer,
+        serial_no=tx.serial_no,
+        type=tx.type,
+        us_reading=tx.us_reading,
+        us_char=tx.us_char,
+        hv_cable_type=tx.hv_cable_type,
+        lv_cable_type=tx.lv_cable_type,
+        photo_numbers=tx.photo_numbers,
+        components=TRANSFORMER_STANDARD_COMPONENTS,
+        page_count=7,
+    )
+
+
+def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
+    """Construct strongly-typed LVDBScanSpec from LVDBSpec."""
+    feeders = tuple(
+        LVDBFeederScanSpec(
+            channel=f.channel,
+            cable_type=f.cable_type,
+        )
+        for f in lvdb.feeders
+    )
+    return LVDBScanSpec(
+        name=lvdb.name,
+        label=lvdb.label,
+        source=lvdb.source,
+        manufacturer=lvdb.manufacturer,
+        serial_no=lvdb.serial_no,
+        rating=lvdb.rating,
+        cable_type=lvdb.cable_type,
+        photo_numbers=lvdb.photo_numbers,
+        feeders=feeders,
+        page_count=1,
+    )
+
+
+def build_battery_bank_scan_spec(bb: BatteryBankSpec) -> BatteryBankScanSpec:
+    """Construct strongly-typed BatteryBankScanSpec from BatteryBankSpec."""
+    return BatteryBankScanSpec(
+        name=bb.name,
+        manufacturer=bb.manufacturer,
+        model=bb.model,
+        serial_no=bb.serial_no,
+        photo_numbers=bb.photo_numbers,
+        page_count=1,
+    )
+
+
+def has_battery_bank(equipment: SubstationEquipmentPackage) -> bool:
+    """Evaluate battery bank presence strictly via len(equipment.battery_banks) > 0 per D49."""
+    return len(equipment.battery_banks) > 0
+
+
+def build_full_report_scan_package(
+    equipment: SubstationEquipmentPackage,
+    substation_number: int = 0,
+    station_name: str = "",
+) -> FullReportScanPackage:
+    """Construct complete FullReportScanPackage from extracted SubstationEquipmentPackage."""
+    swgs = tuple(build_switchgear_scan_spec(s) for s in equipment.switchgears)
+    txs = tuple(build_transformer_scan_spec(t) for t in equipment.transformers)
+    lvdbs = tuple(build_lvdb_scan_spec(l) for l in equipment.lvdb_specs)
+
+    # D49: Evaluates battery bank presence strictly via len(equipment.battery_banks) > 0
+    if has_battery_bank(equipment):
+        bbs = tuple(build_battery_bank_scan_spec(b) for b in equipment.battery_banks)
+    else:
+        bbs = ()
+
+    return FullReportScanPackage(
+        substation_number=substation_number,
+        station_name=station_name,
+        switchgears=swgs,
+        transformers=txs,
+        lvdbs=lvdbs,
+        battery_banks=bbs,
+    )
+
+
+
+
+
+@dataclass(frozen=True)
+class SwitchgearPanelScanSpec:
+    """Strongly-typed scan specification for an individual switchgear panel/bay."""
+
+    panel_no: int = 1
+    panel_feeder_no: str = ""
+    name: str = ""
+    panel_type: str = ""
+    serial_no: str = ""
+    status: str = ""
+    load_amp: str = ""
+    heater_amp: str = ""
+    cable_type: str = ""
+    us_reading: str = ""
+    us_char: str = ""
+    tev_reading: str = ""
+    tev_ppc: str = ""
+    tev_char: str = ""
+    photo_numbers: tuple[int, ...] = ()
+    compartments: tuple[str, ...] = ()
+    active_compartments: tuple[str, ...] = ()
+    page_count: int = 1
+
+
+@dataclass(frozen=True)
+class SwitchgearScanSpec:
+    """Strongly-typed scan specification for a switchgear lineup and its panels."""
+
+    switchgear_type: str = ""
+    manufacturer: str = ""
+    model: str = ""
+    manufactured_year: str = ""
+    rating: str = ""
+    serial_no: str = ""
+    category: SwitchgearCategory = SwitchgearCategory.OTHER_RMU
+    overview_compartments: tuple[str, ...] = ()
+    panels: tuple[SwitchgearPanelScanSpec, ...] = ()
+    photo_numbers: tuple[int, ...] = ()
+
+    @property
+    def panel_count(self) -> int:
+        """Return the number of panels attached to the switchgear."""
+        return len(self.panels)
+
+    @property
+    def total_page_count(self) -> int:
+        """Return the total scanning pages for switchgear overview and panels."""
+        overview_pages = len(self.overview_compartments)
+        panel_pages = sum(p.page_count for p in self.panels)
+        return overview_pages + panel_pages
+
+
+@dataclass(frozen=True)
+class TransformerScanSpec:
+    """Strongly-typed scan specification for a distribution transformer."""
+
+    tx_id: str = "Tx 1"
+    rating_kva: str = ""
+    construction_year: str = ""
+    manufacturer: str = ""
+    serial_no: str = ""
+    type: str = ""
+    us_reading: str = ""
+    us_char: str = ""
+    hv_cable_type: str = ""
+    lv_cable_type: str = ""
+    photo_numbers: tuple[int, ...] = ()
+    components: tuple[str, ...] = TRANSFORMER_STANDARD_COMPONENTS
+    page_count: int = 7
+
+
+@dataclass(frozen=True)
+class LVDBFeederScanSpec:
+    """Specification for an individual LVDB / Feeder Pillar circuit way."""
+
+    channel: str = ""
+    cable_type: str = ""
+    load_amp: str = ""
+
+
+@dataclass(frozen=True)
+class LVDBScanSpec:
+    """Strongly-typed scan specification for an LVDB or Feeder Pillar."""
+
+    name: str = "LVDB 1"
+    label: str = "LVDB"
+    source: str = "TX1"
+    manufacturer: str = ""
+    serial_no: str = ""
+    rating: str = ""
+    cable_type: str = ""
+    photo_numbers: tuple[int, ...] = ()
+    feeders: tuple[LVDBFeederScanSpec, ...] = ()
+    page_count: int = 1
+
+
+@dataclass(frozen=True)
+class BatteryBankScanSpec:
+    """Strongly-typed scan specification for a DC battery bank."""
+
+    name: str = "BATTERY BANK 1"
+    manufacturer: str = ""
+    model: str = ""
+    serial_no: str = ""
+    photo_numbers: tuple[int, ...] = ()
+    page_count: int = 1
+
+
+@dataclass(frozen=True)
+class FullReportScanPackage:
+    """Composite package containing scan specifications across all equipment in a substation."""
+
+    substation_number: int = 0
+    station_name: str = ""
+    switchgears: tuple[SwitchgearScanSpec, ...] = ()
+    transformers: tuple[TransformerScanSpec, ...] = ()
+    lvdbs: tuple[LVDBScanSpec, ...] = ()
+    battery_banks: tuple[BatteryBankScanSpec, ...] = ()
+
+    @property
+    def has_switchgear(self) -> bool:
+        """Return True if at least one switchgear is present."""
+        return len(self.switchgears) > 0
+
+    @property
+    def switchgear(self) -> SwitchgearScanSpec:
+        """Return the primary switchgear or a default SwitchgearScanSpec."""
+        return self.switchgears[0] if self.switchgears else SwitchgearScanSpec()
+
+    @property
+    def transformer_count(self) -> int:
+        """Return total number of transformers."""
+        return len(self.transformers)
+
+    @property
+    def lvdb_count(self) -> int:
+        """Return total number of LVDB / Feeder Pillar units."""
+        return len(self.lvdbs)
+
+    @property
+    def has_battery_bank(self) -> bool:
+        """Evaluate battery bank presence strictly via len(self.battery_banks) > 0 per D49."""
+        return len(self.battery_banks) > 0
+
+    @property
+    def total_scan_pages(self) -> int:
+        """Calculate total scanning pages across all equipment in the package."""
+        swg_pages = sum(s.total_page_count for s in self.switchgears)
+        tx_pages = sum(t.page_count for t in self.transformers)
+        lvdb_pages = sum(l.page_count for l in self.lvdbs)
+        bb_pages = sum(b.page_count for b in self.battery_banks)
+        return swg_pages + tx_pages + lvdb_pages + bb_pages

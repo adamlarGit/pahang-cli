@@ -31,6 +31,30 @@ from src.full_report.photo_resolver import (
     PhotoPair,
     RawPhotoResolver,
 )
+from src.full_report.models import (
+    BatteryBankScanSpec,
+    FullReportScanPackage,
+    LVDBFeederScanSpec,
+    LVDBScanSpec,
+    SwitchgearCategory,
+    SwitchgearPanelScanSpec,
+    SwitchgearScanSpec,
+    TransformerScanSpec,
+    TRANSFORMER_STANDARD_COMPONENTS,
+    VCB_STANDARD_COMPARTMENTS,
+    build_battery_bank_scan_spec,
+    build_full_report_scan_package,
+    build_lvdb_scan_spec,
+    build_switchgear_panel_scan_spec,
+    build_switchgear_scan_spec,
+    build_transformer_scan_spec,
+    classify_switchgear,
+    has_battery_bank,
+    is_tx_feeder,
+    resolve_overview_compartments,
+    resolve_panel_page_count,
+    resolve_switchgear_compartments,
+)
 
 __all__ = [
     # Pre-Flight
@@ -58,5 +82,29 @@ __all__ = [
     # Photo Resolver
     "PhotoPair",
     "RawPhotoResolver",
+    # Scan Models & Compartment Matrix (Ticket #26 / T2.3)
+    "BatteryBankScanSpec",
+    "FullReportScanPackage",
+    "LVDBFeederScanSpec",
+    "LVDBScanSpec",
+    "SwitchgearCategory",
+    "SwitchgearPanelScanSpec",
+    "SwitchgearScanSpec",
+    "TransformerScanSpec",
+    "TRANSFORMER_STANDARD_COMPONENTS",
+    "VCB_STANDARD_COMPARTMENTS",
+    "build_battery_bank_scan_spec",
+    "build_full_report_scan_package",
+    "build_lvdb_scan_spec",
+    "build_switchgear_panel_scan_spec",
+    "build_switchgear_scan_spec",
+    "build_transformer_scan_spec",
+    "classify_switchgear",
+    "has_battery_bank",
+    "is_tx_feeder",
+    "resolve_overview_compartments",
+    "resolve_panel_page_count",
+    "resolve_switchgear_compartments",
 ]
+
 
