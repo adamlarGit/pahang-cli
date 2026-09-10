@@ -231,14 +231,15 @@ Provide an automated ingestion and pre-flight validation pipeline that:
 ##### T1.3a: Implement DocumentSlicer Core, Slicing Protocol & Section Boundary Extraction
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **Status**: Closed
 - **What to build**: The core `DocumentSlicer(Protocol)`, headless `FakeDocumentSlicer`, and production `WordComDocumentSlicer` that opens the finalized Quick Report in Microsoft Word, slices out static sections (`front_page.docx`, `vi_summary.docx`, `condition_pages.docx`, `vi_defect_pages.docx`, `sticker_page.docx`) into `.temp/temp_parts/<STATION>/`, and applies native Word COM Find & Replace on the front page to transform the title to `"FULL SCANNING REPORT"`.
 - **Blocked by**: T1.2
 - **Acceptance criteria**:
-  - [ ] `DocumentSlicer(Protocol)` defined with `FakeDocumentSlicer` for headless unit testing.
-  - [ ] `WordComDocumentSlicer` locates boundary paragraphs per D16 and slices parts cleanly.
-  - [ ] Front page title transformed via Word COM `Find.Execute(FindText="QUICK SCANNING REPORT", ReplaceWith="FULL SCANNING REPORT", Replace=2)` per D46.
-  - [ ] DrawingML shapes and FLIR ActiveX controls are preserved intact in sliced `.docx` parts.
-  - [ ] Temporary directory lifecycle managed with `--keep-temp` debug support.
+  - [x] `DocumentSlicer(Protocol)` defined with `FakeDocumentSlicer` for headless unit testing.
+  - [x] `WordComDocumentSlicer` locates boundary paragraphs per D16 and slices parts cleanly.
+  - [x] Front page title transformed via Word COM `Find.Execute(FindText="QUICK SCANNING REPORT", ReplaceWith="FULL SCANNING REPORT", Replace=2)` per D46.
+  - [x] DrawingML shapes and FLIR ActiveX controls are preserved intact in sliced `.docx` parts.
+  - [x] Temporary directory lifecycle managed with `--keep-temp` debug support.
 
 ##### T1.3b: Sliced CBM Defect Header Parsing & D37 Naming
 - **Labels**: `wayfinder:task`, `ready-for-agent`

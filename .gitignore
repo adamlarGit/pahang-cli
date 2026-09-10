@@ -17,6 +17,7 @@ diff*.txt
 scratch/
 .serena/
 .tmp/
+.temp/
 ~$*
 test_palette_output/
 
