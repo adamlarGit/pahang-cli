@@ -115,12 +115,6 @@ def resolve_panel_page_count(
     active_compartments: Sequence[str] | None = None,
 ) -> int:
     """Resolve number of scanning pages for a panel per D29."""
-    if category == SwitchgearCategory.TAMCO_LUCY:
-        return 2
-
-    if category in (SwitchgearCategory.INDKOM, SwitchgearCategory.OTHER_RMU):
-        return 1
-
     if category == SwitchgearCategory.VCB:
         if active_compartments is not None and len(active_compartments) > 0:
             return len(active_compartments)
@@ -129,7 +123,7 @@ def resolve_panel_page_count(
             return len(panel_active)
         return len(VCB_STANDARD_COMPARTMENTS)
 
-    return 1
+    return len(resolve_switchgear_compartments(category, panel))
 
 
 def build_switchgear_panel_scan_spec(
@@ -184,8 +178,21 @@ def build_switchgear_scan_spec(swg: SwitchgearSpec) -> SwitchgearScanSpec:
     )
 
 
+def has_hv_cable_split(tx: TransformerSpec | TransformerScanSpec | None = None) -> bool:
+    """Domain predicate stub for Transformer HV Cable Split per ADR 0004.
+
+    Always returns True under unconditional generation policy.
+    Future PCE revisions with structured checkbox will evaluate that coordinate.
+    """
+    return True
+
+
 def build_transformer_scan_spec(tx: TransformerSpec) -> TransformerScanSpec:
     """Construct strongly-typed TransformerScanSpec from TransformerSpec per D31 / ADR 0004."""
+    components = TRANSFORMER_STANDARD_COMPONENTS
+    if not has_hv_cable_split(tx):
+        components = tuple(c for c in components if c != "HV CABLE SPLIT")
+
     return TransformerScanSpec(
         tx_id=tx.tx_id,
         rating_kva=tx.rating_kva,
@@ -198,8 +205,8 @@ def build_transformer_scan_spec(tx: TransformerSpec) -> TransformerScanSpec:
         hv_cable_type=tx.hv_cable_type,
         lv_cable_type=tx.lv_cable_type,
         photo_numbers=tx.photo_numbers,
-        components=TRANSFORMER_STANDARD_COMPONENTS,
-        page_count=7,
+        components=components,
+        page_count=len(components),
     )
 
 

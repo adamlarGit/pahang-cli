@@ -15,6 +15,7 @@ from src.full_report.models import (
     TransformerScanSpec,
     TRANSFORMER_STANDARD_COMPONENTS,
     VCB_STANDARD_COMPARTMENTS,
+    has_hv_cable_split,
 )
 from src.testsheet.models import (
     BatteryBankSpec,
@@ -122,6 +123,25 @@ def test_transformer_scan_spec_provisions_7_standard_components() -> None:
         "LV CABLE",
     )
     assert tx.page_count == 7
+
+
+def test_transformer_has_hv_cable_split_predicate() -> None:
+    """Predicate stub returns True per ADR 0004 unconditional policy."""
+    assert has_hv_cable_split() is True
+    tx = TransformerSpec(
+        tx_id="Tx 1",
+        rating_kva="1000",
+        construction_year="2020",
+        manufacturer="MTM",
+        serial_no="SN-1",
+        type="HERMETICALLY SEALED",
+        us_reading="0",
+        us_char="",
+        hv_cable_type="XLPE 3C 240mm2",
+        lv_cable_type="PVC 1C 500mm2",
+        photo_numbers=(),
+    )
+    assert has_hv_cable_split(tx) is True
 
 
 def test_lvdb_scan_spec_structure_and_feeders() -> None:
