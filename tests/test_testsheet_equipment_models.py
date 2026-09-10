@@ -29,6 +29,7 @@ def test_switchgear_panel_spec_defaults_and_immutability():
     assert panel.load_amp == ""
     assert panel.cable_type == ""
     assert panel.heater_amp == ""
+    assert panel.photo_numbers == ()
 
     with pytest.raises(FrozenInstanceError):
         panel.panel_no = 2  # type: ignore[misc]
@@ -43,6 +44,7 @@ def test_switchgear_panel_spec_defaults_and_immutability():
         load_amp="120A",
         cable_type="XLPE 3C 240mm2",
         heater_amp="0.5A",
+        photo_numbers=(10, 11),
     )
     assert custom_panel.panel_no == 3
     assert custom_panel.panel_feeder_no == "F03"
@@ -53,6 +55,7 @@ def test_switchgear_panel_spec_defaults_and_immutability():
     assert custom_panel.load_amp == "120A"
     assert custom_panel.cable_type == "XLPE 3C 240mm2"
     assert custom_panel.heater_amp == "0.5A"
+    assert custom_panel.photo_numbers == (10, 11)
 
 
 def test_switchgear_spec_defaults_and_immutability():
@@ -65,6 +68,7 @@ def test_switchgear_spec_defaults_and_immutability():
     assert sg.rating == ""
     assert sg.serial_no == ""
     assert sg.panels == ()
+    assert sg.photo_numbers == ()
 
     with pytest.raises(FrozenInstanceError):
         sg.manufacturer = "TAMCO"  # type: ignore[misc]
@@ -79,6 +83,7 @@ def test_switchgear_spec_defaults_and_immutability():
         rating="12kV 630A",
         serial_no="SG1001",
         panels=(p1, p2),
+        photo_numbers=(1, 2),
     )
     assert custom_sg.switchgear_type == "VCB"
     assert custom_sg.manufacturer == "TAMCO"
@@ -87,6 +92,7 @@ def test_switchgear_spec_defaults_and_immutability():
     assert custom_sg.rating == "12kV 630A"
     assert custom_sg.serial_no == "SG1001"
     assert custom_sg.panels == (p1, p2)
+    assert custom_sg.photo_numbers == (1, 2)
 
 
 def test_lvdb_feeder_spec_defaults_and_immutability():
@@ -137,6 +143,7 @@ def test_transformer_spec_defaults_and_immutability():
     assert tx.lv_cable_thermal == ThermalReadingSpec()
     assert tx.lv_bushing_thermal == ThermalReadingSpec()
     assert tx.body_thermal == ThermalReadingSpec()
+    assert tx.photo_numbers == ()
 
     with pytest.raises(FrozenInstanceError):
         tx.rating_kva = "1000kVA"  # type: ignore[misc]
@@ -152,6 +159,7 @@ def test_transformer_spec_defaults_and_immutability():
         hv_cable_type="XLPE",
         lv_cable_type="PILC",
         hv_cable_thermal=th1,
+        photo_numbers=(3, 4, 5),
     )
     assert custom_tx.tx_id == "Tx 2"
     assert custom_tx.rating_kva == "1000kVA"
@@ -162,6 +170,7 @@ def test_transformer_spec_defaults_and_immutability():
     assert custom_tx.hv_cable_type == "XLPE"
     assert custom_tx.lv_cable_type == "PILC"
     assert custom_tx.hv_cable_thermal == th1
+    assert custom_tx.photo_numbers == (3, 4, 5)
 
 
 def test_lvdb_spec_defaults_and_immutability():
@@ -175,6 +184,7 @@ def test_lvdb_spec_defaults_and_immutability():
     assert lvdb.rating == ""
     assert lvdb.cable_type == ""
     assert lvdb.feeders == ()
+    assert lvdb.photo_numbers == ()
 
     with pytest.raises(FrozenInstanceError):
         lvdb.name = "LVDB 2"  # type: ignore[misc]
@@ -193,6 +203,7 @@ def test_lvdb_spec_defaults_and_immutability():
         rating="1600A",
         cable_type="XLPE",
         feeders=(f1, f2, f3, f10),
+        photo_numbers=(6,),
     )
     assert custom_lvdb.name == "FEEDER PILLAR 1"
     assert custom_lvdb.label == "FP"
@@ -201,6 +212,7 @@ def test_lvdb_spec_defaults_and_immutability():
     assert custom_lvdb.serial_no == "LV5544"
     assert custom_lvdb.rating == "1600A"
     assert custom_lvdb.cable_type == "XLPE"
+    assert custom_lvdb.photo_numbers == (6,)
     assert len(custom_lvdb.feeders) == 4
 
     # get_feeder_cable resolution tests
@@ -228,6 +240,7 @@ def test_battery_bank_spec_defaults_and_immutability():
     assert bb.manufacturer == ""
     assert bb.model == ""
     assert bb.serial_no == ""
+    assert bb.photo_numbers == ()
 
     with pytest.raises(FrozenInstanceError):
         bb.manufacturer = "CHLORIDE"  # type: ignore[misc]
@@ -237,11 +250,13 @@ def test_battery_bank_spec_defaults_and_immutability():
         manufacturer="SAFT",
         model="NIFE",
         serial_no="BB7788",
+        photo_numbers=(7, 8),
     )
     assert custom_bb.name == "BATTERY BANK 2"
     assert custom_bb.manufacturer == "SAFT"
     assert custom_bb.model == "NIFE"
     assert custom_bb.serial_no == "BB7788"
+    assert custom_bb.photo_numbers == (7, 8)
 
 
 def test_fire_extinguisher_spec_defaults_and_immutability():

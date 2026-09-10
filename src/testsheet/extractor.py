@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import replace
 from datetime import date, datetime
+import math
 import re
 import warnings
 from pathlib import Path
@@ -97,6 +98,24 @@ def to_excel_date(val: object) -> datetime | None:
         except ValueError:
             continue
     return None
+
+
+def parse_photo_numbers(val: object) -> tuple[int, ...]:
+    """Parse inline photo numbers from a cell value into a tuple of integers."""
+    if val is None or isinstance(val, bool):
+        return ()
+    if isinstance(val, int):
+        return (val,)
+    if isinstance(val, float):
+        if math.isnan(val) or math.isinf(val):
+            return ()
+        return (int(val),)
+    s = str(val).strip()
+    if not s or s.upper() in ("-", "NONE", "N/A", "#REF!", "NAN"):
+        return ()
+    s = re.sub(r"\.\d+\b", "", s)
+    matches = re.findall(r"\d+", s)
+    return tuple(int(m) for m in matches)
 
 
 class TestsheetExtractor:
@@ -495,8 +514,19 @@ class TestsheetExtractor:
                 name = clean_val(ws[f"C{r}"].value) or ""
                 serial_no = clean_val(ws[f"I{r}"].value) or ""
 
-                # Exclude slots where name, panel_feeder_no, and serial_no are all blank
-                if not (feeder_no or name or serial_no):
+                # Inline IR photo numbers for panel from Col O
+                photo_nums: list[int] = list(self._parse_photo_numbers(ws[f"O{r}"].value))
+                if not photo_nums:
+                    for sub_r in range(r + 1, r + 4):
+                        if sub_r <= ws.max_row:
+                            sub_nums = self._parse_photo_numbers(ws[f"O{sub_r}"].value)
+                            if sub_nums:
+                                photo_nums.extend(sub_nums)
+                                break
+                photo_numbers = tuple(photo_nums)
+
+                # Exclude slots where name, panel_feeder_no, serial_no, and photo_numbers are all blank
+                if not (feeder_no or name or serial_no or photo_numbers):
                     continue
 
                 status = clean_val(ws[f"E{r}"].value) or clean_val(ws[f"D{r}"].value) or ""
@@ -568,6 +598,7 @@ class TestsheetExtractor:
                         tev_reading=tev_reading,
                         tev_ppc=tev_ppc,
                         tev_char=tev_char,
+                        photo_numbers=photo_numbers,
                     )
                 )
                 panel_idx += 1
@@ -633,8 +664,32 @@ class TestsheetExtractor:
                 for p in panels
             )
 
-        swg1_active = bool(swg1_type or swg1_mfg or swg1_model or swg1_year or swg1_rating or swg1_serial or panels)
-        swg2_active = bool(swg2_type or swg2_mfg or swg2_model or swg2_year or swg2_rating or swg2_serial)
+        def _extract_overview_photos(ws: openpyxl.worksheet.worksheet.Worksheet) -> tuple[int, ...]:
+            nums: list[int] = []
+            # Primary overview: Row 26 Col O
+            for n in self._parse_photo_numbers(ws["O26"].value):
+                if n not in nums:
+                    nums.append(n)
+            # Secondary overview: Row 28 Col O, fallback to Col J
+            overview_secondary_photos = parse_photo_numbers(ws["O28"].value)
+            if not overview_secondary_photos:
+                overview_secondary_photos = parse_photo_numbers(ws["J28"].value)
+            for n in overview_secondary_photos:
+                if n not in nums:
+                    nums.append(n)
+            return tuple(nums)
+
+        swg1_photo_numbers: tuple[int, ...] = ()
+        swg2_photo_numbers: tuple[int, ...] = ()
+        if pce_sheets:
+            swg1_photo_numbers = _extract_overview_photos(pce_sheets[0])
+            if len(pce_sheets) > 1:
+                swg2_photo_numbers = _extract_overview_photos(pce_sheets[1])
+        elif "PCE Testsheet" in wb.sheetnames:
+            swg1_photo_numbers = _extract_overview_photos(wb["PCE Testsheet"])
+
+        swg1_active = bool(swg1_type or swg1_mfg or swg1_model or swg1_year or swg1_rating or swg1_serial or panels or swg1_photo_numbers)
+        swg2_active = bool(swg2_type or swg2_mfg or swg2_model or swg2_year or swg2_rating or swg2_serial or swg2_photo_numbers)
 
         result: list[SwitchgearSpec] = []
         if swg1_active:
@@ -647,6 +702,7 @@ class TestsheetExtractor:
                     rating=swg1_rating,
                     serial_no=swg1_serial,
                     panels=panels,
+                    photo_numbers=swg1_photo_numbers,
                 )
             )
         if swg2_active:
@@ -659,6 +715,7 @@ class TestsheetExtractor:
                     rating=swg2_rating,
                     serial_no=swg2_serial,
                     panels=(),
+                    photo_numbers=swg2_photo_numbers,
                 )
             )
 
@@ -728,16 +785,19 @@ class TestsheetExtractor:
             lv_cable_thermal = ThermalReadingSpec()
             lv_bushing_thermal = ThermalReadingSpec()
             body_thermal = ThermalReadingSpec()
+            tx_photos: list[int] = []
 
             if ws_pce is not None:
                 if i in (1, 2):
                     start_r = 33 if i == 1 else 38
                     col_db = 11  # K
                     col_char = 12  # L
+                    col_photo = "J"
                 else:
                     start_r = 33 if i == 3 else 38
                     col_db = 22  # V
                     col_char = 24  # X
+                    col_photo = "U"
 
                 for row_idx in range(start_r, start_r + 5):
                     if row_idx <= ws_pce.max_row:
@@ -748,6 +808,9 @@ class TestsheetExtractor:
                         if char_val and not tx_us_char:
                             norm_char = normalize_us_characteristic(char_val)
                             tx_us_char = "" if norm_char == "-" else norm_char
+                        for n in self._parse_photo_numbers(ws_pce[f"{col_photo}{row_idx}"].value):
+                            if n not in tx_photos:
+                                tx_photos.append(n)
 
                 # Cable types & thermal measurement extraction
                 if i == 1:
@@ -825,6 +888,7 @@ class TestsheetExtractor:
                     lv_cable_thermal=lv_cable_thermal,
                     lv_bushing_thermal=lv_bushing_thermal,
                     body_thermal=body_thermal,
+                    photo_numbers=tuple(tx_photos),
                 )
             )
 
@@ -857,6 +921,7 @@ class TestsheetExtractor:
         label1_raw = clean_val(ws_pce["R48"].value) or ""
         source1_raw = clean_val(ws_pce["T48"].value) or ""
         photo1 = ws_pce["S49"].value
+        photo1_numbers = self._parse_photo_numbers(photo1)
         mfg1 = clean_val(ws_pce["V49"].value) or clean_val(ws_pce["U49"].value) or ""
         if not mfg1 and clean_val(ws_pce["T49"].value) not in (None, "Manufacturer :", "Manufacturer:"):
             mfg1 = clean_val(ws_pce["T49"].value) or ""
@@ -867,7 +932,7 @@ class TestsheetExtractor:
         if not rating1 and clean_val(ws_pce["R51"].value) not in (None, "Rating :", "Rating:"):
             rating1 = clean_val(ws_pce["R51"].value) or ""
 
-        photo1_active = photo1 is not None and str(photo1).strip() not in ("", "-", "None", "nan", "N/A")
+        photo1_active = bool(photo1_numbers) or (photo1 is not None and str(photo1).strip() not in ("", "-", "None", "nan", "N/A"))
         slot1_active = bool(photo1_active or mfg1 or sn1 or rating1 or feeders1)
 
         if slot1_active:
@@ -884,6 +949,7 @@ class TestsheetExtractor:
                     rating=rating1,
                     cable_type=cable_type1,
                     feeders=tuple(feeders1),
+                    photo_numbers=photo1_numbers,
                 )
             )
 
@@ -898,6 +964,7 @@ class TestsheetExtractor:
         label2_raw = clean_val(ws_pce["R52"].value) or ""
         source2_raw = clean_val(ws_pce["T52"].value) or ""
         photo2 = ws_pce["S53"].value
+        photo2_numbers = self._parse_photo_numbers(photo2)
         mfg2 = clean_val(ws_pce["V53"].value) or clean_val(ws_pce["U53"].value) or ""
         if not mfg2 and clean_val(ws_pce["T53"].value) not in (None, "Manufacturer :", "Manufacturer:"):
             mfg2 = clean_val(ws_pce["T53"].value) or ""
@@ -908,7 +975,7 @@ class TestsheetExtractor:
         if not rating2 and clean_val(ws_pce["R55"].value) not in (None, "Rating :", "Rating:"):
             rating2 = clean_val(ws_pce["R55"].value) or ""
 
-        photo2_active = photo2 is not None and str(photo2).strip() not in ("", "-", "None", "nan", "N/A")
+        photo2_active = bool(photo2_numbers) or (photo2 is not None and str(photo2).strip() not in ("", "-", "None", "nan", "N/A"))
         slot2_active = bool(photo2_active or mfg2 or sn2 or rating2 or feeders2)
 
         if slot2_active:
@@ -925,6 +992,7 @@ class TestsheetExtractor:
                     rating=rating2,
                     cable_type=cable_type2,
                     feeders=tuple(feeders2),
+                    photo_numbers=photo2_numbers,
                 )
             )
 
@@ -947,16 +1015,28 @@ class TestsheetExtractor:
                 mfg = clean_val(ws_pce[f"J{r}"].value) or ""
                 model = clean_val(ws_pce[f"K{r}"].value) or ""
                 sn = clean_val(ws_pce[f"L{r}"].value) or ""
+                photo_numbers = self._parse_photo_numbers(ws_pce[f"H{r}"].value)
 
-                if mfg or model or sn or clean_val(ws_pce[f"C{r}"].value) or clean_val(ws_pce[f"E{r}"].value) or clean_val(ws_pce[f"F{r}"].value):
+                if mfg or model or sn or clean_val(ws_pce[f"C{r}"].value) or clean_val(ws_pce[f"E{r}"].value) or clean_val(ws_pce[f"F{r}"].value) or photo_numbers:
                     battery_banks.append(
                         BatteryBankSpec(
                             name=col_b.upper(),
                             manufacturer=mfg,
                             model=model,
                             serial_no=sn,
+                            photo_numbers=photo_numbers,
                         )
                     )
+
+        if not battery_banks:
+            battery_fallback_photos = parse_photo_numbers(ws_pce["H59"].value)
+            if battery_fallback_photos:
+                battery_banks.append(
+                    BatteryBankSpec(
+                        name="BATTERY BANK 1",
+                        photo_numbers=battery_fallback_photos,
+                    )
+                )
 
         return tuple(battery_banks)
 
@@ -1115,4 +1195,9 @@ class TestsheetExtractor:
         if len(nums) == 1:
             return nums[0], nums[0]
         return None, None
+
+    def _parse_photo_numbers(self, val: object) -> tuple[int, ...]:
+        """Safely parse inline photo numbers into a tuple of integers."""
+        return parse_photo_numbers(val)
+
 

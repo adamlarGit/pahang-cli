@@ -1,6 +1,9 @@
 """Testsheet deep module for Pahang CLI."""
 
-from src.testsheet.extractor import TestsheetExtractor
+from src.testsheet.extractor import (
+    TestsheetExtractor,
+    parse_photo_numbers,
+)
 from src.testsheet.mapper import (
     TestsheetReadingMapper,
     get_sheet_name,
@@ -43,6 +46,7 @@ __all__ = [
     "ThermalReadingSpec",
     "TransformerSpec",
     "TestsheetExtractor",
+    "parse_photo_numbers",
     "SubstationTestsheetRepository",
     "TestsheetReadingMapper",
     "get_sheet_name",

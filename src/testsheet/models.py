@@ -58,6 +58,7 @@ class SwitchgearPanelSpec:
     tev_reading: str = ""
     tev_ppc: str = ""
     tev_char: str = ""
+    photo_numbers: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ class SwitchgearSpec:
     rating: str = ""
     serial_no: str = ""
     panels: tuple[SwitchgearPanelSpec, ...] = ()
+    photo_numbers: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -110,6 +112,7 @@ class TransformerSpec:
     lv_cable_thermal: ThermalReadingSpec = ThermalReadingSpec()
     lv_bushing_thermal: ThermalReadingSpec = ThermalReadingSpec()
     body_thermal: ThermalReadingSpec = ThermalReadingSpec()
+    photo_numbers: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -124,6 +127,7 @@ class LVDBSpec:
     rating: str = ""
     cable_type: str = ""
     feeders: tuple[LVDBFeederSpec, ...] = ()
+    photo_numbers: tuple[int, ...] = ()
 
     def get_feeder_cable(self, feeder_channel_or_id: str) -> str:
         """Resolve cable type for a given feeder channel or identifier, falling back to board cable_type."""
@@ -160,6 +164,7 @@ class BatteryBankSpec:
     manufacturer: str = ""
     model: str = ""
     serial_no: str = ""
+    photo_numbers: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
