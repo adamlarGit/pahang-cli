@@ -228,13 +228,21 @@ The presentation policy governing Quick Report batch generation when an inspecti
 The exhaustive asset census report deliverable (`CONDITION BASED ASSESSMENT FULL SCANNING REPORT`). In contrast to the exception-oriented defect brief of `QuickReportDocument` (which captures only anomalous equipment and baseline condition), `FullReportDocument` documents every inspected asset across the substation regardless of condition. Adheres to the sibling directory convention `FULL REPORT/<STATION>/<MONTH>/<DATE>/` (using `PahangRenamedSubstationStem`) and is assembled through an independent, decoupled post-processing pipeline. Detailed domain analysis and specifications are established in `docs/full_report_domain_analysis.md`.
 
 ### ExecutiveSummaryCensus
-The comprehensive asset inventory domain model in `FullReportDocument`. Lists every bay, panel, cable, and bushing across the substation with color-coded operational status: Green for `NORMAL` (healthy components) and Red for `DEFECT` (anomalous components with test readings populated).
+The comprehensive asset inventory domain model in `FullReportDocument`. Lists every bay, panel, cable, and bushing across the substation with color-coded operational status: Green for `NORMAL` (healthy components) and Red for `DEFECT` (anomalous components with test readings populated). Column 0 (`NO.`) groups sub-rows by major equipment category (`Switchgear`, `Transformer 1`, `Transformer 2`, `Feeder Pillar / LVDB`, `Battery Bank`) via OpenXML vertical merge (`<w:vMerge>`) carrying integer group labels (`1.`, `2.`, `3.`). Measurement cells reuse Quick Report formatting (`format_temperature_reading`, `format_db_reading`), and severity cells have text cleared with background fill (`00B050` or `EE0000`).
 
-### ComponentScanPagePlan
-The domain model specifying per-component scanning records for all healthy equipment in `FullReportDocument`. Allocates dedicated 4-quadrant scanning pages (thermal IR image, digital photo, thermal and electrical parameter tables, ultrasound and TEV waveforms and readings) across switchgear bays, transformers, and feeder pillars.
+### TransformerHvCableSplitPolicy
+The domain generation rule established in ADR 0004 governing Transformer High Voltage terminations. Unconditionally provisions an `HV CABLE SPLIT` row in Executive Summary Table 2 and a dedicated 4-quadrant scanning page (`tx-hv-sides.docx`) for each active transformer via `has_hv_cable_split(tx) -> True`, providing contractually complete 7-point transformer scanning records while safely falling back to blank image placeholders if secondary split photos were not taken on site.
 
-### DefectInterleavingPolicy
-The document assembly policy governing component scanning streams in `FullReportDocument`. Requires dynamic inline insertion of defect detail pages (thermal hotspot views, TEV PRPD scatter graphs, ultrasound phase plots) immediately following an anomalous component page, rather than grouping defects into a trailing appendix.
+### QuickReportIngestionSeam
+The ingestion boundary in `QuickReportIngestionService` responsible for slicing completed sections from the finalized Quick Report Word document into modular intermediate parts (`temp_parts/front_page.docx`, `vi_summary.docx`, `cbm_defects/`, `condition_pages.docx`, `vi_defect_pages.docx`, `sticker_page.docx`). Uses Word COM Automation with forward-scoped paragraph boundary detection (`"SUBSTATION CONDITION"`, `"VISUAL DEFECT"`, `"NORMAL/DEFECT STICKER"`) to guarantee 100% preservation of inspector DrawingML callouts, red boxes, and FLIR Tools+ ActiveX controls without false-positive heading collisions.
+
+### CanonicalFullReportReferenceSamples
+The ground-truth benchmark deliverables and source data sets used for deterministic Full Report development, verification, and regression testing:
+1. `005. TALAPIA (IR+VI)`: PE 5 (`CRAU/PCE/J00251`), Raub Week 32 (04-Aug-2026), IR thermal hotspot on FP fuse contact + visual defects, 68 raw IR thermal/visual photo pairs.
+2. `179. CENDERAWASIH NO.1 (IR+VI)`: PE 179 (`CKTN/PCE/J00030`), Kuantan Week 35 (28-Aug-2026), IR thermal hotspot in RMU TX fuse compartment + visual defects.
+3. `144. TELEKOM TANAH PUTIH (TEV+VI)`: PE 144 (`CKTN/PCE/J00040`), Kuantan Week 35 (24-Aug-2026), severe internal TEV partial discharge across all 4 switchgear panels with PRPD scatter plot waveforms.
+Both the manual reference deliverables (`FULL REPORT/...`) and their corresponding finalized Quick Reports (`QUICK REPORT/...`), testsheets (`TESTSHEET/...`), and raw data reside in the active project base path `PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD`.
+
 
 
 

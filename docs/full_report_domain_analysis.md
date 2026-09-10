@@ -49,6 +49,28 @@ The manual full report archive at `C:\Users\ADAM\Documents\PO 42360565 - PAHANG 
    - **CBM Findings**: Thermal hotspot inside RMU Panel CKN01309 TX Fuse Compartment (33.5 °C, $\Delta T$ 1.0 °C).
    - **VI Findings**: 5 items (CPR poster old, SWG ceiling damaged, lighting unpowered, TX1 low oil level, FP TX1 unstandardized feeder labels).
 
+### 2.1 The Canonical Benchmark Deliverable Trio
+
+To ensure deterministic verification and ground testing in concrete reality, three manually compiled Full Report deliverables are established as the canonical benchmarks:
+
+| PE NO | FL NUMBER | SUBSTATION NAME | DATE | AREA & WEEK | DEFECT MODALITY |
+|:---|:---|:---|:---|:---|:---|
+| **5** | `CRAU/PCE/J00251` | `TALAPIA` | 04-Aug-2026 | `RAUB`<br>`01. AUGUST / 01. WEEK 32` | **IR + VI** (Thermal hotspot + Visual defects) |
+| **179** | `CKTN/PCE/J00030` | `CENDERAWASIH NO.1` | 28-Aug-2026 | `KUANTAN`<br>`04. WEEK 35` | **IR + VI** (TX fuse compartment hotspot + Visual defects) |
+| **144** | `CKTN/PCE/J00040` | `TELEKOM TANAH PUTIH` | 24-Aug-2026 | `KUANTAN`<br>`04. WEEK 35` | **TEV + VI** (Severe multi-panel TEV partial discharge) |
+
+**Canonical File Locations (Active Project Documents Drive)**:
+- `C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\FULL REPORT\RAUB\01. AUGUST\01. WEEK 32\005. TALAPIA (IR+VI).docx`
+- `C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\FULL REPORT\KUANTAN\04. WEEK 35\179. CENDERAWASIH NO.1 (IR+VI).docx`
+- `C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\FULL REPORT\KUANTAN\04. WEEK 35\144. TELEKOM TANAH PUTIH (TEV+VI).docx`
+
+### Raub Week 32 (`FULL REPORT\RAUB\01. AUGUST\01. WEEK 32`)
+
+1. **`005. TALAPIA (IR+VI)` (26+ pages):**
+   - **Topology**: RMU SF6 INDKOM (4 panels: CRA00223, CRA00224, CRA00225, CRA00226), TX1 (1000kVA), Feeder Pillar FP TX1 (10 ways), Battery Bank 1.
+   - **CBM Findings**: Thermal hotspot on Feeder Pillar FP TX1 Outgoing F2 Red Phase fuse contact. 68 raw IR thermal and paired visual photos in `RAW DATA/IR/`.
+   - **VI Findings**: 3 visual defect items.
+
 ### Additional Diversity References
 
 - **`001. KG RPS ASLI BILUT (VI)` (`RAUB\01. AUGUST\01. WEEK 32`):**
@@ -57,6 +79,7 @@ The manual full report archive at `C:\Users\ADAM\Documents\PO 42360565 - PAHANG 
   - Exemplifies a **3-Switchgear installation** and an **Ultrasound Defect detail page** (Tracking sound at 22dB, Phase-Resolved scatter graph, and internal microphone classification table).
 
 ---
+
 
 ## 3. Full Report Document Architecture
 
@@ -173,3 +196,7 @@ When designing the Full Report workflow in the dedicated wayfinder session, the 
    - `SubstationConditionPairBuilderPolicy`
    - `StickerPageRenderer`
    - `BatchComSession`
+6. **Dedicated Template Directory Decoupling**:
+   - `templates/FULL REPORT/NORMAL IR US TEV/`: Houses baseline component scanning templates (`swg-overview.docx`, `swg-panel.docx`, `tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`, `fp-overview.docx`, `battery-overview.docx`). Initialized as identical copies of Quick Report's `DEFECT IR US TEV/` templates, this dedicated hierarchy decouples Full Report healthy scanning layouts and allows independent formatting or styling divergence without risk of breaking Quick Report deliverables.
+   - `templates/FULL REPORT/`: Will house the modular `executive_summary_census.docx` template.
+

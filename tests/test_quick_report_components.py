@@ -1889,7 +1889,7 @@ def test_cbm_defect_planner_multi_technology_merging_same_item_and_area(tmp_path
 
 
 def test_cbm_defect_planner_different_defect_areas_not_merged(tmp_path: Path):
-    """Verify defects on same apparatus with distinct defect areas remain separate records."""
+    """Verify defects on same equipment with distinct defect areas remain separate records."""
     from unittest.mock import MagicMock
     from src.quick_report.cbm_defect_planner import CbmDefectPlanner
 

@@ -56,7 +56,7 @@ def format_summary_equipment(
     record: CbmDefectRecord,
     pe_info: dict[str, Any] | None = None,
 ) -> str:
-    """Format Part 2 Summary EQUIPMENT column with enriched multi-line apparatus details."""
+    """Format Part 2 Summary EQUIPMENT column with enriched multi-line equipment details."""
     equip = (record.equipment or "").strip()
     raw_id = (record.equipment_id or "").strip()
     eq_upper = equip.upper()
