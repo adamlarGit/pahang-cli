@@ -510,7 +510,6 @@ def test_build_full_report_scan_package_with_and_without_battery() -> None:
     assert pkg_no_bb.transformer_count == 1
     assert pkg_no_bb.lvdb_count == 1
     assert len(pkg_no_bb.lvdb_specs) == 1
-    assert pkg_no_bb.lvdbs == pkg_no_bb.lvdb_specs
     assert pkg_no_bb.has_battery_bank is False
     assert pkg_no_bb.battery_banks == ()
     # SWG: 1 overview + 2 panels * 1 = 3 pages
@@ -602,7 +601,6 @@ def test_canonical_benchmark_talapia() -> None:
     assert pkg.transformers[0].page_count == 7
     assert pkg.lvdb_count == 1
     assert pkg.lvdb_specs[0].page_count == 1
-    assert pkg.lvdbs[0].page_count == 1
     assert pkg.has_battery_bank is True
     assert pkg.battery_banks[0].page_count == 1
 

@@ -412,11 +412,6 @@ class FullReportScanPackage:
     battery_banks: tuple[BatteryBankScanSpec, ...] = ()
 
     @property
-    def lvdbs(self) -> tuple[LVDBScanSpec, ...]:
-        """Alias for lvdb_specs for backward compatibility and CONTEXT.md alignment."""
-        return self.lvdb_specs
-
-    @property
     def has_switchgear(self) -> bool:
         """Return True if at least one switchgear is present."""
         return len(self.switchgears) > 0
