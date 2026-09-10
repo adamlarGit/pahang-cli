@@ -74,27 +74,16 @@ def classify_switchgear(
     return SwitchgearCategory.OTHER_RMU
 
 
-def is_tx_feeder(
-    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str | None = None,
-    name: str = "",
-    feeder_no: str = "",
-    panel_type: str = "",
-) -> bool:
-    """Determine if a switchgear panel/bay is a transformer (TX) feeder.
-
-    Accepts a panel object (SwitchgearPanelSpec or SwitchgearPanelScanSpec) or
-    individual string attributes (name, feeder_no, panel_type).
-    """
-    if panel is not None and hasattr(panel, "name"):
-        panel_name = getattr(panel, "name", "")
-        feeder_no = getattr(panel, "panel_feeder_no", feeder_no)
-        panel_type = getattr(panel, "panel_type", panel_type)
-    elif isinstance(panel, str) and panel:
-        panel_name = panel
+def is_tx_feeder(panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str = "") -> bool:
+    """Determine if a switchgear panel/bay is a transformer (TX) feeder."""
+    if hasattr(panel_or_name, "name"):
+        name = getattr(panel_or_name, "name", "")
+        feeder_no = getattr(panel_or_name, "panel_feeder_no", "")
+        panel_type = getattr(panel_or_name, "panel_type", "")
+        combined = f"{name} {feeder_no} {panel_type}".upper()
     else:
-        panel_name = name
+        combined = str(panel_or_name).upper()
 
-    combined = f"{panel_name} {feeder_no} {panel_type}".upper()
     if any(k in combined for k in ("TRANSFORMER", "ALATUBAH", "TEE-OFF", "TEE OFF", "FUSE")):
         return True
     return bool(re.search(r"\bTX\d*\b", combined))
@@ -103,21 +92,34 @@ def is_tx_feeder(
 OVERVIEW_COMPARTMENTS_MAP: dict[SwitchgearCategory, tuple[str, ...]] = {
     SwitchgearCategory.TAMCO_LUCY: ("OVERVIEW", "OVERVIEW BOTTOM"),
     SwitchgearCategory.VCB: ("OVERVIEW",),
-    SwitchgearCategory.INDKOM: ("OVERVIEW", "OVERVIEW TOP"),
-    SwitchgearCategory.OTHER_RMU: ("OVERVIEW", "OVERVIEW TOP"),
+    SwitchgearCategory.INDKOM: ("OVERVIEW",),
+    SwitchgearCategory.OTHER_RMU: ("OVERVIEW",),
 }
 
 
 def resolve_overview_compartments(category: SwitchgearCategory) -> tuple[str, ...]:
     """Resolve overview scanning page compartments for switchgear category per D26."""
-    return OVERVIEW_COMPARTMENTS_MAP.get(category, ("OVERVIEW", "OVERVIEW TOP"))
+    return OVERVIEW_COMPARTMENTS_MAP.get(category, ("OVERVIEW",))
 
 
 def resolve_switchgear_compartments(
     category: SwitchgearCategory,
-    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec,
+    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec | None = None,
 ) -> tuple[str, ...]:
-    """Resolve panel scanning compartments based on manufacturer category per D26."""
+    """Resolve switchgear scanning compartments per D26.
+
+    When panel is omitted, returns the canonical compartment set for the category.
+    When panel is provided, returns the panel-specific scanning compartments.
+    """
+    if panel is None:
+        if category == SwitchgearCategory.TAMCO_LUCY:
+            return ("OVERVIEW BOTTOM", "CABLE COMPARTMENT", "CABLE ENTRY")
+        if category == SwitchgearCategory.INDKOM:
+            return ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
+        if category == SwitchgearCategory.VCB:
+            return VCB_STANDARD_COMPARTMENTS
+        return ("CABLE COMPARTMENT",)
+
     if category == SwitchgearCategory.INDKOM:
         if is_tx_feeder(panel):
             return ("FUSE COMPARTMENT",)
@@ -154,7 +156,6 @@ def build_switchgear_panel_scan_spec(
         compartments = tuple(active_compartments)
     else:
         compartments = resolve_switchgear_compartments(category, panel)
-    act_comps = tuple(active_compartments) if active_compartments is not None else ()
     page_count = len(compartments)
 
     return SwitchgearPanelScanSpec(
@@ -174,7 +175,6 @@ def build_switchgear_panel_scan_spec(
         tev_char=panel.tev_char,
         photo_numbers=panel.photo_numbers,
         compartments=compartments,
-        active_compartments=act_comps,
         page_count=page_count,
     )
 
@@ -253,7 +253,6 @@ def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
         LVDBFeederScanSpec(
             channel=f.channel,
             cable_type=f.cable_type,
-            load_amp=getattr(f, "load_amp", ""),
         )
         for f in lvdb.feeders
     )
@@ -337,8 +336,11 @@ class SwitchgearPanelScanSpec:
     tev_char: str = ""
     photo_numbers: tuple[int, ...] = ()
     compartments: tuple[str, ...] = ()
-    active_compartments: tuple[str, ...] = ()
     page_count: int = 1
+
+    def __post_init__(self) -> None:
+        if self.compartments and self.page_count == 1 and len(self.compartments) != 1:
+            object.__setattr__(self, "page_count", len(self.compartments))
 
 
 @dataclass(frozen=True)
@@ -362,11 +364,16 @@ class SwitchgearScanSpec:
         return len(self.panels)
 
     @property
-    def total_page_count(self) -> int:
+    def total_scan_pages(self) -> int:
         """Return the total scanning pages for switchgear overview and panels."""
         overview_pages = len(self.overview_compartments)
         panel_pages = sum(p.page_count for p in self.panels)
         return overview_pages + panel_pages
+
+    @property
+    def total_page_count(self) -> int:
+        """Alias for total_scan_pages for backwards compatibility."""
+        return self.total_scan_pages
 
 
 @dataclass(frozen=True)
@@ -387,6 +394,10 @@ class TransformerScanSpec:
     components: tuple[str, ...] = TRANSFORMER_STANDARD_COMPONENTS
     page_count: int = 7
 
+    def __post_init__(self) -> None:
+        if self.components and (self.page_count == 7 or self.page_count == 0):
+            object.__setattr__(self, "page_count", len(self.components))
+
 
 @dataclass(frozen=True)
 class LVDBFeederScanSpec:
@@ -394,7 +405,6 @@ class LVDBFeederScanSpec:
 
     channel: str = ""
     cable_type: str = ""
-    load_amp: str = ""
 
 
 @dataclass(frozen=True)
@@ -469,3 +479,8 @@ class FullReportScanPackage:
         lvdb_pages = sum(l.page_count for l in self.lvdbs)
         bb_pages = sum(b.page_count for b in self.battery_banks)
         return swg_pages + tx_pages + lvdb_pages + bb_pages
+
+    @property
+    def total_page_count(self) -> int:
+        """Alias for total_scan_pages for consistent naming across specs."""
+        return self.total_scan_pages

@@ -158,8 +158,8 @@ def test_transformer_has_hv_cable_split_predicate() -> None:
 
 def test_lvdb_scan_spec_structure_and_feeders() -> None:
     """LVDBScanSpec captures equipment metadata and feeder ways."""
-    feeder1 = LVDBFeederScanSpec(channel="IN1", cable_type="PVC 4C 300mm2", load_amp="250A")
-    feeder2 = LVDBFeederScanSpec(channel="OT1", cable_type="XLPE 4C 185mm2", load_amp="45A")
+    feeder1 = LVDBFeederScanSpec(channel="IN1", cable_type="PVC 4C 300mm2")
+    feeder2 = LVDBFeederScanSpec(channel="OT1", cable_type="XLPE 4C 185mm2")
     lvdb = LVDBScanSpec(
         name="FP TX1",
         label="FP",
@@ -204,8 +204,6 @@ def test_battery_bank_scan_spec_structure() -> None:
 
 def test_classify_switchgear_across_all_four_categories() -> None:
     """Verify classify_switchgear accurately categorizes equipment across the 4 canonical categories."""
-    from src.full_report.models import classify_switchgear
-
     # 1. INDKOM
     assert classify_switchgear(switchgear_type="RMU SF6", manufacturer="INDKOM") == SwitchgearCategory.INDKOM
     assert classify_switchgear(switchgear_type="RMU", manufacturer="Indkom Engineering") == SwitchgearCategory.INDKOM
@@ -230,21 +228,21 @@ def test_classify_switchgear_across_all_four_categories() -> None:
 def test_is_tx_feeder_detection() -> None:
     """Verify is_tx_feeder detects transformer feeders while excluding standard bays."""
     # Positives
-    assert is_tx_feeder(name="PANEL CKN01309 TX") is True
-    assert is_tx_feeder(name="RMU SF6 PANEL CKN00051 TX 750") is True
-    assert is_tx_feeder(name="TX 1") is True
-    assert is_tx_feeder(name="TX B") is True
-    assert is_tx_feeder(name="ALATUBAH") is True
-    assert is_tx_feeder(panel_type="TEE-OFF") is True
-    assert is_tx_feeder(name="TRANSFORMER 1") is True
+    assert is_tx_feeder("PANEL CKN01309 TX") is True
+    assert is_tx_feeder("RMU SF6 PANEL CKN00051 TX 750") is True
+    assert is_tx_feeder("TX 1") is True
+    assert is_tx_feeder("TX B") is True
+    assert is_tx_feeder("ALATUBAH") is True
+    assert is_tx_feeder("TEE-OFF") is True
+    assert is_tx_feeder("TRANSFORMER 1") is True
 
     # Negatives
-    assert is_tx_feeder(name="INCOMING 1") is False
-    assert is_tx_feeder(name="BILIK SUIS PENGGUNA") is False
-    assert is_tx_feeder(name="TMN CENDRAWASIH 3") is False
-    assert is_tx_feeder(name="BUS COUPLER") is False
-    assert is_tx_feeder(name="SPARE") is False
-    assert is_tx_feeder(name="LA SG BILUT") is False
+    assert is_tx_feeder("INCOMING 1") is False
+    assert is_tx_feeder("BILIK SUIS PENGGUNA") is False
+    assert is_tx_feeder("TMN CENDRAWASIH 3") is False
+    assert is_tx_feeder("BUS COUPLER") is False
+    assert is_tx_feeder("SPARE") is False
+    assert is_tx_feeder("LA SG BILUT") is False
 
 
 def test_is_tx_feeder_accepts_panel_object() -> None:
@@ -256,12 +254,15 @@ def test_is_tx_feeder_accepts_panel_object() -> None:
 
 
 def test_switchgear_compartment_matrix_indkom() -> None:
-    """INDKOM: TX feeder -> FUSE COMPARTMENT, others -> CABLE COMPARTMENT, overview TOP."""
+    """INDKOM: TX feeder -> FUSE COMPARTMENT, others -> CABLE COMPARTMENT, overview single."""
     incomer = SwitchgearPanelSpec(panel_no=1, name="INCOMING 1", panel_feeder_no="CKN01308")
     tx_feeder = SwitchgearPanelSpec(panel_no=4, name="PANEL CKN01309 TX", panel_feeder_no="CKN01309")
 
     # Overview
-    assert resolve_overview_compartments(SwitchgearCategory.INDKOM) == ("OVERVIEW", "OVERVIEW TOP")
+    assert resolve_overview_compartments(SwitchgearCategory.INDKOM) == ("OVERVIEW",)
+
+    # Category-level canonical set per D26
+    assert resolve_switchgear_compartments(SwitchgearCategory.INDKOM) == ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
 
     # Panels
     assert resolve_switchgear_compartments(SwitchgearCategory.INDKOM, incomer) == ("CABLE COMPARTMENT",)
@@ -276,6 +277,13 @@ def test_switchgear_compartment_matrix_tamco_lucy() -> None:
     # Overview
     assert resolve_overview_compartments(SwitchgearCategory.TAMCO_LUCY) == ("OVERVIEW", "OVERVIEW BOTTOM")
 
+    # Category-level canonical set per D26
+    assert resolve_switchgear_compartments(SwitchgearCategory.TAMCO_LUCY) == (
+        "OVERVIEW BOTTOM",
+        "CABLE COMPARTMENT",
+        "CABLE ENTRY",
+    )
+
     # Panels (both incomer and TX get CABLE COMPARTMENT and CABLE ENTRY)
     assert resolve_switchgear_compartments(SwitchgearCategory.TAMCO_LUCY, incomer) == (
         "CABLE COMPARTMENT",
@@ -288,12 +296,12 @@ def test_switchgear_compartment_matrix_tamco_lucy() -> None:
 
 
 def test_switchgear_compartment_matrix_other_rmu() -> None:
-    """Other RMUs: CABLE COMPARTMENT and OVERVIEW TOP."""
+    """Other RMUs: CABLE COMPARTMENT and single OVERVIEW."""
     incomer = SwitchgearPanelSpec(panel_no=1, name="INCOMING 1")
     tx_feeder = SwitchgearPanelSpec(panel_no=3, name="TX 1")
 
     # Overview
-    assert resolve_overview_compartments(SwitchgearCategory.OTHER_RMU) == ("OVERVIEW", "OVERVIEW TOP")
+    assert resolve_overview_compartments(SwitchgearCategory.OTHER_RMU) == ("OVERVIEW",)
 
     # Panels
     assert resolve_switchgear_compartments(SwitchgearCategory.OTHER_RMU, incomer) == ("CABLE COMPARTMENT",)
@@ -361,7 +369,6 @@ def test_build_switchgear_panel_scan_spec_active_compartments_lockstep() -> None
     spec = build_switchgear_panel_scan_spec(panel, SwitchgearCategory.VCB, active_compartments=active)
 
     assert spec.compartments == active
-    assert spec.active_compartments == active
     assert spec.page_count == 3
     assert len(spec.compartments) == spec.page_count
 
@@ -390,6 +397,7 @@ def test_build_switchgear_scan_spec_integrates_matrix_and_page_counts() -> None:
     assert tamco_spec.panel_count == 4
     # 2 overview pages + 4 panels * 2 pages = 10 pages total
     assert tamco_spec.total_page_count == 10
+    assert tamco_spec.total_scan_pages == 10
     for p in tamco_spec.panels:
         assert p.compartments == ("CABLE COMPARTMENT", "CABLE ENTRY")
         assert p.page_count == 2
@@ -409,9 +417,10 @@ def test_build_switchgear_scan_spec_integrates_matrix_and_page_counts() -> None:
     indkom_spec = build_switchgear_scan_spec(indkom_swg)
 
     assert indkom_spec.category == SwitchgearCategory.INDKOM
-    assert indkom_spec.overview_compartments == ("OVERVIEW", "OVERVIEW TOP")
-    # 2 overview pages + 4 panels * 1 page = 6 pages total
-    assert indkom_spec.total_page_count == 6
+    assert indkom_spec.overview_compartments == ("OVERVIEW",)
+    # 1 overview page + 4 panels * 1 page = 5 pages total
+    assert indkom_spec.total_page_count == 5
+    assert indkom_spec.total_scan_pages == 5
     assert indkom_spec.panels[0].compartments == ("CABLE COMPARTMENT",)
     assert indkom_spec.panels[1].compartments == ("CABLE COMPARTMENT",)
     assert indkom_spec.panels[2].compartments == ("CABLE COMPARTMENT",)
@@ -444,14 +453,18 @@ def test_build_switchgear_scan_spec_with_custom_active_compartments_and_overview
     assert spec.panels[1].page_count == 7
     # 2 overview + 3 + 7 = 12 pages
     assert spec.total_page_count == 12
+    assert spec.total_scan_pages == 12
 
 
-def test_build_lvdb_scan_spec_maps_load_amp_when_present() -> None:
-    """Verify build_lvdb_scan_spec maps load_amp from feeder spec if present."""
+def test_build_lvdb_scan_spec_structure() -> None:
+    """Verify build_lvdb_scan_spec constructs clean scan spec and maps feeders."""
     feeder = LVDBFeederSpec(channel="IN1", cable_type="PVC 4C")
     lvdb = LVDBSpec(name="FP 1", feeders=(feeder,))
     spec = build_lvdb_scan_spec(lvdb)
-    assert spec.feeders[0].load_amp == ""
+    assert len(spec.feeders) == 1
+    assert spec.feeders[0].channel == "IN1"
+    assert spec.feeders[0].cable_type == "PVC 4C"
+    assert spec.page_count == 1
 
 
 # ==============================================================================
@@ -513,11 +526,12 @@ def test_build_full_report_scan_package_with_and_without_battery() -> None:
     assert pkg_no_bb.lvdb_count == 1
     assert pkg_no_bb.has_battery_bank is False
     assert pkg_no_bb.battery_banks == ()
-    # SWG: 2 overview + 2 panels * 1 = 4 pages
+    # SWG: 1 overview + 2 panels * 1 = 3 pages
     # TX: 7 pages
     # LVDB: 1 page
-    # Total: 4 + 7 + 1 = 12 pages
-    assert pkg_no_bb.total_scan_pages == 12
+    # Total: 3 + 7 + 1 = 11 pages
+    assert pkg_no_bb.total_scan_pages == 11
+    assert pkg_no_bb.total_page_count == 11
 
     # Substation with battery bank
     bb = BatteryBankSpec(name="BATTERY BANK 1", manufacturer="Sunpower", photo_numbers=(88,))
@@ -533,8 +547,9 @@ def test_build_full_report_scan_package_with_and_without_battery() -> None:
     assert len(pkg_with_bb.battery_banks) == 1
     assert pkg_with_bb.battery_banks[0].name == "BATTERY BANK 1"
     assert pkg_with_bb.battery_banks[0].photo_numbers == (88,)
-    # Total: 12 + 1 battery page = 13 pages
-    assert pkg_with_bb.total_scan_pages == 13
+    # Total: 11 + 1 battery page = 12 pages
+    assert pkg_with_bb.total_scan_pages == 12
+    assert pkg_with_bb.total_page_count == 12
 
 
 # ==============================================================================
@@ -591,6 +606,7 @@ def test_canonical_benchmark_talapia() -> None:
     assert pkg.switchgear.panel_count == 4
     # 2 overview + 4 * 2 = 10 swg pages
     assert pkg.switchgear.total_page_count == 10
+    assert pkg.switchgear.total_scan_pages == 10
     for p in pkg.switchgear.panels:
         assert p.compartments == ("CABLE COMPARTMENT", "CABLE ENTRY")
         assert p.page_count == 2
@@ -604,10 +620,11 @@ def test_canonical_benchmark_talapia() -> None:
 
     # Total: 10 + 7 + 1 + 1 = 19
     assert pkg.total_scan_pages == 19
+    assert pkg.total_page_count == 19
 
 
 def test_canonical_benchmark_cenderawasih() -> None:
-    """Benchmark CENDERAWASIH NO.1: INDKOM RMU (3 cable, 1 fuse), 1 TX (7 pages), 1 FP, 0 Battery = 14 pages."""
+    """Benchmark CENDERAWASIH NO.1: INDKOM RMU (3 cable, 1 fuse), 1 TX (7 pages), 1 FP, 0 Battery = 13 pages."""
     swg = SwitchgearSpec(
         switchgear_type="RMU SF6",
         manufacturer="INDKOM",
@@ -632,22 +649,24 @@ def test_canonical_benchmark_cenderawasih() -> None:
     pkg = build_full_report_scan_package(eq, substation_number=179, station_name="CENDERAWASIH NO.1")
 
     assert pkg.switchgear.category == SwitchgearCategory.INDKOM
-    assert pkg.switchgear.overview_compartments == ("OVERVIEW", "OVERVIEW TOP")
+    assert pkg.switchgear.overview_compartments == ("OVERVIEW",)
     assert pkg.switchgear.panels[0].compartments == ("CABLE COMPARTMENT",)
     assert pkg.switchgear.panels[1].compartments == ("CABLE COMPARTMENT",)
     assert pkg.switchgear.panels[2].compartments == ("CABLE COMPARTMENT",)
     assert pkg.switchgear.panels[3].compartments == ("FUSE COMPARTMENT",)
-    # 2 overview + 4 * 1 = 6 swg pages
-    assert pkg.switchgear.total_page_count == 6
+    # 1 overview + 4 * 1 = 5 swg pages
+    assert pkg.switchgear.total_page_count == 5
+    assert pkg.switchgear.total_scan_pages == 5
 
     assert pkg.has_battery_bank is False
     assert pkg.battery_banks == ()
-    # Total: 6 (swg) + 7 (tx) + 1 (fp) = 14 pages
-    assert pkg.total_scan_pages == 14
+    # Total: 5 (swg) + 7 (tx) + 1 (fp) = 13 pages
+    assert pkg.total_scan_pages == 13
+    assert pkg.total_page_count == 13
 
 
 def test_canonical_benchmark_telekom_tanah_putih() -> None:
-    """Benchmark TELEKOM TANAH PUTIH: INDKOM RMU (3 cable, 1 fuse), 1 TX, 1 LVDB, 1 Battery = 15 pages."""
+    """Benchmark TELEKOM TANAH PUTIH: INDKOM RMU (3 cable, 1 fuse), 1 TX, 1 LVDB, 1 Battery = 14 pages."""
     swg = SwitchgearSpec(
         switchgear_type="RMU SF6",
         manufacturer="INDKOM",
@@ -676,10 +695,13 @@ def test_canonical_benchmark_telekom_tanah_putih() -> None:
     assert pkg.switchgear.panels[1].compartments == ("CABLE COMPARTMENT",)
     assert pkg.switchgear.panels[2].compartments == ("CABLE COMPARTMENT",)
     assert pkg.switchgear.panels[3].compartments == ("FUSE COMPARTMENT",)
+    assert pkg.switchgear.total_page_count == 5
+    assert pkg.switchgear.total_scan_pages == 5
 
     assert pkg.has_battery_bank is True
-    # Total: 6 (swg) + 7 (tx) + 1 (lvdb) + 1 (battery) = 15 pages
-    assert pkg.total_scan_pages == 15
+    # Total: 5 (swg) + 7 (tx) + 1 (lvdb) + 1 (battery) = 14 pages
+    assert pkg.total_scan_pages == 14
+    assert pkg.total_page_count == 14
 
 
 def test_vcb_substation_sk_raub_indah() -> None:
@@ -721,6 +743,7 @@ def test_vcb_substation_sk_raub_indah() -> None:
 
     # Total: 29 (swg) + 0 (tx) + 1 (fp) + 1 (battery) = 31 pages
     assert pkg.total_scan_pages == 31
+    assert pkg.total_page_count == 31
 
 
 
