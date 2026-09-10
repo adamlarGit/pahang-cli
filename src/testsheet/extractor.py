@@ -515,11 +515,11 @@ class TestsheetExtractor:
                 serial_no = clean_val(ws[f"I{r}"].value) or ""
 
                 # Inline IR photo numbers for panel from Col O
-                photo_nums: list[int] = list(self._parse_photo_numbers(ws[f"O{r}"].value))
+                photo_nums: list[int] = list(parse_photo_numbers(ws[f"O{r}"].value))
                 if not photo_nums:
                     for sub_r in range(r + 1, r + 4):
                         if sub_r <= ws.max_row:
-                            sub_nums = self._parse_photo_numbers(ws[f"O{sub_r}"].value)
+                            sub_nums = parse_photo_numbers(ws[f"O{sub_r}"].value)
                             if sub_nums:
                                 photo_nums.extend(sub_nums)
                                 break
@@ -667,7 +667,7 @@ class TestsheetExtractor:
         def _extract_overview_photos(ws: openpyxl.worksheet.worksheet.Worksheet) -> tuple[int, ...]:
             nums: list[int] = []
             # Primary overview: Row 26 Col O
-            for n in self._parse_photo_numbers(ws["O26"].value):
+            for n in parse_photo_numbers(ws["O26"].value):
                 if n not in nums:
                     nums.append(n)
             # Secondary overview: Row 28 Col O, fallback to Col J
@@ -808,7 +808,7 @@ class TestsheetExtractor:
                         if char_val and not tx_us_char:
                             norm_char = normalize_us_characteristic(char_val)
                             tx_us_char = "" if norm_char == "-" else norm_char
-                        for n in self._parse_photo_numbers(ws_pce[f"{col_photo}{row_idx}"].value):
+                        for n in parse_photo_numbers(ws_pce[f"{col_photo}{row_idx}"].value):
                             if n not in tx_photos:
                                 tx_photos.append(n)
 
@@ -921,7 +921,7 @@ class TestsheetExtractor:
         label1_raw = clean_val(ws_pce["R48"].value) or ""
         source1_raw = clean_val(ws_pce["T48"].value) or ""
         photo1 = ws_pce["S49"].value
-        photo1_numbers = self._parse_photo_numbers(photo1)
+        photo1_numbers = parse_photo_numbers(photo1)
         mfg1 = clean_val(ws_pce["V49"].value) or clean_val(ws_pce["U49"].value) or ""
         if not mfg1 and clean_val(ws_pce["T49"].value) not in (None, "Manufacturer :", "Manufacturer:"):
             mfg1 = clean_val(ws_pce["T49"].value) or ""
@@ -964,7 +964,7 @@ class TestsheetExtractor:
         label2_raw = clean_val(ws_pce["R52"].value) or ""
         source2_raw = clean_val(ws_pce["T52"].value) or ""
         photo2 = ws_pce["S53"].value
-        photo2_numbers = self._parse_photo_numbers(photo2)
+        photo2_numbers = parse_photo_numbers(photo2)
         mfg2 = clean_val(ws_pce["V53"].value) or clean_val(ws_pce["U53"].value) or ""
         if not mfg2 and clean_val(ws_pce["T53"].value) not in (None, "Manufacturer :", "Manufacturer:"):
             mfg2 = clean_val(ws_pce["T53"].value) or ""
@@ -1015,7 +1015,7 @@ class TestsheetExtractor:
                 mfg = clean_val(ws_pce[f"J{r}"].value) or ""
                 model = clean_val(ws_pce[f"K{r}"].value) or ""
                 sn = clean_val(ws_pce[f"L{r}"].value) or ""
-                photo_numbers = self._parse_photo_numbers(ws_pce[f"H{r}"].value)
+                photo_numbers = parse_photo_numbers(ws_pce[f"H{r}"].value)
 
                 if mfg or model or sn or clean_val(ws_pce[f"C{r}"].value) or clean_val(ws_pce[f"E{r}"].value) or clean_val(ws_pce[f"F{r}"].value) or photo_numbers:
                     battery_banks.append(
@@ -1195,9 +1195,5 @@ class TestsheetExtractor:
         if len(nums) == 1:
             return nums[0], nums[0]
         return None, None
-
-    def _parse_photo_numbers(self, val: object) -> tuple[int, ...]:
-        """Safely parse inline photo numbers into a tuple of integers."""
-        return parse_photo_numbers(val)
 
 
