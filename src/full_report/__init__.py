@@ -27,6 +27,10 @@ from src.full_report.defect_parser import (
     normalize_defect_area,
     normalize_equipment_id,
 )
+from src.full_report.photo_resolver import (
+    PhotoPair,
+    RawPhotoResolver,
+)
 
 __all__ = [
     # Pre-Flight
@@ -51,4 +55,8 @@ __all__ = [
     "build_d37_defect_filename",
     "normalize_defect_area",
     "normalize_equipment_id",
+    # Photo Resolver
+    "PhotoPair",
+    "RawPhotoResolver",
 ]
+
