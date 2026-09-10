@@ -63,7 +63,6 @@ def test_switchgear_panel_scan_spec_captures_all_operating_parameters() -> None:
         tev_char="INTERNAL PD",
         photo_numbers=(290, 291),
         compartments=("CABLE COMPARTMENT",),
-        page_count=1,
     )
 
     assert spec.panel_no == 1
@@ -158,6 +157,8 @@ def test_transformer_has_hv_cable_split_predicate() -> None:
 
 def test_lvdb_scan_spec_structure_and_feeders() -> None:
     """LVDBScanSpec captures equipment metadata and feeder ways."""
+    assert LVDBFeederScanSpec is LVDBFeederSpec
+
     feeder1 = LVDBFeederScanSpec(channel="IN1", cable_type="PVC 4C 300mm2")
     feeder2 = LVDBFeederScanSpec(channel="OT1", cable_type="XLPE 4C 185mm2")
     lvdb = LVDBScanSpec(
@@ -277,9 +278,8 @@ def test_switchgear_compartment_matrix_tamco_lucy() -> None:
     # Overview
     assert resolve_overview_compartments(SwitchgearCategory.TAMCO_LUCY) == ("OVERVIEW", "OVERVIEW BOTTOM")
 
-    # Category-level canonical set per D26
+    # Canonical panel compartments per D26 (decoupled from board-level overview)
     assert resolve_switchgear_compartments(SwitchgearCategory.TAMCO_LUCY) == (
-        "OVERVIEW BOTTOM",
         "CABLE COMPARTMENT",
         "CABLE ENTRY",
     )
@@ -429,31 +429,16 @@ def test_build_switchgear_scan_spec_integrates_matrix_and_page_counts() -> None:
         assert p.page_count == 1
 
 
-def test_build_switchgear_scan_spec_with_custom_active_compartments_and_overview() -> None:
-    """Verify build_switchgear_scan_spec supports custom active compartments mapping and overview override."""
-    vcb_swg = SwitchgearSpec(
-        switchgear_type="VCB",
-        manufacturer="TAMCO",
-        panels=(
-            SwitchgearPanelSpec(panel_no=1, name="INCOMING 1"),
-            SwitchgearPanelSpec(panel_no=2, name="FEEDER 1"),
-        ),
-    )
-    custom_map = {1: ("CABLE COMPARTMENT", "BREAKER COMPARTMENT", "BUSBAR COMPARTMENT")}
-    spec = build_switchgear_scan_spec(
-        vcb_swg,
-        active_compartments_by_panel=custom_map,
-        overview_compartments=("OVERVIEW", "OVERVIEW TOP"),
-    )
+def test_page_count_properties_are_derived_and_immutable() -> None:
+    """Verify page_count properties on panel and transformer are dynamically derived from items."""
+    panel = SwitchgearPanelScanSpec(compartments=("CABLE COMPARTMENT", "CABLE ENTRY"))
+    assert panel.page_count == 2
 
-    assert spec.overview_compartments == ("OVERVIEW", "OVERVIEW TOP")
-    assert spec.panels[0].compartments == ("CABLE COMPARTMENT", "BREAKER COMPARTMENT", "BUSBAR COMPARTMENT")
-    assert spec.panels[0].page_count == 3
-    assert spec.panels[1].compartments == VCB_STANDARD_COMPARTMENTS
-    assert spec.panels[1].page_count == 7
-    # 2 overview + 3 + 7 = 12 pages
-    assert spec.total_page_count == 12
-    assert spec.total_scan_pages == 12
+    empty_panel = SwitchgearPanelScanSpec()
+    assert empty_panel.page_count == 0
+
+    tx = TransformerScanSpec(components=("OVERVIEW", "HV BUSHING"))
+    assert tx.page_count == 2
 
 
 def test_build_lvdb_scan_spec_structure() -> None:
@@ -524,6 +509,8 @@ def test_build_full_report_scan_package_with_and_without_battery() -> None:
     assert pkg_no_bb.has_switchgear is True
     assert pkg_no_bb.transformer_count == 1
     assert pkg_no_bb.lvdb_count == 1
+    assert len(pkg_no_bb.lvdb_specs) == 1
+    assert pkg_no_bb.lvdbs == pkg_no_bb.lvdb_specs
     assert pkg_no_bb.has_battery_bank is False
     assert pkg_no_bb.battery_banks == ()
     # SWG: 1 overview + 2 panels * 1 = 3 pages
@@ -614,6 +601,7 @@ def test_canonical_benchmark_talapia() -> None:
     assert pkg.transformer_count == 1
     assert pkg.transformers[0].page_count == 7
     assert pkg.lvdb_count == 1
+    assert pkg.lvdb_specs[0].page_count == 1
     assert pkg.lvdbs[0].page_count == 1
     assert pkg.has_battery_bank is True
     assert pkg.battery_banks[0].page_count == 1

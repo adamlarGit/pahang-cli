@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import re
-from typing import Mapping, Sequence
+from typing import Sequence
 
 from src.testsheet.models import (
     BatteryBankSpec,
@@ -108,28 +108,21 @@ def resolve_switchgear_compartments(
 ) -> tuple[str, ...]:
     """Resolve switchgear scanning compartments per D26.
 
-    When panel is omitted, returns the canonical compartment set for the category.
-    When panel is provided, returns the panel-specific scanning compartments.
+    Panel compartments are strictly decoupled from board-level overview
+    (which is resolved via resolve_overview_compartments).
     """
-    if panel is None:
-        if category == SwitchgearCategory.TAMCO_LUCY:
-            return ("OVERVIEW BOTTOM", "CABLE COMPARTMENT", "CABLE ENTRY")
-        if category == SwitchgearCategory.INDKOM:
-            return ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
-        if category == SwitchgearCategory.VCB:
-            return VCB_STANDARD_COMPARTMENTS
-        return ("CABLE COMPARTMENT",)
-
-    if category == SwitchgearCategory.INDKOM:
-        if is_tx_feeder(panel):
-            return ("FUSE COMPARTMENT",)
-        return ("CABLE COMPARTMENT",)
-
     if category == SwitchgearCategory.TAMCO_LUCY:
         return ("CABLE COMPARTMENT", "CABLE ENTRY")
 
     if category == SwitchgearCategory.VCB:
         return VCB_STANDARD_COMPARTMENTS
+
+    if category == SwitchgearCategory.INDKOM:
+        if panel is not None and is_tx_feeder(panel):
+            return ("FUSE COMPARTMENT",)
+        if panel is not None:
+            return ("CABLE COMPARTMENT",)
+        return ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
 
     # OTHER_RMU
     return ("CABLE COMPARTMENT",)
@@ -156,7 +149,6 @@ def build_switchgear_panel_scan_spec(
         compartments = tuple(active_compartments)
     else:
         compartments = resolve_switchgear_compartments(category, panel)
-    page_count = len(compartments)
 
     return SwitchgearPanelScanSpec(
         panel_no=panel.panel_no,
@@ -175,29 +167,17 @@ def build_switchgear_panel_scan_spec(
         tev_char=panel.tev_char,
         photo_numbers=panel.photo_numbers,
         compartments=compartments,
-        page_count=page_count,
     )
 
 
 def build_switchgear_scan_spec(
     swg: SwitchgearSpec,
-    active_compartments_by_panel: Mapping[int, Sequence[str]] | None = None,
-    overview_compartments: Sequence[str] | None = None,
 ) -> SwitchgearScanSpec:
     """Construct strongly-typed SwitchgearScanSpec from SwitchgearSpec."""
     category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
-    resolved_overview = (
-        tuple(overview_compartments)
-        if overview_compartments is not None
-        else resolve_overview_compartments(category)
-    )
-    active_map = active_compartments_by_panel or {}
+    overview = resolve_overview_compartments(category)
     panels = tuple(
-        build_switchgear_panel_scan_spec(
-            p,
-            category,
-            active_compartments=active_map.get(p.panel_no),
-        )
+        build_switchgear_panel_scan_spec(p, category)
         for p in swg.panels
     )
 
@@ -209,7 +189,7 @@ def build_switchgear_scan_spec(
         rating=swg.rating,
         serial_no=swg.serial_no,
         category=category,
-        overview_compartments=resolved_overview,
+        overview_compartments=overview,
         panels=panels,
         photo_numbers=swg.photo_numbers,
     )
@@ -243,19 +223,11 @@ def build_transformer_scan_spec(tx: TransformerSpec) -> TransformerScanSpec:
         lv_cable_type=tx.lv_cable_type,
         photo_numbers=tx.photo_numbers,
         components=components,
-        page_count=len(components),
     )
 
 
 def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
     """Construct strongly-typed LVDBScanSpec from LVDBSpec."""
-    feeders = tuple(
-        LVDBFeederScanSpec(
-            channel=f.channel,
-            cable_type=f.cable_type,
-        )
-        for f in lvdb.feeders
-    )
     return LVDBScanSpec(
         name=lvdb.name,
         label=lvdb.label,
@@ -265,7 +237,7 @@ def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
         rating=lvdb.rating,
         cable_type=lvdb.cable_type,
         photo_numbers=lvdb.photo_numbers,
-        feeders=feeders,
+        feeders=lvdb.feeders,
         page_count=1,
     )
 
@@ -295,7 +267,7 @@ def build_full_report_scan_package(
     """Construct complete FullReportScanPackage from extracted SubstationEquipmentPackage."""
     swgs = tuple(build_switchgear_scan_spec(s) for s in equipment.switchgears)
     txs = tuple(build_transformer_scan_spec(t) for t in equipment.transformers)
-    lvdbs = tuple(build_lvdb_scan_spec(l) for l in equipment.lvdb_specs)
+    lvdb_specs = tuple(build_lvdb_scan_spec(l) for l in equipment.lvdb_specs)
 
     # D49: Evaluates battery bank presence strictly via len(equipment.battery_banks) > 0
     if has_battery_bank(equipment):
@@ -308,12 +280,9 @@ def build_full_report_scan_package(
         station_name=station_name,
         switchgears=swgs,
         transformers=txs,
-        lvdbs=lvdbs,
+        lvdb_specs=lvdb_specs,
         battery_banks=bbs,
     )
-
-
-
 
 
 @dataclass(frozen=True)
@@ -336,11 +305,11 @@ class SwitchgearPanelScanSpec:
     tev_char: str = ""
     photo_numbers: tuple[int, ...] = ()
     compartments: tuple[str, ...] = ()
-    page_count: int = 1
 
-    def __post_init__(self) -> None:
-        if self.compartments and self.page_count == 1 and len(self.compartments) != 1:
-            object.__setattr__(self, "page_count", len(self.compartments))
+    @property
+    def page_count(self) -> int:
+        """Derived scanning page count equal to number of active compartments."""
+        return len(self.compartments)
 
 
 @dataclass(frozen=True)
@@ -392,19 +361,15 @@ class TransformerScanSpec:
     lv_cable_type: str = ""
     photo_numbers: tuple[int, ...] = ()
     components: tuple[str, ...] = TRANSFORMER_STANDARD_COMPONENTS
-    page_count: int = 7
 
-    def __post_init__(self) -> None:
-        if self.components and (self.page_count == 7 or self.page_count == 0):
-            object.__setattr__(self, "page_count", len(self.components))
+    @property
+    def page_count(self) -> int:
+        """Derived scanning page count equal to number of components."""
+        return len(self.components)
 
 
-@dataclass(frozen=True)
-class LVDBFeederScanSpec:
-    """Specification for an individual LVDB / Feeder Pillar circuit way."""
-
-    channel: str = ""
-    cable_type: str = ""
+# Feeder scan spec directly aliases LVDBFeederSpec to eliminate duplicated DTO code
+LVDBFeederScanSpec = LVDBFeederSpec
 
 
 @dataclass(frozen=True)
@@ -419,7 +384,7 @@ class LVDBScanSpec:
     rating: str = ""
     cable_type: str = ""
     photo_numbers: tuple[int, ...] = ()
-    feeders: tuple[LVDBFeederScanSpec, ...] = ()
+    feeders: tuple[LVDBFeederSpec, ...] = ()
     page_count: int = 1
 
 
@@ -443,8 +408,13 @@ class FullReportScanPackage:
     station_name: str = ""
     switchgears: tuple[SwitchgearScanSpec, ...] = ()
     transformers: tuple[TransformerScanSpec, ...] = ()
-    lvdbs: tuple[LVDBScanSpec, ...] = ()
+    lvdb_specs: tuple[LVDBScanSpec, ...] = ()
     battery_banks: tuple[BatteryBankScanSpec, ...] = ()
+
+    @property
+    def lvdbs(self) -> tuple[LVDBScanSpec, ...]:
+        """Alias for lvdb_specs for backward compatibility and CONTEXT.md alignment."""
+        return self.lvdb_specs
 
     @property
     def has_switchgear(self) -> bool:
@@ -464,7 +434,7 @@ class FullReportScanPackage:
     @property
     def lvdb_count(self) -> int:
         """Return total number of LVDB / Feeder Pillar units."""
-        return len(self.lvdbs)
+        return len(self.lvdb_specs)
 
     @property
     def has_battery_bank(self) -> bool:
@@ -476,7 +446,7 @@ class FullReportScanPackage:
         """Calculate total scanning pages across all equipment in the package."""
         swg_pages = sum(s.total_page_count for s in self.switchgears)
         tx_pages = sum(t.page_count for t in self.transformers)
-        lvdb_pages = sum(l.page_count for l in self.lvdbs)
+        lvdb_pages = sum(l.page_count for l in self.lvdb_specs)
         bb_pages = sum(b.page_count for b in self.battery_banks)
         return swg_pages + tx_pages + lvdb_pages + bb_pages
 
