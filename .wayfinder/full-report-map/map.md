@@ -122,7 +122,7 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 
 ```mermaid
 graph TD
-    T1_1[T1.1: Research QR OpenXML Structure - Closed] --> T1_2[T1.2: Pre-flight Validation for Final QR]
+    T1_1[T1.1: Research QR OpenXML Structure - Closed] --> T1_2[T1.2: Pre-flight Validation for Final QR - Closed]
     T1_2 --> T1_3a[T1.3a: Implement DocumentSlicer Core & Section Slicing]
     T1_3a --> T1_3b[T1.3b: Sliced CBM Defect Parsing & D37 Naming]
     
@@ -218,14 +218,15 @@ Provide an automated ingestion and pre-flight validation pipeline that:
 ##### T1.2: Pre-Flight Integrity Validation for Finalized Quick Report
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **Status**: Closed
 - **What to build**: A fast, pure-Python pre-flight validator that checks whether the finalized Quick Report `.docx` exists, exceeds the 1.0 MB size floor, and contains at least 8 media files before allowing Full Report generation to proceed.
 - **Blocked by**: T1.1
 - **Acceptance criteria**:
-  - [ ] Validates presence of `QUICK REPORT/<STATION>/<MONTH>/<DATE>/<STEM>.docx`.
-  - [ ] Enforces file size floor >= 1.0 MB, rejecting empty/unpopulated templates.
-  - [ ] Enforces `word/media/` count >= 8 images via standard `zipfile.ZipFile` inspection.
-  - [ ] Returns structured `PreFlightValidationResult` with clear error diagnostics if unready.
-  - [ ] Comprehensive unit tests with valid, undersized, and missing mock docx archives.
+  - [x] Validates presence of `QUICK REPORT/<STATION>/<MONTH>/<DATE>/<STEM>.docx`.
+  - [x] Enforces file size floor >= 1.0 MB, rejecting empty/unpopulated templates.
+  - [x] Enforces `word/media/` count >= 8 images via standard `zipfile.ZipFile` inspection.
+  - [x] Returns structured `PreFlightValidationResult` with clear error diagnostics if unready.
+  - [x] Comprehensive unit tests with valid, undersized, and missing mock docx archives.
 
 ##### T1.3a: Implement DocumentSlicer Core, Slicing Protocol & Section Boundary Extraction
 - **Labels**: `wayfinder:task`, `ready-for-agent`
