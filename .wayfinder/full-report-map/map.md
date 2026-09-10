@@ -324,11 +324,11 @@ Extend the testsheet extraction and material resolution layer to:
 - **What to build**: Strongly-typed domain scan specifications (`SwitchgearScanSpec`, `TransformerScanSpec`, `LVDBScanSpec`, `BatteryBankScanSpec`) and compartment matrix logic in `src/full_report/models.py` capturing operating parameters and equipment scanning layouts.
 - **Blocked by**: T2.1, T2.2
 - **Acceptance criteria**:
-  - [ ] DTOs capture load current, heater current, breaker status, serial no, cable type, US, and TEV readings.
-  - [ ] Implements switchgear compartment matrix per D26 (`INDKOM`: TX feeder $\to$ `FUSE COMPARTMENT`, others $\to$ `CABLE COMPARTMENT`; `TAMCO`/`LUCY`: `OVERVIEW BOTTOM` + `CABLE COMPARTMENT` + `CABLE ENTRY`; `VCB`: standard 7 compartments).
-  - [ ] Implements manufacturer-driven scanning page count rules per D29.
-  - [ ] Evaluates battery bank presence strictly via `len(equipment.battery_banks) > 0` per D49.
-  - [ ] Unit tests verifying matrix emission across all 4 switchgear categories.
+  - [x] DTOs capture load current, heater current, breaker status, serial no, cable type, US, and TEV readings.
+  - [x] Implements switchgear compartment matrix per D26 (`INDKOM`: TX feeder $\to$ `FUSE COMPARTMENT`, others $\to$ `CABLE COMPARTMENT`; `TAMCO`/`LUCY`: `OVERVIEW BOTTOM` + `CABLE COMPARTMENT` + `CABLE ENTRY`; `VCB`: standard 7 compartments).
+  - [x] Implements manufacturer-driven scanning page count rules per D29.
+  - [x] Evaluates battery bank presence strictly via `len(equipment.battery_banks) > 0` per D49.
+  - [x] Unit tests verifying matrix emission across all 4 switchgear categories.
 
 ---
 
