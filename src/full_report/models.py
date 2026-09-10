@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import re
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from src.testsheet.models import (
     BatteryBankSpec,
@@ -74,19 +74,43 @@ def classify_switchgear(
     return SwitchgearCategory.OTHER_RMU
 
 
-def is_tx_feeder(name: str = "", feeder_no: str = "", panel_type: str = "") -> bool:
-    """Determine if a switchgear panel/bay is a transformer (TX) feeder."""
-    combined = f"{name} {feeder_no} {panel_type}".upper()
+def is_tx_feeder(
+    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str | None = None,
+    name: str = "",
+    feeder_no: str = "",
+    panel_type: str = "",
+) -> bool:
+    """Determine if a switchgear panel/bay is a transformer (TX) feeder.
+
+    Accepts a panel object (SwitchgearPanelSpec or SwitchgearPanelScanSpec) or
+    individual string attributes (name, feeder_no, panel_type).
+    """
+    if panel is not None and hasattr(panel, "name"):
+        panel_name = getattr(panel, "name", "")
+        feeder_no = getattr(panel, "panel_feeder_no", feeder_no)
+        panel_type = getattr(panel, "panel_type", panel_type)
+    elif isinstance(panel, str) and panel:
+        panel_name = panel
+    else:
+        panel_name = name
+
+    combined = f"{panel_name} {feeder_no} {panel_type}".upper()
     if any(k in combined for k in ("TRANSFORMER", "ALATUBAH", "TEE-OFF", "TEE OFF", "FUSE")):
         return True
     return bool(re.search(r"\bTX\d*\b", combined))
 
 
+OVERVIEW_COMPARTMENTS_MAP: dict[SwitchgearCategory, tuple[str, ...]] = {
+    SwitchgearCategory.TAMCO_LUCY: ("OVERVIEW", "OVERVIEW BOTTOM"),
+    SwitchgearCategory.VCB: ("OVERVIEW",),
+    SwitchgearCategory.INDKOM: ("OVERVIEW", "OVERVIEW TOP"),
+    SwitchgearCategory.OTHER_RMU: ("OVERVIEW", "OVERVIEW TOP"),
+}
+
+
 def resolve_overview_compartments(category: SwitchgearCategory) -> tuple[str, ...]:
     """Resolve overview scanning page compartments for switchgear category per D26."""
-    if category == SwitchgearCategory.TAMCO_LUCY:
-        return ("OVERVIEW", "OVERVIEW BOTTOM")
-    return ("OVERVIEW", "OVERVIEW TOP")
+    return OVERVIEW_COMPARTMENTS_MAP.get(category, ("OVERVIEW", "OVERVIEW TOP"))
 
 
 def resolve_switchgear_compartments(
@@ -95,7 +119,7 @@ def resolve_switchgear_compartments(
 ) -> tuple[str, ...]:
     """Resolve panel scanning compartments based on manufacturer category per D26."""
     if category == SwitchgearCategory.INDKOM:
-        if is_tx_feeder(panel.name, panel.panel_feeder_no, panel.panel_type):
+        if is_tx_feeder(panel):
             return ("FUSE COMPARTMENT",)
         return ("CABLE COMPARTMENT",)
 
@@ -115,14 +139,8 @@ def resolve_panel_page_count(
     active_compartments: Sequence[str] | None = None,
 ) -> int:
     """Resolve number of scanning pages for a panel per D29."""
-    if category == SwitchgearCategory.VCB:
-        if active_compartments is not None and len(active_compartments) > 0:
-            return len(active_compartments)
-        panel_active = getattr(panel, "active_compartments", ())
-        if panel_active:
-            return len(panel_active)
-        return len(VCB_STANDARD_COMPARTMENTS)
-
+    if active_compartments is not None and len(active_compartments) > 0:
+        return len(active_compartments)
     return len(resolve_switchgear_compartments(category, panel))
 
 
@@ -132,9 +150,12 @@ def build_switchgear_panel_scan_spec(
     active_compartments: Sequence[str] | None = None,
 ) -> SwitchgearPanelScanSpec:
     """Construct strongly-typed SwitchgearPanelScanSpec applying D26 compartments and D29 page counts."""
-    compartments = resolve_switchgear_compartments(category, panel)
+    if active_compartments is not None and len(active_compartments) > 0:
+        compartments = tuple(active_compartments)
+    else:
+        compartments = resolve_switchgear_compartments(category, panel)
     act_comps = tuple(active_compartments) if active_compartments is not None else ()
-    page_count = resolve_panel_page_count(category, panel, active_compartments=act_comps or None)
+    page_count = len(compartments)
 
     return SwitchgearPanelScanSpec(
         panel_no=panel.panel_no,
@@ -158,11 +179,27 @@ def build_switchgear_panel_scan_spec(
     )
 
 
-def build_switchgear_scan_spec(swg: SwitchgearSpec) -> SwitchgearScanSpec:
+def build_switchgear_scan_spec(
+    swg: SwitchgearSpec,
+    active_compartments_by_panel: Mapping[int, Sequence[str]] | None = None,
+    overview_compartments: Sequence[str] | None = None,
+) -> SwitchgearScanSpec:
     """Construct strongly-typed SwitchgearScanSpec from SwitchgearSpec."""
     category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
-    overview_compartments = resolve_overview_compartments(category)
-    panels = tuple(build_switchgear_panel_scan_spec(p, category) for p in swg.panels)
+    resolved_overview = (
+        tuple(overview_compartments)
+        if overview_compartments is not None
+        else resolve_overview_compartments(category)
+    )
+    active_map = active_compartments_by_panel or {}
+    panels = tuple(
+        build_switchgear_panel_scan_spec(
+            p,
+            category,
+            active_compartments=active_map.get(p.panel_no),
+        )
+        for p in swg.panels
+    )
 
     return SwitchgearScanSpec(
         switchgear_type=swg.switchgear_type,
@@ -172,7 +209,7 @@ def build_switchgear_scan_spec(swg: SwitchgearSpec) -> SwitchgearScanSpec:
         rating=swg.rating,
         serial_no=swg.serial_no,
         category=category,
-        overview_compartments=overview_compartments,
+        overview_compartments=resolved_overview,
         panels=panels,
         photo_numbers=swg.photo_numbers,
     )
@@ -216,6 +253,7 @@ def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
         LVDBFeederScanSpec(
             channel=f.channel,
             cable_type=f.cable_type,
+            load_amp=getattr(f, "load_amp", ""),
         )
         for f in lvdb.feeders
     )

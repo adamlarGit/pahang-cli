@@ -15,7 +15,19 @@ from src.full_report.models import (
     TransformerScanSpec,
     TRANSFORMER_STANDARD_COMPONENTS,
     VCB_STANDARD_COMPARTMENTS,
+    build_battery_bank_scan_spec,
+    build_full_report_scan_package,
+    build_lvdb_scan_spec,
+    build_switchgear_panel_scan_spec,
+    build_switchgear_scan_spec,
+    build_transformer_scan_spec,
+    classify_switchgear,
+    has_battery_bank,
     has_hv_cable_split,
+    is_tx_feeder,
+    resolve_overview_compartments,
+    resolve_panel_page_count,
+    resolve_switchgear_compartments,
 )
 from src.testsheet.models import (
     BatteryBankSpec,
@@ -217,8 +229,6 @@ def test_classify_switchgear_across_all_four_categories() -> None:
 
 def test_is_tx_feeder_detection() -> None:
     """Verify is_tx_feeder detects transformer feeders while excluding standard bays."""
-    from src.full_report.models import is_tx_feeder
-
     # Positives
     assert is_tx_feeder(name="PANEL CKN01309 TX") is True
     assert is_tx_feeder(name="RMU SF6 PANEL CKN00051 TX 750") is True
@@ -237,13 +247,16 @@ def test_is_tx_feeder_detection() -> None:
     assert is_tx_feeder(name="LA SG BILUT") is False
 
 
+def test_is_tx_feeder_accepts_panel_object() -> None:
+    """Verify is_tx_feeder accepts panel spec object directly without data clumps."""
+    tx_panel = SwitchgearPanelSpec(name="PANEL CKN01309 TX", panel_feeder_no="CKN01309")
+    inc_panel = SwitchgearPanelSpec(name="INCOMING 1", panel_feeder_no="CKN01308")
+    assert is_tx_feeder(tx_panel) is True
+    assert is_tx_feeder(inc_panel) is False
+
+
 def test_switchgear_compartment_matrix_indkom() -> None:
     """INDKOM: TX feeder -> FUSE COMPARTMENT, others -> CABLE COMPARTMENT, overview TOP."""
-    from src.full_report.models import (
-        resolve_overview_compartments,
-        resolve_switchgear_compartments,
-    )
-
     incomer = SwitchgearPanelSpec(panel_no=1, name="INCOMING 1", panel_feeder_no="CKN01308")
     tx_feeder = SwitchgearPanelSpec(panel_no=4, name="PANEL CKN01309 TX", panel_feeder_no="CKN01309")
 
@@ -257,11 +270,6 @@ def test_switchgear_compartment_matrix_indkom() -> None:
 
 def test_switchgear_compartment_matrix_tamco_lucy() -> None:
     """TAMCO/LUCY: OVERVIEW BOTTOM + CABLE COMPARTMENT + CABLE ENTRY per D26."""
-    from src.full_report.models import (
-        resolve_overview_compartments,
-        resolve_switchgear_compartments,
-    )
-
     incomer = SwitchgearPanelSpec(panel_no=1, name="PE KG ASLI BATU BALONG", panel_feeder_no="CRB00679")
     tx_feeder = SwitchgearPanelSpec(panel_no=2, name="TX B", panel_feeder_no="CRB00679")
 
@@ -281,11 +289,6 @@ def test_switchgear_compartment_matrix_tamco_lucy() -> None:
 
 def test_switchgear_compartment_matrix_other_rmu() -> None:
     """Other RMUs: CABLE COMPARTMENT and OVERVIEW TOP."""
-    from src.full_report.models import (
-        resolve_overview_compartments,
-        resolve_switchgear_compartments,
-    )
-
     incomer = SwitchgearPanelSpec(panel_no=1, name="INCOMING 1")
     tx_feeder = SwitchgearPanelSpec(panel_no=3, name="TX 1")
 
@@ -299,15 +302,10 @@ def test_switchgear_compartment_matrix_other_rmu() -> None:
 
 def test_switchgear_compartment_matrix_vcb() -> None:
     """VCB: Evaluated per panel emitting its 7 standard compartments per D26."""
-    from src.full_report.models import (
-        resolve_overview_compartments,
-        resolve_switchgear_compartments,
-    )
-
     panel = SwitchgearPanelSpec(panel_no=1, name="SSU UITM VCB 5", panel_feeder_no="CRB00764")
 
     # Overview
-    assert resolve_overview_compartments(SwitchgearCategory.VCB) == ("OVERVIEW", "OVERVIEW TOP")
+    assert resolve_overview_compartments(SwitchgearCategory.VCB) == ("OVERVIEW",)
 
     # Panel emits standard 7 compartments
     compartments = resolve_switchgear_compartments(SwitchgearCategory.VCB, panel)
@@ -330,8 +328,6 @@ def test_switchgear_compartment_matrix_vcb() -> None:
 
 def test_resolve_panel_page_count_rules_per_d29() -> None:
     """Verify page count resolution follows D29 across all 4 categories."""
-    from src.full_report.models import resolve_panel_page_count
-
     incomer = SwitchgearPanelSpec(panel_no=1, name="INCOMING 1")
     tx_feeder = SwitchgearPanelSpec(panel_no=4, name="TX 1")
 
@@ -358,10 +354,20 @@ def test_resolve_panel_page_count_rules_per_d29() -> None:
     ) == 3
 
 
+def test_build_switchgear_panel_scan_spec_active_compartments_lockstep() -> None:
+    """Verify build_switchgear_panel_scan_spec ensures compartments and page_count are in lockstep."""
+    panel = SwitchgearPanelSpec(panel_no=1, name="VCB 1")
+    active = ("CABLE COMPARTMENT", "BREAKER COMPARTMENT", "PT COMPARTMENT")
+    spec = build_switchgear_panel_scan_spec(panel, SwitchgearCategory.VCB, active_compartments=active)
+
+    assert spec.compartments == active
+    assert spec.active_compartments == active
+    assert spec.page_count == 3
+    assert len(spec.compartments) == spec.page_count
+
+
 def test_build_switchgear_scan_spec_integrates_matrix_and_page_counts() -> None:
     """Verify build_switchgear_scan_spec constructs complete spec with matrix and page counts."""
-    from src.full_report.models import build_switchgear_scan_spec
-
     # 1. TAMCO 4-panel switchgear (Talapia topology)
     tamco_swg = SwitchgearSpec(
         switchgear_type="RMU SF6",
@@ -414,14 +420,46 @@ def test_build_switchgear_scan_spec_integrates_matrix_and_page_counts() -> None:
         assert p.page_count == 1
 
 
+def test_build_switchgear_scan_spec_with_custom_active_compartments_and_overview() -> None:
+    """Verify build_switchgear_scan_spec supports custom active compartments mapping and overview override."""
+    vcb_swg = SwitchgearSpec(
+        switchgear_type="VCB",
+        manufacturer="TAMCO",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="INCOMING 1"),
+            SwitchgearPanelSpec(panel_no=2, name="FEEDER 1"),
+        ),
+    )
+    custom_map = {1: ("CABLE COMPARTMENT", "BREAKER COMPARTMENT", "BUSBAR COMPARTMENT")}
+    spec = build_switchgear_scan_spec(
+        vcb_swg,
+        active_compartments_by_panel=custom_map,
+        overview_compartments=("OVERVIEW", "OVERVIEW TOP"),
+    )
+
+    assert spec.overview_compartments == ("OVERVIEW", "OVERVIEW TOP")
+    assert spec.panels[0].compartments == ("CABLE COMPARTMENT", "BREAKER COMPARTMENT", "BUSBAR COMPARTMENT")
+    assert spec.panels[0].page_count == 3
+    assert spec.panels[1].compartments == VCB_STANDARD_COMPARTMENTS
+    assert spec.panels[1].page_count == 7
+    # 2 overview + 3 + 7 = 12 pages
+    assert spec.total_page_count == 12
+
+
+def test_build_lvdb_scan_spec_maps_load_amp_when_present() -> None:
+    """Verify build_lvdb_scan_spec maps load_amp from feeder spec if present."""
+    feeder = LVDBFeederSpec(channel="IN1", cable_type="PVC 4C")
+    lvdb = LVDBSpec(name="FP 1", feeders=(feeder,))
+    spec = build_lvdb_scan_spec(lvdb)
+    assert spec.feeders[0].load_amp == ""
+
+
 # ==============================================================================
 # Slice 4: Battery Bank Presence (D49) & Scan Package Builder
 # ==============================================================================
 
 def test_has_battery_bank_strictly_checks_length_per_d49() -> None:
     """Verify battery bank presence is evaluated strictly via len(equipment.battery_banks) > 0 per D49."""
-    from src.full_report.models import has_battery_bank
-
     # 1. Zero battery banks
     eq_empty = SubstationEquipmentPackage(battery_banks=())
     assert has_battery_bank(eq_empty) is False
@@ -444,8 +482,6 @@ def test_has_battery_bank_strictly_checks_length_per_d49() -> None:
 
 def test_build_full_report_scan_package_with_and_without_battery() -> None:
     """Verify build_full_report_scan_package respects D49 and correctly aggregates page counts."""
-    from src.full_report.models import build_full_report_scan_package
-
     swg = SwitchgearSpec(
         switchgear_type="RMU SF6",
         manufacturer="INDKOM",
@@ -507,8 +543,6 @@ def test_build_full_report_scan_package_with_and_without_battery() -> None:
 
 def test_canonical_benchmark_talapia() -> None:
     """Benchmark TALAPIA: TAMCO RMU (4 panels, 2 pages/panel), 1 TX (7 pages), 1 FP (1 page), 1 Battery (1 page) = 19 pages."""
-    from src.full_report import build_full_report_scan_package
-
     swg = SwitchgearSpec(
         switchgear_type="RMU SF6",
         manufacturer="TAMCO",
@@ -574,8 +608,6 @@ def test_canonical_benchmark_talapia() -> None:
 
 def test_canonical_benchmark_cenderawasih() -> None:
     """Benchmark CENDERAWASIH NO.1: INDKOM RMU (3 cable, 1 fuse), 1 TX (7 pages), 1 FP, 0 Battery = 14 pages."""
-    from src.full_report import build_full_report_scan_package
-
     swg = SwitchgearSpec(
         switchgear_type="RMU SF6",
         manufacturer="INDKOM",
@@ -616,8 +648,6 @@ def test_canonical_benchmark_cenderawasih() -> None:
 
 def test_canonical_benchmark_telekom_tanah_putih() -> None:
     """Benchmark TELEKOM TANAH PUTIH: INDKOM RMU (3 cable, 1 fuse), 1 TX, 1 LVDB, 1 Battery = 15 pages."""
-    from src.full_report import build_full_report_scan_package
-
     swg = SwitchgearSpec(
         switchgear_type="RMU SF6",
         manufacturer="INDKOM",
@@ -653,9 +683,7 @@ def test_canonical_benchmark_telekom_tanah_putih() -> None:
 
 
 def test_vcb_substation_sk_raub_indah() -> None:
-    """VCB Station SK RAUB INDAH: VCB (4 panels, 7 compartments/panel), 0 TX, 1 FP, 1 Battery = 32 pages."""
-    from src.full_report import build_full_report_scan_package
-
+    """VCB Station SK RAUB INDAH: VCB (4 panels, 7 compartments/panel), 0 TX, 1 FP, 1 Battery = 31 pages."""
     swg = SwitchgearSpec(
         switchgear_type="VCB",
         manufacturer="HV12",
@@ -679,20 +707,20 @@ def test_vcb_substation_sk_raub_indah() -> None:
     pkg = build_full_report_scan_package(eq, substation_number=9, station_name="VCB STATION SK RAUB INDAH")
 
     assert pkg.switchgear.category == SwitchgearCategory.VCB
-    assert pkg.switchgear.overview_compartments == ("OVERVIEW", "OVERVIEW TOP")
+    assert pkg.switchgear.overview_compartments == ("OVERVIEW",)
     assert pkg.switchgear.panel_count == 4
     for p in pkg.switchgear.panels:
         assert p.compartments == VCB_STANDARD_COMPARTMENTS
         assert p.page_count == 7
 
-    # 2 overview + 4 * 7 = 30 swg pages
-    assert pkg.switchgear.total_page_count == 30
+    # 1 overview + 4 * 7 = 29 swg pages
+    assert pkg.switchgear.total_page_count == 29
     assert pkg.transformer_count == 0
     assert pkg.lvdb_count == 1
     assert pkg.has_battery_bank is True
 
-    # Total: 30 (swg) + 0 (tx) + 1 (fp) + 1 (battery) = 32 pages
-    assert pkg.total_scan_pages == 32
+    # Total: 29 (swg) + 0 (tx) + 1 (fp) + 1 (battery) = 31 pages
+    assert pkg.total_scan_pages == 31
 
 
 
