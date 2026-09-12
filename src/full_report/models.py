@@ -102,21 +102,18 @@ def resolve_switchgear_compartments(
     category: SwitchgearCategory,
     panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec | None = None,
 ) -> tuple[str, ...]:
-    """Resolve switchgear scanning compartments per D26.
+    """Resolve switchgear panel scanning compartments per D26.
 
-    When panel is omitted, returns the canonical category compartment set per D26.
-    When panel is provided, returns the panel-specific scanning compartments
-    (decoupled from board-level overview).
+    Panel scanning strictly covers panel-level compartments:
+    - TAMCO / LUCY: ("CABLE COMPARTMENT", "CABLE ENTRY")
+    - INDKOM: ("FUSE COMPARTMENT",) for TX feeder bays, ("CABLE COMPARTMENT",) for other bays
+      (or ("FUSE COMPARTMENT", "CABLE COMPARTMENT") when panel is omitted)
+    - VCB: 7 standard compartments
+    - OTHER_RMU: ("CABLE COMPARTMENT",)
+
+    Board-level overview scanning ('OVERVIEW', 'OVERVIEW BOTTOM' via swg-overview.docx) is cleanly
+    decoupled from panel scanning and resolved via resolve_overview_compartments().
     """
-    if panel is None:
-        if category == SwitchgearCategory.TAMCO_LUCY:
-            return ("OVERVIEW BOTTOM", "CABLE COMPARTMENT", "CABLE ENTRY")
-        if category == SwitchgearCategory.INDKOM:
-            return ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
-        if category == SwitchgearCategory.VCB:
-            return VCB_STANDARD_COMPARTMENTS
-        return ("CABLE COMPARTMENT",)
-
     if category == SwitchgearCategory.TAMCO_LUCY:
         return ("CABLE COMPARTMENT", "CABLE ENTRY")
 
@@ -124,6 +121,8 @@ def resolve_switchgear_compartments(
         return VCB_STANDARD_COMPARTMENTS
 
     if category == SwitchgearCategory.INDKOM:
+        if panel is None:
+            return ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
         if is_tx_feeder(panel):
             return ("FUSE COMPARTMENT",)
         return ("CABLE COMPARTMENT",)

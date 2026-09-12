@@ -17,6 +17,7 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 
 ## Notes & Design Principles
 
+- **GitHub-Driven Issue & PR Tracking**: Implementation flow is recorded canonically through GitHub Issues and PRs (under Map Issue #19) via `gh` CLI per `AGENTS.md`. Local files (`map.md`, `github-map-body.md`, and `tickets/`) are maintained in lockstep synchronization with GitHub.
 - **Single Dedicated Feature Branch**: All 18 implementation tickets across SPEC 1 through SPEC 6 must be implemented sequentially on a **single unified feature branch** (e.g. `feature/full-report`). Do not create separate per-ticket branches. A single linear branch preserves shared compiler, parser, and model context, prevents integration drift, eliminates merge conflicts across tightly coupled modules (`models.py`, `plan_builder.py`, `composer.py`), and ensures incremental test suites pass continuously.
 - **Quick Report Ingestion (DRY / No Re-work)**: Quick Report is generated first and finalized by the inspector (adding thermal and visual images, defect callouts, condition photos). Full Report ingests those finalized sections directly from the completed Quick Report `.docx` rather than regenerating them empty or requiring duplicate manual work.
 - **Front Page Reuse**: The front page (including metadata and PE signboard photo) is lifted directly from the finalized Quick Report, eliminating the need for a separate full report front page template. Title transformation (`QUICK` $\to$ `FULL`) is executed via native Word COM Find & Replace during slicing.
@@ -56,7 +57,7 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 
 ## Decisions So Far
 
-- [x] **D01 - Map Tracking Strategy**: Keep the canonical map in `.wayfinder/full-report-map/map.md` until all fog of war is resolved, keeping GitHub issues dormant.
+- [x] **D01 - Map Tracking Strategy & GitHub Issue Synchronization**: Transition from local-only brainstorming to canonical GitHub issue and PR tracking. All tickets across SPEC 1 through SPEC 6 are published and tracked on GitHub Issues under Map Issue #19, with the full report feature implementation flow recorded through GitHub issues/PRs while keeping local documentation in lockstep.
 - [x] **D02 - 90% Target Boundary**: Scope covers 1 RMU/VCB (3-5 panels), up to 2 TX, up to 2 LVDB/FP, 1 Battery Bank.
 - [x] **D03 - Modular Part Stitching**: Assemble deliverables via modular OpenXML parts using `WordComDocumentCompiler` and `BatchComSession`.
 - [x] **D04 - Quick Report Ingestion Seam**: Lift completed assets and pages (Front page with signboard photo, condition grid, VI defect grid, sticker page, analyzed defect pages) directly from the finalized Quick Report `.docx`.
@@ -89,7 +90,9 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 - [x] **D23 - Defect Measurement Formatting Reuse**: Table 3 defect readings reuse `format_temperature_reading` (`{val:.1f} °C`) and `format_db_reading` (`{val}dB`) from `src/quick_report/cbm_summary.py`. Inactive/healthy technologies show `"-"`.
 - [x] **D24 - Severity-Only Cell Shading**: Only the `SEVERITY` cell is shaded (`00B050` Green for Normal, `EE0000` Red for Defect, text cleared). Overview rows have text `"-"` and unshaded background. Measurement cells (`IR`, `U/S`, `TEV`) remain unshaded with black text.
 - [x] **D25 - Unified Summary Template Schema & Placeholders**: `templates/FULL REPORT/executive_summary_census.docx` inherits directly from Quick Report's `CBM DEFECT IR+US+TEV SUMMARY.docx` schema with unified keys (`no`, `equipment`, `defect_area`, `ir_abs`, `us_dB`, `tev_dB`, `severity`), binding Col 0 to `{{ item.no }}` and Col 6 to `{{ item.severity }}`.
-- [x] **D26 - Switchgear Compartment Matrix**: Switchgear evaluated per panel. `INDKOM`: TX feeder $\to$ `FUSE COMPARTMENT`, others $\to$ `CABLE COMPARTMENT`. `TAMCO`/`LUCY`: `OVERVIEW BOTTOM` + `CABLE COMPARTMENT` + `CABLE ENTRY`. Other RMUs: `CABLE COMPARTMENT`. `VCB`: evaluated per panel emitting its 7 standard compartments.
+- [x] **D26 - Switchgear Compartment Matrix & Overview Decoupling**: Switchgear scanning is cleanly decoupled between Board Overview scanning and Panel scanning:
+  1. Board Overview scanning (via `swg-overview.docx` and `resolve_overview_compartments()`): TAMCO/LUCY boards generate 2 overview pages (`OVERVIEW` and `OVERVIEW BOTTOM`); INDKOM, VCB, and other RMUs generate 1 overview page (`OVERVIEW`).
+  2. Panel scanning (via `swg-panel.docx` and `resolve_switchgear_compartments()`): TAMCO/LUCY panels strictly generate 2 scanning pages (`CABLE COMPARTMENT` and `CABLE ENTRY`) without conflating overview pages. INDKOM panels generate 1 scanning page (`FUSE COMPARTMENT` for TX feeder bays, `CABLE COMPARTMENT` for incoming/bus bays). Other RMUs generate 1 scanning page (`CABLE COMPARTMENT`). VCB panels generate 1 scanning page for each active compartment across standard 7 compartments.
 - [x] **D27 - Unconditional Transformer HV CABLE SPLIT Generation (ADR 0004)**: Full Report unconditionally generates an `HV CABLE SPLIT` row and scanning page for each active transformer via `has_hv_cable_split(...) -> True` per ADR 0004 choice by design. If a secondary split photo is absent on disk, it falls back cleanly to empty string `""` without crashing.
 - [x] **D28 - Inventory-to-Defect Cross-Referencing Engine**: `ExecutiveSummaryCensusBuilder` iterates `SubstationEquipmentPackage` physical inventory, matching against Quick Report `CbmDefectRecord`s to set defect readings and red/green severity tokens.
 - [x] **D29 - Manufacturer-Driven Switchgear Scanning Page Counts**: If manufacturer is `TAMCO`, `SSE LUCY`, or `LUCY`: Generate 2 scanning pages per panel (`CABLE COMPARTMENT` and `CABLE ENTRY` using `swg-panel.docx`). If `INDKOM` or other RMUs: Generate 1 scanning page per panel (`CABLE COMPARTMENT` for incomers/bus; `FUSE COMPARTMENT` for TX feeder on INDKOM). For `VCB`: Generate 1 scanning page for each active compartment per panel.
@@ -121,12 +124,12 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 
 ```mermaid
 graph TD
-    T1_1[T1.1: Research QR OpenXML Structure - Closed] --> T1_2[T1.2: Pre-flight Validation for Final QR]
-    T1_2 --> T1_3a[T1.3a: Implement DocumentSlicer Core & Section Slicing]
-    T1_3a --> T1_3b[T1.3b: Sliced CBM Defect Parsing & D37 Naming]
+    T1_1[T1.1: Research QR OpenXML Structure - Closed] --> T1_2[T1.2: Pre-flight Validation for Final QR - Closed]
+    T1_2 --> T1_3a[T1.3a: Implement DocumentSlicer Core & Section Slicing - Closed]
+    T1_3a --> T1_3b[T1.3b: Sliced CBM Defect Parsing & D37 Naming - Closed]
     
-    T2_1[T2.1: Extract Inline IR Numbers from PCE Testsheet] --> T2_2[T2.2: Map FLIR IR & Visual Photo Pairs]
-    T2_1 --> T2_3[T2.3: Build Full Report Scan Models & Compartment Matrix]
+    T2_1[T2.1: Extract Inline IR Numbers from PCE Testsheet - Closed] --> T2_2[T2.2: Map FLIR IR & Visual Photo Pairs - Closed]
+    T2_1 --> T2_3[T2.3: Build Full Report Scan Models & Compartment Matrix - Closed]
     T2_2 --> T2_3
     
     T3_1[T3.1: Prototype Census Jinja2 Template] --> T3_2[T3.2: Implement ExecutiveSummaryCensusBuilder]
@@ -159,30 +162,30 @@ graph TD
 All child tickets are tracked as sub-issues of this map, each declaring its blocking edges and assigned the triage label `ready-for-agent`.
 
 - **SPEC 1: Pre-Flight Integrity & Quick Report Ingestion**
-  - Child ticket: `T1.1: Research QR OpenXML Structure & Part Boundaries` (Closed)
-  - Child ticket: `T1.2: Pre-Flight Integrity Validation for Finalized Quick Report`
-  - Child ticket: `T1.3a: Implement DocumentSlicer Core, Slicing Protocol & Section Boundary Extraction`
-  - Child ticket: `T1.3b: Sliced CBM Defect Header Parsing & D37 Naming`
+  - Child ticket: `T1.1: Research QR OpenXML Structure & Part Boundaries` (Closed, #20)
+  - Child ticket: `T1.2: Pre-Flight Integrity Validation for Finalized Quick Report` (Closed, #21)
+  - Child ticket: `T1.3a: Implement DocumentSlicer Core, Slicing Protocol & Section Boundary Extraction` (Closed, #22)
+  - Child ticket: `T1.3b: Sliced CBM Defect Header Parsing & D37 Naming` (Closed, #23)
 - **SPEC 2: Testsheet Extraction, Photo Pairing & Scan Specifications**
-  - Child ticket: `T2.1: Extract Inline IR Numbers from PCE Testsheet`
-  - Child ticket: `T2.2: Map FLIR IR & Visual Photo Pairs`
-  - Child ticket: `T2.3: Build Full Report Scan Models & Switchgear Compartment Matrix`
+  - Child ticket: `T2.1: Extract Inline IR Numbers from PCE Testsheet` (Closed, #24)
+  - Child ticket: `T2.2: Map FLIR IR & Visual Photo Pairs` (Closed, #25)
+  - Child ticket: `T2.3: Build Full Report Scan Models & Switchgear Compartment Matrix` (Closed, #26)
 - **SPEC 3: Executive Summary Equipment Census Engine**
-  - Child ticket: `T3.1: Prototype Census Jinja2 Template`
-  - Child ticket: `T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge`
+  - Child ticket: `T3.1: Prototype Census Jinja2 Template` (#27)
+  - Child ticket: `T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge` (#28)
 - **SPEC 4: Component Scanning Page Rendering & Dynamic Shading**
-  - Child ticket: `T4.1: Adapt Component Scanning Templates in NORMAL IR US TEV/`
-  - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine`
-  - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration`
+  - Child ticket: `T4.1: Adapt Component Scanning Templates in NORMAL IR US TEV/` (#29)
+  - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (#30)
+  - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (#31)
 - **SPEC 5: Defect Interleaving & Deterministic Plan Building**
-  - Child ticket: `T5.1: Implement Defect Interleaving Rules`
-  - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module`
+  - Child ticket: `T5.1: Implement Defect Interleaving Rules` (#32)
+  - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module` (#33)
 - **SPEC 6: Workflow Orchestration, Post-Processing & CLI Integration**
-  - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler`
-  - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module`
-  - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append`
-  - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions`
-  - Child ticket: `T6.5: End-to-End Auditing & Validation against Canonical Benchmarks`
+  - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (#34)
+  - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (#35)
+  - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append` (#36)
+  - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions` (#37)
+  - Child ticket: `T6.5: End-to-End Auditing & Validation against Canonical Benchmarks` (#38)
 
 ---
 

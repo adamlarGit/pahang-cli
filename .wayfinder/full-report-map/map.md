@@ -17,7 +17,7 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 
 ## Notes & Design Principles
 
-- **Single Source of Truth Before GitHub**: All tickets, specs, and architectural decisions are maintained here in `.wayfinder/full-report-map/map.md` and companion ticket files. GitHub issues remain dormant until explicit user approval after final review.
+- **GitHub-Driven Issue & PR Tracking**: Implementation flow is recorded canonically through GitHub Issues and PRs (under Map Issue #19) via `gh` CLI per `AGENTS.md`. Local files (`map.md`, `github-map-body.md`, and `tickets/`) are maintained in lockstep synchronization with GitHub.
 - **Quick Report Ingestion (DRY / No Re-work)**: Quick Report is generated first and finalized by the inspector (adding thermal and visual images, defect callouts, condition photos). Full Report ingests those finalized sections directly from the completed Quick Report `.docx` rather than regenerating them empty or requiring duplicate manual work.
 - **Front Page Reuse**: The front page (including metadata and PE signboard photo) is lifted directly from the finalized Quick Report, eliminating the need for a separate full report front page template. Title transformation (`QUICK` $\to$ `FULL`) is executed via native Word COM Find & Replace during slicing.
 - **Compiler Reuse As-Is**: `FullReportComposer` directly reuses `WordComDocumentCompiler` without any custom margin code or section breaks, matching proven Quick Report compilation behavior, benchmark single-section layout parity, and zero `LinkToPrevious` corruption risks.
@@ -57,7 +57,7 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 
 ## Decisions So Far
 
-- [x] **D01 - Map Tracking Strategy**: Keep the canonical map in `.wayfinder/full-report-map/map.md` until all fog of war is resolved, keeping GitHub issues dormant.
+- [x] **D01 - Map Tracking Strategy & GitHub Issue Synchronization**: Transition from local-only brainstorming to canonical GitHub issue and PR tracking. All tickets across SPEC 1 through SPEC 6 are published and tracked on GitHub Issues under Map Issue #19, with the full report feature implementation flow recorded through GitHub issues/PRs while keeping local documentation in lockstep.
 - [x] **D02 - 90% Target Boundary**: Scope covers 1 RMU/VCB (3-5 panels), up to 2 TX, up to 2 LVDB/FP, 1 Battery Bank.
 - [x] **D03 - Modular Part Stitching**: Assemble deliverables via modular OpenXML parts using `WordComDocumentCompiler` and `BatchComSession`.
 - [x] **D04 - Quick Report Ingestion Seam**: Lift completed assets and pages (Front page with signboard photo, condition grid, VI defect grid, sticker page, analyzed defect pages) directly from the finalized Quick Report `.docx`.
@@ -90,7 +90,9 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 - [x] **D23 - Defect Measurement Formatting Reuse**: Table 3 defect readings reuse `format_temperature_reading` (`{val:.1f} °C`) and `format_db_reading` (`{val}dB`) from `src/quick_report/cbm_summary.py`. Inactive/healthy technologies show `"-"`.
 - [x] **D24 - Severity-Only Cell Shading**: Only the `SEVERITY` cell is shaded (`00B050` Green for Normal, `EE0000` Red for Defect, text cleared). Overview rows have text `"-"` and unshaded background. Measurement cells (`IR`, `U/S`, `TEV`) remain unshaded with black text.
 - [x] **D25 - Unified Summary Template Schema & Placeholders**: `templates/FULL REPORT/executive_summary_census.docx` inherits directly from Quick Report's `CBM DEFECT IR+US+TEV SUMMARY.docx` schema with unified keys (`no`, `equipment`, `defect_area`, `ir_abs`, `us_dB`, `tev_dB`, `severity`), binding Col 0 to `{{ item.no }}` and Col 6 to `{{ item.severity }}`.
-- [x] **D26 - Switchgear Compartment Matrix**: Switchgear evaluated per panel. `INDKOM`: TX feeder $\to$ `FUSE COMPARTMENT`, others $\to$ `CABLE COMPARTMENT`. `TAMCO`/`LUCY`: `OVERVIEW BOTTOM` + `CABLE COMPARTMENT` + `CABLE ENTRY`. Other RMUs: `CABLE COMPARTMENT`. `VCB`: evaluated per panel emitting its 7 standard compartments.
+- [x] **D26 - Switchgear Compartment Matrix & Overview Decoupling**: Switchgear scanning is cleanly decoupled between Board Overview scanning and Panel scanning:
+  1. Board Overview scanning (via `swg-overview.docx` and `resolve_overview_compartments()`): TAMCO/LUCY boards generate 2 overview pages (`OVERVIEW` and `OVERVIEW BOTTOM`); INDKOM, VCB, and other RMUs generate 1 overview page (`OVERVIEW`).
+  2. Panel scanning (via `swg-panel.docx` and `resolve_switchgear_compartments()`): TAMCO/LUCY panels strictly generate 2 scanning pages (`CABLE COMPARTMENT` and `CABLE ENTRY`) without conflating overview pages. INDKOM panels generate 1 scanning page (`FUSE COMPARTMENT` for TX feeder bays, `CABLE COMPARTMENT` for incoming/bus bays). Other RMUs generate 1 scanning page (`CABLE COMPARTMENT`). VCB panels generate 1 scanning page for each active compartment across standard 7 compartments.
 - [x] **D27 - Unconditional Transformer HV CABLE SPLIT Generation (ADR 0004)**: Full Report unconditionally generates an `HV CABLE SPLIT` row and scanning page for each active transformer via `has_hv_cable_split(...) -> True` per ADR 0004 choice by design. If a secondary split photo is absent on disk, it falls back cleanly to empty string `""` without crashing.
 - [x] **D28 - Inventory-to-Defect Cross-Referencing Engine**: `ExecutiveSummaryCensusBuilder` iterates `SubstationEquipmentPackage` physical inventory, matching against Quick Report `CbmDefectRecord`s to set defect readings and red/green severity tokens.
 - [x] **D29 - Manufacturer-Driven Switchgear Scanning Page Counts**: If manufacturer is `TAMCO`, `SSE LUCY`, or `LUCY`: Generate 2 scanning pages per panel (`CABLE COMPARTMENT` and `CABLE ENTRY` using `swg-panel.docx`). If `INDKOM` or other RMUs: Generate 1 scanning page per panel (`CABLE COMPARTMENT` for incomers/bus; `FUSE COMPARTMENT` for TX feeder on INDKOM). For `VCB`: Generate 1 scanning page for each active compartment per panel.
@@ -293,39 +295,42 @@ Extend the testsheet extraction and material resolution layer to:
 
 ##### T2.1: Extract Inline IR Numbers from PCE Testsheet
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: Enhancement to `TestsheetExtractor` and `src/testsheet/models.py` to parse inline IR photo numbers as typed integers (`int` / `tuple[int, ...]`) from `PCE Testsheet.xlsx` (SWG panels Col O, SWG Overview R26 Col O, SWG Overview Secondary R28 Col O/J, TX Col J, FP Col S, Battery Col H).
 - **Blocked by**: None (can start immediately)
 - **Acceptance criteria**:
-  - [ ] `SwitchgearPanelSpec`, `SwitchgearSpec`, `TransformerSpec`, `LVDBSpec`, `BatteryBankSpec` extended with `photo_numbers: tuple[int, ...] = ()`.
-  - [ ] SWG panel IR numbers parsed from Column O (Rows 10, 14, 18, 22).
-  - [ ] SWG Overview IR numbers parsed from Row 26 Col O and Row 28 Col O/J.
-  - [ ] Transformer IR numbers parsed from Column J (Rows 33–37).
-  - [ ] Feeder Pillar IR numbers parsed from Column S (Rows 49, 53).
-  - [ ] Battery Bank IR numbers parsed from Row 59 Col H.
-  - [ ] Comma-separated strings (e.g. `"9,10"`) parsed cleanly via `re.findall`.
-  - [ ] Unit tests verifying parsing against mock workbooks without breaking existing tests.
+  - [x] `SwitchgearPanelSpec`, `SwitchgearSpec`, `TransformerSpec`, `LVDBSpec`, `BatteryBankSpec` extended with `photo_numbers: tuple[int, ...] = ()`.
+  - [x] SWG panel IR numbers parsed from Column O (Rows 10, 14, 18, 22).
+  - [x] SWG Overview IR numbers parsed from Row 26 Col O and Row 28 Col O/J.
+  - [x] Transformer IR numbers parsed from Column J (Rows 33–37).
+  - [x] Feeder Pillar IR numbers parsed from Column S (Rows 49, 53).
+  - [x] Battery Bank IR numbers parsed from Row 59 Col H.
+  - [x] Comma-separated strings (e.g. `"9,10"`) parsed cleanly via `re.findall`.
+  - [x] Unit tests verifying parsing against mock workbooks without breaking existing tests.
 
 ##### T2.2: Map FLIR IR & Visual Photo Pairs
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: `RawPhotoResolver` module that takes integer IR photo numbers, locates the thermal image file in `RAW DATA/IR/` (`FLIRxxxx.jpg`), and pairs the corresponding visual inspection photo (`FLIRxxxx*-photo*.jpg`) governed by project `CameraConfig`.
 - **Blocked by**: T2.1
 - **Acceptance criteria**:
-  - [ ] Resolves integer photo number `290` to `RAW DATA/IR/FLIR0290.jpg`.
-  - [ ] Discovers paired visual photo matching `FLIR0290*-photo*.jpg` (e.g. `FLIR0290- photo.jpg`).
-  - [ ] Safely returns empty string `""` with a warning if the paired visual photo is missing on disk.
-  - [ ] Handles secondary cable split photo lookup with empty fallback per D27/D48.
-  - [ ] Unit tests verifying resolution across various file naming patterns.
+  - [x] Resolves integer photo number `290` to `RAW DATA/IR/FLIR0290.jpg`.
+  - [x] Discovers paired visual photo matching `FLIR0290*-photo*.jpg` (e.g. `FLIR0290- photo.jpg`).
+  - [x] Safely returns empty string `""` with a warning if the paired visual photo is missing on disk.
+  - [x] Handles secondary cable split photo lookup with empty fallback per D27/D48.
+  - [x] Unit tests verifying resolution across various file naming patterns.
 
 ##### T2.3: Build Full Report Scan Models & Compartment Matrix
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: Strongly-typed domain scan specifications (`SwitchgearScanSpec`, `TransformerScanSpec`, `LVDBScanSpec`, `BatteryBankScanSpec`) and compartment matrix logic in `src/full_report/models.py` capturing operating parameters and equipment scanning layouts.
 - **Blocked by**: T2.1, T2.2
 - **Acceptance criteria**:
   - [x] DTOs capture load current, heater current, breaker status, serial no, cable type, US, and TEV readings.
-  - [x] Implements switchgear compartment matrix per D26 (`INDKOM`: TX feeder $\to$ `FUSE COMPARTMENT`, others $\to$ `CABLE COMPARTMENT`; `TAMCO`/`LUCY`: `OVERVIEW BOTTOM` + `CABLE COMPARTMENT` + `CABLE ENTRY`; `VCB`: standard 7 compartments).
+  - [x] Implements switchgear compartment matrix per D26 (`INDKOM`: TX feeder $\to$ `FUSE COMPARTMENT`, others $\to$ `CABLE COMPARTMENT`; `TAMCO`/`LUCY`: board overview decoupled to `OVERVIEW`/`OVERVIEW BOTTOM`, panel scan pages strictly `CABLE COMPARTMENT` + `CABLE ENTRY`; `VCB`: standard 7 compartments).
   - [x] Implements manufacturer-driven scanning page count rules per D29.
   - [x] Evaluates battery bank presence strictly via `len(equipment.battery_banks) > 0` per D49.
   - [x] Unit tests verifying matrix emission across all 4 switchgear categories.

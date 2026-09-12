@@ -283,16 +283,15 @@ def test_switchgear_compartment_matrix_indkom() -> None:
 
 
 def test_switchgear_compartment_matrix_tamco_lucy() -> None:
-    """TAMCO/LUCY: OVERVIEW BOTTOM + CABLE COMPARTMENT + CABLE ENTRY per D26."""
+    """TAMCO/LUCY: OVERVIEW/OVERVIEW BOTTOM overview, and CABLE COMPARTMENT + CABLE ENTRY panels per D26."""
     incomer = SwitchgearPanelSpec(panel_no=1, name="PE KG ASLI BATU BALONG", panel_feeder_no="CRB00679")
     tx_feeder = SwitchgearPanelSpec(panel_no=2, name="TX B", panel_feeder_no="CRB00679")
 
-    # Overview
+    # Overview decoupled per D26
     assert resolve_overview_compartments(SwitchgearCategory.TAMCO_LUCY) == ("OVERVIEW", "OVERVIEW BOTTOM")
 
-    # Canonical category set per D26 (when panel is omitted)
+    # Canonical category set per D26 (when panel is omitted) strictly returns panel compartments
     assert resolve_switchgear_compartments(SwitchgearCategory.TAMCO_LUCY) == (
-        "OVERVIEW BOTTOM",
         "CABLE COMPARTMENT",
         "CABLE ENTRY",
     )
