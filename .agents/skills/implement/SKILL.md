@@ -13,3 +13,9 @@ Run typechecking regularly, single test files regularly, and the full test suite
 Once done, use /code-review to review the work.
 
 Commit your work to the current branch.
+
+### Ticket Completion
+After committing, you MUST close the ticket following `.agents/rules/ticket-lifecycle.md`:
+1. Mark acceptance criteria `[x]` and `status: closed` in the local ticket file.
+2. Mark acceptance criteria `[x]` and `Status: Closed` in `map.md`.
+3. Close the GitHub issue via `gh issue close <id> --comment "..."`.

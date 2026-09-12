@@ -1,6 +1,7 @@
 # Full Report Generation Workflow Map
 
-This issue is the canonical Wayfinder map tracking the destination, architecture decisions, component flows, specification breakdown, and child tickets for the Full Report automated generator in `pahang-cli`.
+> [!NOTE]
+> **Canonical Source of Truth**: The primary local architecture and specification document is [map.md](map.md). This file (`github-map-body.md`) is maintained as the synchronization payload for GitHub Epic Issue [#19](https://github.com/adamlarGit/pahang-cli/issues/19).
 
 ---
 
