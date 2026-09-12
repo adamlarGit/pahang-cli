@@ -125,11 +125,11 @@ A complete `FullReportWorkflow` automated generator in `pahang-cli` catering to 
 ```mermaid
 graph TD
     T1_1[T1.1: Research QR OpenXML Structure - Closed] --> T1_2[T1.2: Pre-flight Validation for Final QR - Closed]
-    T1_2 --> T1_3a[T1.3a: Implement DocumentSlicer Core & Section Slicing]
-    T1_3a --> T1_3b[T1.3b: Sliced CBM Defect Parsing & D37 Naming]
+    T1_2 --> T1_3a[T1.3a: Implement DocumentSlicer Core & Section Slicing - Closed]
+    T1_3a --> T1_3b[T1.3b: Sliced CBM Defect Parsing & D37 Naming - Closed]
     
-    T2_1[T2.1: Extract Inline IR Numbers from PCE Testsheet] --> T2_2[T2.2: Map FLIR IR & Visual Photo Pairs]
-    T2_1 --> T2_3[T2.3: Build Full Report Scan Models & Compartment Matrix]
+    T2_1[T2.1: Extract Inline IR Numbers from PCE Testsheet - Closed] --> T2_2[T2.2: Map FLIR IR & Visual Photo Pairs - Closed]
+    T2_1 --> T2_3[T2.3: Build Full Report Scan Models & Compartment Matrix - Closed]
     T2_2 --> T2_3
     
     T3_1[T3.1: Prototype Census Jinja2 Template] --> T3_2[T3.2: Implement ExecutiveSummaryCensusBuilder]
@@ -154,6 +154,38 @@ graph TD
     T6_3 --> T6_4[T6.4: Wire CLI Menu & Workflow Actions]
     T6_4 --> T6_5[T6.5: End-to-End Validation Against Canonical Benchmarks]
 ```
+
+---
+
+## Specifications Overview & Child Tickets
+
+All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19), each declaring its blocking edges and assigned the triage label `ready-for-agent`.
+
+- **SPEC 1: Pre-Flight Integrity & Quick Report Ingestion**
+  - Child ticket: `T1.1: Research QR OpenXML Structure & Part Boundaries` (Closed, #20)
+  - Child ticket: `T1.2: Pre-Flight Integrity Validation for Finalized Quick Report` (Closed, #21)
+  - Child ticket: `T1.3a: Implement DocumentSlicer Core, Slicing Protocol & Section Boundary Extraction` (Closed, #22)
+  - Child ticket: `T1.3b: Sliced CBM Defect Header Parsing & D37 Naming` (Closed, #23)
+- **SPEC 2: Testsheet Extraction, Photo Pairing & Scan Specifications**
+  - Child ticket: `T2.1: Extract Inline IR Numbers from PCE Testsheet` (Closed, #24)
+  - Child ticket: `T2.2: Map FLIR IR & Visual Photo Pairs` (Closed, #25)
+  - Child ticket: `T2.3: Build Full Report Scan Models & Switchgear Compartment Matrix` (Closed, #26)
+- **SPEC 3: Executive Summary Equipment Census Engine**
+  - Child ticket: `T3.1: Prototype Census Jinja2 Template` (#27)
+  - Child ticket: `T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge` (#28)
+- **SPEC 4: Component Scanning Page Rendering & Dynamic Shading**
+  - Child ticket: `T4.1: Adapt Component Scanning Templates in NORMAL IR US TEV/` (#29)
+  - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (#30)
+  - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (#31)
+- **SPEC 5: Defect Interleaving & Deterministic Plan Building**
+  - Child ticket: `T5.1: Implement Defect Interleaving Rules` (#32)
+  - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module` (#33)
+- **SPEC 6: Workflow Orchestration, Post-Processing & CLI Integration**
+  - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (#34)
+  - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (#35)
+  - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append` (#36)
+  - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions` (#37)
+  - Child ticket: `T6.5: End-to-End Auditing & Validation against Canonical Benchmarks` (#38)
 
 ---
 
@@ -209,7 +241,8 @@ Provide an automated ingestion and pre-flight validation pipeline that:
 
 ##### T1.1: Research QR OpenXML Structure & Part Boundaries
 - **Labels**: `wayfinder:research`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#20](https://github.com/adamlarGit/pahang-cli/issues/20)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **Status**: Closed (Decisions D13, D14, D15, D16 locked)
 - **What to build**: Comprehensive empirical analysis of OpenXML part boundaries across completed Quick Reports for the 3 benchmark stations.
 - **Blocked by**: None (can start immediately)
@@ -219,7 +252,8 @@ Provide an automated ingestion and pre-flight validation pipeline that:
 
 ##### T1.2: Pre-Flight Integrity Validation for Finalized Quick Report
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#21](https://github.com/adamlarGit/pahang-cli/issues/21)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **Status**: Closed
 - **What to build**: A fast, pure-Python pre-flight validator that checks whether the finalized Quick Report `.docx` exists, exceeds the 1.0 MB size floor, and contains at least 8 media files before allowing Full Report generation to proceed.
 - **Blocked by**: T1.1
@@ -232,7 +266,8 @@ Provide an automated ingestion and pre-flight validation pipeline that:
 
 ##### T1.3a: Implement DocumentSlicer Core, Slicing Protocol & Section Boundary Extraction
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#22](https://github.com/adamlarGit/pahang-cli/issues/22)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **Status**: Closed
 - **What to build**: The core `DocumentSlicer(Protocol)`, headless `FakeDocumentSlicer`, and production `WordComDocumentSlicer` that opens the finalized Quick Report in Microsoft Word, slices out static sections (`front_page.docx`, `vi_summary.docx`, `condition_pages.docx`, `vi_defect_pages.docx`, `sticker_page.docx`) into `.temp/temp_parts/<STATION>/`, and applies native Word COM Find & Replace on the front page to transform the title to `"FULL SCANNING REPORT"`.
 - **Blocked by**: T1.2
@@ -245,7 +280,8 @@ Provide an automated ingestion and pre-flight validation pipeline that:
 
 ##### T1.3b: Sliced CBM Defect Header Parsing & D37 Naming
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#23](https://github.com/adamlarGit/pahang-cli/issues/23)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **Status**: Closed
 - **What to build**: An inspector that extracts individual CBM defect pages from Quick Report, parses Table 1 metadata (Equipment, ID, Defect Area, Severity), and saves them into `temp_parts/cbm_defects/` using the fine-tuned left-to-right naming grammar `{eq_instance}_{seq}_{id}_{area}_{idx}.docx` per D37.
 - **Blocked by**: T1.3a
@@ -295,6 +331,7 @@ Extend the testsheet extraction and material resolution layer to:
 
 ##### T2.1: Extract Inline IR Numbers from PCE Testsheet
 - **Labels**: `wayfinder:task`, `ready-for-agent`
+- **GitHub Issue**: [#24](https://github.com/adamlarGit/pahang-cli/issues/24)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
 - **Status**: Closed
 - **What to build**: Enhancement to `TestsheetExtractor` and `src/testsheet/models.py` to parse inline IR photo numbers as typed integers (`int` / `tuple[int, ...]`) from `PCE Testsheet.xlsx` (SWG panels Col O, SWG Overview R26 Col O, SWG Overview Secondary R28 Col O/J, TX Col J, FP Col S, Battery Col H).
@@ -311,6 +348,7 @@ Extend the testsheet extraction and material resolution layer to:
 
 ##### T2.2: Map FLIR IR & Visual Photo Pairs
 - **Labels**: `wayfinder:task`, `ready-for-agent`
+- **GitHub Issue**: [#25](https://github.com/adamlarGit/pahang-cli/issues/25)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
 - **Status**: Closed
 - **What to build**: `RawPhotoResolver` module that takes integer IR photo numbers, locates the thermal image file in `RAW DATA/IR/` (`FLIRxxxx.jpg`), and pairs the corresponding visual inspection photo (`FLIRxxxx*-photo*.jpg`) governed by project `CameraConfig`.
@@ -324,6 +362,7 @@ Extend the testsheet extraction and material resolution layer to:
 
 ##### T2.3: Build Full Report Scan Models & Compartment Matrix
 - **Labels**: `wayfinder:task`, `ready-for-agent`
+- **GitHub Issue**: [#26](https://github.com/adamlarGit/pahang-cli/issues/26)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
 - **Status**: Closed
 - **What to build**: Strongly-typed domain scan specifications (`SwitchgearScanSpec`, `TransformerScanSpec`, `LVDBScanSpec`, `BatteryBankScanSpec`) and compartment matrix logic in `src/full_report/models.py` capturing operating parameters and equipment scanning layouts.
@@ -377,7 +416,8 @@ Provide an automated Executive Summary Census generation engine that:
 
 ##### T3.1: Prototype Census Jinja2 Template
 - **Labels**: `wayfinder:prototype`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#27](https://github.com/adamlarGit/pahang-cli/issues/27)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: Prototype Jinja2 docx template `templates/FULL REPORT/executive_summary_census.docx` matching Table 2 layout with 7 columns (`NO. | EQUIPMENT | DEFECT AREA | IR | U/S | TEV | SEVERITY`) using flat loop rows without static XML merges.
 - **Blocked by**: None (can start immediately)
 - **Acceptance criteria**:
@@ -388,7 +428,8 @@ Provide an automated Executive Summary Census generation engine that:
 
 ##### T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#28](https://github.com/adamlarGit/pahang-cli/issues/28)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: `ExecutiveSummaryCensusBuilder` module that traverses `SubstationEquipmentPackage`, provisions 7-point TX rows per ADR 0004, cross-references CBM defects, applies post-render Column 0 `<w:vMerge>` group numbering (`1.`, `2.`, `3.`), and applies Green `00B050` / Red `EE0000` severity shading.
 - **Blocked by**: T3.1, T2.1, T2.3
 - **Acceptance criteria**:
@@ -443,7 +484,8 @@ Provide an automated scanning page rendering engine that:
 
 ##### T4.1: Adapt Component Scanning Templates in `NORMAL IR US TEV/`
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#29](https://github.com/adamlarGit/pahang-cli/issues/29)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: Audit, adapt, and verify transparent Jinja2 scanning templates in `templates/FULL REPORT/NORMAL IR US TEV/` (`swg-overview.docx`, `swg-panel.docx`, `tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`, `fp-overview.docx`, `battery-overview.docx`) ensuring placeholder consistency.
 - **Blocked by**: None (can start immediately)
 - **Acceptance criteria**:
@@ -454,7 +496,8 @@ Provide an automated scanning page rendering engine that:
 
 ##### T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#30](https://github.com/adamlarGit/pahang-cli/issues/30)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: The core rendering and OpenXML post-render shading engine in `src/full_report/scan_render.py` that renders scanning templates via `docxtpl` and dynamically applies Green `00B050` / Red `EE0000` cell shading and banner styling per D30 and D32.
 - **Blocked by**: T4.1
 - **Acceptance criteria**:
@@ -465,7 +508,8 @@ Provide an automated scanning page rendering engine that:
 
 ##### T4.2b: Implement Equipment Scan Adapters & PRPD Integration
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#31](https://github.com/adamlarGit/pahang-cli/issues/31)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: Concrete equipment scan adapters (Switchgear, Transformer 7-point, Feeder Pillar, Battery Bank) that construct template contexts, resolve IR and paired visual photos via `RawPhotoResolver`, generate PRPD waveform graphs via `prpd.py`, and handle defective overview page substitution per D47.
 - **Blocked by**: T4.2a, T2.2, T2.3
 - **Acceptance criteria**:
@@ -520,7 +564,8 @@ Provide an upfront, deterministic document planning and defect interleaving engi
 
 ##### T5.1: Implement Defect Interleaving Rules
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#32](https://github.com/adamlarGit/pahang-cli/issues/32)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: `DefectInterleavingPolicy` module that matches sliced CBM defect pages (`temp_parts/cbm_defects/`) to physical equipment components using D37 grammar and Table 1 metadata, implementing replacement and insertion sequencing rules.
 - **Blocked by**: T1.3b, T4.2b
 - **Acceptance criteria**:
@@ -533,7 +578,8 @@ Provide an upfront, deterministic document planning and defect interleaving engi
 
 ##### T5.2: Implement FullReportPlanBuilder Deep Module
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#33](https://github.com/adamlarGit/pahang-cli/issues/33)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: `FullReportPlanBuilder` deep module that evaluates substation equipment packages, testsheet specs, and ingested Quick Report parts to construct a complete, deterministic Bill of Materials (`FullReportStationPlan`) ordering all document parts 1 through 7 before compilation.
 - **Blocked by**: T1.3a, T3.2, T5.1
 - **Acceptance criteria**:
@@ -589,7 +635,8 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 
 ##### T6.1: Implement FullReportComposer Reusing WordComCompiler
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#34](https://github.com/adamlarGit/pahang-cli/issues/34)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: `FullReportComposer` module in `src/full_report/composer.py` that iterates parts from `FullReportStationPlan`, delegates rendering to stage renderers, and compiles the final deliverable into `FULL REPORT/<STATION>/<MONTH>/<DATE>/<STEM>.docx` by reusing `WordComDocumentCompiler` directly as-is.
 - **Blocked by**: T5.2
 - **Acceptance criteria**:
@@ -601,7 +648,8 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 
 ##### T6.2: Implement FullReportWorkflow Deep Module
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#35](https://github.com/adamlarGit/pahang-cli/issues/35)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: `FullReportWorkflow` deep module in `src/workflows/full_report.py` exposing `inspect(target, environment)` and `generate(target, environment, ...)` with pre-flight Quick Report integrity validation and batch resilience policy.
 - **Blocked by**: T6.1
 - **Acceptance criteria**:
@@ -613,7 +661,8 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 
 ##### T6.3: Post-Processing PDF Conversion & Testsheet Append
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#36](https://github.com/adamlarGit/pahang-cli/issues/36)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: `FullReportPostProcessingWorkflow` in `src/workflows/full_report_postprocessing.py` converting finalized Full Report `.docx` to `.pdf` via Word COM virtual printer and merging with pre-existing testsheet PDF from `processed_testsheet/pdf/` using `PyPDF2`.
 - **Blocked by**: T6.2
 - **Acceptance criteria**:
@@ -625,7 +674,8 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 
 ##### T6.4: Wire CLI Menu & Workflow Actions
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#37](https://github.com/adamlarGit/pahang-cli/issues/37)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: Registration of `FullReportAction` and `FullReportPostProcessingAction` in `src/cli_menu.py` and `src/project_workflow_actions.py` providing interactive station selection, dry-run telemetry, and execution summary tables.
 - **Blocked by**: T6.3
 - **Acceptance criteria**:
@@ -637,7 +687,8 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 
 ##### T6.5: End-to-End Auditing & Validation against Canonical Benchmarks
 - **Labels**: `wayfinder:task`, `ready-for-agent`
-- **Parent**: [Full Report Generation Workflow Map](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/full-report-map/map.md)
+- **GitHub Issue**: [#38](https://github.com/adamlarGit/pahang-cli/issues/38)
+- **Parent**: [Full Report Generation Workflow Map](map.md)
 - **What to build**: Real-world Windows Word COM execution and visual layout audit against the three canonical ground-truth benchmarks: TALAPIA, CENDERAWASIH NO.1, and TELEKOM TANAH PUTIH.
 - **Blocked by**: T6.4
 - **Acceptance criteria**:

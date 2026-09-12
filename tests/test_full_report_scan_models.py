@@ -280,6 +280,9 @@ def test_switchgear_compartment_matrix_indkom() -> None:
     # Panels
     assert resolve_switchgear_compartments(SwitchgearCategory.INDKOM, incomer) == ("CABLE COMPARTMENT",)
     assert resolve_switchgear_compartments(SwitchgearCategory.INDKOM, tx_feeder) == ("FUSE COMPARTMENT",)
+    # String panel names
+    assert resolve_switchgear_compartments(SwitchgearCategory.INDKOM, "TX 1") == ("FUSE COMPARTMENT",)
+    assert resolve_switchgear_compartments(SwitchgearCategory.INDKOM, "INCOMING 1") == ("CABLE COMPARTMENT",)
 
 
 def test_switchgear_compartment_matrix_tamco_lucy() -> None:
@@ -315,6 +318,9 @@ def test_switchgear_compartment_matrix_other_rmu() -> None:
     # Overview
     assert resolve_overview_compartments(SwitchgearCategory.OTHER_RMU) == ("OVERVIEW",)
 
+    # Canonical category set (when panel is omitted)
+    assert resolve_switchgear_compartments(SwitchgearCategory.OTHER_RMU) == ("CABLE COMPARTMENT",)
+
     # Panels
     assert resolve_switchgear_compartments(SwitchgearCategory.OTHER_RMU, incomer) == ("CABLE COMPARTMENT",)
     assert resolve_switchgear_compartments(SwitchgearCategory.OTHER_RMU, tx_feeder) == ("CABLE COMPARTMENT",)
@@ -326,6 +332,9 @@ def test_switchgear_compartment_matrix_vcb() -> None:
 
     # Overview
     assert resolve_overview_compartments(SwitchgearCategory.VCB) == ("OVERVIEW",)
+
+    # Canonical category set (when panel is omitted)
+    assert resolve_switchgear_compartments(SwitchgearCategory.VCB) == VCB_STANDARD_COMPARTMENTS
 
     # Panel emits standard 7 compartments
     compartments = resolve_switchgear_compartments(SwitchgearCategory.VCB, panel)

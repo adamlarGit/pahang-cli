@@ -100,7 +100,7 @@ def resolve_overview_compartments(category: SwitchgearCategory) -> tuple[str, ..
 
 def resolve_switchgear_compartments(
     category: SwitchgearCategory,
-    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec | None = None,
+    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str | None = None,
 ) -> tuple[str, ...]:
     """Resolve switchgear panel scanning compartments per D26.
 
