@@ -55,19 +55,18 @@ def classify_switchgear(
     manufacturer: str = "",
 ) -> SwitchgearCategory:
     """Classify switchgear into one of 4 canonical categories per D26/D29."""
-    swg_type_upper = (switchgear_type or "").upper()
-    mfg_upper = (manufacturer or "").upper()
+    combined = f"{switchgear_type or ''} {manufacturer or ''}".upper()
 
     # VCB check takes highest precedence (even if made by TAMCO/EPE)
-    if "VCB" in swg_type_upper or "VCB" in mfg_upper:
+    if "VCB" in combined:
         return SwitchgearCategory.VCB
 
     # INDKOM RMU
-    if "INDKOM" in mfg_upper:
+    if "INDKOM" in combined:
         return SwitchgearCategory.INDKOM
 
     # TAMCO / LUCY / SSE LUCY
-    if any(k in mfg_upper for k in ("TAMCO", "LUCY", "SSE LUCY")):
+    if any(k in combined for k in ("TAMCO", "LUCY", "SSE LUCY")):
         return SwitchgearCategory.TAMCO_LUCY
 
     # Other RMUs (SIEMENS, ABB, generic RMU SF6 / RMU OIL)
@@ -76,13 +75,10 @@ def classify_switchgear(
 
 def is_tx_feeder(panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str = "") -> bool:
     """Determine if a switchgear panel/bay is a transformer (TX) feeder."""
-    if hasattr(panel_or_name, "name"):
-        name = getattr(panel_or_name, "name", "")
-        feeder_no = getattr(panel_or_name, "panel_feeder_no", "")
-        panel_type = getattr(panel_or_name, "panel_type", "")
-        combined = f"{name} {feeder_no} {panel_type}".upper()
+    if isinstance(panel_or_name, str):
+        combined = panel_or_name.upper()
     else:
-        combined = str(panel_or_name).upper()
+        combined = f"{panel_or_name.name} {panel_or_name.panel_feeder_no} {panel_or_name.panel_type}".upper()
 
     if any(k in combined for k in ("TRANSFORMER", "ALATUBAH", "TEE-OFF", "TEE OFF", "FUSE")):
         return True
@@ -108,9 +104,19 @@ def resolve_switchgear_compartments(
 ) -> tuple[str, ...]:
     """Resolve switchgear scanning compartments per D26.
 
-    Panel compartments are strictly decoupled from board-level overview
-    (which is resolved via resolve_overview_compartments).
+    When panel is omitted, returns the canonical category compartment set per D26.
+    When panel is provided, returns the panel-specific scanning compartments
+    (decoupled from board-level overview).
     """
+    if panel is None:
+        if category == SwitchgearCategory.TAMCO_LUCY:
+            return ("OVERVIEW BOTTOM", "CABLE COMPARTMENT", "CABLE ENTRY")
+        if category == SwitchgearCategory.INDKOM:
+            return ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
+        if category == SwitchgearCategory.VCB:
+            return VCB_STANDARD_COMPARTMENTS
+        return ("CABLE COMPARTMENT",)
+
     if category == SwitchgearCategory.TAMCO_LUCY:
         return ("CABLE COMPARTMENT", "CABLE ENTRY")
 
@@ -118,11 +124,9 @@ def resolve_switchgear_compartments(
         return VCB_STANDARD_COMPARTMENTS
 
     if category == SwitchgearCategory.INDKOM:
-        if panel is not None and is_tx_feeder(panel):
+        if is_tx_feeder(panel):
             return ("FUSE COMPARTMENT",)
-        if panel is not None:
-            return ("CABLE COMPARTMENT",)
-        return ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
+        return ("CABLE COMPARTMENT",)
 
     # OTHER_RMU
     return ("CABLE COMPARTMENT",)
@@ -238,7 +242,6 @@ def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
         cable_type=lvdb.cable_type,
         photo_numbers=lvdb.photo_numbers,
         feeders=lvdb.feeders,
-        page_count=1,
     )
 
 
@@ -250,7 +253,6 @@ def build_battery_bank_scan_spec(bb: BatteryBankSpec) -> BatteryBankScanSpec:
         model=bb.model,
         serial_no=bb.serial_no,
         photo_numbers=bb.photo_numbers,
-        page_count=1,
     )
 
 
@@ -311,6 +313,11 @@ class SwitchgearPanelScanSpec:
         """Derived scanning page count equal to number of active compartments."""
         return len(self.compartments)
 
+    @property
+    def is_tx_feeder(self) -> bool:
+        """Return True if this panel is a transformer (TX) feeder."""
+        return is_tx_feeder(self)
+
 
 @dataclass(frozen=True)
 class SwitchgearScanSpec:
@@ -333,16 +340,11 @@ class SwitchgearScanSpec:
         return len(self.panels)
 
     @property
-    def total_scan_pages(self) -> int:
+    def total_page_count(self) -> int:
         """Return the total scanning pages for switchgear overview and panels."""
         overview_pages = len(self.overview_compartments)
         panel_pages = sum(p.page_count for p in self.panels)
         return overview_pages + panel_pages
-
-    @property
-    def total_page_count(self) -> int:
-        """Alias for total_scan_pages for backwards compatibility."""
-        return self.total_scan_pages
 
 
 @dataclass(frozen=True)
@@ -373,31 +375,23 @@ LVDBFeederScanSpec = LVDBFeederSpec
 
 
 @dataclass(frozen=True)
-class LVDBScanSpec:
+class LVDBScanSpec(LVDBSpec):
     """Strongly-typed scan specification for an LVDB or Feeder Pillar."""
 
-    name: str = "LVDB 1"
-    label: str = "LVDB"
-    source: str = "TX1"
-    manufacturer: str = ""
-    serial_no: str = ""
-    rating: str = ""
-    cable_type: str = ""
-    photo_numbers: tuple[int, ...] = ()
-    feeders: tuple[LVDBFeederSpec, ...] = ()
-    page_count: int = 1
+    @property
+    def page_count(self) -> int:
+        """Return scanning page count for LVDB."""
+        return 1
 
 
 @dataclass(frozen=True)
-class BatteryBankScanSpec:
+class BatteryBankScanSpec(BatteryBankSpec):
     """Strongly-typed scan specification for a DC battery bank."""
 
-    name: str = "BATTERY BANK 1"
-    manufacturer: str = ""
-    model: str = ""
-    serial_no: str = ""
-    photo_numbers: tuple[int, ...] = ()
-    page_count: int = 1
+    @property
+    def page_count(self) -> int:
+        """Return scanning page count for battery bank."""
+        return 1
 
 
 @dataclass(frozen=True)
@@ -437,15 +431,10 @@ class FullReportScanPackage:
         return len(self.battery_banks) > 0
 
     @property
-    def total_scan_pages(self) -> int:
+    def total_page_count(self) -> int:
         """Calculate total scanning pages across all equipment in the package."""
         swg_pages = sum(s.total_page_count for s in self.switchgears)
         tx_pages = sum(t.page_count for t in self.transformers)
         lvdb_pages = sum(l.page_count for l in self.lvdb_specs)
         bb_pages = sum(b.page_count for b in self.battery_banks)
         return swg_pages + tx_pages + lvdb_pages + bb_pages
-
-    @property
-    def total_page_count(self) -> int:
-        """Alias for total_scan_pages for consistent naming across specs."""
-        return self.total_scan_pages
