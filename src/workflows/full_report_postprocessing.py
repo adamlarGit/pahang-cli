@@ -149,6 +149,43 @@ def validate_processed_testsheet_pdf(
     )
 
 
+def _find_pdf_in_dirs(pdf_dirs: Sequence[Path], stem: str) -> Path | None:
+    """Search directories with phased priority: exact -> numerical prefix -> clean name."""
+    # Phase 1: Exact match
+    for pdf_dir in pdf_dirs:
+        exact_pdf = pdf_dir / f"{stem}.pdf"
+        if exact_pdf.exists() and exact_pdf.is_file():
+            return exact_pdf.resolve()
+
+    # Phase 2: Numerical prefix match (e.g. "005." or "5.")
+    try:
+        prefix_num = extract_numerical_prefix(stem)
+        prefix_pattern1 = f"{prefix_num:03d}."
+        prefix_pattern2 = f"{prefix_num}."
+
+        for pdf_dir in pdf_dirs:
+            for candidate in pdf_dir.glob("*.pdf"):
+                if candidate.name.startswith("~$") or candidate.name.startswith("."):
+                    continue
+                if candidate.name.startswith(prefix_pattern1) or candidate.name.startswith(prefix_pattern2):
+                    return candidate.resolve()
+    except ValueError:
+        pass
+
+    # Phase 3: Substation name match without defect suffix
+    clean_name_match = re.sub(r"^\d+\.\s*", "", stem).strip()
+    clean_name_match = re.sub(r"\s*\(.*?\)$", "", clean_name_match).strip().lower()
+    if clean_name_match:
+        for pdf_dir in pdf_dirs:
+            for candidate in pdf_dir.glob("*.pdf"):
+                if candidate.name.startswith("~$") or candidate.name.startswith("."):
+                    continue
+                if clean_name_match in candidate.name.lower():
+                    return candidate.resolve()
+
+    return None
+
+
 def resolve_processed_testsheet_pdf_path(
     docx_path: Path,
     environment: ProjectEnvironment | None = None,
@@ -162,66 +199,83 @@ def resolve_processed_testsheet_pdf_path(
     month = doc_p.parent.parent.name
     station = doc_p.parent.parent.parent.name
 
-    candidate_pdf_dirs: list[Path] = []
+    # Collect candidate processed_testsheet roots
+    def _collect_pdf_dirs(ts_dir: Path) -> list[Path]:
+        if not ts_dir.exists() or not ts_dir.is_dir():
+            return []
+        dirs = [ts_dir / "pdf", ts_dir]
+        try:
+            for sub in ts_dir.iterdir():
+                if sub.is_dir() and sub.name.lower() != "pdf":
+                    dirs.append(sub)
+                    for sub2 in sub.iterdir():
+                        if sub2.is_dir():
+                            dirs.append(sub2)
+        except Exception:
+            pass
+        return [d for d in dirs if d.exists() and d.is_dir()]
 
+    candidate_roots: list[Path] = []
     if environment is not None:
         ts_base = environment.get_testsheet_dir()
-        candidate_pdf_dirs.extend([
-            ts_base / station / month / date_str / "processed_testsheet" / "pdf",
-            ts_base / station / date_str / "processed_testsheet" / "pdf",
-            ts_base / date_str / "processed_testsheet" / "pdf",
+        candidate_roots.extend([
+            ts_base / station / month / date_str / "processed_testsheet",
+            ts_base / station / date_str / "processed_testsheet",
+            ts_base / date_str / "processed_testsheet",
         ])
+        if (ts_base / station / month).exists() and (ts_base / station / month).is_dir():
+            for sub in (ts_base / station / month).iterdir():
+                if sub.is_dir() and (sub / "processed_testsheet").is_dir():
+                    candidate_roots.append(sub / "processed_testsheet")
+
         base_path = getattr(environment, "base_path", None)
         if base_path:
-            candidate_pdf_dirs.extend([
-                Path(base_path) / "TESTSHEET" / station / month / date_str / "processed_testsheet" / "pdf",
-                Path(base_path) / "TESTSHEET" / date_str / "processed_testsheet" / "pdf",
+            candidate_roots.extend([
+                Path(base_path) / "TESTSHEET" / station / month / date_str / "processed_testsheet",
+                Path(base_path) / "TESTSHEET" / date_str / "processed_testsheet",
             ])
+            ts_m = Path(base_path) / "TESTSHEET" / station / month
+            if ts_m.exists() and ts_m.is_dir():
+                for sub in ts_m.iterdir():
+                    if sub.is_dir() and (sub / "processed_testsheet").is_dir():
+                        candidate_roots.append(sub / "processed_testsheet")
 
     # Also check relative to testsheet parent if docx is adjacent
     for part in doc_p.parts:
         if part.upper() == "FULL REPORT":
             try:
                 idx = doc_p.parts.index(part)
-                ts_rel = Path(*doc_p.parts[:idx]) / "TESTSHEET" / Path(*doc_p.parts[idx + 1 : -1]) / "processed_testsheet" / "pdf"
-                candidate_pdf_dirs.append(ts_rel)
+                ts_rel = Path(*doc_p.parts[:idx]) / "TESTSHEET" / Path(*doc_p.parts[idx + 1 : -1]) / "processed_testsheet"
+                candidate_roots.append(ts_rel)
             except Exception:
                 pass
             break
 
-    # Search candidate directories
-    for pdf_dir in candidate_pdf_dirs:
-        if not pdf_dir.exists() or not pdf_dir.is_dir():
-            continue
+    candidate_pdf_dirs: list[Path] = []
+    for root_dir in candidate_roots:
+        for d in _collect_pdf_dirs(root_dir):
+            if d not in candidate_pdf_dirs:
+                candidate_pdf_dirs.append(d)
 
-        # 1. Exact match
-        exact_pdf = pdf_dir / f"{stem}.pdf"
-        if exact_pdf.exists() and exact_pdf.is_file():
-            return exact_pdf.resolve()
+    # 1. Search candidate directories
+    matched = _find_pdf_in_dirs(candidate_pdf_dirs, stem)
+    if matched is not None:
+        return matched
 
-        # 2. Numerical prefix match (e.g. "005." or "5.")
-        try:
-            prefix_num = extract_numerical_prefix(stem)
-            prefix_pattern1 = f"{prefix_num:03d}."
-            prefix_pattern2 = f"{prefix_num}."
+    # 2. Workspace-wide fallback across all processed_testsheet dirs under ts_base
+    if environment is not None:
+        ts_base = environment.get_testsheet_dir()
+        if ts_base.exists() and ts_base.is_dir():
+            fallback_dirs: list[Path] = []
+            try:
+                for pts in ts_base.rglob("processed_testsheet"):
+                    for d in _collect_pdf_dirs(pts):
+                        if d not in candidate_pdf_dirs and d not in fallback_dirs:
+                            fallback_dirs.append(d)
+            except Exception:
+                pass
 
-            for candidate in pdf_dir.glob("*.pdf"):
-                if candidate.name.startswith("~$") or candidate.name.startswith("."):
-                    continue
-                if candidate.name.startswith(prefix_pattern1) or candidate.name.startswith(prefix_pattern2):
-                    return candidate.resolve()
-        except ValueError:
-            pass
-
-        # 3. Substation name match without defect suffix
-        clean_name_match = re.sub(r"^\d+\.\s*", "", stem).strip()
-        clean_name_match = re.sub(r"\s*\(.*?\)$", "", clean_name_match).strip().lower()
-        if clean_name_match:
-            for candidate in pdf_dir.glob("*.pdf"):
-                if candidate.name.startswith("~$") or candidate.name.startswith("."):
-                    continue
-                if clean_name_match in candidate.name.lower():
-                    return candidate.resolve()
+            return _find_pdf_in_dirs(fallback_dirs, stem)
 
     return None
 

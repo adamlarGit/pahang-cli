@@ -291,6 +291,9 @@ class DefectInterleavingPolicy:
 
         # Track which defects have been consumed
         consumed_defects: set[str] = set()
+        for item in flattened_items:
+            if item.is_sliced and item.sliced_path:
+                consumed_defects.add(Path(item.sliced_path).name)
 
         for item in flattened_items:
             cat = item.equipment_category.lower()
@@ -300,36 +303,13 @@ class DefectInterleavingPolicy:
             # ------------------------------------------------------------------
             if cat in ("swg", "switchgear"):
                 if item.is_overview:
-                    # Overview page: check if matching overview in sliced defects
-                    ov_match = self._find_overview_defect_match(item, swg_defects, consumed_defects)
-                    if ov_match and not item.is_sliced:
-                        # Replace rendered overview with sliced overview
-                        consumed_defects.add(ov_match.filename)
-                        action = InterleavingAction(
-                            action_type=InterleavingActionType.REPLACE,
-                            target_sequence=item.sequence,
-                            target_component=item.component_name,
-                            defect_filename=ov_match.filename,
-                            reason="SWG Overview replaced by sliced overview per D47",
-                            defect_metadata=ov_match,
-                            target_item=item,
-                        )
-                        actions.append(action)
-                        replaced_items.append(item)
-                        result_parts.append(
-                            InterleavedPart(
-                                part_name=ov_match.filename,
-                                is_defect=False,
-                                equipment_category=cat,
-                                sequence=item.sequence,
-                                component_name=item.component_name,
-                                action_type=InterleavingActionType.REPLACE,
-                                defect_metadata=ov_match,
-                                file_path=ov_match.slice_path,
-                            )
-                        )
-                    else:
-                        result_parts.append(self._item_to_part(item))
+                    part = self._substitute_overview_part(
+                        item, swg_defects, consumed_defects, actions, replaced_items, "SWG"
+                    )
+                    result_parts.append(part)
+                    for swg_d in swg_defects:
+                        if swg_d.sequence == "p00" or swg_d.defect_area == "OVERVIEW":
+                            consumed_defects.add(swg_d.filename)
                     continue
 
                 # Panel item: look for matching panel defects
@@ -437,6 +417,16 @@ class DefectInterleavingPolicy:
             # 2. TRANSFORMER INTERLEAVING (D35)
             # ------------------------------------------------------------------
             elif cat in ("tx", "transformer"):
+                if item.is_overview:
+                    part = self._substitute_overview_part(
+                        item, tx_defects, consumed_defects, actions, replaced_items, "Transformer"
+                    )
+                    result_parts.append(part)
+                    for tx_d in tx_defects:
+                        if tx_d.sequence == "s00" or tx_d.defect_area == "OVERVIEW":
+                            consumed_defects.add(tx_d.filename)
+                    continue
+
                 # Transformer component scan page always retained
                 result_parts.append(self._item_to_part(item))
 
@@ -471,10 +461,15 @@ class DefectInterleavingPolicy:
             # 3. FEEDER PILLAR INTERLEAVING (D36)
             # ------------------------------------------------------------------
             elif cat in ("fp", "lvdb", "feeder_pillar"):
-                # Feeder pillar overview page retained
-                result_parts.append(self._item_to_part(item))
-
                 if item.is_overview:
+                    part = self._substitute_overview_part(
+                        item, fp_defects, consumed_defects, actions, replaced_items, "Feeder Pillar"
+                    )
+                    result_parts.append(part)
+                    for fp_d in fp_defects:
+                        if fp_d.sequence == "f00" or fp_d.defect_area == "OVERVIEW":
+                            consumed_defects.add(fp_d.filename)
+
                     # Collect all defects for this Feeder Pillar
                     matching_fp_defects = self._find_fp_defects(item, fp_defects, consumed_defects)
                     # Sort strictly in channel order per D36 (IN1..IN3, OT1..OT10)
@@ -510,6 +505,8 @@ class DefectInterleavingPolicy:
                                 file_path=fp_d.slice_path,
                             )
                         )
+                else:
+                    result_parts.append(self._item_to_part(item))
 
             # ------------------------------------------------------------------
             # 4. BATTERY BANK INTERLEAVING
@@ -698,6 +695,43 @@ class DefectInterleavingPolicy:
             file_path=item.sliced_path if item.is_sliced else None,
         )
 
+    def _substitute_overview_part(
+        self,
+        item: ScanRenderItem,
+        defects: Sequence[CbmDefectSliceMetadata],
+        consumed_defects: set[str],
+        actions: list[InterleavingAction],
+        replaced_items: list[ScanRenderItem],
+        reason_label: str,
+    ) -> InterleavedPart:
+        """Handle D47 overview replacement with sliced QR overview if available."""
+        ov_match = self._find_overview_defect_match(item, defects, consumed_defects)
+        if ov_match:
+            consumed_defects.add(ov_match.filename)
+            if not item.is_sliced:
+                action = InterleavingAction(
+                    action_type=InterleavingActionType.REPLACE,
+                    target_sequence=item.sequence,
+                    target_component=item.component_name,
+                    defect_filename=ov_match.filename,
+                    reason=f"{reason_label} Overview replaced by sliced overview per D47",
+                    defect_metadata=ov_match,
+                    target_item=item,
+                )
+                actions.append(action)
+                replaced_items.append(item)
+                return InterleavedPart(
+                    part_name=ov_match.filename,
+                    is_defect=False,
+                    equipment_category=item.equipment_category,
+                    sequence=item.sequence,
+                    component_name=item.component_name,
+                    action_type=InterleavingActionType.REPLACE,
+                    defect_metadata=ov_match,
+                    file_path=ov_match.slice_path,
+                )
+        return self._item_to_part(item)
+
     def _find_overview_defect_match(
         self,
         item: ScanRenderItem,
@@ -705,14 +739,17 @@ class DefectInterleavingPolicy:
         consumed_defects: set[str],
     ) -> CbmDefectSliceMetadata | None:
         """Find matching sliced overview page for D47 overview substitution."""
+        item_id_clean = re.sub(r"[^A-Za-z0-9]", "", str(item.equipment_id or "")).lower()
         for d in defects:
             if d.filename in consumed_defects:
                 continue
             if d.sequence in ("p00", "f00", "s00", "b00") or d.defect_area == "OVERVIEW":
-                if item.equipment_id and d.equipment_instance:
-                    if item.equipment_id.lower() == d.equipment_instance.lower():
+                if item_id_clean and d.equipment_instance:
+                    d_inst_clean = re.sub(r"[^A-Za-z0-9]", "", str(d.equipment_instance)).lower()
+                    if item_id_clean == d_inst_clean:
                         return d
-                return d
+                else:
+                    return d
         return None
 
     def _find_swg_panel_defects(
@@ -728,7 +765,14 @@ class DefectInterleavingPolicy:
         item_comp = normalize_defect_area(item.component_name)
 
         panel_ctx = item.context.get("panel", {}) if isinstance(item.context, dict) else {}
-        item_feeder_no = normalize_equipment_id(str(panel_ctx.get("feeder_no", "")))
+        item_feeder_no = normalize_equipment_id(
+            str(
+                panel_ctx.get("feeder_no")
+                or panel_ctx.get("panel_feeder_no")
+                or panel_ctx.get("linknumber")
+                or ""
+            )
+        )
         panel_is_tx = is_tx_feeder(f"{panel_ctx.get('name', '')} {item_feeder_no}")
 
         for d in defects:
@@ -788,6 +832,8 @@ class DefectInterleavingPolicy:
 
             d_seq = d.sequence.lower()
             d_area = normalize_defect_area(d.defect_area)
+            if d_seq in ("s00", "p00", "f00", "b00") or d_area == "OVERVIEW":
+                continue
 
             # Check TX instance (e.g. tx1 vs tx2) if item has equipment_id
             if item.equipment_id and d.equipment_instance:

@@ -419,12 +419,12 @@ class CbmDefectHeaderParser:
     def _infer_equipment_category(self, raw_eq: str) -> str:
         """Infer equipment category ('swg', 'tx', 'fp', 'battery') from equipment text."""
         eq = raw_eq.upper()
+        if any(k in eq for k in ("FEEDER PILLAR", "FP", "LVDB")):
+            return "fp"
         if any(k in eq for k in ("RMU", "VCB", "SWG", "SWITCHGEAR", "AIS", "GIS")):
             return "swg"
         if any(k in eq for k in ("TRANSFORMER", "TX")):
             return "tx"
-        if any(k in eq for k in ("FEEDER PILLAR", "FP", "LVDB")):
-            return "fp"
         if "BATTERY" in eq:
             return "battery"
         return "swg"
@@ -468,18 +468,23 @@ class CbmDefectHeaderParser:
             return "p01"
 
         if category == "fp":
-            if area_norm == "OVERVIEW" or panel_no_text in ("-", ""):
+            if area_norm == "OVERVIEW":
                 return "f00"
-            p_upper = panel_no_text.upper()
-            if "IN" in p_upper:
-                m = re.search(r"(\d+)", p_upper)
+            search_text = f"{panel_no_text} {area_text}".upper()
+            if "IN" in search_text or "INCOMING" in search_text:
+                m = re.search(r"(?:IN|INCOMING)\s*(\d+)", search_text)
                 return f"in{int(m.group(1)):02d}" if m else "in01"
-            if "OT" in p_upper:
-                m = re.search(r"(\d+)", p_upper)
+            if "OT" in search_text or "OUTGOING" in search_text:
+                m = re.search(r"(?:OT|OUTGOING)\s*(\d+)", search_text)
                 return f"ot{int(m.group(1)):02d}" if m else "ot01"
-            m = re.search(r"(\d+)", panel_no_text)
+            m = re.search(r"[Ff](\d+)", search_text)
             if m:
                 return f"f{int(m.group(1)):02d}"
+            m_num = re.search(r"(\d+)", panel_no_text)
+            if m_num:
+                return f"f{int(m_num.group(1)):02d}"
+            if panel_no_text in ("-", ""):
+                return "f01"
             return "f01"
 
         if category == "tx":

@@ -535,6 +535,7 @@ class SwitchgearScanAdapter:
                     "panel": {
                         "name": p_name,
                         "linknumber": _clean_str(panel.panel_feeder_no or str(p_no)),
+                        "feeder_no": _clean_str(panel.panel_feeder_no or ""),
                         "area": comp_name,
                         "serialnumber": _clean_str(panel.serial_no),
                         "heateramp": h_amp,

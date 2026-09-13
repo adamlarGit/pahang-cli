@@ -198,6 +198,11 @@ class FullReportStationPlan:
         return self.parts[index]
 
     @property
+    def pe_number(self) -> int:
+        """Substation PE number from underlying package or 0."""
+        return getattr(self.package, "substation_number", 0)
+
+    @property
     def part_types(self) -> tuple[PlanPartType, ...]:
         """Sequence of PlanPartType for all planned parts."""
         return tuple(p.part_type for p in self.parts)
@@ -380,10 +385,9 @@ class FullReportPlanBuilder:
                 has_vi_summary=has_vi_eval,
                 has_vi_defects=has_vi_eval,
             )
-            if hasattr(slicer_instance, "slice_cbm_defects"):
+            if hasattr(slicer_instance, "slice_cbm_defects") and not resolved_sliced.cbm_defect_pages:
                 sliced_cbm = slicer_instance.slice_cbm_defects(qr_p, temp_target)
                 if sliced_cbm:
-                    combined = tuple(resolved_sliced.cbm_defect_pages) + tuple(sliced_cbm)
                     resolved_sliced = SlicedSections(
                         station=resolved_sliced.station,
                         front_page=resolved_sliced.front_page,
@@ -391,7 +395,7 @@ class FullReportPlanBuilder:
                         sticker_page=resolved_sliced.sticker_page,
                         vi_summary=resolved_sliced.vi_summary,
                         vi_defect_pages=resolved_sliced.vi_defect_pages,
-                        cbm_defect_pages=combined,
+                        cbm_defect_pages=tuple(sliced_cbm),
                     )
 
         # Determine visual defect presence (D39)

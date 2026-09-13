@@ -198,6 +198,8 @@ class BatchComSession:
         # Cleanup COM runtime
         if self._co_initialized:
             try:
+                import time
+                time.sleep(0.2)
                 import pythoncom
                 pythoncom.CoUninitialize()
             except Exception as exc:
