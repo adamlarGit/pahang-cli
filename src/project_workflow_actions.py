@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Sequence
 
 from src import cli_selectors
 from src.workflows.models import (
@@ -783,30 +783,60 @@ def generate_full_reports_action(
     environment: ProjectEnvironment,
     *,
     workflow: FullReportWorkflow | None = None,
-    target: Path | str | None = None,
+    target: Path | str | Sequence[str] | None = None,
 ) -> FullReportBatchResult | None:
     """Action handler for Stage 1 Full Report Word document generation."""
+    selected_target: Path | str | Sequence[str]
     if target is None:
-        selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
-        if selected_path is None:
+        options = [
+            cli_selectors.SelectOption("Manual FL Input", "manual"),
+            cli_selectors.SelectOption("Select Testsheet Folder", "folder"),
+            cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"),
+        ]
+        mode_str = cli_selectors.select_one("Full Report - Selection Mode", options)
+        if mode_str in ("__cancel__", None):
             print("Processing cancelled.")
             return None
+
+        if mode_str == "manual":
+            print("Enter comma-separated Functional Locations.")
+            input_locs = input("Functional Locations: ").strip()
+            fl_numbers = [loc.strip() for loc in input_locs.split(",") if loc.strip()]
+            if not fl_numbers:
+                print("No functional locations provided.")
+                return None
+            selected_target = fl_numbers
+        else:
+            selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
+            if selected_path is None:
+                print("Processing cancelled.")
+                return None
+            selected_target = selected_path
     else:
-        target_path = Path(target)
-        if not target_path.is_absolute():
+        if isinstance(target, (list, tuple)):
+            selected_target = target
+        elif isinstance(target, Path):
+            selected_target = target
+        else:
+            target_str = str(target).strip()
+            target_path = Path(target_str)
             testsheet_dir = (
                 environment.get_testsheet_dir()
                 if hasattr(environment, "get_testsheet_dir")
                 else environment.base_path / "TESTSHEET"
             )
-            candidate = testsheet_dir / target_path
-            selected_path = candidate if candidate.exists() else (environment.base_path / target_path)
-        else:
-            selected_path = target_path
+            if target_path.is_absolute() and target_path.exists():
+                selected_target = target_path
+            elif (testsheet_dir / target_path).exists():
+                selected_target = testsheet_dir / target_path
+            elif (environment.base_path / target_path).exists():
+                selected_target = environment.base_path / target_path
+            else:
+                selected_target = target_str
 
     active_workflow = workflow or FullReportWorkflow()
     inspection = active_workflow.inspect(
-        selected_path,
+        selected_target,
         environment,
         progress_sink=_cli_progress_sink,
     )
@@ -843,7 +873,7 @@ def generate_full_reports_action(
             chosen_station_names.append(target_item.station)
 
     result = active_workflow.generate(
-        selected_path,
+        selected_target,
         environment,
         station=chosen_station_names if chosen_station_names else None,
         progress_sink=_cli_progress_sink,

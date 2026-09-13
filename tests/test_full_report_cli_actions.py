@@ -44,9 +44,100 @@ def mock_env() -> MagicMock:
 # 1. FullReportAction Tests
 # ==============================================================================
 
+def test_full_report_action_cancel_selection_mode(mock_env: MagicMock) -> None:
+    action = FullReportAction()
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="__cancel__"):
+        result = action.execute(mock_env)
+        assert result is None
+
+
+def test_full_report_action_manual_fl_input_empty(
+    mock_env: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    action = FullReportAction()
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="manual"), \
+         patch("builtins.input", return_value="   "):
+        result = action.execute(mock_env)
+        assert result is None
+        assert "No functional locations provided." in capsys.readouterr().out
+
+
+def test_full_report_action_manual_fl_input_success(
+    mock_env: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mock_workflow = MagicMock(spec=FullReportWorkflow)
+    telem = FullReportSubstationTelemetry(
+        substation_number=5,
+        substation_name="TALAPIA",
+        functional_location="FL-01",
+        station="RAUB",
+        month="08. AUGUST",
+        date_str="04-08-2026",
+        quick_report_path=Path("C:/fake/QR.docx"),
+        is_quick_report_valid=True,
+        preflight_result=None,
+        target_output_path=Path("C:/fake/FR.docx"),
+        stem="005. TALAPIA",
+        defect_suffix="",
+        cbm_defect_count=1,
+        vi_defect_count=0,
+    )
+    inspection = FullReportInspection(targets=(telem,))
+    mock_workflow.inspect.return_value = inspection
+
+    out_path = Path("C:/fake/project/FULL REPORT/RAUB/08. AUGUST/04-08-2026/005. TALAPIA.docx")
+    batch_result = FullReportBatchResult(
+        total_stations=1,
+        succeeded_count=1,
+        failed_count=0,
+        station_results=(
+            FullReportStationExecutionResult(
+                station="TALAPIA",
+                substation_number=5,
+                output_path=out_path,
+                is_success=True,
+            ),
+        ),
+        generated_paths=(out_path,),
+    )
+    mock_workflow.generate.return_value = batch_result
+
+    action = FullReportAction(workflow=mock_workflow)
+
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="manual"), \
+         patch("builtins.input", return_value=" FL-01, FL-02 "), \
+         patch("src.project_workflow_actions.cli_selectors.select_substations_interactive", return_value=[telem]), \
+         patch("src.project_workflow_actions.cli_selectors.confirm", return_value=True):
+
+        result = action.execute(mock_env)
+        assert result == batch_result
+
+        # Verify inspect was called with parsed FL strings
+        mock_workflow.inspect.assert_called_once_with(
+            ["FL-01", "FL-02"],
+            mock_env,
+            progress_sink=ANY,
+        )
+
+        # Verify generate was called with parsed FL strings and chosen station
+        mock_workflow.generate.assert_called_once_with(
+            ["FL-01", "FL-02"],
+            mock_env,
+            station=["TALAPIA"],
+            progress_sink=ANY,
+        )
+
+        captured = capsys.readouterr().out
+        assert "FULL REPORT PRE-FLIGHT TELEMETRY & DRY-RUN" in captured
+        assert "FULL REPORT BATCH EXECUTION SUMMARY" in captured
+
+
 def test_full_report_action_cancel_date_selection(mock_env: MagicMock) -> None:
     action = FullReportAction()
-    with patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=None):
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="folder"), \
+         patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=None):
         result = action.execute(mock_env)
         assert result is None
 
@@ -78,7 +169,8 @@ def test_full_report_action_dry_run_telemetry_and_cancel_confirmation(
     action = FullReportAction(workflow=mock_workflow)
 
     date_dir = Path("C:/fake/project/TESTSHEET/RAUB/08. AUGUST/04-08-2026")
-    with patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="folder"), \
+         patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
          patch("src.project_workflow_actions.cli_selectors.select_substations_interactive", return_value=[telem]), \
          patch("src.project_workflow_actions.cli_selectors.confirm", return_value=False) as mock_confirm:
 
@@ -160,7 +252,8 @@ def test_full_report_action_multi_station_selection_and_summary(
     action = FullReportAction(workflow=mock_workflow)
     date_dir = Path("C:/fake/project/TESTSHEET/RAUB/08. AUGUST/04-08-2026")
 
-    with patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="folder"), \
+         patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
          patch("src.project_workflow_actions.cli_selectors.select_substations_interactive") as mock_interactive, \
          patch("src.project_workflow_actions.cli_selectors.confirm", return_value=True):
 

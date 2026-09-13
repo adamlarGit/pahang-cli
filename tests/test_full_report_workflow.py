@@ -472,3 +472,25 @@ def test_none_environment_raises_value_error() -> None:
 
     with pytest.raises(ValueError, match="ProjectEnvironment cannot be None"):
         wf.inspect(target="04-08-2026", environment=None)  # type: ignore
+
+
+def test_resolve_target_fl_strings(tmp_path: Path) -> None:
+    """FullReportWorkflow._resolve_target correctly parses single, comma-separated, and list FLs."""
+    env = _make_mock_env(tmp_path)
+    wf = FullReportWorkflow(compiler=FakeDocumentCompiler(), slicer=FakeDocumentSlicer())
+
+    # Single FL string
+    folders, fls = wf._resolve_target("CRAU/PCE/J00251", env)
+    assert folders is None
+    assert fls == ("CRAU/PCE/J00251",)
+
+    # Comma-separated FL string
+    folders, fls = wf._resolve_target("CRAU/PCE/J00251, CKTN/PCE/J00030", env)
+    assert folders is None
+    assert fls == ("CRAU/PCE/J00251", "CKTN/PCE/J00030")
+
+    # Sequence of FL strings
+    folders, fls = wf._resolve_target(["CRAU/PCE/J00251", "CKTN/PCE/J00030"], env)
+    assert folders is None
+    assert fls == ("CRAU/PCE/J00251", "CKTN/PCE/J00030")
+
