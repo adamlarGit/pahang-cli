@@ -144,7 +144,7 @@ graph TD
     T1_3b --> T5_1[T5.1: Implement Defect Interleaving Rules - Closed]
     T4_2b --> T5_1
     
-    T1_3a --> T5_2[T5.2: Implement FullReportPlanBuilder Deep Module]
+    T1_3a --> T5_2[T5.2: Implement FullReportPlanBuilder Deep Module - Closed]
     T3_2 --> T5_2
     T5_1 --> T5_2
     
@@ -179,7 +179,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
   - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (Closed, #31)
 - **SPEC 5: Defect Interleaving & Deterministic Plan Building**
   - Child ticket: `T5.1: Implement Defect Interleaving Rules` (Closed, #32)
-  - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module` (#33)
+  - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module` (Closed, #33)
 - **SPEC 6: Workflow Orchestration, Post-Processing & CLI Integration**
   - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (#34)
   - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (#35)
@@ -589,11 +589,11 @@ Provide an upfront, deterministic document planning and defect interleaving engi
 - **What to build**: `FullReportPlanBuilder` deep module that evaluates substation equipment packages, testsheet specs, and ingested Quick Report parts to construct a complete, deterministic Bill of Materials (`FullReportStationPlan`) ordering all document parts 1 through 7 before compilation.
 - **Blocked by**: T1.3a, T3.2, T5.1
 - **Acceptance criteria**:
-  - [ ] Evaluates component health to determine rendered vs sliced overview pages (D47).
-  - [ ] Assembles canonical 8-part sequence: Front Page $\to$ Census $\to$ VI Summary (if present) $\to$ Component Stream (with interleaved defects) $\to$ Substation Condition $\to$ VI Defect Pages $\to$ Sticker Page per D39.
-  - [ ] Omits `vi_summary.docx` and `vi_defect_pages.docx` cleanly if zero visual defects exist.
-  - [ ] Outputs strongly-typed `FullReportStationPlan` ready for composer consumption.
-  - [ ] Comprehensive unit tests verifying plan structure across benchmark topologies.
+  - [x] Evaluates component health to determine rendered vs sliced overview pages (D47).
+  - [x] Assembles canonical 8-part sequence: Front Page $\to$ Census $\to$ VI Summary (if present) $\to$ Component Stream (with interleaved defects) $\to$ Substation Condition $\to$ VI Defect Pages $\to$ Sticker Page per D39.
+  - [x] Omits `vi_summary.docx` and `vi_defect_pages.docx` cleanly if zero visual defects exist.
+  - [x] Outputs strongly-typed `FullReportStationPlan` ready for composer consumption.
+  - [x] Comprehensive unit tests verifying plan structure across benchmark topologies.
 
 ---
 
