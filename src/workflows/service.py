@@ -144,3 +144,26 @@ class WorkflowService:
         workflow = PostProcessingPipelineWorkflow()
         return workflow.execute(environment, request)
 
+    def run_full_report_postprocessing(
+        self,
+        environment: ProjectEnvironment,
+        target: Any = None,
+        *,
+        station: Any = None,
+        progress_sink: Any = None,
+        fail_fast: bool = False,
+        output_dir: Any = None,
+        converter: Any = None,
+    ) -> Any:
+        from src.workflows.full_report_postprocessing import FullReportPostProcessingWorkflow
+
+        workflow = FullReportPostProcessingWorkflow(converter=converter)
+        return workflow.process(
+            target=target,
+            environment=environment,
+            station=station,
+            progress_sink=progress_sink,
+            fail_fast=fail_fast,
+            output_dir=output_dir,
+        )
+

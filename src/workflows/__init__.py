@@ -51,6 +51,16 @@ from src.workflows.full_report import (
     FullReportSubstationTelemetry,
     FullReportWorkflow,
 )
+from src.workflows.full_report_postprocessing import (
+    FullReportPostProcessingInspection,
+    FullReportPostProcessingResult,
+    FullReportPostProcessingTelemetry,
+    FullReportPostProcessingWorkflow,
+    TestsheetPdfNotFoundError,
+    TestsheetPdfValidationResult,
+    resolve_processed_testsheet_pdf_path,
+    validate_processed_testsheet_pdf,
+)
 from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.raw_material import AutomatedRawMaterialSummary, RawMaterialWorkflow
 from src.workflows.service import WorkflowService
@@ -77,6 +87,10 @@ __all__ = [
     "EnrichMsmsWorkflow",
     "FullReportBatchResult",
     "FullReportInspection",
+    "FullReportPostProcessingInspection",
+    "FullReportPostProcessingResult",
+    "FullReportPostProcessingTelemetry",
+    "FullReportPostProcessingWorkflow",
     "FullReportStationExecutionResult",
     "FullReportSubstationTelemetry",
     "FullReportWorkflow",

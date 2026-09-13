@@ -79,6 +79,10 @@ class WorkspaceStorage(ABC):
         """Return the QUICK REPORT directory path."""
 
     @abstractmethod
+    def get_full_report_dir(self) -> Path:
+        """Return the FULL REPORT directory path."""
+
+    @abstractmethod
     def get_engr_folder(self) -> Path:
         """Return the engineering files folder path."""
 
@@ -215,6 +219,9 @@ class LocalWorkspaceStorage(WorkspaceStorage):
 
     def get_quick_report_dir(self) -> Path:
         return self.root_path / "QUICK REPORT"
+
+    def get_full_report_dir(self) -> Path:
+        return self.root_path / "FULL REPORT"
 
     def get_engr_folder(self) -> Path:
         return self.get_python_dir() / "ENGR FROM DRIVE"

@@ -77,6 +77,9 @@ class ProjectEnvironment:
     def get_quick_report_dir(self) -> Path:
         return self.storage.get_quick_report_dir()
 
+    def get_full_report_dir(self) -> Path:
+        return self.storage.get_full_report_dir()
+
     def get_engr_folder(self) -> Path:
         return self.storage.get_engr_folder()
 
