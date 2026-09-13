@@ -44,6 +44,13 @@ from src.workflows.propagate_wo import (
     PropagateWoPreflightGuard,
     PropagateWoWorkflow,
 )
+from src.workflows.full_report import (
+    FullReportBatchResult,
+    FullReportInspection,
+    FullReportStationExecutionResult,
+    FullReportSubstationTelemetry,
+    FullReportWorkflow,
+)
 from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.raw_material import AutomatedRawMaterialSummary, RawMaterialWorkflow
 from src.workflows.service import WorkflowService
@@ -68,6 +75,11 @@ __all__ = [
     "EnrichMsmsPlan",
     "EnrichMsmsPreflightGuard",
     "EnrichMsmsWorkflow",
+    "FullReportBatchResult",
+    "FullReportInspection",
+    "FullReportStationExecutionResult",
+    "FullReportSubstationTelemetry",
+    "FullReportWorkflow",
     "GenerateTestsheetFolderAuditor",
     "GenerateTestsheetFolderExtractionData",
     "GenerateTestsheetFolderExtractor",
