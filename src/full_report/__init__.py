@@ -101,6 +101,12 @@ from src.full_report.interleaving import (
     InterleavingActionType,
     InterleavingResult,
 )
+from src.full_report.plan_builder import (
+    FullReportPlanBuilder,
+    FullReportStationPlan,
+    PlanPartItem,
+    PlanPartType,
+)
 
 __all__ = [
     # Pre-Flight
@@ -191,6 +197,11 @@ __all__ = [
     "InterleavingActionType",
     "InterleavingResult",
     "parse_d37_filename",
+    # Deterministic Plan Builder (Ticket #33 / T5.2)
+    "FullReportPlanBuilder",
+    "FullReportStationPlan",
+    "PlanPartItem",
+    "PlanPartType",
 ]
 
 
