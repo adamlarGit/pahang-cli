@@ -137,7 +137,7 @@ graph TD
     T2_3 --> T3_2
     
     T4_1[T4.1: Adapt Templates in NORMAL IR US TEV/ - Closed] --> T4_2a[T4.2a: Core Scan Renderer & Dynamic Shading Engine - Closed]
-    T4_2a --> T4_2b[T4.2b: Equipment Scan Adapters & PRPD Integration]
+    T4_2a --> T4_2b[T4.2b: Equipment Scan Adapters & PRPD Integration - Closed]
     T2_2 --> T4_2b
     T2_3 --> T4_2b
     
@@ -176,7 +176,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
 - **SPEC 4: Component Scanning Page Rendering & Dynamic Shading**
   - Child ticket: `T4.1: Adapt Component Scanning Templates in NORMAL IR US TEV/` (Closed, #29)
   - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (Closed, #30)
-  - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (#31)
+  - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (Closed, #31)
 - **SPEC 5: Defect Interleaving & Deterministic Plan Building**
   - Child ticket: `T5.1: Implement Defect Interleaving Rules` (#32)
   - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module` (#33)
@@ -514,15 +514,16 @@ Provide an automated scanning page rendering engine that:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#31](https://github.com/adamlarGit/pahang-cli/issues/31)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: Concrete equipment scan adapters (Switchgear, Transformer 7-point, Feeder Pillar, Battery Bank) that construct template contexts, resolve IR and paired visual photos via `RawPhotoResolver`, generate PRPD waveform graphs via `prpd.py`, and handle defective overview page substitution per D47.
 - **Blocked by**: T4.2a, T2.2, T2.3
 - **Acceptance criteria**:
-  - [ ] Switchgear adapter renders panel scanning pages per manufacturer compartment matrix (D26, D29).
-  - [ ] Transformer adapter renders unconditional 7-point scanning pages per ADR 0004 and D31.
-  - [ ] Feeder Pillar and Battery Bank adapters render overview pages with operating parameters.
-  - [ ] Integrates `prpd.py` scatter plots, falling back cleanly to `""` if survey data is missing (D08).
-  - [ ] Implements D47 overview page substitution when equipment group has active defects.
-  - [ ] Unit tests verifying context generation across all equipment families.
+  - [x] Switchgear adapter renders panel scanning pages per manufacturer compartment matrix (D26, D29).
+  - [x] Transformer adapter renders unconditional 7-point scanning pages per ADR 0004 and D31.
+  - [x] Feeder Pillar and Battery Bank adapters render overview pages with operating parameters.
+  - [x] Integrates `prpd.py` scatter plots, falling back cleanly to `""` if survey data is missing (D08).
+  - [x] Implements D47 overview page substitution when equipment group has active defects.
+  - [x] Unit tests verifying context generation across all equipment families.
 
 ---
 
