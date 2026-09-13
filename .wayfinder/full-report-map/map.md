@@ -132,7 +132,7 @@ graph TD
     T2_1 --> T2_3[T2.3: Build Full Report Scan Models & Compartment Matrix - Closed]
     T2_2 --> T2_3
     
-    T3_1[T3.1: Prototype Census Jinja2 Template] --> T3_2[T3.2: Implement ExecutiveSummaryCensusBuilder]
+    T3_1[T3.1: Prototype Census Jinja2 Template - Closed] --> T3_2[T3.2: Implement ExecutiveSummaryCensusBuilder]
     T2_1 --> T3_2
     T2_3 --> T3_2
     
@@ -418,13 +418,14 @@ Provide an automated Executive Summary Census generation engine that:
 - **Labels**: `wayfinder:prototype`, `ready-for-agent`
 - **GitHub Issue**: [#27](https://github.com/adamlarGit/pahang-cli/issues/27)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: Prototype Jinja2 docx template `templates/FULL REPORT/executive_summary_census.docx` matching Table 2 layout with 7 columns (`NO. | EQUIPMENT | DEFECT AREA | IR | U/S | TEV | SEVERITY`) using flat loop rows without static XML merges.
 - **Blocked by**: None (can start immediately)
 - **Acceptance criteria**:
-  - [ ] Template contains title heading `"2.0 EXECUTIVE SUMMARY (EQUIPMENT CENSUS)"`.
-  - [ ] Table structure defines exactly 7 columns with correct standard widths and header styling.
-  - [ ] Jinja loop `{% tr for item in census_items %}` binds all 7 fields.
-  - [ ] Verifiable by rendering mock items through `docxtpl`.
+  - [x] Template contains title heading `"2.0 EXECUTIVE SUMMARY (EQUIPMENT CENSUS)"`.
+  - [x] Table structure defines exactly 7 columns with correct standard widths and header styling.
+  - [x] Jinja loop `{% tr for item in census_items %}` binds all 7 fields.
+  - [x] Verifiable by rendering mock items through `docxtpl`.
 
 ##### T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge
 - **Labels**: `wayfinder:task`, `ready-for-agent`
