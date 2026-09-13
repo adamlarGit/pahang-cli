@@ -471,14 +471,14 @@ class FullReportPostProcessingWorkflow:
                     # Temporary PDF for Word conversion before in-place PyPDF2 merge
                     temp_conv_pdf = out_pdf.parent / f".tmp_conv_{out_pdf.name}"
 
-                    # 1. Word COM conversion
-                    if word_app is not None:
-                        self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, word_app=word_app)
-                    else:
-                        self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, session=session)
-
-                    # 2. PyPDF2 merge: converted Full Report PDF + testsheet PDF -> out_pdf
                     try:
+                        # 1. Word COM conversion
+                        if word_app is not None:
+                            self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, word_app=word_app)
+                        else:
+                            self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, session=session)
+
+                        # 2. PyPDF2 merge: converted Full Report PDF + testsheet PDF -> out_pdf
                         self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
                     finally:
                         if temp_conv_pdf.exists():
@@ -569,7 +569,8 @@ class FullReportPostProcessingWorkflow:
             return explicit_session
 
         if isinstance(self._converter, ComDocumentConverter):
-            return batch_com_session(configure_printer=True, suppress_errors=False)
+            # Only Word COM is required for Full Report post-processing; bypass Excel COM startup
+            return batch_com_session(excel_app=object(), configure_printer=True, suppress_errors=False)
 
         # For FakeDocumentConverter or headless testing
         return nullcontext(None)

@@ -402,6 +402,7 @@ class LocalWorkspaceStorage(WorkspaceStorage):
             self.get_testsheet_dir,
             self.get_raw_material_dir,
             self.get_quick_report_dir,
+            self.get_full_report_dir,
             self.get_engr_folder,
             self.get_whatsapp_dir,
             self.get_msms_dir,

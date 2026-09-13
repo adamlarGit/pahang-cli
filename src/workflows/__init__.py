@@ -118,5 +118,9 @@ __all__ = [
     "WorkflowService",
     "format_package_history_key",
     "WhatsAppReportWorkflow",
+    "TestsheetPdfNotFoundError",
+    "TestsheetPdfValidationResult",
+    "resolve_processed_testsheet_pdf_path",
+    "validate_processed_testsheet_pdf",
 ]
 

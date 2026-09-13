@@ -383,3 +383,63 @@ class TestFullReportPostProcessingExecution:
         assert result.deliverables[0].parent == custom_out
         assert result.deliverables[0].name == "005. TALAPIA.pdf"
         assert result.deliverables[0].exists()
+
+    def test_process_single_direct_call(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        docx_path = env.get_full_report_dir() / "RAUB" / "08. AUGUST" / "04-08-2026" / "005. TALAPIA.docx"
+        _create_mock_docx(docx_path)
+        ts_pdf = env.get_testsheet_dir() / "RAUB" / "08. AUGUST" / "04-08-2026" / "processed_testsheet" / "pdf" / "005. TALAPIA.pdf"
+        _create_mock_pdf(ts_pdf)
+
+        fake_converter = FakeDocumentConverter()
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+        output_pdf = workflow.process_single(docx_path, env)
+
+        assert output_pdf.exists()
+        assert output_pdf.name == "005. TALAPIA.pdf"
+        assert len(fake_converter.convert_docx_calls) == 1
+        assert len(fake_converter.merge_pdfs_calls) == 1
+
+    def test_temp_file_cleanup_on_conversion_failure(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        docx_path = env.get_full_report_dir() / "RAUB" / "08. AUGUST" / "04-08-2026" / "005. TALAPIA.docx"
+        _create_mock_docx(docx_path)
+        ts_pdf = env.get_testsheet_dir() / "RAUB" / "08. AUGUST" / "04-08-2026" / "processed_testsheet" / "pdf" / "005. TALAPIA.pdf"
+        _create_mock_pdf(ts_pdf)
+
+        fake_converter = FakeDocumentConverter()
+
+        def _exploding_convert(docx: Path, pdf: Path, **kwargs: object) -> Path:
+            pdf.write_bytes(b"partial temp pdf")
+            raise RuntimeError("Word COM export crashed")
+
+        fake_converter.convert_docx_to_pdf = _exploding_convert  # type: ignore[method-assign]
+
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+        result = workflow.process(docx_path, env)
+
+        assert result.failed_count == 1
+        assert "Word COM export crashed" in result.errors[0]
+        # Verify temporary conversion file was cleanly unlinked in finally block
+        temp_pdf = docx_path.parent / f".tmp_conv_{docx_path.stem}.pdf"
+        assert not temp_pdf.exists()
+
+    @patch("src.workflows.full_report_postprocessing.configure_uniform_printer")
+    def test_configure_uniform_printer_called(self, mock_printer: MagicMock, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        docx_path = env.get_full_report_dir() / "RAUB" / "08. AUGUST" / "04-08-2026" / "005. TALAPIA.docx"
+        _create_mock_docx(docx_path)
+        ts_pdf = env.get_testsheet_dir() / "RAUB" / "08. AUGUST" / "04-08-2026" / "processed_testsheet" / "pdf" / "005. TALAPIA.pdf"
+        _create_mock_pdf(ts_pdf)
+
+        fake_converter = FakeDocumentConverter()
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+
+        mock_session = MagicMock()
+        mock_word = MagicMock()
+        mock_session.word_app = mock_word
+        mock_session.__enter__.return_value = mock_session
+        mock_session.__exit__.return_value = None
+
+        workflow.process(docx_path, env, com_session=mock_session)
+        mock_printer.assert_called_once_with(mock_word)

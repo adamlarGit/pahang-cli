@@ -33,7 +33,15 @@ from src.workflows.populate_total_pe import PopulateTotalPeWorkflow
 from src.workflows.raw_material import RawMaterialWorkflow
 
 if TYPE_CHECKING:
+    from pathlib import Path
+    from typing import Sequence
+    from src.postprocessing.converters import DocumentConverter
     from src.project.environment import ProjectEnvironment
+    from src.workflows.full_report_postprocessing import (
+        FullReportPostProcessingResult,
+        PostProcessingTarget,
+        ProgressSink,
+    )
 
 
 class WorkflowService:
@@ -147,14 +155,14 @@ class WorkflowService:
     def run_full_report_postprocessing(
         self,
         environment: ProjectEnvironment,
-        target: Any = None,
+        target: PostProcessingTarget = None,
         *,
-        station: Any = None,
-        progress_sink: Any = None,
+        station: str | Sequence[str] | None = None,
+        progress_sink: ProgressSink | None = None,
         fail_fast: bool = False,
-        output_dir: Any = None,
-        converter: Any = None,
-    ) -> Any:
+        output_dir: Path | str | None = None,
+        converter: DocumentConverter | None = None,
+    ) -> FullReportPostProcessingResult:
         from src.workflows.full_report_postprocessing import FullReportPostProcessingWorkflow
 
         workflow = FullReportPostProcessingWorkflow(converter=converter)
