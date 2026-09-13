@@ -141,7 +141,7 @@ graph TD
     T2_2 --> T4_2b
     T2_3 --> T4_2b
     
-    T1_3b --> T5_1[T5.1: Implement Defect Interleaving Rules]
+    T1_3b --> T5_1[T5.1: Implement Defect Interleaving Rules - Closed]
     T4_2b --> T5_1
     
     T1_3a --> T5_2[T5.2: Implement FullReportPlanBuilder Deep Module]
@@ -178,7 +178,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
   - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (Closed, #30)
   - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (Closed, #31)
 - **SPEC 5: Defect Interleaving & Deterministic Plan Building**
-  - Child ticket: `T5.1: Implement Defect Interleaving Rules` (#32)
+  - Child ticket: `T5.1: Implement Defect Interleaving Rules` (Closed, #32)
   - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module` (#33)
 - **SPEC 6: Workflow Orchestration, Post-Processing & CLI Integration**
   - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (#34)
@@ -571,15 +571,16 @@ Provide an upfront, deterministic document planning and defect interleaving engi
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#32](https://github.com/adamlarGit/pahang-cli/issues/32)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: `DefectInterleavingPolicy` module that matches sliced CBM defect pages (`temp_parts/cbm_defects/`) to physical equipment components using D37 grammar and Table 1 metadata, implementing replacement and insertion sequencing rules.
 - **Blocked by**: T1.3b, T4.2b
 - **Acceptance criteria**:
-  - [ ] Implements SWG IR defect page replacement for `swg-panel.docx` per D34.
-  - [ ] Implements SWG TEV defect page append following `swg-panel.docx` per D34.
-  - [ ] Implements Transformer defect page insertion behind specific component per D35.
-  - [ ] Implements Feeder Pillar defect page sequencing after `fp-overview.docx` in channel order per D36.
-  - [ ] Implements safe orphan defect page append before Substation Condition with logged warning per D38.
-  - [ ] Unit tests verifying interleaving behavior across the 3 benchmark scenarios.
+  - [x] Implements SWG IR defect page replacement for `swg-panel.docx` per D34.
+  - [x] Implements SWG TEV defect page append following `swg-panel.docx` per D34.
+  - [x] Implements Transformer defect page insertion behind specific component per D35.
+  - [x] Implements Feeder Pillar defect page sequencing after `fp-overview.docx` in channel order per D36.
+  - [x] Implements safe orphan defect page append before Substation Condition with logged warning per D38.
+  - [x] Unit tests verifying interleaving behavior across the 3 benchmark scenarios.
 
 ##### T5.2: Implement FullReportPlanBuilder Deep Module
 - **Labels**: `wayfinder:task`, `ready-for-agent`
