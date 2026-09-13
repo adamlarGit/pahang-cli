@@ -91,6 +91,16 @@ from src.full_report.scan_adapters import (
     adapt_equipment_package,
     find_sliced_overview_page,
 )
+from src.full_report.defect_parser import (
+    parse_d37_filename,
+)
+from src.full_report.interleaving import (
+    DefectInterleavingPolicy,
+    InterleavedPart,
+    InterleavingAction,
+    InterleavingActionType,
+    InterleavingResult,
+)
 
 __all__ = [
     # Pre-Flight
@@ -174,6 +184,13 @@ __all__ = [
     "BatteryBankScanAdapter",
     "find_sliced_overview_page",
     "adapt_equipment_package",
+    # Defect Interleaving (Ticket #32 / T5.1)
+    "DefectInterleavingPolicy",
+    "InterleavedPart",
+    "InterleavingAction",
+    "InterleavingActionType",
+    "InterleavingResult",
+    "parse_d37_filename",
 ]
 
 

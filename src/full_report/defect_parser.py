@@ -26,6 +26,7 @@ class CbmDefectSliceMetadata:
     model: str = ""
     filename: str = ""
     slice_path: Path | None = None
+    technology: str = ""
 
 
 def normalize_defect_area(area_str: str) -> str:
@@ -55,6 +56,99 @@ def build_d37_defect_filename(metadata: CbmDefectSliceMetadata) -> str:
     area = metadata.defect_area.strip().upper()
     idx = f"{metadata.index:02d}"
     return f"{eq_inst}_{seq}_{eq_id}_{area}_{idx}.docx"
+
+
+def parse_d37_filename(filename_or_path: str | Path) -> CbmDefectSliceMetadata | None:
+    """Parse D37 naming tokens ({eq_instance}_{seq}_{id}_{area}_{idx}.docx) into metadata.
+
+    Provides a fast, robust fallback when sliced docx files are referenced in testing
+    or before physical docx generation.
+    """
+    name = Path(filename_or_path).name
+    if not name.lower().endswith(".docx"):
+        return None
+
+    stem = name[:-5]
+    parts = stem.split("_")
+    if len(parts) < 5:
+        return None
+
+    eq_inst = parts[0].lower()
+    seq = parts[1].lower()
+
+    # Determine index from last part
+    try:
+        idx = int(parts[-1])
+    except ValueError:
+        return None
+
+    # Determine equipment category
+    if eq_inst.startswith("swg"):
+        cat = "swg"
+    elif eq_inst.startswith("tx"):
+        cat = "tx"
+    elif eq_inst.startswith("fp") or eq_inst.startswith("lvdb"):
+        cat = "fp"
+    elif eq_inst.startswith("batt"):
+        cat = "battery"
+    else:
+        cat = "unknown"
+
+    known_areas = {
+        "OVERVIEW",
+        "OVERVIEW_TOP",
+        "OVERVIEW_BOTTOM",
+        "FUSE_COMPARTMENT",
+        "CABLE_COMPARTMENT",
+        "CABLE_ENTRY",
+        "BREAKER_COMPARTMENT",
+        "BUSBAR_COMPARTMENT",
+        "PT_COMPARTMENT",
+        "SECONDARY_COMPARTMENT",
+        "BACK_COMPARTMENT",
+        "FRONT_COMPARTMENT",
+        "HV_BUSHING",
+        "HV_CABLE",
+        "HV_CABLE_SPLIT",
+        "LV_BUSHING",
+        "LV_CABLE",
+        "FUSE_BASE",
+        "FUSE_CONTACT",
+        "BUSBAR",
+        "INCOMER",
+        "OUTGOING",
+        "CABLE_TERMINATION",
+    }
+
+    # Find longest matching area from right to left
+    area = ""
+    eq_id = ""
+    middle = parts[2:-1]
+
+    for split_idx in range(len(middle) - 1, -1, -1):
+        candidate_area = "_".join(middle[split_idx:]).upper()
+        if candidate_area in known_areas:
+            area = candidate_area
+            eq_id = "_".join(middle[:split_idx]).upper()
+            break
+
+    if not area:
+        # Fallback: assume last middle part is area
+        area = middle[-1].upper()
+        eq_id = "_".join(middle[:-1]).upper()
+
+    slice_path = Path(filename_or_path) if Path(filename_or_path).is_file() else None
+
+    return CbmDefectSliceMetadata(
+        equipment_category=cat,
+        equipment_instance=eq_inst,
+        sequence=seq,
+        equipment_id=eq_id or eq_inst.upper(),
+        defect_area=area,
+        index=idx,
+        filename=name,
+        slice_path=slice_path,
+    )
 
 
 class CbmDefectHeaderParser:
@@ -120,6 +214,9 @@ class CbmDefectHeaderParser:
         # 5. Severity
         severity = self._extract_severity(fields, grid)
 
+        # 6. Technology (if present)
+        tech_val = fields.get("technology", fields.get("tech", "")).upper()
+
         metadata = CbmDefectSliceMetadata(
             equipment_category=category,
             equipment_instance=instance,
@@ -132,6 +229,7 @@ class CbmDefectHeaderParser:
             manufacturer=fields.get("manufacturer", ""),
             model=fields.get("model", ""),
             slice_path=slice_path,
+            technology=tech_val,
         )
 
         filename = build_d37_defect_filename(metadata)
@@ -149,6 +247,7 @@ class CbmDefectHeaderParser:
             model=metadata.model,
             filename=filename,
             slice_path=metadata.slice_path,
+            technology=metadata.technology,
         )
 
     def parse_batch(
