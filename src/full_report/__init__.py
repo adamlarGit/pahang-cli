@@ -107,6 +107,11 @@ from src.full_report.plan_builder import (
     PlanPartItem,
     PlanPartType,
 )
+from src.full_report.composer import (
+    FullReportCompilationResult,
+    FullReportComposer,
+    composer_temp_workspace,
+)
 
 __all__ = [
     # Pre-Flight
@@ -202,6 +207,10 @@ __all__ = [
     "FullReportStationPlan",
     "PlanPartItem",
     "PlanPartType",
+    # Composer (Ticket #34 / T6.1)
+    "FullReportCompilationResult",
+    "FullReportComposer",
+    "composer_temp_workspace",
 ]
 
 
