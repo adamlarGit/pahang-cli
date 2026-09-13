@@ -148,7 +148,7 @@ graph TD
     T3_2 --> T5_2
     T5_1 --> T5_2
     
-    T5_2 --> T6_1[T6.1: Implement FullReportComposer Reusing WordComCompiler]
+    T5_2 --> T6_1[T6.1: Implement FullReportComposer Reusing WordComCompiler - Closed]
     T6_1 --> T6_2[T6.2: Implement FullReportWorkflow Deep Module]
     T6_2 --> T6_3[T6.3: Post-Processing PDF Conversion & Testsheet Append]
     T6_3 --> T6_4[T6.4: Wire CLI Menu & Workflow Actions]
@@ -181,7 +181,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
   - Child ticket: `T5.1: Implement Defect Interleaving Rules` (Closed, #32)
   - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module` (Closed, #33)
 - **SPEC 6: Workflow Orchestration, Post-Processing & CLI Integration**
-  - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (#34)
+  - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (Closed, #34)
   - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (#35)
   - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append` (#36)
   - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions` (#37)
@@ -643,14 +643,15 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#34](https://github.com/adamlarGit/pahang-cli/issues/34)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: `FullReportComposer` module in `src/full_report/composer.py` that iterates parts from `FullReportStationPlan`, delegates rendering to stage renderers, and compiles the final deliverable into `FULL REPORT/<STATION>/<MONTH>/<DATE>/<STEM>.docx` by reusing `WordComDocumentCompiler` directly as-is.
 - **Blocked by**: T5.2
 - **Acceptance criteria**:
-  - [ ] Implements `FullReportComposer(compiler: DocumentCompiler | None = None)`.
-  - [ ] Supports swappable compiler seam (`WordComDocumentCompiler` vs `FakeDocumentCompiler`).
-  - [ ] Compiles all planned parts into master document via `compiler.compile(parts, output_path)`.
-  - [ ] Automatically cleans up `temp_parts/` in a `finally` block unless `--keep-temp` is set.
-  - [ ] Unit tests verifying compilation flow with `FakeDocumentCompiler`.
+  - [x] Implements `FullReportComposer(compiler: DocumentCompiler | None = None)`.
+  - [x] Supports swappable compiler seam (`WordComDocumentCompiler` vs `FakeDocumentCompiler`).
+  - [x] Compiles all planned parts into master document via `compiler.compile(parts, output_path)`.
+  - [x] Automatically cleans up `temp_parts/` in a `finally` block unless `--keep-temp` is set.
+  - [x] Unit tests verifying compilation flow with `FakeDocumentCompiler`.
 
 ##### T6.2: Implement FullReportWorkflow Deep Module
 - **Labels**: `wayfinder:task`, `ready-for-agent`
