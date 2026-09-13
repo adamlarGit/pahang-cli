@@ -56,6 +56,15 @@ from src.full_report.models import (
     resolve_panel_page_count,
     resolve_switchgear_compartments,
 )
+from src.full_report.census import (
+    CensusRowItem,
+    ExecutiveSummaryCensusBuilder,
+    ExecutiveSummaryCensusContext,
+    ExecutiveSummaryCensusResult,
+    apply_column_vertical_merge,
+    apply_post_render_dom,
+    apply_severity_shading,
+)
 
 __all__ = [
     # Pre-Flight
@@ -107,6 +116,14 @@ __all__ = [
     "resolve_overview_compartments",
     "resolve_panel_page_count",
     "resolve_switchgear_compartments",
+    # Executive Summary Census (Ticket #28 / T3.2)
+    "CensusRowItem",
+    "ExecutiveSummaryCensusBuilder",
+    "ExecutiveSummaryCensusContext",
+    "ExecutiveSummaryCensusResult",
+    "apply_column_vertical_merge",
+    "apply_post_render_dom",
+    "apply_severity_shading",
 ]
 
 
