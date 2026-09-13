@@ -897,3 +897,156 @@ def test_get_cell_shading_helper():
     assert get_cell_shading(t.cell(0, 0)) == "00B050"
 
 
+def test_normalize_technologies_negative_sentinels(tmp_path: Path):
+    """Verify negative sentinels ('-', 'NONE', 'NORMAL', 'N/A') are filtered out and do not flag defects."""
+    assert _normalize_technologies("-") == set()
+    assert _normalize_technologies("NONE") == set()
+    assert _normalize_technologies("NORMAL") == set()
+    assert _normalize_technologies("N/A") == set()
+    assert _normalize_technologies(["-", "NONE", "NORMAL"]) == set()
+    assert _normalize_technologies("IR, -") == {"IR"}
+    assert _normalize_technologies("NONE+US") == {"US"}
+
+    template_path = TEMPLATES_DIR / "swg-panel.docx"
+    output_path = tmp_path / "dash_healthy.docx"
+    renderer = FullReportScanPageRendererCore(template_path)
+
+    # Passing defective_technologies="-" must NOT turn page into a defect page
+    renderer.render(output_path, {}, defective_technologies="-")
+    assert output_path.is_file()
+
+    doc = docx.Document(output_path)
+    analysis_cell = doc.tables[0].rows[35].cells[0]
+    assert BANNER_HEALTHY_ANALYSIS in analysis_cell.text
+    assert get_cell_shading(analysis_cell) == "00B050"
+
+
+def test_render_argument_dispatch_positional_output_with_keyword_template(tmp_path: Path):
+    """Verify passing output positionally while specifying template as keyword works without FileNotFoundError."""
+    default_tpl = TEMPLATES_DIR / "swg-overview.docx"
+    override_tpl = TEMPLATES_DIR / "swg-panel.docx"
+    out1 = tmp_path / "kw_tpl1.docx"
+    out2 = tmp_path / "kw_tpl2.docx"
+
+    # 1. Empty instance renderer + keyword template_path
+    r1 = FullReportScanPageRendererCore()
+    res1 = r1.render(out1, context={}, template_path=override_tpl)
+    assert res1.is_file()
+
+    # 2. Configured instance renderer + keyword template_path override
+    r2 = FullReportScanPageRendererCore(default_tpl)
+    res2 = r2.render(out2, template_path=override_tpl, context={})
+    assert res2.is_file()
+
+    # 3. Output path pointing to existing directory must raise ValueError
+    with pytest.raises(ValueError, match="Output path cannot be an existing directory"):
+        r1.render(tmp_path, context={}, template_path=override_tpl)
+
+
+def test_render_none_context_structures_graceful_handling(tmp_path: Path):
+    """Verify context with None values for banner, ir, us, tev does not crash with AttributeError/TypeError."""
+    template_path = TEMPLATES_DIR / "swg-panel.docx"
+    output_path = tmp_path / "none_context.docx"
+
+    renderer = FullReportScanPageRendererCore(template_path)
+    out = renderer.render(
+        output_path,
+        {
+            "banner": None,
+            "ir": None,
+            "us": None,
+            "tev": None,
+        },
+    )
+    assert out.is_file()
+
+    doc = docx.Document(out)
+    table = doc.tables[0]
+    analysis_cell = table.rows[35].cells[0]
+    assert BANNER_HEALTHY_ANALYSIS in analysis_cell.text
+    assert get_cell_shading(analysis_cell) == "00B050"
+
+
+def test_is_healthy_banner_text_standalone_markers_and_shading():
+    """Verify standalone healthy markers ('-', 'None', 'Tiada', 'Analysis: -') and banner shading."""
+    assert is_healthy_banner_text("-") is True
+    assert is_healthy_banner_text(" - ") is True
+    assert is_healthy_banner_text("None") is True
+    assert is_healthy_banner_text("Tiada") is True
+    assert is_healthy_banner_text("Analysis: -") is True
+    assert is_healthy_banner_text("Recommendation: -") is True
+    assert is_healthy_banner_text("Recommendation:  -") is True
+    assert is_healthy_banner_text("Cadangan: Tiada") is True
+
+    doc = docx.Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "-"
+    t.cell(0, 1).text = "Analysis: -"
+
+    apply_banner_shading(t.cell(0, 0))
+    apply_banner_shading(t.cell(0, 1))
+
+    assert get_cell_shading(t.cell(0, 0)) == "00B050"
+    assert get_cell_shading(t.cell(0, 1)) == "00B050"
+
+
+def test_apply_shading_table_row_and_mixed_containers():
+    """Verify apply_banner_shading and apply_technology_severity_shading process _Row objects."""
+    doc = docx.Document()
+    t = doc.add_table(rows=2, cols=3)
+
+    # Row 0: Banner cells
+    row0 = t.rows[0]
+    row0.cells[0].text = "Analysis: No Anomaly."
+    row0.cells[1].text = "Recommendation: -"
+    row0.cells[2].text = "Analysis: Please refer to the following page for details defect."
+
+    apply_banner_shading(row0)
+    assert get_cell_shading(row0.cells[0]) == "00B050"
+    assert get_cell_shading(row0.cells[1]) == "00B050"
+    assert get_cell_shading(row0.cells[2]) == "EE0000"
+
+    # Row 1: Technology severity cells
+    row1 = t.rows[1]
+    row1.cells[0].text = "{{ ir.severity }}"
+    row1.cells[1].text = "{{ us.severity }}"
+    row1.cells[2].text = "{{ tev.severity }}"
+
+    apply_technology_severity_shading(row1, defective_technologies="US")
+    assert get_cell_shading(row1.cells[0]) == "00B050"
+    assert get_cell_shading(row1.cells[1]) == "EE0000"
+    assert get_cell_shading(row1.cells[2]) == "00B050"
+
+
+def test_render_explicit_is_defective_false_override(tmp_path: Path):
+    """Verify is_defective=False overrides defect indicators in context to render 100% healthy."""
+    template_path = TEMPLATES_DIR / "swg-panel.docx"
+    output_path = tmp_path / "forced_healthy.docx"
+
+    renderer = FullReportScanPageRendererCore(template_path)
+    # Context indicates IR defect, but caller explicitly passes is_defective=False
+    renderer.render(
+        output_path,
+        {
+            "ir": {"severity": "DEFECT"},
+            "defective_technologies": "IR",
+        },
+        is_defective=False,
+    )
+    assert output_path.is_file()
+
+    doc = docx.Document(output_path)
+    table = doc.tables[0]
+
+    # IR severity cell should be healthy Green 00B050
+    ir_cell = table.rows[18].cells[3]
+    assert ir_cell.text == ""
+    assert get_cell_shading(ir_cell) == "00B050"
+
+    # Banner analysis should be healthy Green 00B050
+    analysis_cell = table.rows[35].cells[0]
+    assert BANNER_HEALTHY_ANALYSIS in analysis_cell.text
+    assert get_cell_shading(analysis_cell) == "00B050"
+
+
+

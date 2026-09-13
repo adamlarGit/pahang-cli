@@ -50,8 +50,46 @@ SEVERITY_MARKER_US: str = "__SEVERITY_US__"
 SEVERITY_MARKER_TEV: str = "__SEVERITY_TEV__"
 
 
+# Sentinels representing absence of defect or empty values
+_NEGATIVE_SENTINELS: frozenset[str] = frozenset({
+    "",
+    "-",
+    "--",
+    "NONE",
+    "NORMAL",
+    "HEALTHY",
+    "NO DEFECT",
+    "NO ANOMALY",
+    "NO_DEFECT",
+    "NO_ANOMALY",
+    "N/A",
+    "NA",
+    "TIADA",
+    "TIADA ANOMALI",
+    "TIADA DEFECT",
+    "NIL",
+    "EMPTY",
+    "FALSE",
+    "0",
+})
+
+_VALID_TECHNOLOGY_MAP: dict[str, str] = {
+    "IR": "IR",
+    "INFRARED": "IR",
+    "THERMAL": "IR",
+    "US": "US",
+    "ULTRASOUND": "US",
+    "TEV": "TEV",
+    "TRANSIENT": "TEV",
+}
+
+
 def _normalize_technologies(techs: set[str] | list[str] | tuple[str, ...] | str | None) -> set[str]:
-    """Normalize defective technologies specification into a set of uppercase strings."""
+    """Normalize defective technologies specification into a set of uppercase strings.
+
+    Filters out negative/empty sentinels (e.g. '-', 'NONE', 'NORMAL', 'N/A') and
+    normalizes recognized modalities ('IR', 'US', 'TEV').
+    """
     if techs is None:
         return set()
     if isinstance(techs, str):
@@ -61,22 +99,23 @@ def _normalize_technologies(techs: set[str] | list[str] | tuple[str, ...] | str 
 
     tokens: list[str] = []
     for item in raw_items:
+        trimmed = str(item).strip()
+        if not trimmed or trimmed.upper() in _NEGATIVE_SENTINELS:
+            continue
         # Pre-normalize U/S variants before delimiter splitting to prevent U / S token fracturing
-        subbed = re.sub(r"(?i)\bu\s*/\s*s\b", "US", item.strip())
+        subbed = re.sub(r"(?i)\bu\s*/\s*s\b", "US", trimmed)
         cleaned = subbed.replace(",", " ").replace("+", " ").replace("/", " ")
         tokens.extend(cleaned.split())
 
     res = set()
     for tok in tokens:
-        norm = tok.strip().upper().replace("/", "")
-        if norm in ("US", "ULTRASOUND"):
-            res.add("US")
-        elif norm in ("IR", "INFRARED", "THERMAL"):
-            res.add("IR")
-        elif norm in ("TEV", "TRANSIENT"):
-            res.add("TEV")
-        elif norm:
-            res.add(norm)
+        clean_tok = tok.strip().upper().replace("/", "")
+        if clean_tok in _NEGATIVE_SENTINELS or not clean_tok:
+            continue
+        if clean_tok in _VALID_TECHNOLOGY_MAP:
+            res.add(_VALID_TECHNOLOGY_MAP[clean_tok])
+        elif clean_tok not in _NEGATIVE_SENTINELS:
+            res.add(clean_tok)
     return res
 
 
@@ -150,11 +189,13 @@ def is_healthy_banner_text(text: str) -> bool:
         or "tiada anomaly" in lower
         or "tiada anomali" in lower
         or "tiada defect" in lower
+        or "no defect" in lower
     ):
         return True
-    if lower.startswith(("recommendation:", "cadangan:")):
-        clean = re.sub(r"^(recommendation|cadangan)\s*:\s*", "", lower).strip()
-        return clean in ("-", "tiada", "none", "n/a") or not clean
+    # Strip common prefixes and evaluate residual prose
+    clean = re.sub(r"^(?:recommendation|cadangan|analysis|analisis)\s*:\s*", "", lower).strip()
+    if clean in ("-", "tiada", "none", "n/a", "nil", "normal") or not clean:
+        return True
     return False
 
 
@@ -176,20 +217,52 @@ def _get_cell_tc(cell: Any) -> Any:
     return cell
 
 
-def _extract_tables(target: Any) -> list[Any]:
-    """Extract list of tables from a Document, DocxTemplate, Table, or container."""
-    if hasattr(target, "docx") and hasattr(target.docx, "tables"):
-        return list(target.docx.tables)
-    if hasattr(target, "tables"):
-        return list(target.tables)
-    if hasattr(target, "rows"):
-        return [target]
-    if isinstance(target, (list, tuple)):
-        tables: list[Any] = []
-        for item in target:
-            tables.extend(_extract_tables(item))
-        return tables
-    return []
+def _is_cell(target: Any) -> bool:
+    """Check if target represents a single table cell."""
+    return hasattr(target, "paragraphs") and hasattr(target, "_tc") and not hasattr(target, "rows")
+
+
+def _iter_unique_cells(target: Any) -> list[Any]:
+    """Extract a deduplicated list of table cells from various containers.
+
+    Accepts a single _Cell, _Row, Table, Document, DocxTemplate, or sequence thereof.
+    Ensures merged cells sharing the same underlying XML _tc element are only yielded once.
+    """
+    cells: list[Any] = []
+    seen_tcs: set[Any] = set()
+
+    def _collect(obj: Any) -> None:
+        if obj is None:
+            return
+        if _is_cell(obj):
+            tc = _get_cell_tc(obj)
+            if tc not in seen_tcs:
+                seen_tcs.add(tc)
+                cells.append(obj)
+            return
+        if hasattr(obj, "cells"):  # Table row (_Row)
+            for c in obj.cells:
+                _collect(c)
+            return
+        if hasattr(obj, "rows"):  # Table
+            for r in obj.rows:
+                for c in r.cells:
+                    _collect(c)
+            return
+        if hasattr(obj, "docx") and hasattr(obj.docx, "tables"):  # DocxTemplate
+            for t in obj.docx.tables:
+                _collect(t)
+            return
+        if hasattr(obj, "tables"):  # docx.Document
+            for t in obj.tables:
+                _collect(t)
+            return
+        if isinstance(obj, (list, tuple, set)):
+            for item in obj:
+                _collect(item)
+
+    _collect(target)
+    return cells
 
 
 def apply_technology_severity_shading(
@@ -204,58 +277,29 @@ def apply_technology_severity_shading(
     - Healthy cell: Green '00B050', text cleared.
     - Defective cell: Red 'EE0000', text cleared.
 
-    Can operate on a single _Cell, a Table, a Document, a DocxTemplate, or an iterable thereof.
+    Can operate on a single _Cell, a _Row, a Table, a Document, a DocxTemplate, or an iterable thereof.
     """
     def_techs = _normalize_technologies(defective_technologies)
+    cells = _iter_unique_cells(target)
+    single_cell_mode = len(cells) == 1 and _is_cell(target)
 
-    # 1. Single cell handling
-    if hasattr(target, "paragraphs") and hasattr(target, "_tc") and not hasattr(target, "rows"):
-        detected_tech = detect_cell_technology(target)
+    for cell in cells:
+        detected_tech = detect_cell_technology(cell)
         tech = (technology or detected_tech or "").upper()
-        if not tech and is_defective is None:
-            # Cell is not a detected technology severity cell and no explicit defect status was given
-            return target
 
-        if is_defective is not None:
-            cell_defective = is_defective
-        elif tech:
-            cell_defective = tech in def_techs
+        if not tech:
+            if single_cell_mode and is_defective is not None:
+                cell_defective = is_defective
+            else:
+                continue
         else:
-            cell_defective = False
+            if is_defective is not None:
+                cell_defective = is_defective
+            else:
+                cell_defective = tech in def_techs
 
-        clear_cell_text(target)
-        set_cell_shading(target, COLOR_DEFECT if cell_defective else COLOR_HEALTHY)
-        return target
-
-    if isinstance(target, (list, tuple)):
-        for item in target:
-            if hasattr(item, "paragraphs") and hasattr(item, "_tc") and not hasattr(item, "rows"):
-                apply_technology_severity_shading(
-                    item,
-                    defective_technologies=def_techs,
-                    technology=technology,
-                    is_defective=is_defective,
-                )
-
-    # 2. Extract list of tables and process
-    for table in _extract_tables(target):
-        seen_tcs: set[Any] = set()
-        for row in table.rows:
-            for cell in row.cells:
-                tc = _get_cell_tc(cell)
-                if tc in seen_tcs:
-                    continue
-                seen_tcs.add(tc)
-
-                tech = detect_cell_technology(cell)
-                if tech is not None:
-                    if is_defective is not None:
-                        cell_defective = is_defective
-                    else:
-                        cell_defective = tech in def_techs
-
-                    clear_cell_text(cell)
-                    set_cell_shading(cell, COLOR_DEFECT if cell_defective else COLOR_HEALTHY)
+        clear_cell_text(cell)
+        set_cell_shading(cell, COLOR_DEFECT if cell_defective else COLOR_HEALTHY)
 
     return target
 
@@ -270,62 +314,39 @@ def apply_banner_shading(
     - Healthy ('No Anomaly.'): Green '00B050'.
     - Defect Forwarding prose: Red 'EE0000'.
 
-    Can operate on a single _Cell, a Table, a Document, a DocxTemplate, or an iterable thereof.
+    Can operate on a single _Cell, a _Row, a Table, a Document, a DocxTemplate, or an iterable thereof.
     """
-    # 1. Single cell handling
-    if hasattr(target, "paragraphs") and hasattr(target, "_tc") and not hasattr(target, "rows"):
+    cells = _iter_unique_cells(target)
+    single_cell_mode = len(cells) == 1 and _is_cell(target)
+
+    for cell in cells:
+        text = cell.text.strip()
+        lower = text.lower()
+        is_header = lower.rstrip(":").strip() in ("analysis & recommendations", "analysis & recommendation")
+        if is_header:
+            continue
+
         if is_defective is True:
-            set_cell_shading(target, COLOR_DEFECT)
+            if (
+                single_cell_mode
+                or is_defect_forwarding_text(text)
+                or lower.startswith("analysis:")
+                or lower.startswith("recommendation:")
+            ):
+                set_cell_shading(cell, COLOR_DEFECT)
         elif is_defective is False:
-            set_cell_shading(target, COLOR_HEALTHY)
-        else:
-            text = target.text.strip()
+            if (
+                single_cell_mode
+                or is_healthy_banner_text(text)
+                or (lower.startswith("analysis:") and "defect" not in lower)
+                or (lower.startswith("recommendation:") and "defect" not in lower)
+            ):
+                set_cell_shading(cell, COLOR_HEALTHY)
+        else:  # is_defective is None
             if is_defect_forwarding_text(text):
-                set_cell_shading(target, COLOR_DEFECT)
+                set_cell_shading(cell, COLOR_DEFECT)
             elif is_healthy_banner_text(text):
-                set_cell_shading(target, COLOR_HEALTHY)
-        return target
-
-    if isinstance(target, (list, tuple)):
-        for item in target:
-            if hasattr(item, "paragraphs") and hasattr(item, "_tc") and not hasattr(item, "rows"):
-                apply_banner_shading(item, is_defective=is_defective)
-
-    # 2. Extract list of tables and process
-    for table in _extract_tables(target):
-        seen_tcs: set[Any] = set()
-        for row in table.rows:
-            for cell in row.cells:
-                tc = _get_cell_tc(cell)
-                if tc in seen_tcs:
-                    continue
-                seen_tcs.add(tc)
-
-                text = cell.text.strip()
-                lower = text.lower()
-                is_header = lower.rstrip(":").strip() in ("analysis & recommendations", "analysis & recommendation")
-                if is_header:
-                    continue
-
-                if is_defective is None:
-                    if is_defect_forwarding_text(text):
-                        set_cell_shading(cell, COLOR_DEFECT)
-                    elif is_healthy_banner_text(text):
-                        set_cell_shading(cell, COLOR_HEALTHY)
-                elif is_defective is True:
-                    if (
-                        is_defect_forwarding_text(text)
-                        or lower.startswith("analysis:")
-                        or lower.startswith("recommendation:")
-                    ):
-                        set_cell_shading(cell, COLOR_DEFECT)
-                else:  # is_defective is False
-                    if (
-                        is_healthy_banner_text(text)
-                        or (lower.startswith("analysis:") and "defect" not in lower)
-                        or (lower.startswith("recommendation:") and "defect" not in lower)
-                    ):
-                        set_cell_shading(cell, COLOR_HEALTHY)
+                set_cell_shading(cell, COLOR_HEALTHY)
 
     return target
 
@@ -352,25 +373,29 @@ def _bind_inline_images(doc: DocxTemplate, context: dict, image_width_mm: float 
                     or k_str.endswith(".prpd")
                     or k_str.endswith("_prpd")
                 ):
-                    if isinstance(v, (str, Path)) and str(v).strip() and str(v) != "-":
-                        v_path = Path(v)
-                        if v_path.is_file():
-                            try:
-                                with PILImage.open(v_path) as img:
-                                    img.verify()
-                                obj[k] = InlineImage(doc, str(v_path), width=Mm(image_width_mm))
-                            except Exception as exc:
-                                logger.warning(
-                                    "Invalid or corrupt image at %s: %s; falling back to blank",
-                                    v_path,
-                                    exc,
-                                )
-                                obj[k] = ""
-                        else:
+                    if isinstance(v, (str, Path)):
+                        v_str = str(v).strip()
+                        if not v_str or v_str == "-":
                             obj[k] = ""
+                        else:
+                            v_path = Path(v)
+                            if v_path.is_file():
+                                try:
+                                    with PILImage.open(v_path) as img:
+                                        img.verify()
+                                    obj[k] = InlineImage(doc, str(v_path), width=Mm(image_width_mm))
+                                except Exception as exc:
+                                    logger.warning(
+                                        "Invalid or corrupt image at %s: %s; falling back to blank",
+                                        v_path,
+                                        exc,
+                                    )
+                                    obj[k] = ""
+                            else:
+                                obj[k] = ""
                     elif isinstance(v, InlineImage):
                         v.tpl = doc
-                    elif v is None or v == "-":
+                    elif v is None:
                         obj[k] = ""
                 elif isinstance(v, InlineImage):
                     v.tpl = doc
@@ -450,7 +475,7 @@ class FullReportScanPageRendererCore:
                 if raw_context is None:
                     raw_context = arg0
             elif isinstance(arg0, (str, Path)):
-                if self.template_path is not None and template_path is None:
+                if actual_template is not None and actual_output is None:
                     actual_output = Path(arg0)
                 else:
                     actual_template = Path(arg0)
@@ -465,6 +490,8 @@ class FullReportScanPageRendererCore:
 
         actual_template = Path(actual_template).resolve()
         actual_output = Path(actual_output).resolve()
+        if actual_output.is_dir():
+            raise ValueError(f"Output path cannot be an existing directory: {actual_output}")
         if actual_output == actual_template:
             raise ValueError(f"Output path cannot overwrite template path: {actual_output}")
         actual_output.parent.mkdir(parents=True, exist_ok=True)
@@ -481,13 +508,16 @@ class FullReportScanPageRendererCore:
 
         # Inspect context severity flags
         for tech_key, tech_token in (("ir", "IR"), ("us", "US"), ("tev", "TEV")):
-            if tech_key in render_ctx and isinstance(render_ctx[tech_key], dict):
-                sev_val = str(render_ctx[tech_key].get("severity", "")).upper()
+            val = render_ctx.get(tech_key)
+            if isinstance(val, dict):
+                sev_val = str(val.get("severity", "")).upper()
                 if sev_val in ("DEFECT", "DEFECTIVE", "CRITICAL", "POOR", "ANOMALY"):
                     def_techs.add(tech_token)
 
         if is_defective is True and not def_techs and not overview:
             def_techs.add("IR")
+        elif is_defective is False:
+            def_techs.clear()
 
         # Inject severity sentinels so Jinja places markers into cells for post-processing
         for tech_key, marker in (
@@ -495,40 +525,40 @@ class FullReportScanPageRendererCore:
             ("us", SEVERITY_MARKER_US),
             ("tev", SEVERITY_MARKER_TEV),
         ):
-            if tech_key in render_ctx and isinstance(render_ctx[tech_key], dict):
-                if render_ctx[tech_key].get("severity") != "-":
-                    render_ctx[tech_key]["severity"] = marker
-            else:
-                render_ctx.setdefault(tech_key, {})["severity"] = marker
+            val = render_ctx.get(tech_key)
+            if not isinstance(val, dict):
+                render_ctx[tech_key] = {"severity": marker}
+            elif val.get("severity") != "-":
+                val["severity"] = marker
 
         # Inject banner analysis & recommendation per D30 if not already provided
-        has_defect = (len(def_techs) > 0) or (is_defective is True)
+        if is_defective is not None:
+            has_defect = is_defective
+        else:
+            has_defect = len(def_techs) > 0
+
         if not has_defect and is_defective is not False:
-            b_analysis = str(render_ctx.get("banner", {}).get("analysis", render_ctx.get("analysis", "")))
-            b_rec = str(render_ctx.get("banner", {}).get("recommendation", render_ctx.get("recommendation", "")))
+            banner_val = render_ctx.get("banner")
+            b_dict = banner_val if isinstance(banner_val, dict) else {}
+            b_analysis = str(b_dict.get("analysis") or render_ctx.get("analysis") or "")
+            b_rec = str(b_dict.get("recommendation") or render_ctx.get("recommendation") or "")
             if is_defect_forwarding_text(b_analysis) or is_defect_forwarding_text(b_rec):
                 has_defect = True
 
         default_analysis = BANNER_DEFECT_FORWARDING if has_defect else BANNER_HEALTHY_ANALYSIS
         default_rec = BANNER_DEFECT_FORWARDING if has_defect else BANNER_HEALTHY_RECOMMENDATION
 
-        if "banner" not in render_ctx:
+        if "banner" not in render_ctx or not isinstance(render_ctx["banner"], dict):
             render_ctx["banner"] = {
                 "analysis": default_analysis,
                 "recommendation": default_rec,
             }
-        elif isinstance(render_ctx["banner"], dict):
+        else:
             render_ctx["banner"].setdefault("analysis", default_analysis)
             render_ctx["banner"].setdefault("recommendation", default_rec)
 
-        render_ctx.setdefault(
-            "analysis",
-            render_ctx["banner"]["analysis"] if isinstance(render_ctx.get("banner"), dict) else default_analysis,
-        )
-        render_ctx.setdefault(
-            "recommendation",
-            render_ctx["banner"]["recommendation"] if isinstance(render_ctx.get("banner"), dict) else default_rec,
-        )
+        render_ctx.setdefault("analysis", render_ctx["banner"]["analysis"])
+        render_ctx.setdefault("recommendation", render_ctx["banner"]["recommendation"])
 
         # Open template via docxtpl
         doc = DocxTemplate(str(actual_template))

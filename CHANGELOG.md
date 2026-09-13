@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Component Scanning Smoke Tests (`tests/test_full_report_normal_templates.py`)**: 28 automated tests verifying template decoupling, placeholder consistency, inline image bindings, and full docxtpl smoke compilation.
 
 ### Fixed
+- **Negative Sentinel Normalization (`src/full_report/scan_render.py`)**: Filtered negative and empty sentinels (`"-"`, `"NONE"`, `"NORMAL"`, `"N/A"`, `"TIADA"`) in `_normalize_technologies()` so empty defect technology fields are not mistakenly treated as defects.
+- **Positional Output Argument Resolution with Keyword Template (`src/full_report/scan_render.py`)**: Fixed `render()` argument dispatch where passing `template_path` via keyword argument caused positional output path to be misidentified as a template path, raising `FileNotFoundError`. Added directory check guard.
+- **None Context Structure Safety (`src/full_report/scan_render.py`)**: Fixed unhandled exceptions (`AttributeError` / `TypeError`) when context dictionary contains `None` values for `banner`, `ir`, `us`, or `tev`.
+- **Row and Container Traversal (`src/full_report/scan_render.py`)**: Extracted `_iter_unique_cells()` to deduplicate DOM iteration across `apply_technology_severity_shading()` and `apply_banner_shading()`, adding support for `_Row` objects.
+- **Explicit is_defective=False Override (`src/full_report/scan_render.py`)**: Ensured passing `is_defective=False` clears `def_techs` and forces healthy Green `00B050` rendering across both technology cells and banners.
 - **Technology Slash Delimiter Normalization (`src/full_report/scan_render.py`)**: Fixed `_normalize_technologies` splitting `"U/S"` into `{"U", "S"}` by pre-normalizing `U/S` before delimiter splitting.
 - **Healthy Banner Recommendation Shading (`src/full_report/scan_render.py`)**: Resolved issue where `Recommendation:  -` cells were left unshaded on healthy scan pages.
 - **Positional Path Dispatch & Template Overwrite Guard (`src/full_report/scan_render.py`)**: Fixed argument dispatch in `FullReportScanPageRendererCore.render()` where passing an override template and output path could overwrite the template file; added strict path identity check.
