@@ -137,7 +137,7 @@ graph TD
     T2_1 --> T3_2
     T2_3 --> T3_2
     
-    T4_1[T4.1: Adapt Templates in NORMAL IR US TEV/ - Closed] --> T4_2a[T4.2a: Core Scan Renderer & Dynamic Shading Engine]
+    T4_1[T4.1: Adapt Templates in NORMAL IR US TEV/ - Closed] --> T4_2a[T4.2a: Core Scan Renderer & Dynamic Shading Engine - Closed]
     T4_2a --> T4_2b[T4.2b: Equipment Scan Adapters & PRPD Integration]
     T2_2 --> T4_2b
     T2_3 --> T4_2b
@@ -176,7 +176,7 @@ All child tickets are tracked as sub-issues of this map, each declaring its bloc
   - Child ticket: `T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge` (Closed, #28)
 - **SPEC 4: Component Scanning Page Rendering & Dynamic Shading**
   - Child ticket: `T4.1: Adapt Component Scanning Templates in NORMAL IR US TEV/` (Closed, #29)
-  - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (#30)
+  - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (Closed, #30)
   - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (#31)
 - **SPEC 5: Defect Interleaving & Deterministic Plan Building**
   - Child ticket: `T5.1: Implement Defect Interleaving Rules` (#32)

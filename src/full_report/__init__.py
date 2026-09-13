@@ -65,6 +65,19 @@ from src.full_report.census import (
     apply_post_render_dom,
     apply_severity_shading,
 )
+from src.full_report.scan_render import (
+    BANNER_DEFECT_FORWARDING,
+    BANNER_HEALTHY_ANALYSIS,
+    BANNER_HEALTHY_RECOMMENDATION,
+    COLOR_DEFECT,
+    COLOR_HEALTHY,
+    COLOR_NORMAL,
+    FullReportScanPageRendererCore,
+    apply_banner_shading,
+    apply_technology_severity_shading,
+    detect_cell_technology,
+    render_scan_page,
+)
 
 __all__ = [
     # Pre-Flight
@@ -124,6 +137,18 @@ __all__ = [
     "apply_column_vertical_merge",
     "apply_post_render_dom",
     "apply_severity_shading",
+    # Scan Page Renderer & Dynamic Shading (Ticket #30 / T4.2a)
+    "BANNER_DEFECT_FORWARDING",
+    "BANNER_HEALTHY_ANALYSIS",
+    "BANNER_HEALTHY_RECOMMENDATION",
+    "COLOR_DEFECT",
+    "COLOR_HEALTHY",
+    "COLOR_NORMAL",
+    "FullReportScanPageRendererCore",
+    "apply_banner_shading",
+    "apply_technology_severity_shading",
+    "detect_cell_technology",
+    "render_scan_page",
 ]
 
 

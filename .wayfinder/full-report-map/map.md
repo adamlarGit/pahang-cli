@@ -136,7 +136,7 @@ graph TD
     T2_1 --> T3_2
     T2_3 --> T3_2
     
-    T4_1[T4.1: Adapt Templates in NORMAL IR US TEV/ - Closed] --> T4_2a[T4.2a: Core Scan Renderer & Dynamic Shading Engine]
+    T4_1[T4.1: Adapt Templates in NORMAL IR US TEV/ - Closed] --> T4_2a[T4.2a: Core Scan Renderer & Dynamic Shading Engine - Closed]
     T4_2a --> T4_2b[T4.2b: Equipment Scan Adapters & PRPD Integration]
     T2_2 --> T4_2b
     T2_3 --> T4_2b
@@ -175,7 +175,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
   - Child ticket: `T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge` (Closed, #28)
 - **SPEC 4: Component Scanning Page Rendering & Dynamic Shading**
   - Child ticket: `T4.1: Adapt Component Scanning Templates in NORMAL IR US TEV/` (Closed, #29)
-  - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (#30)
+  - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (Closed, #30)
   - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (#31)
 - **SPEC 5: Defect Interleaving & Deterministic Plan Building**
   - Child ticket: `T5.1: Implement Defect Interleaving Rules` (#32)
@@ -501,13 +501,14 @@ Provide an automated scanning page rendering engine that:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#30](https://github.com/adamlarGit/pahang-cli/issues/30)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: The core rendering and OpenXML post-render shading engine in `src/full_report/scan_render.py` that renders scanning templates via `docxtpl` and dynamically applies Green `00B050` / Red `EE0000` cell shading and banner styling per D30 and D32.
 - **Blocked by**: T4.1
 - **Acceptance criteria**:
-  - [ ] Implements `FullReportScanPageRendererCore` wrapping `docxtpl.DocxTemplate`.
-  - [ ] Dynamically shades technology severity cells (`ir`, `us`, `tev`) Green `00B050` (healthy) or Red `EE0000` (defective), clearing text.
-  - [ ] Dynamically shades Analysis & Recommendation banner Green `00B050` for `"No Anomaly."` or Red `EE0000` for defect forwarding prose per D30.
-  - [ ] Unit tests verifying XML cell shading attributes on generated documents.
+  - [x] Implements `FullReportScanPageRendererCore` wrapping `docxtpl.DocxTemplate`.
+  - [x] Dynamically shades technology severity cells (`ir`, `us`, `tev`) Green `00B050` (healthy) or Red `EE0000` (defective), clearing text.
+  - [x] Dynamically shades Analysis & Recommendation banner Green `00B050` for `"No Anomaly."` or Red `EE0000` for defect forwarding prose per D30.
+  - [x] Unit tests verifying XML cell shading attributes on generated documents.
 
 ##### T4.2b: Implement Equipment Scan Adapters & PRPD Integration
 - **Labels**: `wayfinder:task`, `ready-for-agent`
