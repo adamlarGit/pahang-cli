@@ -150,7 +150,7 @@ graph TD
     
     T5_2 --> T6_1[T6.1: Implement FullReportComposer Reusing WordComCompiler - Closed]
     T6_1 --> T6_2[T6.2: Implement FullReportWorkflow Deep Module - Closed]
-    T6_2 --> T6_3[T6.3: Post-Processing PDF Conversion & Testsheet Append]
+    T6_2 --> T6_3[T6.3: Post-Processing PDF Conversion & Testsheet Append - Closed]
     T6_3 --> T6_4[T6.4: Wire CLI Menu & Workflow Actions]
     T6_4 --> T6_5[T6.5: End-to-End Validation Against Canonical Benchmarks]
 ```
@@ -183,7 +183,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
 - **SPEC 6: Workflow Orchestration, Post-Processing & CLI Integration**
   - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (Closed, #34)
   - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (Closed, #35)
-  - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append` (#36)
+  - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append` (Closed, #36)
   - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions` (#37)
   - Child ticket: `T6.5: End-to-End Auditing & Validation against Canonical Benchmarks` (#38)
 
@@ -671,14 +671,15 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#36](https://github.com/adamlarGit/pahang-cli/issues/36)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: `FullReportPostProcessingWorkflow` in `src/workflows/full_report_postprocessing.py` converting finalized Full Report `.docx` to `.pdf` via Word COM virtual printer and merging with pre-existing testsheet PDF from `processed_testsheet/pdf/` using `PyPDF2`.
 - **Blocked by**: T6.2
 - **Acceptance criteria**:
-  - [ ] Fails fast with clear diagnostic if testsheet PDF is missing in `processed_testsheet/pdf/` per D43.
-  - [ ] Converts `.docx` to `.pdf` via `ComDocumentConverter` and `configure_uniform_printer` per D45.
-  - [ ] Merges converted PDF and testsheet PDF into final client PDF deliverable using `PyPDF2`.
-  - [ ] Supports swappable converter seam (`FakeDocumentConverter`) for headless testing.
-  - [ ] Unit tests covering missing testsheet failure, conversion, and merge steps.
+  - [x] Fails fast with clear diagnostic if testsheet PDF is missing in `processed_testsheet/pdf/` per D43.
+  - [x] Converts `.docx` to `.pdf` via `ComDocumentConverter` and `configure_uniform_printer` per D45.
+  - [x] Merges converted PDF and testsheet PDF into final client PDF deliverable using `PyPDF2`.
+  - [x] Supports swappable converter seam (`FakeDocumentConverter`) for headless testing.
+  - [x] Unit tests covering missing testsheet failure, conversion, and merge steps.
 
 ##### T6.4: Wire CLI Menu & Workflow Actions
 - **Labels**: `wayfinder:task`, `ready-for-agent`
