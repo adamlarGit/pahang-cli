@@ -55,13 +55,16 @@ def _normalize_technologies(techs: set[str] | list[str] | tuple[str, ...] | str 
     if techs is None:
         return set()
     if isinstance(techs, str):
-        cleaned = techs.replace(",", " ").replace("+", " ").replace("/", " ")
-        tokens = cleaned.split()
+        raw_items = [techs]
     else:
-        tokens = []
-        for t in techs:
-            raw = str(t).strip().replace(",", " ").replace("+", " ")
-            tokens.extend(raw.split())
+        raw_items = [str(t) for t in techs]
+
+    tokens: list[str] = []
+    for item in raw_items:
+        # Pre-normalize U/S variants before delimiter splitting to prevent U / S token fracturing
+        subbed = re.sub(r"(?i)\bu\s*/\s*s\b", "US", item.strip())
+        cleaned = subbed.replace(",", " ").replace("+", " ").replace("/", " ")
+        tokens.extend(cleaned.split())
 
     res = set()
     for tok in tokens:
@@ -139,13 +142,31 @@ def is_defect_forwarding_text(text: str) -> bool:
 
 def is_healthy_banner_text(text: str) -> bool:
     """Check if cell text corresponds to healthy Analysis / Recommendation prose per D30."""
-    lower = text.lower()
-    return (
+    lower = text.lower().strip()
+    if not lower:
+        return False
+    if (
         "no anomaly" in lower
         or "tiada anomaly" in lower
         or "tiada anomali" in lower
         or "tiada defect" in lower
-    )
+    ):
+        return True
+    if lower.startswith(("recommendation:", "cadangan:")):
+        clean = re.sub(r"^(recommendation|cadangan)\s*:\s*", "", lower).strip()
+        return clean in ("-", "tiada", "none", "n/a") or not clean
+    return False
+
+
+def get_cell_shading(cell: Any) -> str | None:
+    """Read w:fill hex color attribute from a table cell's tcPr/w:shd XML element."""
+    if not hasattr(cell, "_tc"):
+        return None
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = tcPr.find(qn("w:shd"))
+    if shd is None:
+        return None
+    return shd.attrib.get(qn("w:fill"))
 
 
 def _get_cell_tc(cell: Any) -> Any:
@@ -153,6 +174,22 @@ def _get_cell_tc(cell: Any) -> Any:
     if hasattr(cell, "_tc"):
         return cell._tc
     return cell
+
+
+def _extract_tables(target: Any) -> list[Any]:
+    """Extract list of tables from a Document, DocxTemplate, Table, or container."""
+    if hasattr(target, "docx") and hasattr(target.docx, "tables"):
+        return list(target.docx.tables)
+    if hasattr(target, "tables"):
+        return list(target.tables)
+    if hasattr(target, "rows"):
+        return [target]
+    if isinstance(target, (list, tuple)):
+        tables: list[Any] = []
+        for item in target:
+            tables.extend(_extract_tables(item))
+        return tables
+    return []
 
 
 def apply_technology_severity_shading(
@@ -190,29 +227,18 @@ def apply_technology_severity_shading(
         set_cell_shading(target, COLOR_DEFECT if cell_defective else COLOR_HEALTHY)
         return target
 
-    # 2. Extract list of tables
-    tables: list[Any] = []
-    if hasattr(target, "docx") and hasattr(target.docx, "tables"):
-        tables = list(target.docx.tables)
-    elif hasattr(target, "tables"):
-        tables = list(target.tables)
-    elif hasattr(target, "rows"):
-        tables = [target]
-    elif isinstance(target, (list, tuple)):
+    if isinstance(target, (list, tuple)):
         for item in target:
-            if hasattr(item, "rows"):
-                tables.append(item)
-            elif hasattr(item, "paragraphs") and hasattr(item, "_tc"):
+            if hasattr(item, "paragraphs") and hasattr(item, "_tc") and not hasattr(item, "rows"):
                 apply_technology_severity_shading(
                     item,
                     defective_technologies=def_techs,
                     technology=technology,
                     is_defective=is_defective,
                 )
-        return target
 
-    # 3. Process table cells
-    for table in tables:
+    # 2. Extract list of tables and process
+    for table in _extract_tables(target):
         seen_tcs: set[Any] = set()
         for row in table.rows:
             for cell in row.cells:
@@ -260,24 +286,13 @@ def apply_banner_shading(
                 set_cell_shading(target, COLOR_HEALTHY)
         return target
 
-    # 2. Extract list of tables
-    tables: list[Any] = []
-    if hasattr(target, "docx") and hasattr(target.docx, "tables"):
-        tables = list(target.docx.tables)
-    elif hasattr(target, "tables"):
-        tables = list(target.tables)
-    elif hasattr(target, "rows"):
-        tables = [target]
-    elif isinstance(target, (list, tuple)):
+    if isinstance(target, (list, tuple)):
         for item in target:
-            if hasattr(item, "rows"):
-                tables.append(item)
-            elif hasattr(item, "paragraphs") and hasattr(item, "_tc"):
+            if hasattr(item, "paragraphs") and hasattr(item, "_tc") and not hasattr(item, "rows"):
                 apply_banner_shading(item, is_defective=is_defective)
-        return target
 
-    # 3. Process table cells
-    for table in tables:
+    # 2. Extract list of tables and process
+    for table in _extract_tables(target):
         seen_tcs: set[Any] = set()
         for row in table.rows:
             for cell in row.cells:
@@ -412,38 +427,46 @@ class FullReportScanPageRendererCore:
         actual_output = output_path
         raw_context = context
 
+        pos_args: list[Any] = []
         if template_path_or_output is not None:
-            if self.template_path is not None and actual_template == self.template_path:
-                if isinstance(output_path_or_context, (str, Path)) and isinstance(context, dict):
-                    actual_template = Path(template_path_or_output)
-                    actual_output = Path(output_path_or_context)
-                else:
-                    actual_output = Path(template_path_or_output)
-                    if isinstance(output_path_or_context, dict) and raw_context is None:
-                        raw_context = output_path_or_context
-            else:
-                actual_template = Path(template_path_or_output)
-                if isinstance(output_path_or_context, (str, Path)):
-                    actual_output = Path(output_path_or_context)
-                elif isinstance(output_path_or_context, dict) and raw_context is None:
-                    raw_context = output_path_or_context
+            pos_args.append(template_path_or_output)
+        if output_path_or_context is not None:
+            pos_args.append(output_path_or_context)
 
-        if actual_output is None and isinstance(output_path_or_context, (str, Path)):
-            actual_output = Path(output_path_or_context)
+        if len(pos_args) == 2:
+            arg0, arg1 = pos_args[0], pos_args[1]
+            if isinstance(arg1, dict):
+                actual_output = Path(arg0)
+                if raw_context is None:
+                    raw_context = arg1
+            elif isinstance(arg1, (str, Path)):
+                actual_template = Path(arg0)
+                actual_output = Path(arg1)
+            else:
+                raise ValueError(f"Unrecognized second positional argument: {arg1!r}")
+        elif len(pos_args) == 1:
+            arg0 = pos_args[0]
+            if isinstance(arg0, dict):
+                if raw_context is None:
+                    raw_context = arg0
+            elif isinstance(arg0, (str, Path)):
+                if self.template_path is not None and template_path is None:
+                    actual_output = Path(arg0)
+                else:
+                    actual_template = Path(arg0)
 
         if raw_context is None:
-            if isinstance(output_path_or_context, dict):
-                raw_context = output_path_or_context
-            else:
-                raw_context = {}
+            raw_context = {}
 
         if actual_template is None or not Path(actual_template).is_file():
             raise FileNotFoundError(f"Scanning template file not found: {actual_template}")
         if actual_output is None:
             raise ValueError("Output path must be provided")
 
-        actual_template = Path(actual_template)
-        actual_output = Path(actual_output)
+        actual_template = Path(actual_template).resolve()
+        actual_output = Path(actual_output).resolve()
+        if actual_output == actual_template:
+            raise ValueError(f"Output path cannot overwrite template path: {actual_output}")
         actual_output.parent.mkdir(parents=True, exist_ok=True)
 
         # Prepare context copy safely
@@ -460,7 +483,7 @@ class FullReportScanPageRendererCore:
         for tech_key, tech_token in (("ir", "IR"), ("us", "US"), ("tev", "TEV")):
             if tech_key in render_ctx and isinstance(render_ctx[tech_key], dict):
                 sev_val = str(render_ctx[tech_key].get("severity", "")).upper()
-                if sev_val in ("DEFECT", "DEFECTIVE"):
+                if sev_val in ("DEFECT", "DEFECTIVE", "CRITICAL", "POOR", "ANOMALY"):
                     def_techs.add(tech_token)
 
         if is_defective is True and not def_techs and not overview:
@@ -480,6 +503,12 @@ class FullReportScanPageRendererCore:
 
         # Inject banner analysis & recommendation per D30 if not already provided
         has_defect = (len(def_techs) > 0) or (is_defective is True)
+        if not has_defect and is_defective is not False:
+            b_analysis = str(render_ctx.get("banner", {}).get("analysis", render_ctx.get("analysis", "")))
+            b_rec = str(render_ctx.get("banner", {}).get("recommendation", render_ctx.get("recommendation", "")))
+            if is_defect_forwarding_text(b_analysis) or is_defect_forwarding_text(b_rec):
+                has_defect = True
+
         default_analysis = BANNER_DEFECT_FORWARDING if has_defect else BANNER_HEALTHY_ANALYSIS
         default_rec = BANNER_DEFECT_FORWARDING if has_defect else BANNER_HEALTHY_RECOMMENDATION
 
@@ -516,7 +545,7 @@ class FullReportScanPageRendererCore:
 
         # Apply dynamic post-render OpenXML DOM shading
         apply_technology_severity_shading(doc, defective_technologies=def_techs)
-        apply_banner_shading(doc, is_defective=has_defect if (is_defective is not None or def_techs) else None)
+        apply_banner_shading(doc, is_defective=has_defect)
 
         # Save rendered and shaded document
         doc.save(str(actual_output))
@@ -594,6 +623,7 @@ __all__ = [
     # DOM post-processors
     "apply_technology_severity_shading",
     "apply_banner_shading",
+    "get_cell_shading",
     # Core Renderer
     "FullReportScanPageRendererCore",
     "render_scan_page",

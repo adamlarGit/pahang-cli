@@ -32,9 +32,11 @@ from src.full_report.scan_render import (
     SEVERITY_MARKER_IR,
     SEVERITY_MARKER_TEV,
     SEVERITY_MARKER_US,
+    _normalize_technologies,
     apply_banner_shading,
     apply_technology_severity_shading,
     detect_cell_technology,
+    get_cell_shading,
     is_defect_forwarding_text,
     is_healthy_banner_text,
     render_scan_page,
@@ -267,6 +269,8 @@ def test_apply_banner_shading_mock_table_healthy_and_defective():
     assert _get_cell_fill(t_h.cell(0, 0)) is None  # Heading unaffected
     assert _get_cell_fill(t_h.cell(1, 0)) == "00B050"  # Analysis Green
     assert 'w:fill="00B050"' in t_h.cell(1, 0)._tc.xml
+    assert _get_cell_fill(t_h.cell(2, 0)) == "00B050"  # Recommendation Green
+    assert 'w:fill="00B050"' in t_h.cell(2, 0)._tc.xml
 
     # Defective Table
     doc_def = docx.Document()
@@ -438,6 +442,11 @@ def test_core_renderer_swg_panel_healthy(tmp_path: Path, dummy_image_file: Path)
     analysis_cell = table.rows[35].cells[0]
     assert "No Anomaly." in analysis_cell.text
     assert _get_cell_fill(analysis_cell) == "00B050"
+
+    # Banner recommendation row
+    rec_cell = table.rows[36].cells[0]
+    assert "Recommendation:" in rec_cell.text
+    assert _get_cell_fill(rec_cell) == "00B050"
 
 
 def test_core_renderer_swg_panel_ir_defect(tmp_path: Path, dummy_image_file: Path):
@@ -759,4 +768,132 @@ def test_apply_banner_shading_healthy_and_defect_recommendations():
     assert _get_cell_fill(t_def.cell(0, 0)) is None
     assert _get_cell_fill(t_def.cell(1, 0)) == "EE0000"
     assert _get_cell_fill(t_def.cell(2, 0)) == "EE0000"
+
+
+def test_apply_technology_severity_shading_us_string_and_mixed_delimiters():
+    """Verify string representations of U/S ('U/S', 'u/s', 'IR, U/S', 'IR/U/S') normalize properly."""
+    assert _normalize_technologies("U/S") == {"US"}
+    assert _normalize_technologies("u/s") == {"US"}
+    assert _normalize_technologies(["U/S"]) == {"US"}
+    assert _normalize_technologies("IR, U/S") == {"IR", "US"}
+    assert _normalize_technologies("IR/TEV") == {"IR", "TEV"}
+    assert _normalize_technologies("IR/U/S") == {"IR", "US"}
+    assert _normalize_technologies("IR+US+TEV") == {"IR", "US", "TEV"}
+
+    doc = docx.Document()
+    t = doc.add_table(rows=1, cols=3)
+    t.cell(0, 0).text = "{{ ir.severity }}"
+    t.cell(0, 1).text = "{{ us.severity }}"
+    t.cell(0, 2).text = "{{ tev.severity }}"
+
+    apply_technology_severity_shading(t, defective_technologies="U/S")
+    assert _get_cell_fill(t.cell(0, 0)) == "00B050"
+    assert _get_cell_fill(t.cell(0, 1)) == "EE0000"
+    assert _get_cell_fill(t.cell(0, 2)) == "00B050"
+
+
+def test_core_renderer_overview_downstream_defect_forwarding_d30(tmp_path: Path, dummy_image_file: Path):
+    """Verify D30: Overview page with downstream defect shades banner Red EE0000 while Overview IR remains Green 00B050."""
+    template_path = TEMPLATES_DIR / "swg-overview.docx"
+    output_path = tmp_path / "overview_forwarding.docx"
+
+    dt = DocxTemplate(str(template_path))
+    ctx = _build_test_context(dt, dummy_image_file)
+
+    renderer = FullReportScanPageRendererCore(template_path)
+    out = renderer.render(
+        output_path,
+        ctx,
+        is_defective=True,
+        overview=True,
+    )
+    assert out.is_file()
+
+    doc = docx.Document(out)
+    table = doc.tables[0]
+
+    # Row 18: IR Severity is Green 00B050 (healthy overview photo)
+    ir_cell = table.rows[18].cells[3]
+    assert ir_cell.text.strip() == ""
+    assert _get_cell_fill(ir_cell) == "00B050"
+
+    # Row 35: Analysis banner has forwarding text and is Red EE0000
+    analysis_cell = table.rows[35].cells[0]
+    assert BANNER_DEFECT_FORWARDING in analysis_cell.text
+    assert _get_cell_fill(analysis_cell) == "EE0000"
+
+    # Row 36: Recommendation banner has forwarding text and is Red EE0000
+    rec_cell = table.rows[36].cells[0]
+    assert BANNER_DEFECT_FORWARDING in rec_cell.text
+    assert _get_cell_fill(rec_cell) == "EE0000"
+
+
+def test_core_renderer_safe_path_resolution_and_template_override(tmp_path: Path, dummy_image_file: Path):
+    """Verify positional template path override works safely without overwriting the template file."""
+    default_tpl = TEMPLATES_DIR / "swg-overview.docx"
+    override_tpl = TEMPLATES_DIR / "swg-panel.docx"
+    out_file = tmp_path / "override_render.docx"
+
+    dt = DocxTemplate(str(override_tpl))
+    ctx = _build_test_context(dt, dummy_image_file)
+
+    # Initial mtime of template
+    mtime_before = override_tpl.stat().st_mtime_ns
+
+    renderer = FullReportScanPageRendererCore(default_tpl)
+    res = renderer.render(override_tpl, out_file, ctx)
+    assert res.is_file()
+    assert res.resolve() == out_file.resolve()
+
+    # Template must NOT have been modified
+    mtime_after = override_tpl.stat().st_mtime_ns
+    assert mtime_before == mtime_after
+
+    # Render attempting to overwrite template directly must raise ValueError
+    with pytest.raises(ValueError, match="Output path cannot overwrite template path"):
+        renderer.render(override_tpl, override_tpl, ctx)
+
+
+def test_core_renderer_context_immutability(tmp_path: Path, dummy_image_file: Path):
+    """Verify renderer does not mutate the caller's context dictionary or its nested structures."""
+    template_path = TEMPLATES_DIR / "swg-panel.docx"
+    output_path = tmp_path / "immut_test.docx"
+
+    ctx = {
+        "substation": {"name_erms": "PE IMMUT TEST", "date": "10-08-2026"},
+        "swg": {"area": "OVERVIEW"},
+        "panel": {"name": "BAY 1", "area": "CABLE COMPARTMENT"},
+        "ir": {"image": str(dummy_image_file), "reading": "30.0", "severity": "NORMAL"},
+        "visual": {"image": str(dummy_image_file)},
+        "us": {"reading": "10", "prpd": str(dummy_image_file)},
+        "tev": {"reading": "5", "prpd": str(dummy_image_file)},
+    }
+
+    # Deep snapshot before render
+    ir_sev_before = ctx["ir"]["severity"]
+    ir_img_before = ctx["ir"]["image"]
+    keys_before = set(ctx.keys())
+
+    renderer = FullReportScanPageRendererCore(template_path)
+    renderer.render(output_path, ctx)
+
+    assert ctx["ir"]["severity"] == ir_sev_before
+    assert ctx["ir"]["image"] == ir_img_before
+    assert set(ctx.keys()) == keys_before
+    assert "banner" not in ctx
+
+
+def test_get_cell_shading_helper():
+    """Verify get_cell_shading utility reads shading correctly."""
+    doc = docx.Document()
+    t = doc.add_table(rows=1, cols=2)
+    t.cell(0, 0).text = "A"
+    t.cell(0, 1).text = "B"
+
+    assert get_cell_shading(t.cell(0, 0)) is None
+    assert get_cell_shading("not a cell") is None
+
+    apply_technology_severity_shading(t.cell(0, 0), is_defective=False)
+    assert get_cell_shading(t.cell(0, 0)) == "00B050"
+
 

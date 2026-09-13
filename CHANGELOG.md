@@ -8,8 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Core Scan Page Renderer & Dynamic Shading Engine (`src/full_report/scan_render.py`)**: Implemented `FullReportScanPageRendererCore` wrapping `docxtpl.DocxTemplate` to render scanning templates and dynamically shade technology severity cells (`ir`, `us`, `tev`) Green `00B050` (healthy) or Red `EE0000` (defective), clearing placeholder text. Applied D30/D32 bottom banner Analysis & Recommendation shading (`No Anomaly.` Green / forwarding text Red) (closes #30).
+- **Core Scan Renderer Unit Tests (`tests/test_full_report_scan_render_core.py`)**: Added 29 unit tests covering OpenXML DOM cell shading, text clearing, corrupted image fallback, flexible argument dispatch, D30 downstream defect forwarding, and context immutability.
 - **Dedicated Full Report Scanning Templates (`templates/FULL REPORT/NORMAL IR US TEV/`)**: Adapted 7 dedicated Jinja2 component scanning templates (`swg-overview.docx`, `swg-panel.docx`, `tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`, `fp-overview.docx`, `battery-overview.docx`) with transparent placeholders for thermal/electrical readings, visual/IR photo slots, US/TEV PRPD waveforms, severity tokens, and analysis/recommendation banners decoupled from Quick Report (closes #29).
 - **Component Scanning Smoke Tests (`tests/test_full_report_normal_templates.py`)**: 28 automated tests verifying template decoupling, placeholder consistency, inline image bindings, and full docxtpl smoke compilation.
+
+### Fixed
+- **Technology Slash Delimiter Normalization (`src/full_report/scan_render.py`)**: Fixed `_normalize_technologies` splitting `"U/S"` into `{"U", "S"}` by pre-normalizing `U/S` before delimiter splitting.
+- **Healthy Banner Recommendation Shading (`src/full_report/scan_render.py`)**: Resolved issue where `Recommendation:  -` cells were left unshaded on healthy scan pages.
+- **Positional Path Dispatch & Template Overwrite Guard (`src/full_report/scan_render.py`)**: Fixed argument dispatch in `FullReportScanPageRendererCore.render()` where passing an override template and output path could overwrite the template file; added strict path identity check.
 
 ## [1.18.0] - 2026-09-08
 
