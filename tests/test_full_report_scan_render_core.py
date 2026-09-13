@@ -651,3 +651,112 @@ def test_apply_shading_document_level():
     assert _get_cell_fill(t.cell(0, 0)) == "00B050"
     assert t.cell(0, 0).text == ""
     assert _get_cell_fill(t.cell(0, 1)) == "00B050"
+
+
+def test_core_renderer_keyword_argument_dispatch(tmp_path: Path, dummy_image_file: Path):
+    """Verify render() works with keyword context= and output_path= patterns."""
+    template_path = TEMPLATES_DIR / "swg-panel.docx"
+    dt = DocxTemplate(str(template_path))
+    ctx = _build_test_context(dt, dummy_image_file)
+
+    renderer = FullReportScanPageRendererCore(template_path)
+
+    # 1. Positional output, keyword context
+    out1 = tmp_path / "kw_dispatch_1.docx"
+    res1 = renderer.render(out1, context=ctx)
+    assert res1.is_file()
+
+    # 2. Both keyword arguments
+    out2 = tmp_path / "kw_dispatch_2.docx"
+    res2 = renderer.render(output_path=out2, context=ctx)
+    assert res2.is_file()
+
+    # 3. Explicit template_path keyword override
+    out3 = tmp_path / "kw_dispatch_3.docx"
+    res3 = renderer.render(template_path=template_path, output_path=out3, context=ctx)
+    assert res3.is_file()
+
+
+def test_core_renderer_corrupted_image_handling(tmp_path: Path):
+    """Verify corrupted / 0-byte image files gracefully fall back to blank without crashing docxtpl."""
+    template_path = TEMPLATES_DIR / "swg-panel.docx"
+    output_path = tmp_path / "corrupt_img_test.docx"
+
+    # Create corrupt non-image file and 0-byte file
+    corrupt_img = tmp_path / "corrupt.png"
+    corrupt_img.write_text("corrupted non-image content")
+
+    zero_byte_img = tmp_path / "zero.jpg"
+    zero_byte_img.write_bytes(b"")
+
+    ctx = {
+        "substation": {"name_erms": "PE CORRUPT IMG", "date": "10-08-2026"},
+        "swg": {"area": "OVERVIEW"},
+        "panel": {"name": "BAY 1", "area": "CABLE COMPARTMENT"},
+        "ir": {"image": corrupt_img, "reading": "30.0"},
+        "visual": {"image": zero_byte_img},
+        "us": {"reading": "10", "prpd": corrupt_img},
+        "tev": {"reading": "5", "prpd": zero_byte_img},
+    }
+
+    renderer = FullReportScanPageRendererCore(template_path)
+    out = renderer.render(output_path, context=ctx)
+    assert out.is_file()
+
+    xml = _read_document_xml(out)
+    assert 'w:fill="00B050"' in xml
+    assert "{{" not in xml
+
+
+def test_apply_technology_severity_shading_us_slash_normalization():
+    """Verify defective_technologies={'U/S'} or ['U/S'] correctly shades US cell Red."""
+    doc = docx.Document()
+    t = doc.add_table(rows=1, cols=3)
+    t.cell(0, 0).text = "{{ ir.severity }}"
+    t.cell(0, 1).text = "{{ us.severity }}"
+    t.cell(0, 2).text = "{{ tev.severity }}"
+
+    apply_technology_severity_shading(t, defective_technologies={"U/S"})
+
+    assert _get_cell_fill(t.cell(0, 0)) == "00B050"
+    assert _get_cell_fill(t.cell(0, 1)) == "EE0000"
+    assert _get_cell_fill(t.cell(0, 2)) == "00B050"
+
+
+def test_apply_technology_severity_shading_non_severity_cell_unmodified():
+    """Verify non-severity cell passed to apply_technology_severity_shading is left untouched."""
+    doc = docx.Document()
+    t = doc.add_table(rows=1, cols=1)
+    cell = t.cell(0, 0)
+    cell.text = "Substation PE TEST 11KV"
+
+    apply_technology_severity_shading(cell)
+
+    assert cell.text == "Substation PE TEST 11KV"
+    assert _get_cell_fill(cell) is None
+
+
+def test_apply_banner_shading_healthy_and_defect_recommendations():
+    """Verify banner shading on both Analysis and Recommendation rows."""
+    doc = docx.Document()
+    t = doc.add_table(rows=3, cols=1)
+    t.cell(0, 0).text = "Analysis & Recommendations:"
+    t.cell(1, 0).text = "Analysis:  No Anomaly."
+    t.cell(2, 0).text = "Recommendation:  -"
+
+    apply_banner_shading(t, is_defective=False)
+    assert _get_cell_fill(t.cell(0, 0)) is None
+    assert _get_cell_fill(t.cell(1, 0)) == "00B050"
+    assert _get_cell_fill(t.cell(2, 0)) == "00B050"
+
+    doc_def = docx.Document()
+    t_def = doc_def.add_table(rows=3, cols=1)
+    t_def.cell(0, 0).text = "Analysis & Recommendations:"
+    t_def.cell(1, 0).text = "Analysis:  Please refer to the following page for details defect."
+    t_def.cell(2, 0).text = "Recommendation:  Please refer to the following page for details defect."
+
+    apply_banner_shading(t_def, is_defective=True)
+    assert _get_cell_fill(t_def.cell(0, 0)) is None
+    assert _get_cell_fill(t_def.cell(1, 0)) == "EE0000"
+    assert _get_cell_fill(t_def.cell(2, 0)) == "EE0000"
+

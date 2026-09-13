@@ -21,6 +21,8 @@ from docx.oxml.ns import qn
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
 
+from PIL import Image as PILImage
+
 from src.quick_report.cbm_render import (
     _build_jinja_env,
     _preserve_blank_render_values,
@@ -54,8 +56,25 @@ def _normalize_technologies(techs: set[str] | list[str] | tuple[str, ...] | str 
         return set()
     if isinstance(techs, str):
         cleaned = techs.replace(",", " ").replace("+", " ").replace("/", " ")
-        return {t.strip().upper() for t in cleaned.split() if t.strip()}
-    return {str(t).strip().upper() for t in techs if str(t).strip()}
+        tokens = cleaned.split()
+    else:
+        tokens = []
+        for t in techs:
+            raw = str(t).strip().replace(",", " ").replace("+", " ")
+            tokens.extend(raw.split())
+
+    res = set()
+    for tok in tokens:
+        norm = tok.strip().upper().replace("/", "")
+        if norm in ("US", "ULTRASOUND"):
+            res.add("US")
+        elif norm in ("IR", "INFRARED", "THERMAL"):
+            res.add("IR")
+        elif norm in ("TEV", "TRANSIENT"):
+            res.add("TEV")
+        elif norm:
+            res.add(norm)
+    return res
 
 
 def detect_cell_technology(cell: Any) -> str | None:
@@ -154,7 +173,12 @@ def apply_technology_severity_shading(
 
     # 1. Single cell handling
     if hasattr(target, "paragraphs") and hasattr(target, "_tc") and not hasattr(target, "rows"):
-        tech = (technology or detect_cell_technology(target) or "").upper()
+        detected_tech = detect_cell_technology(target)
+        tech = (technology or detected_tech or "").upper()
+        if not tech and is_defective is None:
+            # Cell is not a detected technology severity cell and no explicit defect status was given
+            return target
+
         if is_defective is not None:
             cell_defective = is_defective
         elif tech:
@@ -263,19 +287,28 @@ def apply_banner_shading(
                 seen_tcs.add(tc)
 
                 text = cell.text.strip()
+                lower = text.lower()
+                is_header = lower.rstrip(":").strip() in ("analysis & recommendations", "analysis & recommendation")
+                if is_header:
+                    continue
+
                 if is_defective is None:
                     if is_defect_forwarding_text(text):
                         set_cell_shading(cell, COLOR_DEFECT)
                     elif is_healthy_banner_text(text):
                         set_cell_shading(cell, COLOR_HEALTHY)
                 elif is_defective is True:
-                    if is_defect_forwarding_text(text) or "analysis" in text.lower() or "recommendation" in text.lower():
-                        # Exclude pure header row 'Analysis & Recommendations:' if it's white/static
-                        if text.strip().rstrip(":").lower() not in ("analysis & recommendations", "analysis & recommendation"):
-                            set_cell_shading(cell, COLOR_DEFECT)
+                    if (
+                        is_defect_forwarding_text(text)
+                        or lower.startswith("analysis:")
+                        or lower.startswith("recommendation:")
+                    ):
+                        set_cell_shading(cell, COLOR_DEFECT)
                 else:  # is_defective is False
-                    if is_healthy_banner_text(text) or (
-                        "analysis:" in text.lower() and "defect" not in text.lower()
+                    if (
+                        is_healthy_banner_text(text)
+                        or (lower.startswith("analysis:") and "defect" not in lower)
+                        or (lower.startswith("recommendation:") and "defect" not in lower)
                     ):
                         set_cell_shading(cell, COLOR_HEALTHY)
 
@@ -307,7 +340,17 @@ def _bind_inline_images(doc: DocxTemplate, context: dict, image_width_mm: float 
                     if isinstance(v, (str, Path)) and str(v).strip() and str(v) != "-":
                         v_path = Path(v)
                         if v_path.is_file():
-                            obj[k] = InlineImage(doc, str(v_path), width=Mm(image_width_mm))
+                            try:
+                                with PILImage.open(v_path) as img:
+                                    img.verify()
+                                obj[k] = InlineImage(doc, str(v_path), width=Mm(image_width_mm))
+                            except Exception as exc:
+                                logger.warning(
+                                    "Invalid or corrupt image at %s: %s; falling back to blank",
+                                    v_path,
+                                    exc,
+                                )
+                                obj[k] = ""
                         else:
                             obj[k] = ""
                     elif isinstance(v, InlineImage):
@@ -342,10 +385,12 @@ class FullReportScanPageRendererCore:
 
     def render(
         self,
-        template_path_or_output: str | Path,
+        template_path_or_output: str | Path | None = None,
         output_path_or_context: Path | str | dict[str, Any] | None = None,
         context: dict[str, Any] | None = None,
         *,
+        template_path: str | Path | None = None,
+        output_path: Path | str | None = None,
         defective_technologies: set[str] | list[str] | tuple[str, ...] | str | None = None,
         is_defective: bool | None = None,
         overview: bool = False,
@@ -353,27 +398,52 @@ class FullReportScanPageRendererCore:
     ) -> Path:
         """Render scanning template with docxtpl and apply dynamic OpenXML cell shading.
 
-        Supports two calling patterns:
+        Supports flexible calling patterns:
         1. renderer = FullReportScanPageRendererCore(template_path)
-           renderer.render(output_path, context, ...)
+           renderer.render(output_path, context)
+           renderer.render(output_path, context=context)
+           renderer.render(output_path=output_path, context=context)
         2. renderer = FullReportScanPageRendererCore()
-           renderer.render(template_path, output_path, context, ...)
+           renderer.render(template_path, output_path, context)
+           renderer.render(template_path, output_path, context=context)
+           renderer.render(template_path=tpl, output_path=out, context=ctx)
         """
-        # Resolve positional arguments
-        if self.template_path is not None and isinstance(output_path_or_context, dict) and context is None:
-            actual_template = self.template_path
-            actual_output = Path(template_path_or_output)
-            raw_context = output_path_or_context
-        else:
-            actual_template = Path(template_path_or_output) if template_path_or_output else self.template_path
-            actual_output = Path(output_path_or_context) if output_path_or_context is not None else None
-            raw_context = context if context is not None else {}
+        actual_template = template_path or self.template_path
+        actual_output = output_path
+        raw_context = context
 
-        if actual_template is None or not actual_template.is_file():
+        if template_path_or_output is not None:
+            if self.template_path is not None and actual_template == self.template_path:
+                if isinstance(output_path_or_context, (str, Path)) and isinstance(context, dict):
+                    actual_template = Path(template_path_or_output)
+                    actual_output = Path(output_path_or_context)
+                else:
+                    actual_output = Path(template_path_or_output)
+                    if isinstance(output_path_or_context, dict) and raw_context is None:
+                        raw_context = output_path_or_context
+            else:
+                actual_template = Path(template_path_or_output)
+                if isinstance(output_path_or_context, (str, Path)):
+                    actual_output = Path(output_path_or_context)
+                elif isinstance(output_path_or_context, dict) and raw_context is None:
+                    raw_context = output_path_or_context
+
+        if actual_output is None and isinstance(output_path_or_context, (str, Path)):
+            actual_output = Path(output_path_or_context)
+
+        if raw_context is None:
+            if isinstance(output_path_or_context, dict):
+                raw_context = output_path_or_context
+            else:
+                raw_context = {}
+
+        if actual_template is None or not Path(actual_template).is_file():
             raise FileNotFoundError(f"Scanning template file not found: {actual_template}")
         if actual_output is None:
             raise ValueError("Output path must be provided")
 
+        actual_template = Path(actual_template)
+        actual_output = Path(actual_output)
         actual_output.parent.mkdir(parents=True, exist_ok=True)
 
         # Prepare context copy safely
@@ -393,7 +463,7 @@ class FullReportScanPageRendererCore:
                 if sev_val in ("DEFECT", "DEFECTIVE"):
                     def_techs.add(tech_token)
 
-        if is_defective is True and not def_techs:
+        if is_defective is True and not def_techs and not overview:
             def_techs.add("IR")
 
         # Inject severity sentinels so Jinja places markers into cells for post-processing
@@ -446,7 +516,7 @@ class FullReportScanPageRendererCore:
 
         # Apply dynamic post-render OpenXML DOM shading
         apply_technology_severity_shading(doc, defective_technologies=def_techs)
-        apply_banner_shading(doc)
+        apply_banner_shading(doc, is_defective=has_defect if (is_defective is not None or def_techs) else None)
 
         # Save rendered and shaded document
         doc.save(str(actual_output))
