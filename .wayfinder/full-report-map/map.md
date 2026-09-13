@@ -132,7 +132,7 @@ graph TD
     T2_1 --> T2_3[T2.3: Build Full Report Scan Models & Compartment Matrix - Closed]
     T2_2 --> T2_3
     
-    T3_1[T3.1: Prototype Census Jinja2 Template - Closed] --> T3_2[T3.2: Implement ExecutiveSummaryCensusBuilder]
+    T3_1[T3.1: Prototype Census Jinja2 Template - Closed] --> T3_2[T3.2: Implement ExecutiveSummaryCensusBuilder - Closed]
     T2_1 --> T3_2
     T2_3 --> T3_2
     
@@ -431,16 +431,17 @@ Provide an automated Executive Summary Census generation engine that:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#28](https://github.com/adamlarGit/pahang-cli/issues/28)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: `ExecutiveSummaryCensusBuilder` module that traverses `SubstationEquipmentPackage`, provisions 7-point TX rows per ADR 0004, cross-references CBM defects, applies post-render Column 0 `<w:vMerge>` group numbering (`1.`, `2.`, `3.`), and applies Green `00B050` / Red `EE0000` severity shading.
 - **Blocked by**: T3.1, T2.1, T2.3
 - **Acceptance criteria**:
-  - [ ] Assembles census row items from physical equipment inventory.
-  - [ ] Provisions unconditional 7-point TX rows per ADR 0004 and D27.
-  - [ ] Emits single FP overview row when healthy, appending active defect feeder rows per D22.
-  - [ ] Cross-references Quick Report `CbmDefectRecord`s to set measurement readings and defect severity.
-  - [ ] Performs post-render OpenXML DOM pass setting `<w:vMerge>` on Column 0 with integer group numbering per D21.
-  - [ ] Dynamically shades Severity cells Green `00B050` (healthy) or Red `EE0000` (defective) per D24.
-  - [ ] Comprehensive unit tests verifying row structure across benchmark substations.
+  - [x] Assembles census row items from physical equipment inventory.
+  - [x] Provisions unconditional 7-point TX rows per ADR 0004 and D27.
+  - [x] Emits single FP overview row when healthy, appending active defect feeder rows per D22.
+  - [x] Cross-references Quick Report `CbmDefectRecord`s to set measurement readings and defect severity.
+  - [x] Performs post-render OpenXML DOM pass setting `<w:vMerge>` on Column 0 with integer group numbering per D21.
+  - [x] Dynamically shades Severity cells Green `00B050` (healthy) or Red `EE0000` (defective) per D24.
+  - [x] Comprehensive unit tests verifying row structure across benchmark substations.
 
 ---
 
