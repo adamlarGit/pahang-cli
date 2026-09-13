@@ -149,7 +149,7 @@ graph TD
     T5_1 --> T5_2
     
     T5_2 --> T6_1[T6.1: Implement FullReportComposer Reusing WordComCompiler - Closed]
-    T6_1 --> T6_2[T6.2: Implement FullReportWorkflow Deep Module]
+    T6_1 --> T6_2[T6.2: Implement FullReportWorkflow Deep Module - Closed]
     T6_2 --> T6_3[T6.3: Post-Processing PDF Conversion & Testsheet Append]
     T6_3 --> T6_4[T6.4: Wire CLI Menu & Workflow Actions]
     T6_4 --> T6_5[T6.5: End-to-End Validation Against Canonical Benchmarks]
@@ -182,7 +182,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
   - Child ticket: `T5.2: Implement FullReportPlanBuilder Deep Module` (Closed, #33)
 - **SPEC 6: Workflow Orchestration, Post-Processing & CLI Integration**
   - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (Closed, #34)
-  - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (#35)
+  - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (Closed, #35)
   - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append` (#36)
   - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions` (#37)
   - Child ticket: `T6.5: End-to-End Auditing & Validation against Canonical Benchmarks` (#38)
@@ -657,14 +657,15 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#35](https://github.com/adamlarGit/pahang-cli/issues/35)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: `FullReportWorkflow` deep module in `src/workflows/full_report.py` exposing `inspect(target, environment)` and `generate(target, environment, ...)` with pre-flight Quick Report integrity validation and batch resilience policy.
 - **Blocked by**: T6.1
 - **Acceptance criteria**:
-  - [ ] Implements `inspect()` discovering substations, validating Quick Report presence/integrity, and returning inspection telemetry without disk writes.
-  - [ ] Implements `generate()` establishing a single `BatchComSession` context across all batch substations.
-  - [ ] Implements `SubstationIsolatedBatchResiliencePolicy`: errors on one station are captured in `result.errors` while remaining stations continue.
-  - [ ] Reports progress through `progress_sink` callbacks.
-  - [ ] Comprehensive unit tests covering single station, batch success, and partial failure modes.
+  - [x] Implements `inspect()` discovering substations, validating Quick Report presence/integrity, and returning inspection telemetry without disk writes.
+  - [x] Implements `generate()` establishing a single `BatchComSession` context across all batch substations.
+  - [x] Implements `SubstationIsolatedBatchResiliencePolicy`: errors on one station are captured in `result.errors` while remaining stations continue.
+  - [x] Reports progress through `progress_sink` callbacks.
+  - [x] Comprehensive unit tests covering single station, batch success, and partial failure modes.
 
 ##### T6.3: Post-Processing PDF Conversion & Testsheet Append
 - **Labels**: `wayfinder:task`, `ready-for-agent`
