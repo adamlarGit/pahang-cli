@@ -151,7 +151,7 @@ graph TD
     T5_2 --> T6_1[T6.1: Implement FullReportComposer Reusing WordComCompiler - Closed]
     T6_1 --> T6_2[T6.2: Implement FullReportWorkflow Deep Module - Closed]
     T6_2 --> T6_3[T6.3: Post-Processing PDF Conversion & Testsheet Append - Closed]
-    T6_3 --> T6_4[T6.4: Wire CLI Menu & Workflow Actions]
+    T6_3 --> T6_4[T6.4: Wire CLI Menu & Workflow Actions - Closed]
     T6_4 --> T6_5[T6.5: End-to-End Validation Against Canonical Benchmarks]
 ```
 
@@ -184,7 +184,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
   - Child ticket: `T6.1: Implement FullReportComposer Reusing WordComCompiler` (Closed, #34)
   - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (Closed, #35)
   - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append` (Closed, #36)
-  - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions` (#37)
+  - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions` (Closed, #37)
   - Child ticket: `T6.5: End-to-End Auditing & Validation against Canonical Benchmarks` (#38)
 
 ---
@@ -685,14 +685,15 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#37](https://github.com/adamlarGit/pahang-cli/issues/37)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: Registration of `FullReportAction` and `FullReportPostProcessingAction` in `src/cli_menu.py` and `src/project_workflow_actions.py` providing interactive station selection, dry-run telemetry, and execution summary tables.
 - **Blocked by**: T6.3
 - **Acceptance criteria**:
-  - [ ] Adds `"Generate Full Reports"` and `"Post-Process Full Reports (PDF + Testsheet Merge)"` to CLI menu.
-  - [ ] Presents interactive multi-station checkbox prompt with all ready stations pre-checked.
-  - [ ] Displays dry-run telemetry and pre-flight validation status before generation confirmation.
-  - [ ] Prints formatted execution summary box with counts for total, succeeded, failed, and output paths.
-  - [ ] Unit tests verifying CLI action execution and prompt routing.
+  - [x] Adds `"Generate Full Reports"` and `"Post-Process Full Reports (PDF + Testsheet Merge)"` to CLI menu.
+  - [x] Presents interactive multi-station checkbox prompt with all ready stations pre-checked.
+  - [x] Displays dry-run telemetry and pre-flight validation status before generation confirmation.
+  - [x] Prints formatted execution summary box with counts for total, succeeded, failed, and output paths.
+  - [x] Unit tests verifying CLI action execution and prompt routing.
 
 ##### T6.5: End-to-End Auditing & Validation against Canonical Benchmarks
 - **Labels**: `wayfinder:task`, `ready-for-agent`
