@@ -78,6 +78,19 @@ from src.full_report.scan_render import (
     detect_cell_technology,
     render_scan_page,
 )
+from src.full_report.scan_adapters import (
+    DEFAULT_TEMPLATES_DIR,
+    BatteryBankScanAdapter,
+    FeederPillarScanAdapter,
+    LVDBScanAdapter,
+    ScanAdapterResult,
+    ScanPageContext,
+    ScanRenderItem,
+    SwitchgearScanAdapter,
+    TransformerScanAdapter,
+    adapt_equipment_package,
+    find_sliced_overview_page,
+)
 
 __all__ = [
     # Pre-Flight
@@ -149,6 +162,18 @@ __all__ = [
     "apply_technology_severity_shading",
     "detect_cell_technology",
     "render_scan_page",
+    # Equipment Scan Adapters (Ticket #31 / T4.2b)
+    "DEFAULT_TEMPLATES_DIR",
+    "ScanPageContext",
+    "ScanRenderItem",
+    "ScanAdapterResult",
+    "SwitchgearScanAdapter",
+    "TransformerScanAdapter",
+    "LVDBScanAdapter",
+    "FeederPillarScanAdapter",
+    "BatteryBankScanAdapter",
+    "find_sliced_overview_page",
+    "adapt_equipment_package",
 ]
 
 
