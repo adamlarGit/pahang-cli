@@ -781,7 +781,18 @@ class FullReportWorkflow:
         data_station = getattr(pkg.data, "station_name", "") if getattr(pkg, "data", None) else ""
         data_station_str = str(data_station).strip().upper() if isinstance(data_station, str) else ""
 
-        return (pkg_station_str in target_stations) or (data_station_str in target_stations)
+        substation_erms = getattr(pkg.data, "substation_name_erms", "") if getattr(pkg, "data", None) else ""
+        substation_erms_str = str(substation_erms).strip().upper() if isinstance(substation_erms, str) else ""
+
+        display_name = self._resolve_substation_display_name(pkg)
+        display_name_str = str(display_name).strip().upper()
+
+        return (
+            (pkg_station_str in target_stations)
+            or (data_station_str in target_stations)
+            or (substation_erms_str in target_stations)
+            or (display_name_str in target_stations)
+        )
 
     def _validate_target_existence(
         self, target: ReportTarget, environment: ProjectEnvironment

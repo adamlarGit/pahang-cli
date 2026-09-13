@@ -19,6 +19,16 @@ from src.workflows.models import (
     UpdateQr02CbaRequest,
     WhatsAppReportRequest,
 )
+from src.workflows.full_report import (
+    FullReportBatchResult,
+    FullReportInspection,
+    FullReportWorkflow,
+)
+from src.workflows.full_report_postprocessing import (
+    FullReportPostProcessingInspection,
+    FullReportPostProcessingResult,
+    FullReportPostProcessingWorkflow,
+)
 from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.service import WorkflowService
 
@@ -696,6 +706,345 @@ class PopulateDataMsmsAction(ProjectWorkflowAction):
         return result
 
 
+def _print_full_report_dry_run_telemetry(inspection: FullReportInspection) -> None:
+    """Display upfront dry-run telemetry and pre-flight validation status."""
+    print("\n  =======================================================")
+    print("    🔍 FULL REPORT PRE-FLIGHT TELEMETRY & DRY-RUN")
+    print("  =======================================================")
+    print(f"    Total Discovered : {inspection.total_count}")
+    print(f"    Ready to Generate: {inspection.ready_count}")
+    print(f"    Unready / Errors : {len(inspection.unready_targets)}")
+    print("  =======================================================")
+
+    if inspection.targets:
+        print("\n    📋 SUBSTATIONS:")
+        for t in inspection.targets:
+            pe_str = f"PE {t.substation_number} - " if t.substation_number else ""
+            if t.is_ready:
+                status_str = "✓ READY"
+                detail = f"QR: OK | Defects: {t.cbm_defect_count} CBM, {t.vi_defect_count} VI"
+            else:
+                status_str = "✗ UNREADY"
+                err_msg = t.errors[0] if t.errors else "Pre-flight validation failed"
+                detail = f"Error: {err_msg}"
+            print(f"      [{status_str}] {pe_str}{t.substation_name} ({detail})")
+
+    if inspection.warnings:
+        print("\n    ⚠️ WARNINGS:")
+        for w in inspection.warnings:
+            print(f"      - {w}")
+
+    if inspection.errors:
+        print("\n    ❌ DISCOVERY ERRORS:")
+        for e in inspection.errors:
+            print(f"      - {e}")
+
+    print("  =======================================================\n")
+
+
+def _print_full_report_batch_summary(result: FullReportBatchResult | None) -> None:
+    """Display clean formatted CLI summary box for Full Report batch runs."""
+    if result is None:
+        return
+
+    total = result.total_stations
+    succeeded = result.succeeded_count
+    failed = result.failed_count
+    warnings = len(result.warnings)
+
+    print("\n  =======================================================")
+    print("    📌 FULL REPORT BATCH EXECUTION SUMMARY")
+    print("  =======================================================")
+    print(f"    Total Processed : {total}")
+    print(f"    Succeeded       : {succeeded}")
+    print(f"    Failed          : {failed}")
+    print(f"    Warnings        : {warnings}")
+    print("  =======================================================")
+
+    if result.generated_paths:
+        print("\n    📄 GENERATED FULL REPORTS:")
+        for p in result.generated_paths:
+            print(f"      ✓ {p}")
+
+    if result.warnings:
+        print("\n    ⚠️ WARNINGS:")
+        for w in result.warnings:
+            print(f"      - {w}")
+
+    if result.errors:
+        print("\n    ❌ FAILED SUBSTATIONS:")
+        for e in result.errors:
+            print(f"      - [FAILED] {e}")
+
+    print("  =======================================================\n")
+
+
+def generate_full_reports_action(
+    environment: ProjectEnvironment,
+    *,
+    workflow: FullReportWorkflow | None = None,
+    target: Path | str | None = None,
+) -> FullReportBatchResult | None:
+    """Action handler for Stage 1 Full Report Word document generation."""
+    if target is None:
+        selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
+        if selected_path is None:
+            print("Processing cancelled.")
+            return None
+    else:
+        target_path = Path(target)
+        if not target_path.is_absolute():
+            testsheet_dir = (
+                environment.get_testsheet_dir()
+                if hasattr(environment, "get_testsheet_dir")
+                else environment.base_path / "TESTSHEET"
+            )
+            candidate = testsheet_dir / target_path
+            selected_path = candidate if candidate.exists() else (environment.base_path / target_path)
+        else:
+            selected_path = target_path
+
+    active_workflow = workflow or FullReportWorkflow()
+    inspection = active_workflow.inspect(
+        selected_path,
+        environment,
+        progress_sink=_cli_progress_sink,
+    )
+
+    _print_full_report_dry_run_telemetry(inspection)
+
+    if not inspection.targets:
+        print("No substations discovered to process.")
+        return None
+
+    chosen_targets = cli_selectors.select_substations_interactive(
+        inspection.targets,
+        title="Select substations to generate Full Report",
+        get_title=lambda item: f"{getattr(item, 'substation_name', str(item))} [{'READY' if getattr(item, 'is_ready', True) else 'NOT READY'}]",
+        get_value=lambda item: item,
+        is_checked=lambda item: getattr(item, "is_ready", True),
+    )
+    if not chosen_targets:
+        print("Processing cancelled.")
+        return None
+
+    confirm_proceed = cli_selectors.confirm("Proceed with Full Report generation?", default=True)
+    if confirm_proceed is not True:
+        print("Generation cancelled.")
+        return None
+
+    chosen_station_names: list[str] = []
+    for target_item in chosen_targets:
+        if isinstance(target_item, str):
+            chosen_station_names.append(target_item)
+        elif hasattr(target_item, "substation_name") and target_item.substation_name:
+            chosen_station_names.append(target_item.substation_name)
+        elif hasattr(target_item, "station") and target_item.station:
+            chosen_station_names.append(target_item.station)
+
+    result = active_workflow.generate(
+        selected_path,
+        environment,
+        station=chosen_station_names if chosen_station_names else None,
+        progress_sink=_cli_progress_sink,
+    )
+
+    _print_full_report_batch_summary(result)
+    return result
+
+
+class FullReportAction(ProjectWorkflowAction):
+    """CLI Presentation Adapter for Stage 1 Full Report Word document generation."""
+
+    def __init__(
+        self,
+        label: str = "Generate Full Reports",
+        runner_factory: Callable[[], Callable[[ProjectEnvironment], object]] | None = None,
+        workflow: FullReportWorkflow | None = None,
+    ) -> None:
+        super().__init__(label, runner_factory=runner_factory)
+        self.workflow = workflow
+
+    def execute(self, environment: ProjectEnvironment) -> object:
+        return generate_full_reports_action(environment, workflow=self.workflow)
+
+
+def _print_full_report_postprocessing_dry_run_telemetry(
+    inspection: FullReportPostProcessingInspection,
+) -> None:
+    """Display upfront post-processing dry-run telemetry and testsheet PDF status."""
+    print("\n  =======================================================")
+    print("    🔍 FULL REPORT POST-PROCESSING PRE-FLIGHT TELEMETRY")
+    print("  =======================================================")
+    print(f"    Total Discovered : {inspection.total_count}")
+    print(f"    Ready to Process : {inspection.ready_count}")
+    print(f"    Unready / Errors : {len(inspection.unready_targets)}")
+    print("  =======================================================")
+
+    if inspection.targets:
+        print("\n    📋 FULL REPORT DOCUMENTS:")
+        for t in inspection.targets:
+            if t.is_ready:
+                status_str = "✓ READY"
+                size = t.validation_result.size_bytes if t.validation_result else 0
+                detail = f"Testsheet PDF: OK ({size:,} bytes)"
+            else:
+                status_str = "✗ UNREADY"
+                err_msg = t.errors[0] if t.errors else "Testsheet PDF missing"
+                detail = f"Error: {err_msg}"
+            print(f"      [{status_str}] {t.docx_path.name} ({detail})")
+
+    if inspection.warnings:
+        print("\n    ⚠️ WARNINGS:")
+        for w in inspection.warnings:
+            print(f"      - {w}")
+
+    if inspection.errors:
+        print("\n    ❌ DISCOVERY ERRORS:")
+        for e in inspection.errors:
+            print(f"      - {e}")
+
+    print("  =======================================================\n")
+
+
+def _print_full_report_postprocessing_summary(
+    result: FullReportPostProcessingResult | None,
+) -> None:
+    """Display clean formatted CLI summary box for Full Report post-processing."""
+    if result is None:
+        return
+
+    total = result.total_reports
+    succeeded = result.succeeded_count
+    failed = result.failed_count
+    warnings = len(result.warnings)
+    duration_str = f"{result.duration_seconds:.2f}s"
+
+    print("\n  =======================================================")
+    print("    📌 FULL REPORT POST-PROCESSING SUMMARY")
+    print("  =======================================================")
+    print(f"    Total Processed : {total}")
+    print(f"    Succeeded       : {succeeded}")
+    print(f"    Failed          : {failed}")
+    print(f"    Warnings        : {warnings}")
+    print(f"    Duration        : {duration_str}")
+    print("  =======================================================")
+
+    if result.deliverables:
+        print("\n    📄 FINAL CLIENT DELIVERABLES (MERGED PDF):")
+        for p in result.deliverables:
+            print(f"      ✓ {p}")
+
+    if result.warnings:
+        print("\n    ⚠️ WARNINGS:")
+        for w in result.warnings:
+            print(f"      - {w}")
+
+    if result.errors:
+        print("\n    ❌ FAILED REPORTS:")
+        for e in result.errors:
+            print(f"      - [FAILED] {e}")
+
+    print("  =======================================================\n")
+
+
+def postprocess_full_reports_action(
+    environment: ProjectEnvironment,
+    *,
+    workflow: FullReportPostProcessingWorkflow | None = None,
+    target: Path | str | None = None,
+) -> FullReportPostProcessingResult | None:
+    """Action handler for Stage 2 Full Report PDF conversion and testsheet merge."""
+    if target is None:
+        selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
+        if selected_path is None:
+            print("Processing cancelled.")
+            return None
+    else:
+        target_path = Path(target)
+        if not target_path.is_absolute():
+            full_report_dir = (
+                environment.get_full_report_dir()
+                if hasattr(environment, "get_full_report_dir")
+                else environment.base_path / "FULL REPORT"
+            )
+            candidate = full_report_dir / target_path
+            selected_path = candidate if candidate.exists() else (environment.base_path / target_path)
+        else:
+            selected_path = target_path
+
+    if selected_path.is_dir() and any(selected_path.glob("*.docx")):
+        inspect_target: Path | str = selected_path
+    else:
+        inspect_target = selected_path.name
+
+    active_workflow = workflow or FullReportPostProcessingWorkflow()
+    inspection = active_workflow.inspect(
+        inspect_target,
+        environment,
+        progress_sink=_cli_progress_sink,
+    )
+
+    _print_full_report_postprocessing_dry_run_telemetry(inspection)
+
+    if not inspection.targets:
+        print("No Full Report documents discovered for post-processing.")
+        return None
+
+    chosen_targets = cli_selectors.select_substations_interactive(
+        inspection.targets,
+        title="Select Full Report documents to post-process",
+        get_title=lambda item: f"{getattr(getattr(item, 'docx_path', None), 'name', str(item))} [{'READY' if getattr(item, 'is_ready', True) else 'NOT READY'}]",
+        get_value=lambda item: item,
+        is_checked=lambda item: getattr(item, "is_ready", True),
+    )
+    if not chosen_targets:
+        print("Processing cancelled.")
+        return None
+
+    confirm_proceed = cli_selectors.confirm(
+        "Proceed with Full Report post-processing (PDF + Testsheet Merge)?",
+        default=True,
+    )
+    if confirm_proceed is not True:
+        print("Post-processing cancelled.")
+        return None
+
+    target_docs: list[Path] = []
+    for target_item in chosen_targets:
+        if isinstance(target_item, Path):
+            target_docs.append(target_item)
+        elif hasattr(target_item, "docx_path") and target_item.docx_path:
+            target_docs.append(target_item.docx_path)
+        elif isinstance(target_item, str):
+            target_docs.append(Path(target_item))
+
+    result = active_workflow.process(
+        target_docs if target_docs else inspect_target,
+        environment,
+        progress_sink=_cli_progress_sink,
+    )
+
+    _print_full_report_postprocessing_summary(result)
+    return result
+
+
+class FullReportPostProcessingAction(ProjectWorkflowAction):
+    """CLI Presentation Adapter for Stage 2 Full Report PDF conversion and testsheet merge."""
+
+    def __init__(
+        self,
+        label: str = "Post-Process Full Reports (PDF + Testsheet Merge)",
+        runner_factory: Callable[[], Callable[[ProjectEnvironment], object]] | None = None,
+        workflow: FullReportPostProcessingWorkflow | None = None,
+    ) -> None:
+        super().__init__(label, runner_factory=runner_factory)
+        self.workflow = workflow
+
+    def execute(self, environment: ProjectEnvironment) -> object:
+        return postprocess_full_reports_action(environment, workflow=self.workflow)
+
+
 
 PROJECT_WORKFLOW_ACTIONS: tuple[ProjectWorkflowAction, ...] = (
     GenerateTestsheetFolderAction("Generate TESTSHEET Folder Structure"),
@@ -710,6 +1059,8 @@ PROJECT_WORKFLOW_ACTIONS: tuple[ProjectWorkflowAction, ...] = (
     PropagateWoAction("Propagate Work Orders (DATA MSMS -> TOTAL PE)"),
     IngestMsmsCsvAction("Ingest MSMS CSVs (RAW DATA -> TO BE FILLED)"),
     PopulateDataMsmsAction("Populate Data MSMS (Testsheets -> TO BE FILLED CSVs)"),
+    FullReportAction("Generate Full Reports"),
+    FullReportPostProcessingAction("Post-Process Full Reports (PDF + Testsheet Merge)"),
 )
 
 
@@ -717,3 +1068,4 @@ PROJECT_WORKFLOW_ACTIONS: tuple[ProjectWorkflowAction, ...] = (
 def get_project_workflow_actions() -> tuple[ProjectWorkflowAction, ...]:
     """Return the immutable project workflow action registry."""
     return PROJECT_WORKFLOW_ACTIONS
+

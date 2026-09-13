@@ -5,7 +5,14 @@ import unittest
 import pytest
 from pathlib import Path
 from unittest.mock import patch
-from src.cli_selectors import SelectOption, _with_shortcuts, _iter_directory_children, is_pahang_date_folder, prompt_directory_path
+from src.cli_selectors import (
+    SelectOption,
+    _iter_directory_children,
+    _with_shortcuts,
+    is_pahang_date_folder,
+    prompt_directory_path,
+    select_substations_interactive,
+)
 
 
 class TestCliSelectors(unittest.TestCase):
@@ -75,5 +82,71 @@ def test_prompt_directory_path_default(tmp_path: Path) -> None:
         assert result == tmp_path
 
 
+def test_select_substations_interactive_empty() -> None:
+    assert select_substations_interactive([]) == []
+
+
+def test_select_substations_interactive_prechecks_ready_telemetry() -> None:
+    from types import SimpleNamespace
+
+    item1 = SimpleNamespace(substation_name="TALAPIA", is_ready=True)
+    item2 = SimpleNamespace(substation_name="BAD_STATION", is_ready=False)
+
+    with patch("src.cli_selectors.select_multiple") as mock_select_multiple:
+        mock_select_multiple.return_value = [item1]
+        result = select_substations_interactive([item1, item2])
+        assert result == [item1]
+
+        mock_select_multiple.assert_called_once()
+        title, options = mock_select_multiple.call_args[0]
+        assert "Select substations" in title
+        assert len(options) == 2
+        assert options[0].title == "TALAPIA [READY]"
+        assert options[0].checked is True
+        assert options[0].value == item1
+
+        assert options[1].title == "BAD_STATION [NOT READY]"
+        assert options[1].checked is False
+        assert options[1].value == item2
+
+
+def test_select_substations_interactive_strings_prechecked() -> None:
+    with patch("src.cli_selectors.select_multiple") as mock_select_multiple:
+        mock_select_multiple.return_value = ["STATION_A", "STATION_B"]
+        result = select_substations_interactive(["STATION_A", "STATION_B"])
+        assert result == ["STATION_A", "STATION_B"]
+
+        _, options = mock_select_multiple.call_args[0]
+        assert len(options) == 2
+        assert options[0].title == "STATION_A"
+        assert options[0].checked is True
+        assert options[1].title == "STATION_B"
+        assert options[1].checked is True
+
+
+def test_select_substations_interactive_custom_callbacks() -> None:
+    data = [{"id": 1, "name": "Item 1", "ok": True}, {"id": 2, "name": "Item 2", "ok": False}]
+    with patch("src.cli_selectors.select_multiple") as mock_select_multiple:
+        mock_select_multiple.return_value = [1]
+        result = select_substations_interactive(
+            data,
+            title="Custom Title",
+            get_title=lambda x: f"Custom: {x['name']}",
+            get_value=lambda x: x["id"],
+            is_checked=lambda x: x["ok"],
+        )
+        assert result == [1]
+
+        title, options = mock_select_multiple.call_args[0]
+        assert title == "Custom Title"
+        assert options[0].title == "Custom: Item 1"
+        assert options[0].value == 1
+        assert options[0].checked is True
+        assert options[1].title == "Custom: Item 2"
+        assert options[1].value == 2
+        assert options[1].checked is False
+
+
 if __name__ == "__main__":
     unittest.main()
+

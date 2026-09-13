@@ -389,6 +389,50 @@ def _fallback_select_multiple(
         return selected
 
 
+def select_substations_interactive(
+    items: Sequence[T],
+    title: str = "Select substations to process",
+    *,
+    get_title: Callable[[T], str] | None = None,
+    get_value: Callable[[T], Any] | None = None,
+    is_checked: Callable[[T], bool] | None = None,
+) -> list[Any] | None:
+    """Prompt the operator to select substations with ready items pre-checked."""
+    if not items:
+        return []
+
+    options: list[SelectOption[Any]] = []
+    for item in items:
+        if isinstance(item, SelectOption):
+            options.append(item)
+            continue
+
+        if is_checked is not None:
+            checked = is_checked(item)
+        elif hasattr(item, "is_ready"):
+            checked = bool(getattr(item, "is_ready"))
+        else:
+            checked = True
+
+        if get_title is not None:
+            opt_title = get_title(item)
+        elif hasattr(item, "substation_name"):
+            st_name = getattr(item, "substation_name", "")
+            ready_str = "READY" if checked else "NOT READY"
+            opt_title = f"{st_name} [{ready_str}]"
+        else:
+            opt_title = str(item)
+
+        if get_value is not None:
+            opt_value = get_value(item)
+        else:
+            opt_value = item
+
+        options.append(SelectOption(title=opt_title, value=opt_value, checked=checked))
+
+    return select_multiple(title, options)
+
+
 def confirm(message: str, *, default: bool = False) -> bool | None:
     """Return confirmation state, or None when cancelled."""
     questionary = _load_questionary()

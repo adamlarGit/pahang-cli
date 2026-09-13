@@ -9,7 +9,11 @@ from typing import TYPE_CHECKING, Generic, Sequence, TypeVar
 from src import __version__, cli_selectors
 
 if TYPE_CHECKING:
-    from src.project_workflow_actions import ProjectWorkflowAction
+    from src.project_workflow_actions import (
+        FullReportAction,
+        FullReportPostProcessingAction,
+        ProjectWorkflowAction,
+    )
     from src.utility_actions import UtilityAction
 
 T = TypeVar("T")
@@ -146,4 +150,5 @@ def select_project_management_action() -> str | SessionCommand | None:
         items,
         default_value="view_info",
     )
+
 

@@ -435,6 +435,21 @@ def test_composer_exception_resilience(tmp_path: Path) -> None:
     assert result.station_results[1].is_success is True
 
 
+def test_matches_station_substation_name(tmp_path: Path) -> None:
+    """_matches_station should match by district/station, testsheet station_name, or ERMS name."""
+    wf = FullReportWorkflow(compiler=FakeDocumentCompiler(), slicer=FakeDocumentSlicer())
+    pkg = _make_sample_pkg(pe_number=5, station_name="TALAPIA", station="RAUB")
+
+    # Match by district station
+    assert wf._matches_station(pkg, "RAUB") is True
+    # Match by substation name
+    assert wf._matches_station(pkg, "TALAPIA") is True
+    # Match in a list
+    assert wf._matches_station(pkg, ["OTHER", "TALAPIA"]) is True
+    # Unmatched
+    assert wf._matches_station(pkg, "KUANTAN") is False
+
+
 # ==============================================================================
 # 6. Error and Target Validation Tests
 # ==============================================================================

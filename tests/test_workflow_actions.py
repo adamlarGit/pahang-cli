@@ -441,6 +441,8 @@ def test_project_workflow_actions_registry() -> None:
         PROJECT_WORKFLOW_ACTIONS,
         ConsolidateMsmsAction,
         EnrichMsmsAction,
+        FullReportAction,
+        FullReportPostProcessingAction,
         GenerateTestsheetFolderAction,
         IngestMsmsCsvAction,
         PopulateDataMsmsAction,
@@ -456,7 +458,7 @@ def test_project_workflow_actions_registry() -> None:
 
     actions = get_project_workflow_actions()
     assert actions == PROJECT_WORKFLOW_ACTIONS
-    assert len(actions) == 12
+    assert len(actions) == 14
 
     expected_specs = [
         (GenerateTestsheetFolderAction, "Generate TESTSHEET Folder Structure"),
@@ -471,6 +473,8 @@ def test_project_workflow_actions_registry() -> None:
         (PropagateWoAction, "Propagate Work Orders (DATA MSMS -> TOTAL PE)"),
         (IngestMsmsCsvAction, "Ingest MSMS CSVs (RAW DATA -> TO BE FILLED)"),
         (PopulateDataMsmsAction, "Populate Data MSMS (Testsheets -> TO BE FILLED CSVs)"),
+        (FullReportAction, "Generate Full Reports"),
+        (FullReportPostProcessingAction, "Post-Process Full Reports (PDF + Testsheet Merge)"),
     ]
 
     for idx, (expected_cls, expected_label) in enumerate(expected_specs):
