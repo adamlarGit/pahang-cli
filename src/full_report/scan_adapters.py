@@ -39,10 +39,9 @@ from src.full_report.models import (
     classify_switchgear,
     has_hv_cable_split,
     resolve_overview_compartments,
-    resolve_panel_page_count,
     resolve_switchgear_compartments,
 )
-from src.full_report.photo_resolver import PhotoPair, RawPhotoResolver
+from src.full_report.photo_resolver import RawPhotoResolver
 from src.full_report.scan_render import (
     BANNER_DEFECT_FORWARDING,
     BANNER_HEALTHY_ANALYSIS,
@@ -131,6 +130,21 @@ class ScanRenderItem:
             defective_technologies=self.defective_technologies,
             is_defective=self.is_defective,
             overview=self.is_overview,
+        )
+
+    def to_page_context(self) -> ScanPageContext:
+        """Convert render item metadata to strongly-typed ScanPageContext."""
+        return ScanPageContext(
+            template_name=self.template_name,
+            context=self.context,
+            equipment_category=self.equipment_category,
+            component_name=self.component_name,
+            sequence=self.sequence,
+            is_overview=self.is_overview,
+            is_defective=self.is_defective,
+            defective_technologies=set(self.defective_technologies),
+            equipment_id=self.equipment_id,
+            panel_no=self.panel_no,
         )
 
 

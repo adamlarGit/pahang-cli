@@ -843,3 +843,26 @@ def test_dynamic_prpd_generation_with_tempfile_no_crash(
     assert result.page_count == 2
 
 
+def test_scan_render_item_to_page_context(mock_substation_info: dict[str, str]) -> None:
+    """ScanRenderItem converts cleanly to ScanPageContext."""
+    swg = SwitchgearScanSpec(
+        category=SwitchgearCategory.OTHER_RMU,
+        overview_compartments=("OVERVIEW",),
+        panels=(SwitchgearPanelScanSpec(panel_no=1, compartments=("CABLE COMPARTMENT",)),),
+    )
+    adapter = SwitchgearScanAdapter(swg=swg, substation_info=mock_substation_info)
+    result = adapter.adapt()
+
+    item = result.items[1]
+    spc = item.to_page_context()
+
+    assert isinstance(spc, ScanPageContext)
+    assert spc.template_name == "swg-panel.docx"
+    assert spc.component_name == "CABLE COMPARTMENT"
+    assert spc.panel_no == 1
+    assert spc.sequence == "p01"
+    assert spc.equipment_category == "swg"
+    assert spc.is_overview is False
+    assert spc.context == item.context
+
+
