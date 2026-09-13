@@ -5,6 +5,12 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Dedicated Full Report Scanning Templates (`templates/FULL REPORT/NORMAL IR US TEV/`)**: Adapted 7 dedicated Jinja2 component scanning templates (`swg-overview.docx`, `swg-panel.docx`, `tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`, `fp-overview.docx`, `battery-overview.docx`) with transparent placeholders for thermal/electrical readings, visual/IR photo slots, US/TEV PRPD waveforms, severity tokens, and analysis/recommendation banners decoupled from Quick Report (closes #29).
+- **Component Scanning Smoke Tests (`tests/test_full_report_normal_templates.py`)**: 28 automated tests verifying template decoupling, placeholder consistency, inline image bindings, and full docxtpl smoke compilation.
+
 ## [1.18.0] - 2026-09-08
 
 ### Added

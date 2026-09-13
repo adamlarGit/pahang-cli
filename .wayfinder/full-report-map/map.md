@@ -136,7 +136,7 @@ graph TD
     T2_1 --> T3_2
     T2_3 --> T3_2
     
-    T4_1[T4.1: Adapt Templates in NORMAL IR US TEV/] --> T4_2a[T4.2a: Core Scan Renderer & Dynamic Shading Engine]
+    T4_1[T4.1: Adapt Templates in NORMAL IR US TEV/ - Closed] --> T4_2a[T4.2a: Core Scan Renderer & Dynamic Shading Engine]
     T4_2a --> T4_2b[T4.2b: Equipment Scan Adapters & PRPD Integration]
     T2_2 --> T4_2b
     T2_3 --> T4_2b
@@ -171,10 +171,10 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
   - Child ticket: `T2.2: Map FLIR IR & Visual Photo Pairs` (Closed, #25)
   - Child ticket: `T2.3: Build Full Report Scan Models & Switchgear Compartment Matrix` (Closed, #26)
 - **SPEC 3: Executive Summary Equipment Census Engine**
-  - Child ticket: `T3.1: Prototype Census Jinja2 Template` (#27)
-  - Child ticket: `T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge` (#28)
+  - Child ticket: `T3.1: Prototype Census Jinja2 Template` (Closed, #27)
+  - Child ticket: `T3.2: Implement ExecutiveSummaryCensusBuilder with Group Vertical Merge` (Closed, #28)
 - **SPEC 4: Component Scanning Page Rendering & Dynamic Shading**
-  - Child ticket: `T4.1: Adapt Component Scanning Templates in NORMAL IR US TEV/` (#29)
+  - Child ticket: `T4.1: Adapt Component Scanning Templates in NORMAL IR US TEV/` (Closed, #29)
   - Child ticket: `T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine` (#30)
   - Child ticket: `T4.2b: Implement Equipment Scan Adapters & PRPD Waveform Integration` (#31)
 - **SPEC 5: Defect Interleaving & Deterministic Plan Building**
@@ -488,13 +488,14 @@ Provide an automated scanning page rendering engine that:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#29](https://github.com/adamlarGit/pahang-cli/issues/29)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: Audit, adapt, and verify transparent Jinja2 scanning templates in `templates/FULL REPORT/NORMAL IR US TEV/` (`swg-overview.docx`, `swg-panel.docx`, `tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`, `fp-overview.docx`, `battery-overview.docx`) ensuring placeholder consistency.
 - **Blocked by**: None (can start immediately)
 - **Acceptance criteria**:
-  - [ ] Verifies all 7 templates have consistent Jinja placeholders for metadata, photos, parameters, and US/TEV.
-  - [ ] Verifies image placeholders support docxtpl inline image binding.
-  - [ ] Confirms templates are decoupled from `templates/QUICK REPORT/`.
-  - [ ] Render smoke test passing for all 7 templates.
+  - [x] Verifies all 7 templates have consistent Jinja placeholders for metadata, photos, parameters, and US/TEV.
+  - [x] Verifies image placeholders support docxtpl inline image binding.
+  - [x] Confirms templates are decoupled from `templates/QUICK REPORT/`.
+  - [x] Render smoke test passing for all 7 templates.
 
 ##### T4.2a: Implement Core Scan Page Renderer & Dynamic Shading Engine
 - **Labels**: `wayfinder:task`, `ready-for-agent`
