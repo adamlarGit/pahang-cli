@@ -35,6 +35,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
+from src.core.shading import is_swg_compartment_tev_eligible
+
 
 # Non-overlapping Flexbox Layout: 320px Left Measurement Table + 840px Right PRPD Graph
 OPTION_C_INJECTION_TEMPLATE = """
@@ -721,10 +723,15 @@ def generate_prpd_graphs_for_swg_panel(
     mode: str = "option_c",
     http_port: int | None = None,
     chrome_path: str | None = None,
+    *,
+    compartment: str | None = None,
+    include_tev: bool = True,
 ) -> tuple[Path | None, Path | None]:
     """Generate US and TEV PRPD PNG graph images for a switchgear panel.
 
     Supports mode='option_c' (Headless Chrome) and mode='option_b' (Native Python).
+    When compartment is not TEV-eligible or include_tev is False, skips TEV PRPD graph
+    generation completely to eliminate unnecessary disk I/O and computation.
     Returns (us_png_path, tev_png_path).
     """
     if not survey_root:
@@ -739,6 +746,7 @@ def generate_prpd_graphs_for_swg_panel(
     if not feeder_dir:
         return None, None
 
+    should_gen_tev = include_tev and (compartment is None or is_swg_compartment_tev_eligible(compartment))
     us_png: Path | None = None
     tev_png: Path | None = None
 
@@ -755,21 +763,22 @@ def generate_prpd_graphs_for_swg_panel(
                 except Exception:
                     us_png = None
 
-        # 2. TEV Graph (Option B)
-        tev_dir = find_latest_measurement_dir(feeder_dir, "TEV")
-        if tev_dir:
-            tev_file = tev_dir / "eventData.js"
-            if tev_file.exists():
-                try:
-                    events = decode_tev_event_data(tev_file)
-                    tev_out = output_dir / f"prpd_swg_panel{panel_no}_tev.png"
-                    tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
-                except Exception:
-                    tev_png = None
+        # 2. TEV Graph (Option B) - Skipped if compartment is non-TEV or include_tev is False
+        if should_gen_tev:
+            tev_dir = find_latest_measurement_dir(feeder_dir, "TEV")
+            if tev_dir:
+                tev_file = tev_dir / "eventData.js"
+                if tev_file.exists():
+                    try:
+                        events = decode_tev_event_data(tev_file)
+                        tev_out = output_dir / f"prpd_swg_panel{panel_no}_tev.png"
+                        tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
+                    except Exception:
+                        tev_png = None
     else:
         # Option C: Headless Chrome
         us_dir = find_latest_measurement_dir(feeder_dir, "US")
-        tev_dir = find_latest_measurement_dir(feeder_dir, "TEV")
+        tev_dir = find_latest_measurement_dir(feeder_dir, "TEV") if should_gen_tev else None
         if not us_dir and not tev_dir:
             return None, None
 

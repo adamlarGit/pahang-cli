@@ -136,6 +136,7 @@ class FullReportScanPageRendererCore:
         is_defective: bool | None = None,
         overview: bool = False,
         image_width_mm: float = 80.0,
+        blank_tev: bool | None = None,
     ) -> Path:
         """Render scanning template with docxtpl and apply dynamic OpenXML cell shading.
 
@@ -274,12 +275,24 @@ class FullReportScanPageRendererCore:
             autoescape=True,
         )
 
+        # Resolve whether switchgear TEV cells should be blanked
+        should_blank_tev = (
+            blank_tev
+            if blank_tev is not None
+            else bool(
+                render_ctx.get("__blank_tev__")
+                or render_ctx.get("blank_tev")
+                or (render_ctx.get("is_tev_active") is False)
+            )
+        )
+
         # Apply dynamic post-render OpenXML DOM shading
         apply_scan_post_processing(
             doc,
             defective_technologies=def_techs,
             is_defective=has_defect,
             is_overview=overview,
+            blank_tev=should_blank_tev,
         )
 
         # Save rendered and shaded document
@@ -300,6 +313,7 @@ class FullReportScanPageRendererCore:
         is_defective: bool | None = None,
         overview: bool = False,
         image_width_mm: float = 80.0,
+        blank_tev: bool | None = None,
     ) -> Path:
         """Convenience class method to render and shade a scan page."""
         renderer = cls()
@@ -311,6 +325,7 @@ class FullReportScanPageRendererCore:
             is_defective=is_defective,
             overview=overview,
             image_width_mm=image_width_mm,
+            blank_tev=blank_tev,
         )
 
 
@@ -323,6 +338,7 @@ def render_scan_page(
     is_defective: bool | None = None,
     overview: bool = False,
     image_width_mm: float = 80.0,
+    blank_tev: bool | None = None,
 ) -> Path:
     """Standalone helper function to render a scan page with dynamic OpenXML shading."""
     return FullReportScanPageRendererCore.render_page(
@@ -333,6 +349,7 @@ def render_scan_page(
         is_defective=is_defective,
         overview=overview,
         image_width_mm=image_width_mm,
+        blank_tev=blank_tev,
     )
 
 

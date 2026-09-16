@@ -19,6 +19,10 @@ import shutil
 import tempfile
 from typing import Any, Sequence
 
+from src.core.shading import (
+    is_swg_compartment_tev_eligible,
+    is_swg_tev_active,
+)
 from src.core.normalizers import (
     format_busbar_position,
     format_date_cbm,
@@ -400,6 +404,7 @@ class SwitchgearScanAdapter:
         has_active_defect: bool | None = None,
         cbm_defects: Sequence[Any] | None = None,
         tev_background: str | int | None = None,
+        project_technologies: Sequence[str] | set[str] | None = None,
     ) -> None:
         self.swg = swg
         self.substation_info = substation_info or {}
@@ -411,6 +416,11 @@ class SwitchgearScanAdapter:
         self.templates_dir = Path(templates_dir) if templates_dir else DEFAULT_TEMPLATES_DIR
         self.sliced_overview_pages = sliced_overview_pages or ()
         self.cbm_defects = cbm_defects or ()
+        self.project_technologies = (
+            project_technologies
+            or self.substation_info.get("technologies")
+            or self.substation_info.get("project_technologies")
+        )
 
         if tev_background is not None and str(tev_background).strip() and str(tev_background).strip() != "-":
             self.tev_background = str(tev_background).strip()
@@ -570,9 +580,6 @@ class SwitchgearScanAdapter:
                 else resolve_switchgear_compartments(self.category, panel)
             )
 
-            # Resolve PRPD graphs for panel
-            us_prpd, tev_prpd = self._resolve_prpd(panel_no=p_no, panel_name=p_name)
-
             for comp_idx, comp_name in enumerate(compartments):
                 # IR & Visual photo mapping
                 ir_num = None
@@ -585,10 +592,45 @@ class SwitchgearScanAdapter:
                 ir_img = self.photo_resolver.resolve_ir_photo(ir_num) if self.photo_resolver else ""
                 vis_img = self.photo_resolver.resolve_visual_photo(ir_num) if self.photo_resolver else ""
 
+                # Evaluate TEV activity via Two-Tier model:
+                # Tier 1: Contract awarded technologies
+                # Tier 2: Switchgear compartment eligibility
+                comp_tev_active = is_swg_tev_active(
+                    project_technologies=self.project_technologies,
+                    compartment=comp_name,
+                )
+
+                # Resolve PRPD graphs for panel and compartment
+                us_prpd, tev_prpd = self._resolve_prpd(
+                    panel_no=p_no,
+                    panel_name=p_name,
+                    compartment=comp_name,
+                    include_tev=comp_tev_active,
+                )
+
                 # Format parameters
                 h_amp = format_heater_amp(panel.heater_amp, is_vcb=is_vcb)
                 bus_pos = format_busbar_position(f"{p_name} {panel.panel_feeder_no}", is_vcb=is_vcb)
                 us_char_norm = normalize_us_characteristic(panel.us_char, default="NORMAL")
+
+                if comp_tev_active:
+                    tev_ctx = {
+                        "bg": format_db_int(self.tev_background),
+                        "reading": format_db_int(panel.tev_reading),
+                        "ppc": _clean_str(panel.tev_ppc),
+                        "char": _clean_str(panel.tev_char),
+                        "severity": "NORMAL",
+                        "prpd": tev_prpd,
+                    }
+                else:
+                    tev_ctx = {
+                        "bg": "",
+                        "reading": "",
+                        "ppc": "",
+                        "char": "",
+                        "severity": "",
+                        "prpd": "",
+                    }
 
                 panel_ctx = {
                     "substation": sub_ctx,
@@ -622,14 +664,7 @@ class SwitchgearScanAdapter:
                             "severity": "NORMAL",
                             "prpd": us_prpd,
                         },
-                        "tev": {
-                            "bg": format_db_int(self.tev_background),
-                            "reading": format_db_int(panel.tev_reading),
-                            "ppc": _clean_str(panel.tev_ppc),
-                            "char": _clean_str(panel.tev_char),
-                            "severity": "NORMAL",
-                            "prpd": tev_prpd,
-                        },
+                        "tev": tev_ctx,
                     },
                     "ir": {
                         # Deprecated: FLIR ActiveX CIRViewer object is preserved in normal docx templates;
@@ -647,20 +682,15 @@ class SwitchgearScanAdapter:
                         "severity": "NORMAL",
                         "prpd": us_prpd,
                     },
-                    "tev": {
-                        "bg": format_db_int(self.tev_background),
-                        "reading": format_db_int(panel.tev_reading),
-                        "ppc": _clean_str(panel.tev_ppc),
-                        "char": _clean_str(panel.tev_char),
-                        "severity": "NORMAL",
-                        "prpd": tev_prpd,
-                    },
+                    "tev": tev_ctx,
                     "banner": {
                         "analysis": BANNER_HEALTHY_ANALYSIS,
                         "recommendation": BANNER_HEALTHY_RECOMMENDATION,
                     },
                     "analysis": BANNER_HEALTHY_ANALYSIS,
                     "recommendation": BANNER_HEALTHY_RECOMMENDATION,
+                    "__blank_tev__": not comp_tev_active,
+                    "is_tev_active": comp_tev_active,
                 }
 
                 items.append(
@@ -688,15 +718,23 @@ class SwitchgearScanAdapter:
             is_overview_substituted=is_ov_substituted,
         )
 
-    def _resolve_prpd(self, panel_no: int, panel_name: str = "") -> tuple[str, str]:
+    def _resolve_prpd(
+        self,
+        panel_no: int,
+        panel_name: str = "",
+        compartment: str | None = None,
+        include_tev: bool = True,
+    ) -> tuple[str, str]:
         """Resolve US and TEV PRPD waveform image file paths, falling back to clean '' per D08."""
+        should_gen_tev = include_tev and (compartment is None or is_swg_compartment_tev_eligible(compartment))
+
         # 1. Catalog lookup
         if self.prpd_catalog and "swg" in self.prpd_catalog:
             swg_cat = self.prpd_catalog["swg"]
             if panel_no in swg_cat:
                 entry = swg_cat[panel_no]
                 us_p = str(entry.get("us") or "")
-                tev_p = str(entry.get("tev") or "")
+                tev_p = str(entry.get("tev") or "") if should_gen_tev else ""
                 return us_p, tev_p
 
         # 2. Dynamic generation via prpd.py if survey directory is available
@@ -710,6 +748,8 @@ class SwitchgearScanAdapter:
                     output_dir=out_d,
                     panel_name=panel_name,
                     mode=self.prpd_mode,
+                    compartment=compartment,
+                    include_tev=should_gen_tev,
                 )
                 return (str(us_png) if us_png else ""), (str(tev_png) if tev_png else "")
             except Exception as exc:
@@ -1247,6 +1287,7 @@ def adapt_equipment_package(
     templates_dir: Path | str | None = None,
     sliced_overview_pages: Sequence[Path | str] | None = None,
     cbm_defects: Sequence[Any] | None = None,
+    project_technologies: Sequence[str] | set[str] | None = None,
 ) -> list[ScanAdapterResult]:
     """Adapt all equipment in a scan package into an ordered list of ScanAdapterResults."""
     results: list[ScanAdapterResult] = []
@@ -1263,6 +1304,7 @@ def adapt_equipment_package(
             templates_dir=templates_dir,
             sliced_overview_pages=sliced_overview_pages,
             cbm_defects=cbm_defects,
+            project_technologies=project_technologies,
         )
         results.append(adapter.adapt())
 

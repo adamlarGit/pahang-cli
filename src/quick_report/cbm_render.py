@@ -31,6 +31,8 @@ from src.core.shading import (
     apply_banner_shading,
     apply_scan_post_processing,
     is_defect_forwarding_text,
+    is_swg_compartment_tev_eligible,
+    is_swg_tev_active,
 )
 from src.testsheet.feeder_thermal import resolve_feeder_channel
 from src.testsheet.models import (
@@ -157,6 +159,7 @@ def _render_docx_template(
     defective_technologies: set[str] | list[str] | tuple[str, ...] | str | None = None,
     overview: bool | None = None,
     scan_post_process: bool = True,
+    blank_tev: bool | None = None,
 ) -> Path:
     """Render a DocxTemplate with quick-report placeholder semantics and severity cell shading.
 
@@ -169,6 +172,8 @@ def _render_docx_template(
         scan_post_process: When True, applies technology severity cell shading (00B050/EE0000)
             and defect analysis/recommendation banner shading. Set to False for metadata-only pages
             (e.g. Front Page) to prevent static table labels ("TEV") from being falsely treated as severity cells.
+        blank_tev: When True, blanks rows 21–32 cols 11–22 in swg-panel.docx table.
+            If None, automatically checks context["__blank_tev__"] or context["is_tev_active"].
     """
     doc = DocxTemplate(str(template_path))
     rendered_context = dict(context)
@@ -195,11 +200,22 @@ def _render_docx_template(
                                 has_defect = True
                                 break
 
+        should_blank_tev = (
+            blank_tev
+            if blank_tev is not None
+            else bool(
+                context.get("__blank_tev__")
+                or context.get("blank_tev")
+                or (context.get("is_tev_active") is False)
+            )
+        )
+
         apply_scan_post_processing(
             doc,
             defective_technologies=def_techs,
             is_defective=has_defect,
             is_overview=is_overview,
+            blank_tev=should_blank_tev,
         )
 
     doc.save(output_path)
@@ -384,6 +400,23 @@ def _extract_tev_background(pe_info: dict[str, Any] | None) -> str:
     if pe_info.get("tev_bg"):
         return format_db_int(pe_info["tev_bg"])
     return "-"
+
+
+def _extract_project_technologies(pe_info: dict[str, Any] | None) -> Sequence[str] | None:
+    """Extract project awarded technologies from pe_info or nested project metadata."""
+    if not pe_info:
+        return None
+    if "project_technologies" in pe_info and pe_info["project_technologies"]:
+        return pe_info["project_technologies"]
+    if "technologies" in pe_info and pe_info["technologies"]:
+        return pe_info["technologies"]
+    proj = pe_info.get("project")
+    if proj:
+        if hasattr(proj, "technologies"):
+            return proj.technologies
+        if isinstance(proj, dict) and "technologies" in proj:
+            return proj["technologies"]
+    return None
 
 
 def _build_fp_lvdb_render_context(
@@ -604,6 +637,21 @@ def _build_swg_render_context(
     tev_sev = "-" if overview else "__SEVERITY_TEV__"
     def_techs = {record.technology} if record.technology else set()
 
+    # Two-tier check for TEV activity:
+    # Tier 1: Contract awarded technologies
+    # Tier 2: Switchgear compartment eligibility
+    proj_techs = _extract_project_technologies(pe_info)
+    comp_target = record.defect_area or area
+    if not comp_target or comp_target.strip() in ("-", "--"):
+        comp_target = "CABLE COMPARTMENT"
+    if overview:
+        is_tev_active = True
+    else:
+        is_tev_active = is_swg_tev_active(
+            project_technologies=proj_techs,
+            compartment=comp_target,
+        )
+
     # Discover survey root and retrieve/generate PRPD images if available
     us_prpd: Path | str = ""
     tev_prpd: Path | str = ""
@@ -623,14 +671,14 @@ def _build_swg_render_context(
             if panel_no in swg_catalog:
                 entry = swg_catalog[panel_no]
                 us_prpd = entry.get("us") or ""
-                tev_prpd = entry.get("tev") or ""
+                tev_prpd = (entry.get("tev") or "") if is_tev_active else ""
             elif len(swg_catalog) == 1 and 0 in swg_catalog:
                 entry = swg_catalog[0]
                 us_prpd = entry.get("us") or ""
-                tev_prpd = entry.get("tev") or ""
+                tev_prpd = (entry.get("tev") or "") if is_tev_active else ""
 
         # Fallback to direct on-demand generation if not in catalog
-        if not us_prpd and not tev_prpd:
+        if not us_prpd or (is_tev_active and not tev_prpd):
             raw_dir = pe_info.get("raw_data_dir") or pe_info.get("survey_dir") or pe_info.get("raw_dir")
             survey_root = discover_ultratev_survey_dir(raw_dir)
             prpd_out_dir = pe_info.get("prpd_output_dir")
@@ -643,10 +691,12 @@ def _build_swg_render_context(
                     feeder_no=panel_match_target,
                     panel_name=panel_name,
                     mode=pe_info.get("prpd_mode", "option_c"),
+                    compartment=comp_target,
+                    include_tev=is_tev_active,
                 )
-                if us_png:
+                if us_png and not us_prpd:
                     us_prpd = us_png
-                if tev_png:
+                if tev_png and is_tev_active:
                     tev_prpd = tev_png
 
     analysis, recommendation = generate_cbm_analysis_and_recommendation(
@@ -657,9 +707,36 @@ def _build_swg_render_context(
         is_overview=overview,
     )
 
+    if is_tev_active:
+        tev_reading_val = format_db_int(panel_tev_reading)
+        tev_ppc_val = _fallback_dash(panel_tev_ppc)
+        tev_char_val = _fallback_dash(panel_tev_char)
+        tev_bg_val = format_db_int(tev_bg)
+        tev_sev_val = tev_sev
+        tev_prpd_val = tev_prpd
+    else:
+        tev_reading_val = ""
+        tev_ppc_val = ""
+        tev_char_val = ""
+        tev_bg_val = ""
+        tev_sev_val = ""
+        tev_prpd_val = ""
+        def_techs = {t for t in def_techs if t != "TEV"}
+
+    tev_ctx = {
+        "reading": tev_reading_val,
+        "ppc": tev_ppc_val,
+        "char": tev_char_val,
+        "bg": tev_bg_val,
+        "severity": tev_sev_val,
+        "prpd": tev_prpd_val,
+    }
+
     return {
         "__is_overview__": overview,
         "__defective_technologies__": def_techs,
+        "__blank_tev__": not is_tev_active,
+        "is_tev_active": is_tev_active,
         "analysis": analysis,
         "recommendation": recommendation,
         "swg": {
@@ -694,14 +771,7 @@ def _build_swg_render_context(
                 "severity": us_sev,
                 "prpd": us_prpd,
             },
-            "tev": {
-                "reading": format_db_int(panel_tev_reading),
-                "ppc": _fallback_dash(panel_tev_ppc),
-                "char": _fallback_dash(panel_tev_char),
-                "bg": format_db_int(tev_bg),
-                "severity": tev_sev,
-                "prpd": tev_prpd,
-            },
+            "tev": tev_ctx,
         },
         "ir": {
             "reading": format_temperature_float(record.ir_reading),
@@ -713,14 +783,7 @@ def _build_swg_render_context(
             "severity": us_sev,
             "prpd": us_prpd,
         },
-        "tev": {
-            "reading": format_db_int(panel_tev_reading),
-            "ppc": _fallback_dash(panel_tev_ppc),
-            "char": _fallback_dash(panel_tev_char),
-            "bg": format_db_int(tev_bg),
-            "severity": tev_sev,
-            "prpd": tev_prpd,
-        },
+        "tev": tev_ctx,
     }
 
 
