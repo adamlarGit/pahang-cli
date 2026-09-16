@@ -156,6 +156,7 @@ def _render_docx_template(
     *,
     defective_technologies: set[str] | list[str] | tuple[str, ...] | str | None = None,
     overview: bool | None = None,
+    post_process: bool = True,
 ) -> Path:
     """Render a DocxTemplate with quick-report placeholder semantics and severity cell shading."""
     doc = DocxTemplate(str(template_path))
@@ -163,31 +164,32 @@ def _render_docx_template(
     _process_inline_images(doc, rendered_context)
     doc.render(_preserve_blank_render_values(rendered_context), jinja_env=_build_jinja_env(), autoescape=True)
 
-    is_overview = overview if overview is not None else bool(context.get("__is_overview__", False))
-    def_techs: set[str] = _normalize_technologies(defective_technologies)
-    if not def_techs and "__defective_technologies__" in context:
-        def_techs = _normalize_technologies(context["__defective_technologies__"])
+    if post_process:
+        is_overview = overview if overview is not None else bool(context.get("__is_overview__", False))
+        def_techs: set[str] = _normalize_technologies(defective_technologies)
+        if not def_techs and "__defective_technologies__" in context:
+            def_techs = _normalize_technologies(context["__defective_technologies__"])
 
-    # On detail defect pages (is_overview=False), ensure is_defective=True,
-    # so Analysis: and Recommendation: banners are shaded Red (EE0000)!
-    if not is_overview:
-        has_defect = True
-    else:
-        has_defect = bool(def_techs or context.get("has_defect") or context.get("is_defective"))
-        if not has_defect:
-            for table in doc.docx.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        if is_defect_forwarding_text(cell.text):
-                            has_defect = True
-                            break
+        # On detail defect pages (is_overview=False), ensure is_defective=True,
+        # so Analysis: and Recommendation: banners are shaded Red (EE0000)!
+        if not is_overview:
+            has_defect = True
+        else:
+            has_defect = bool(def_techs or context.get("has_defect") or context.get("is_defective"))
+            if not has_defect:
+                for table in doc.docx.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            if is_defect_forwarding_text(cell.text):
+                                has_defect = True
+                                break
 
-    apply_scan_post_processing(
-        doc,
-        defective_technologies=def_techs,
-        is_defective=has_defect,
-        is_overview=is_overview,
-    )
+        apply_scan_post_processing(
+            doc,
+            defective_technologies=def_techs,
+            is_defective=has_defect,
+            is_overview=is_overview,
+        )
 
     doc.save(output_path)
     del doc
