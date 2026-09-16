@@ -47,7 +47,7 @@ def test_generate_front_page_preserves_tev_cells(tmp_path: Path):
 
 
 def test_render_docx_template_post_process_suppression(tmp_path: Path):
-    """Verify _render_docx_template with post_process=False suppresses severity and banner shading."""
+    """Verify _render_docx_template with scan_post_process=False suppresses severity and banner shading."""
     template_path = Path("templates/QUICK REPORT/DEFECT IR US TEV/swg-panel.docx")
     if not template_path.exists():
         pytest.skip(f"Template not found: {template_path}")
@@ -60,9 +60,9 @@ def test_render_docx_template_post_process_suppression(tmp_path: Path):
     )
     context = _build_swg_render_context(rec, overview=False)
 
-    # 1. With post_process=True (default), severity cell is shaded EE0000 and text cleared
+    # 1. With scan_post_process=True (default), severity cell is shaded EE0000 and text cleared
     out_true = tmp_path / "test_swg_post_process_true.docx"
-    _render_docx_template(template_path, out_true, context, post_process=True)
+    _render_docx_template(template_path, out_true, context, scan_post_process=True)
     doc_true = docx.Document(out_true)
     cell_ir_true = doc_true.tables[0].rows[18].cells[3]
     assert get_cell_shading(cell_ir_true) == "EE0000"
@@ -71,9 +71,9 @@ def test_render_docx_template_post_process_suppression(tmp_path: Path):
     assert get_cell_shading(doc_true.tables[0].rows[35].cells[0]) == "EE0000"
     assert get_cell_shading(doc_true.tables[0].rows[36].cells[0]) == "EE0000"
 
-    # 2. With post_process=False, severity cell shading and banner shading are suppressed
+    # 2. With scan_post_process=False, severity cell shading and banner shading are suppressed
     out_false = tmp_path / "test_swg_post_process_false.docx"
-    _render_docx_template(template_path, out_false, context, post_process=False)
+    _render_docx_template(template_path, out_false, context, scan_post_process=False)
     doc_false = docx.Document(out_false)
     cell_ir_false = doc_false.tables[0].rows[18].cells[3]
     assert get_cell_shading(cell_ir_false) is None

@@ -156,15 +156,26 @@ def _render_docx_template(
     *,
     defective_technologies: set[str] | list[str] | tuple[str, ...] | str | None = None,
     overview: bool | None = None,
-    post_process: bool = True,
+    scan_post_process: bool = True,
 ) -> Path:
-    """Render a DocxTemplate with quick-report placeholder semantics and severity cell shading."""
+    """Render a DocxTemplate with quick-report placeholder semantics and severity cell shading.
+
+    Args:
+        template_path: Path to Jinja2 docx template.
+        output_path: Target path for the compiled docx part.
+        context: Rendering dictionary context.
+        defective_technologies: Technologies identified as defective (IR, US, TEV).
+        overview: True if rendering an equipment overview page, False for detail defect pages.
+        scan_post_process: When True, applies technology severity cell shading (00B050/EE0000)
+            and defect analysis/recommendation banner shading. Set to False for metadata-only pages
+            (e.g. Front Page) to prevent static table labels ("TEV") from being falsely treated as severity cells.
+    """
     doc = DocxTemplate(str(template_path))
     rendered_context = dict(context)
     _process_inline_images(doc, rendered_context)
     doc.render(_preserve_blank_render_values(rendered_context), jinja_env=_build_jinja_env(), autoescape=True)
 
-    if post_process:
+    if scan_post_process:
         is_overview = overview if overview is not None else bool(context.get("__is_overview__", False))
         def_techs: set[str] = _normalize_technologies(defective_technologies)
         if not def_techs and "__defective_technologies__" in context:

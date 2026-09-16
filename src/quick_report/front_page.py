@@ -15,5 +15,8 @@ def generate_front_page(pe_info: dict, template_path: str | Path, output_dir: st
     
     out_path = Path(output_dir) / f"{substation_number:03d}_01_front_page.docx"
     context = build_front_page_context(pe_info)
-    _render_docx_template(template_path, out_path, context, post_process=False)
+    # Front page is a metadata cover page (substation info, date, crew, equipment tools).
+    # Suppress scan post-processing to prevent Table 1 "TEV" labels (under SCANNED BY and
+    # EQUIPMENT/TOOLS) from being falsely detected as severity cells and wiped/shaded green.
+    _render_docx_template(template_path, out_path, context, scan_post_process=False)
     return out_path
