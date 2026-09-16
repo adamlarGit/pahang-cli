@@ -15,10 +15,12 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 from pathlib import Path
+import shutil
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Sequence
 
 from src.core.normalizers import (
     format_month_folder,
+    normalize_for_report,
     resolve_station_code,
     resolve_station_from_fl,
 )
@@ -46,6 +48,10 @@ from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
 from src.quick_report.extractor import (
     DAILY_DATE_FOLDER_PATTERN,
     QuickReportExtractor,
+)
+from src.quick_report.prpd import (
+    discover_ultratev_survey_dir,
+    generate_all_substation_prpd_graphs,
 )
 from src.quick_report.utils import (
     normalize_functional_location_input,
@@ -361,72 +367,107 @@ class FullReportWorkflow:
 
         ordered_results: list[FullReportStationExecutionResult | None] = [None] * len(packages)
         generated_paths: list[Path] = []
-        valid_plans: list[tuple[int, SubstationTestsheetPackage, FullReportStationPlan, PreFlightValidationResult]] = []
+        valid_plans: list[tuple[int, SubstationTestsheetPackage, FullReportStationPlan, PreFlightValidationResult, Path]] = []
 
-        # Step 1: Pre-flight validation and plan synthesis per substation
-        for pkg_idx, pkg in enumerate(packages):
-            st_name = self._resolve_substation_display_name(pkg)
-            qr_path = self._resolve_quick_report_path(environment, pkg)
+        base_temp_root = (
+            Path(temp_dir).resolve()
+            if temp_dir is not None
+            else (Path(environment.base_path).resolve() / ".temp" / "full_report")
+        )
 
-            val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
-            if not val_res.is_valid:
-                # SubstationIsolatedBatchResiliencePolicy: record upfront validation failure
-                err_msg = f"Pre-flight validation failed for {st_name}: {val_res.error_message}"
-                errors.append(err_msg)
-                ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                    station=st_name,
-                    substation_number=pkg.substation_number,
-                    output_path=None,
-                    is_success=False,
-                    error_message=val_res.error_message,
-                    preflight_result=val_res,
-                )
-                continue
-
-            try:
-                plan = self._build_station_plan(
-                    pkg,
-                    environment,
-                    quick_report_path=qr_path,
-                    output_dir=output_dir,
-                    temp_dir=temp_dir,
-                )
-                valid_plans.append((pkg_idx, pkg, plan, val_res))
-            except Exception as exc:
-                err_msg = f"Failed to build plan for {st_name}: {exc}"
-                errors.append(err_msg)
-                logger.exception(err_msg)
-                ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                    station=st_name,
-                    substation_number=pkg.substation_number,
-                    output_path=None,
-                    is_success=False,
-                    error_message=str(exc),
-                    preflight_result=val_res,
-                )
-
-        # Step 2: Establish single BatchComSession context across all batch substations
+        # Step 1 & 2: Single shared BatchComSession context across ALL phases (slicing & compilation)
         session_cm = self._establish_batch_session(com_session)
 
         with session_cm as session:
             word_app = getattr(session, "word_app", None)
             orig_word_app = getattr(self._compiler, "_word_app", None)
-            if word_app is not None and hasattr(self._compiler, "_word_app"):
-                self._compiler._word_app = word_app
+            orig_slicer_word_app = getattr(self._slicer, "_word_app", None)
+            if word_app is not None:
+                try:
+                    word_app.ScreenUpdating = False
+                    word_app.DisplayAlerts = 0
+                except Exception:
+                    pass
+                if hasattr(self._compiler, "_word_app"):
+                    self._compiler._word_app = word_app
+                if hasattr(self._slicer, "_word_app"):
+                    self._slicer._word_app = word_app
 
             try:
-                for idx, (pkg_idx, pkg, plan, val_res) in enumerate(valid_plans, start=1):
+                # Step 1: Pre-flight validation, plan synthesis, and slicing per substation
+                for pkg_idx, pkg in enumerate(packages):
+                    st_name = self._resolve_substation_display_name(pkg)
+                    qr_path = self._resolve_quick_report_path(environment, pkg)
+
+                    val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
+                    if not val_res.is_valid:
+                        # SubstationIsolatedBatchResiliencePolicy: record upfront validation failure
+                        err_msg = f"Pre-flight validation failed for {st_name}: {val_res.error_message}"
+                        errors.append(err_msg)
+                        ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                            station=st_name,
+                            substation_number=pkg.substation_number,
+                            output_path=None,
+                            is_success=False,
+                            error_message=val_res.error_message,
+                            preflight_result=val_res,
+                        )
+                        continue
+
+                    sub_num = pkg.substation_number or (pkg.data.pe_number if getattr(pkg, "data", None) else 0) or 0
+                    date_str = pkg.date_str or (pkg.data.date if getattr(pkg, "data", None) else "") or "01-01-2026"
+                    clean_name = sanitize_filename(st_name)
+                    clean_date = sanitize_filename(date_str).replace(" ", "_")
+                    substation_key = f"{sub_num:03d}_{clean_name}_{clean_date}"
+                    station_temp_dir = base_temp_root / substation_key
+
+                    # Pre-purge on allocation: guarantee completely clean slate for this substation
+                    if station_temp_dir.exists():
+                        shutil.rmtree(station_temp_dir, ignore_errors=True)
+                    (station_temp_dir / "sliced").mkdir(parents=True, exist_ok=True)
+                    (station_temp_dir / "rendered").mkdir(parents=True, exist_ok=True)
+                    (station_temp_dir / "prpd").mkdir(parents=True, exist_ok=True)
+
+                    try:
+                        plan = self._build_station_plan(
+                            pkg,
+                            environment,
+                            quick_report_path=qr_path,
+                            output_dir=output_dir,
+                            station_temp_dir=station_temp_dir,
+                        )
+                        valid_plans.append((pkg_idx, pkg, plan, val_res, station_temp_dir))
+                    except Exception as exc:
+                        err_msg = f"Failed to build plan for {st_name}: {exc}"
+                        errors.append(err_msg)
+                        logger.exception(err_msg)
+                        if not keep_temp and station_temp_dir.exists():
+                            shutil.rmtree(station_temp_dir, ignore_errors=True)
+                        ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                            station=st_name,
+                            substation_number=pkg.substation_number,
+                            output_path=None,
+                            is_success=False,
+                            error_message=str(exc),
+                            preflight_result=val_res,
+                        )
+
+                # Step 2: Compilation per substation
+                for idx, (pkg_idx, pkg, plan, val_res, station_temp_dir) in enumerate(valid_plans, start=1):
                     st_name = self._resolve_substation_display_name(pkg)
                     if progress_sink:
                         progress_sink(
                             f"[{idx}/{len(valid_plans)}] Generating Full Report for {st_name}..."
                         )
 
+                    rendered_dir = station_temp_dir / "rendered"
+                    rendered_dir.mkdir(parents=True, exist_ok=True)
+
                     try:
                         comp_res = self._composer.compose(
                             plan,
                             keep_temp=keep_temp,
-                            temp_dir=temp_dir,
+                            temp_dir=rendered_dir,
                             base_dir=environment.base_path,
                         )
                         if comp_res.output_path and comp_res.output_path.exists() and comp_res.output_path.stat().st_size > 0:
@@ -463,9 +504,17 @@ class FullReportWorkflow:
                             error_message=str(exc),
                             preflight_result=val_res,
                         )
+                    finally:
+                        if not keep_temp and station_temp_dir.exists():
+                            shutil.rmtree(station_temp_dir, ignore_errors=True)
             finally:
                 if hasattr(self._compiler, "_word_app"):
                     self._compiler._word_app = orig_word_app
+                if hasattr(self._slicer, "_word_app"):
+                    self._slicer._word_app = orig_slicer_word_app
+                word_app = None
+                import gc
+                gc.collect()
 
         if progress_sink:
             succeeded_cnt = len(generated_paths)
@@ -535,6 +584,27 @@ class FullReportWorkflow:
         if not val_res.is_valid:
             telem_errors.append(val_res.error_message or "Pre-flight validation failed")
 
+        # Validate Full Report templates
+        if hasattr(environment, "get_full_report_census_template"):
+            try:
+                census_tpl = environment.get_full_report_census_template()
+                if not census_tpl.is_file():
+                    telem_errors.append(f"Missing Full Report census template: {census_tpl.name}")
+            except Exception as exc:
+                telem_errors.append(f"Missing Full Report census template: {exc}")
+
+        if hasattr(environment, "get_full_report_normal_template"):
+            from config import FULL_REPORT_TEMPLATES
+            for key, filename in FULL_REPORT_TEMPLATES.items():
+                if key == "census":
+                    continue
+                try:
+                    tpl_path = environment.get_full_report_normal_template(filename)
+                    if not tpl_path.is_file():
+                        telem_errors.append(f"Missing Full Report template: {filename}")
+                except Exception as exc:
+                    telem_errors.append(f"Failed resolving Full Report template {filename}: {exc}")
+
         eq_pkg = self._resolve_equipment_package(pkg)
         eq_count = (
             len(getattr(eq_pkg, "switchgears", ()))
@@ -567,24 +637,88 @@ class FullReportWorkflow:
         environment: ProjectEnvironment,
         quick_report_path: Path,
         output_dir: Path | str | None = None,
+        station_temp_dir: Path | None = None,
         temp_dir: Path | str | None = None,
     ) -> FullReportStationPlan:
         """Construct FullReportStationPlan Bill of Materials for compilation."""
         st_name = self._resolve_substation_display_name(pkg)
         fl_str = self._resolve_fl(pkg)
-        sub_num = pkg.substation_number
+        sub_num = pkg.substation_number or (pkg.data.pe_number if getattr(pkg, "data", None) else 0) or 0
         station = pkg.station or (pkg.data.station_name if pkg.data else "") or "UNKNOWN"
-        date_str = pkg.date_str or "01-01-2026"
+        date_str = pkg.date_str or (pkg.data.date if getattr(pkg, "data", None) else "") or "01-01-2026"
         month = pkg.month or "01. JANUARY"
 
         cbm_defects, vi_defects = self._extract_defects_safe(pkg, environment)
         suffix = self._calculate_defect_suffix(cbm_defects, vi_defects)
         clean_name = sanitize_filename(st_name)
+        clean_date = sanitize_filename(date_str).replace(" ", "_")
         stem = f"{sub_num:03d}. {clean_name}{suffix}" if sub_num else f"{clean_name}{suffix}"
 
         out_path = self._resolve_target_output_path(environment, pkg, stem, output_dir=output_dir)
 
+        if station_temp_dir is None:
+            if temp_dir is not None:
+                station_temp_dir = Path(temp_dir)
+            else:
+                sub_key = f"{sub_num:03d}_{clean_name}_{clean_date}"
+                station_temp_dir = (
+                    Path(environment.base_path).resolve() / ".temp" / "full_report" / sub_key
+                )
+
+        sliced_dir = station_temp_dir / "sliced"
+        prpd_dir = station_temp_dir / "prpd"
+        sliced_dir.mkdir(parents=True, exist_ok=True)
+        prpd_dir.mkdir(parents=True, exist_ok=True)
+
+        # Query user's PRPD mode setting (ADR 0001)
+        prpd_mode = "option_c"
+        if hasattr(environment, "get_prpd_config"):
+            try:
+                prpd_mode = environment.get_prpd_config().mode
+            except Exception:
+                prpd_mode = "option_c"
+
+        # Resolve substation raw data directory
+        raw_dir = None
+        if hasattr(environment, "get_substation_raw_data_dir"):
+            try:
+                raw_dir = environment.get_substation_raw_data_dir(
+                    station=station,
+                    month=month,
+                    date_str=date_str,
+                    substation_number=sub_num,
+                )
+            except Exception:
+                raw_dir = None
+
+        if (not raw_dir or not Path(raw_dir).exists()) and getattr(pkg, "unsorted_raw_data_dir", None):
+            cand = Path(pkg.unsorted_raw_data_dir)
+            if cand.exists():
+                raw_dir = cand
+
+        if (not raw_dir or not Path(raw_dir).exists()) and getattr(pkg, "raw_data_dir", None):
+            cand = Path(pkg.raw_data_dir)
+            if cand.exists():
+                raw_dir = cand
+
+        # Discover UltraTEV survey folder and generate all PRPD graphs for this substation
+        survey_root = None
+        prpd_catalog = None
+        if raw_dir and Path(raw_dir).exists():
+            survey_root = discover_ultratev_survey_dir(raw_dir)
+            if survey_root and Path(survey_root).exists():
+                try:
+                    prpd_catalog = generate_all_substation_prpd_graphs(
+                        survey_root=survey_root,
+                        output_dir=prpd_dir,
+                        mode=prpd_mode,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to generate PRPD graphs for %s: %s", st_name, exc)
+                    prpd_catalog = None
+
         eq_pkg = self._resolve_equipment_package(pkg)
+        ts_data = getattr(pkg, "data", None)
         sub_info = {
             "name_erms": st_name,
             "station_name": station,
@@ -592,7 +726,26 @@ class FullReportWorkflow:
             "date": date_str,
             "fl": fl_str,
             "pe_number": sub_num,
+            "time": normalize_for_report(ts_data.time) if ts_data else "-",
+            "ambient": normalize_for_report(ts_data.ambient) if ts_data else "-",
+            "humidity": normalize_for_report(ts_data.humidity) if ts_data else "-",
+            "tev_background": normalize_for_report(ts_data.tev_background) if ts_data else "-",
+            "tev_bg": normalize_for_report(ts_data.tev_background) if ts_data else "-",
         }
+
+        census_tpl = None
+        if hasattr(environment, "get_full_report_census_template"):
+            try:
+                census_tpl = environment.get_full_report_census_template()
+            except Exception:
+                census_tpl = None
+
+        normal_tpl_dir = None
+        if hasattr(environment, "get_full_report_normal_templates_dir"):
+            try:
+                normal_tpl_dir = environment.get_full_report_normal_templates_dir()
+            except Exception:
+                normal_tpl_dir = None
 
         return self._plan_builder.build(
             package=eq_pkg,
@@ -605,8 +758,14 @@ class FullReportWorkflow:
             month=month,
             output_dir=out_path.parent,
             output_filename=out_path.name,
-            temp_parts_dir=temp_dir,
+            temp_parts_dir=sliced_dir,
             photo_resolver=self._photo_resolver,
+            survey_root=survey_root,
+            prpd_catalog=prpd_catalog,
+            prpd_output_dir=prpd_dir,
+            prpd_mode=prpd_mode,
+            templates_dir=normal_tpl_dir,
+            census_template=census_tpl,
         )
 
     def _resolve_target_output_path(

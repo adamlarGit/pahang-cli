@@ -676,26 +676,38 @@ class WordComDocumentSlicer:
         finally:
             self._word_app = None
             if dispatched_word is not None:
-                try:
-                    dispatched_word.ScreenUpdating = True
-                except Exception:
-                    pass
-                try:
-                    dispatched_word.Quit()
-                except Exception:
-                    pass
-                del dispatched_word
+                word_to_quit = dispatched_word
                 dispatched_word = None
-                gc.collect()
-
-            if word_pid is not None:
-                _terminate_word_process(word_pid)
+                try:
+                    import faulthandler
+                    was_enabled = faulthandler.is_enabled()
+                    if was_enabled:
+                        faulthandler.disable()
+                except Exception:
+                    was_enabled = False
+                try:
+                    try:
+                        word_to_quit.Quit()
+                    except Exception:
+                        pass
+                    del word_to_quit
+                    gc.collect()
+                finally:
+                    if was_enabled:
+                        try:
+                            faulthandler.enable()
+                        except Exception:
+                            pass
 
             if co_initialized:
                 try:
+                    time.sleep(0.2)
                     pythoncom.CoUninitialize()
                 except Exception:
                     pass
+
+            if word_pid is not None:
+                _terminate_word_process(word_pid)
 
     def slice_sections(
         self,

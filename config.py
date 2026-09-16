@@ -64,6 +64,28 @@ TEMPLATES: dict[str, str] = {
     "blackbox_overview": r"QUICK REPORT\DEFECT IR\blackbox-overview.docx",
     "battery_overview": r"QUICK REPORT\DEFECT IR\battery-overview.docx",
     "separator_sheet": r"TESTSHEET SEPARATOR\separator_sheet.pdf",
+
+    # Full Report Templates
+    "full_report_census": r"FULL REPORT\executive_summary_census.docx",
+    "full_report_normal_dir": r"FULL REPORT\NORMAL IR US TEV",
+    "full_report_battery_overview": r"FULL REPORT\NORMAL IR US TEV\battery-overview.docx",
+    "full_report_fp_overview": r"FULL REPORT\NORMAL IR US TEV\fp-overview.docx",
+    "full_report_swg_overview": r"FULL REPORT\NORMAL IR US TEV\swg-overview.docx",
+    "full_report_swg_panel": r"FULL REPORT\NORMAL IR US TEV\swg-panel.docx",
+    "full_report_tx_hv_sides": r"FULL REPORT\NORMAL IR US TEV\tx-hv-sides.docx",
+    "full_report_tx_lv_sides": r"FULL REPORT\NORMAL IR US TEV\tx-lv-sides.docx",
+    "full_report_tx_overview": r"FULL REPORT\NORMAL IR US TEV\tx-overview.docx",
+}
+
+FULL_REPORT_TEMPLATES: dict[str, str] = {
+    "census": "executive_summary_census.docx",
+    "battery_overview": "battery-overview.docx",
+    "fp_overview": "fp-overview.docx",
+    "swg_overview": "swg-overview.docx",
+    "swg_panel": "swg-panel.docx",
+    "tx_hv_sides": "tx-hv-sides.docx",
+    "tx_lv_sides": "tx-lv-sides.docx",
+    "tx_overview": "tx-overview.docx",
 }
 
 # ─── Seed Files for Onboarding (source relative to GLOBAL_TEMPLATES_DIR -> target relative to base_path) ───

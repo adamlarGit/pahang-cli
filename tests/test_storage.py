@@ -84,3 +84,29 @@ def test_get_substation_raw_data_dir(tmp_path: Path) -> None:
     resolved_direct = storage.get_substation_raw_data_dir("PEKAN", None, "03-09-2026", 8)
     assert resolved_direct == pe_direct_dir
 
+
+def test_full_report_storage_template_resolution(tmp_path: Path) -> None:
+    """Verify Full Report template resolution and initialization in LocalWorkspaceStorage (Bug 7)."""
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+
+    storage = LocalWorkspaceStorage(project_root)
+    storage._initialize_project_workspace()
+
+    fr_dir = storage.get_full_report_templates_dir()
+    assert fr_dir == project_root / "templates" / "FULL REPORT"
+    assert fr_dir.exists()
+
+    census_tpl = storage.get_full_report_census_template()
+    assert census_tpl == fr_dir / "executive_summary_census.docx"
+    assert census_tpl.exists()
+
+    normal_dir = storage.get_full_report_normal_templates_dir()
+    assert normal_dir == fr_dir / "NORMAL IR US TEV"
+    assert normal_dir.exists()
+
+    swg_tpl = storage.get_full_report_normal_template("swg-overview.docx")
+    assert swg_tpl == normal_dir / "swg-overview.docx"
+    assert swg_tpl.exists()
+
+

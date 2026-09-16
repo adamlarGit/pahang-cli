@@ -597,6 +597,33 @@ def normalize_fl_erms(location: object) -> str:
     return s
 
 
+def normalize_tx_id(tx_id: str | int | None, default_idx: int = 1) -> str:
+    """Normalize transformer identifier into canonical 'TX1', 'TX2' format.
+
+    Examples:
+        'Tx 1' -> 'TX1'
+        'TX 2' -> 'TX2'
+        'Transformer 1' -> 'TX1'
+        'TX1' -> 'TX1'
+        1 -> 'TX1'
+        None -> 'TX1' (with default_idx=1)
+    """
+    if tx_id is None:
+        return f"TX{default_idx}"
+    s = str(tx_id).strip()
+    if not s or s in ("-", "None", "N/A"):
+        return f"TX{default_idx}"
+    m = re.search(r"(?:TX|TRANSFORMER)\s*[-_]?\s*([A-Za-z0-9]+)", s, re.IGNORECASE)
+    if m:
+        return f"TX{m.group(1).upper()}"
+    if s.isdigit():
+        return f"TX{s}"
+    clean = re.sub(r"\s+", "", s).upper()
+    if clean.startswith("TX"):
+        return clean
+    return f"TX{s.upper()}"
+
+
 def format_db_int(val: Any) -> str:
     """Format ultrasound (US) and TEV measurement or background dB values as integer strings (0 decimal places).
 

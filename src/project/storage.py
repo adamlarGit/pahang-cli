@@ -154,6 +154,22 @@ class WorkspaceStorage(ABC):
     def get_cbm_defect_template(self, folder_name: str, filename: str) -> Path:
         """Return the resolved path for a CBM defect template in the given technology folder."""
 
+    @abstractmethod
+    def get_full_report_templates_dir(self) -> Path:
+        """Return the FULL REPORT templates directory path."""
+
+    @abstractmethod
+    def get_full_report_census_template(self) -> Path:
+        """Return the resolved path for the Full Report census template."""
+
+    @abstractmethod
+    def get_full_report_normal_templates_dir(self, folder_name: str = "NORMAL IR US TEV") -> Path:
+        """Return the normal templates directory path under FULL REPORT."""
+
+    @abstractmethod
+    def get_full_report_normal_template(self, filename: str, folder_name: str = "NORMAL IR US TEV") -> Path:
+        """Return the resolved path for a normal Full Report template."""
+
 
     @abstractmethod
     def validate_existence(self) -> None:
@@ -324,6 +340,37 @@ class LocalWorkspaceStorage(WorkspaceStorage):
             )
         return file_path
 
+    def get_full_report_templates_dir(self) -> Path:
+        return self._templates_dir / "FULL REPORT"
+
+    def get_full_report_census_template(self) -> Path:
+        tpl_path = self.get_full_report_templates_dir() / "executive_summary_census.docx"
+        if not tpl_path.exists() or not tpl_path.is_file():
+            raise FileNotFoundError(
+                f"Required Full Report census template is missing at '{tpl_path}'. "
+                f"Every project must contain its own templates in its project root directory ('{self.root_path}')."
+            )
+        return tpl_path
+
+    def get_full_report_normal_templates_dir(self, folder_name: str = "NORMAL IR US TEV") -> Path:
+        folder = self.get_full_report_templates_dir() / folder_name
+        if not folder.exists() or not folder.is_dir():
+            raise FileNotFoundError(
+                f"Required Full Report normal templates directory '{folder_name}' is missing at '{folder}'. "
+                f"Every project must contain its own templates in its project root directory ('{self.root_path}')."
+            )
+        return folder
+
+    def get_full_report_normal_template(self, filename: str, folder_name: str = "NORMAL IR US TEV") -> Path:
+        folder = self.get_full_report_normal_templates_dir(folder_name)
+        file_path = folder / filename
+        if not file_path.exists() or not file_path.is_file():
+            raise FileNotFoundError(
+                f"Required Full Report normal template '{filename}' is missing in '{folder}'. "
+                f"Every project must contain its own templates in its project root directory ('{self.root_path}')."
+            )
+        return file_path
+
     def validate_existence(self) -> None:
         required = [self.root_path, self.get_python_dir()]
         missing = [p for p in required if not p.exists()]
@@ -442,6 +489,23 @@ class LocalWorkspaceStorage(WorkspaceStorage):
                     else:
                         for sub_file in item.glob("*.docx"):
                             local_sub_file = local_defect_dir / sub_file.name
+                            if not local_sub_file.exists():
+                                _safe_copy(sub_file, local_sub_file)
+
+        # Copy FULL REPORT templates from GLOBAL_TEMPLATES_DIR / "FULL REPORT"
+        global_fr_dir = config.GLOBAL_TEMPLATES_DIR / "FULL REPORT"
+        if global_fr_dir.exists() and global_fr_dir.is_dir():
+            local_fr_dir = self._templates_dir / "FULL REPORT"
+            if not local_fr_dir.exists():
+                _safe_copy(global_fr_dir, local_fr_dir)
+            else:
+                for item in global_fr_dir.iterdir():
+                    local_item = local_fr_dir / item.name
+                    if not local_item.exists():
+                        _safe_copy(item, local_item)
+                    elif item.is_dir():
+                        for sub_file in item.glob("*.docx"):
+                            local_sub_file = local_item / sub_file.name
                             if not local_sub_file.exists():
                                 _safe_copy(sub_file, local_sub_file)
 

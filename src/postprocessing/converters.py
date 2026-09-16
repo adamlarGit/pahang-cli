@@ -148,6 +148,7 @@ class BatchComSession:
                 word = win32.DispatchEx("Word.Application")
                 word.Visible = False
                 word.DisplayAlerts = 0
+                word.ScreenUpdating = False
                 if self.configure_printer:
                     configure_uniform_printer(word)
                 self.word_app = word
@@ -189,15 +190,33 @@ class BatchComSession:
             word = self.word_app
             self.word_app = None
             try:
-                word.Quit()
-            except Exception as exc:
-                logging.debug("Error quitting Word COM: %s", exc)
+                import faulthandler
+                was_enabled = faulthandler.is_enabled()
+                if was_enabled:
+                    faulthandler.disable()
+            except Exception:
+                was_enabled = False
+            try:
+                try:
+                    word.Quit()
+                except Exception as exc:
+                    logging.debug("Error quitting Word COM: %s", exc)
+                finally:
+                    del word
+                import gc
+                gc.collect()
             finally:
-                del word
+                if was_enabled:
+                    try:
+                        faulthandler.enable()
+                    except Exception:
+                        pass
 
         # Cleanup COM runtime
         if self._co_initialized:
             try:
+                import gc
+                gc.collect()
                 import time
                 time.sleep(0.2)
                 import pythoncom
@@ -470,15 +489,38 @@ class ComDocumentConverter(DocumentConverter):
                     doc.Close(SaveChanges=False)
                 except Exception:
                     pass
+                del doc
                 doc = None
             if owns_word and word_app is not None:
-                try:
-                    word_app.Quit()
-                except Exception:
-                    pass
+                word_to_quit = word_app
                 word_app = None
+                try:
+                    import faulthandler
+                    was_enabled = faulthandler.is_enabled()
+                    if was_enabled:
+                        faulthandler.disable()
+                except Exception:
+                    was_enabled = False
+                try:
+                    try:
+                        word_to_quit.Quit()
+                    except Exception:
+                        pass
+                    del word_to_quit
+                    import gc
+                    gc.collect()
+                finally:
+                    if was_enabled:
+                        try:
+                            faulthandler.enable()
+                        except Exception:
+                            pass
             if co_initialized:
                 try:
+                    import gc
+                    gc.collect()
+                    import time
+                    time.sleep(0.2)
                     pythoncom.CoUninitialize()
                 except Exception:
                     pass

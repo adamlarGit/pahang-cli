@@ -115,7 +115,11 @@ def test_banner_text_helpers():
     """Verify healthy and defect forwarding text detection helpers."""
     assert is_healthy_banner_text("Analysis: No Anomaly.")
     assert is_healthy_banner_text("No Anomaly.")
-    assert is_healthy_banner_text("TIADA ANOMALI")
+    assert is_healthy_banner_text("No defect.")
+    assert not is_healthy_banner_text("-")
+    assert not is_healthy_banner_text("NORMAL")
+    assert not is_healthy_banner_text("None")
+    assert not is_healthy_banner_text("TIADA ANOMALI")
     assert not is_healthy_banner_text("Analysis: Please refer to the following page for details defect.")
 
     assert is_defect_forwarding_text("Analysis: Please refer to the following page for details defect.")
@@ -559,7 +563,8 @@ def test_core_renderer_all_templates_smoke(tmp_path: Path, dummy_image_file: Pat
         assert out_file.is_file()
 
         xml = _read_document_xml(out_file)
-        assert 'w:fill="00B050"' in xml
+        if tpl_name not in ("swg-overview.docx", "tx-overview.docx", "fp-overview.docx"):
+            assert 'w:fill="00B050"' in xml
         assert "{{" not in xml
         assert "}}" not in xml
 
@@ -812,19 +817,19 @@ def test_core_renderer_overview_downstream_defect_forwarding_d30(tmp_path: Path,
     doc = docx.Document(out)
     table = doc.tables[0]
 
-    # Row 18: IR Severity is Green 00B050 (healthy overview photo)
+    # Row 18: IR Severity in swg-overview is '-' (overview photo has no technology severity)
     ir_cell = table.rows[18].cells[3]
-    assert ir_cell.text.strip() == ""
-    assert _get_cell_fill(ir_cell) == "00B050"
+    assert ir_cell.text.strip() == "-"
+    assert _get_cell_fill(ir_cell) is None
 
     # Row 35: Analysis banner has forwarding text and is Red EE0000
     analysis_cell = table.rows[35].cells[0]
-    assert BANNER_DEFECT_FORWARDING in analysis_cell.text
+    assert is_defect_forwarding_text(analysis_cell.text)
     assert _get_cell_fill(analysis_cell) == "EE0000"
 
     # Row 36: Recommendation banner has forwarding text and is Red EE0000
     rec_cell = table.rows[36].cells[0]
-    assert BANNER_DEFECT_FORWARDING in rec_cell.text
+    assert is_defect_forwarding_text(rec_cell.text)
     assert _get_cell_fill(rec_cell) == "EE0000"
 
 
@@ -968,26 +973,87 @@ def test_render_none_context_structures_graceful_handling(tmp_path: Path):
 
 
 def test_is_healthy_banner_text_standalone_markers_and_shading():
-    """Verify standalone healthy markers ('-', 'None', 'Tiada', 'Analysis: -') and banner shading."""
-    assert is_healthy_banner_text("-") is True
-    assert is_healthy_banner_text(" - ") is True
-    assert is_healthy_banner_text("None") is True
-    assert is_healthy_banner_text("Tiada") is True
+    """Verify standalone healthy markers without banner prefix return False, while banner-prefixed text returns True."""
+    assert is_healthy_banner_text("-") is False
+    assert is_healthy_banner_text(" - ") is False
+    assert is_healthy_banner_text("None") is False
+    assert is_healthy_banner_text("NORMAL") is False
+    assert is_healthy_banner_text("N/A") is False
+    assert is_healthy_banner_text("Nil") is False
+    assert is_healthy_banner_text("Tiada") is False
+    assert is_healthy_banner_text("Cadangan: Tiada") is False
+
+    # Valid banner-prefixed healthy texts
     assert is_healthy_banner_text("Analysis: -") is True
     assert is_healthy_banner_text("Recommendation: -") is True
     assert is_healthy_banner_text("Recommendation:  -") is True
-    assert is_healthy_banner_text("Cadangan: Tiada") is True
+    assert is_healthy_banner_text("Analysis: None") is True
+    assert is_healthy_banner_text("Analysis: Normal") is True
+    assert is_healthy_banner_text("Analysis: No Anomaly.") is True
+    assert is_healthy_banner_text("Recommendation: N/A") is True
 
     doc = docx.Document()
     t = doc.add_table(rows=1, cols=2)
     t.cell(0, 0).text = "-"
     t.cell(0, 1).text = "Analysis: -"
 
-    apply_banner_shading(t.cell(0, 0))
-    apply_banner_shading(t.cell(0, 1))
+    # In multi-cell table mode, '-' is unshaded, while 'Analysis: -' is shaded Green
+    apply_banner_shading(t)
 
-    assert get_cell_shading(t.cell(0, 0)) == "00B050"
+    assert get_cell_shading(t.cell(0, 0)) is None
     assert get_cell_shading(t.cell(0, 1)) == "00B050"
+
+
+def test_apply_shading_measurement_cells_remain_unshaded():
+    """Verify tables with '-', 'NORMAL', and parameter cells remain unshaded while only severity and banner cells are shaded."""
+    doc = docx.Document()
+    table = doc.add_table(rows=6, cols=2)
+
+    # Technology severity cell
+    table.rows[0].cells[0].text = "IR Severity"
+    table.rows[0].cells[1].text = SEVERITY_MARKER_IR
+
+    # US severity cell
+    table.rows[1].cells[0].text = "US Severity"
+    table.rows[1].cells[1].text = SEVERITY_MARKER_US
+
+    # Generic measurement cells that should NEVER be shaded
+    table.rows[2].cells[0].text = "Breaker Status"
+    table.rows[2].cells[1].text = "NORMAL"
+
+    table.rows[3].cells[0].text = "Load Current"
+    table.rows[3].cells[1].text = "-"
+
+    # Banner cells
+    table.rows[4].cells[0].text = "Analysis & Recommendations:"
+    table.rows[4].cells[1].text = "Analysis: No Anomaly."
+
+    table.rows[5].cells[0].text = "Recommendation:"
+    table.rows[5].cells[1].text = "Recommendation: -"
+
+    # Apply both shading passes as FullReportScanPageRendererCore does
+    apply_technology_severity_shading(table, defective_technologies=None)
+    apply_banner_shading(table, is_defective=False)
+
+    # 1. Technology severity cells are shaded Green and text cleared
+    assert get_cell_shading(table.rows[0].cells[1]) == COLOR_HEALTHY
+    assert table.rows[0].cells[1].text == ""
+    assert get_cell_shading(table.rows[1].cells[1]) == COLOR_HEALTHY
+    assert table.rows[1].cells[1].text == ""
+
+    # 2. Measurement / parameter cells MUST REMAIN UNSHADED (fill=None)
+    assert get_cell_shading(table.rows[2].cells[0]) is None
+    assert get_cell_shading(table.rows[2].cells[1]) is None
+    assert table.rows[2].cells[1].text == "NORMAL"
+
+    assert get_cell_shading(table.rows[3].cells[0]) is None
+    assert get_cell_shading(table.rows[3].cells[1]) is None
+    assert table.rows[3].cells[1].text == "-"
+
+    # 3. Banner heading unaffected, banner content cells shaded Green
+    assert get_cell_shading(table.rows[4].cells[0]) is None
+    assert get_cell_shading(table.rows[4].cells[1]) == COLOR_HEALTHY
+    assert get_cell_shading(table.rows[5].cells[1]) == COLOR_HEALTHY
 
 
 def test_apply_shading_table_row_and_mixed_containers():
@@ -1047,6 +1113,71 @@ def test_render_explicit_is_defective_false_override(tmp_path: Path):
     analysis_cell = table.rows[35].cells[0]
     assert BANNER_HEALTHY_ANALYSIS in analysis_cell.text
     assert get_cell_shading(analysis_cell) == "00B050"
+
+
+def test_cleanup_dash_measurement_units_and_tev_background(tmp_path: Path):
+    """Verify cleanup_dash_measurement_units cleans -dB to - and renders cleanly in swg-panel.docx."""
+    from src.full_report.scan_render import cleanup_dash_measurement_units
+
+    # 1. Test unit cleanup on synthetic table
+    doc = docx.Document()
+    t = doc.add_table(rows=2, cols=3)
+    t.rows[0].cells[0].paragraphs[0].add_run("-dB")
+    t.rows[0].cells[1].paragraphs[0].add_run("1dB")
+    t.rows[0].cells[2].paragraphs[0].add_run("- dB")
+    t.rows[1].cells[0].paragraphs[0].add_run("-°C")
+    t.rows[1].cells[1].paragraphs[0].add_run("33.5 °C")
+    t.rows[1].cells[2].paragraphs[0].add_run("-%")
+
+    cleanup_dash_measurement_units(doc)
+
+    assert t.rows[0].cells[0].text.strip() == "-"
+    assert t.rows[0].cells[1].text.strip() == "1dB"
+    assert t.rows[0].cells[2].text.strip() == "-"
+    assert t.rows[1].cells[0].text.strip() == "-"
+    assert t.rows[1].cells[1].text.strip() == "33.5 °C"
+    assert t.rows[1].cells[2].text.strip() == "-"
+
+    # 2. Test full render of swg-panel with missing TEV background (bg = "-")
+    tpl = TEMPLATES_DIR / "swg-panel.docx"
+    out = tmp_path / "panel_dash_bg.docx"
+    renderer = FullReportScanPageRendererCore(tpl)
+    renderer.render(
+        out,
+        {
+            "substation": {"name_erms": "TEST PE", "date": "01-01-2026", "time": "-", "ambient": "-", "humidity": "-"},
+            "swg": {"type": "RMU SF6", "manufacturer": "TAMCO", "model": "-", "rating": "-", "serialnumber": "-"},
+            "panel": {
+                "name": "PANEL 1",
+                "linknumber": "1",
+                "feeder_no": "P1",
+                "area": "CABLE COMPARTMENT",
+                "serialnumber": "-",
+                "heateramp": "-",
+                "breakerstatus": "CLOSE",
+                "busbarposition": "-",
+                "cabletype": "-",
+                "loadamp": "-",
+                "analysis": "No Anomaly.",
+                "recommendation": "-",
+                "ir": {"reading": "-", "severity": "NORMAL"},
+                "us": {"reading": "-", "char": "NORMAL", "severity": "NORMAL"},
+                "tev": {"bg": "-", "reading": "-", "ppc": "-", "char": "-", "severity": "NORMAL"},
+            },
+            "tev": {"bg": "-", "reading": "-", "severity": "NORMAL"},
+            "us": {"reading": "-", "severity": "NORMAL"},
+            "ir": {"reading": "-", "severity": "NORMAL"},
+            "analysis": "No Anomaly.",
+            "recommendation": "-",
+        },
+        is_defective=False,
+    )
+    assert out.is_file()
+    rendered_doc = docx.Document(out)
+    table = rendered_doc.tables[0]
+    tev_bg_cell = table.rows[28].cells[17]
+    assert tev_bg_cell.text.strip() == "-", f"Expected '-' for TEV background but found {tev_bg_cell.text!r}"
+
 
 
 

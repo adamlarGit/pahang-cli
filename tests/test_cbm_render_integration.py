@@ -123,3 +123,48 @@ def test_template_compilation_clean_substitution(tmp_path: Path) -> None:
     assert "{{ recommendation }}" not in full_text
     assert "Thermal image above indicates hot spot detected at FUSE COMPARTMENT." in full_text
     assert "To inspect, clean the contact surface and re-tighten the connection point." in full_text
+
+
+def test_detail_defect_page_shades_analysis_and_recommendation_red(tmp_path: Path) -> None:
+    """Verify that detail defect pages (overview=False) shade Analysis and Recommendation banners Red (EE0000)."""
+    template_path = Path("templates/QUICK REPORT/DEFECT IR/fp-individual-defect.docx")
+    if not template_path.exists():
+        pytest.skip("Template file not found at expected path")
+
+    record = CbmDefectRecord(
+        equipment="FP (D)",
+        technology="IR",
+        defect_area="FUSE COMPARTMENT",
+        additional_remarks="RED PHASE",
+        ir_reading="55.2",
+    )
+    ctx = _build_fp_lvdb_render_context(record, overview=False)
+    ctx["substation"] = {
+        "name_erms": "PE TEST",
+        "date": "08-09-2026",
+        "time": "10:00 AM",
+        "ambient": "30.0",
+        "humidity": "65%",
+    }
+    ctx["visual"] = {"image": "-"}
+
+    output_file = tmp_path / "compiled_fp_detail_defect.docx"
+    _render_docx_template(template_path, output_file, ctx, overview=False)
+
+    assert output_file.exists()
+    out_doc = docx.Document(output_file)
+    analysis_shaded = False
+    rec_shaded = False
+    for t in out_doc.tables:
+        for row in t.rows:
+            for cell in row.cells:
+                txt = cell.text.strip()
+                if txt.startswith("Analysis:"):
+                    assert "EE0000" in cell._tc.xml
+                    analysis_shaded = True
+                elif txt.startswith("Recommendation:"):
+                    assert "EE0000" in cell._tc.xml
+                    rec_shaded = True
+    assert analysis_shaded, "Analysis cell was not found or shaded"
+    assert rec_shaded, "Recommendation cell was not found or shaded"
+

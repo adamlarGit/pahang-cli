@@ -768,14 +768,7 @@ class TestsheetExtractor:
             if serial_no.upper() in ("S/N :", "S/N:", "S/N"):
                 serial_no = ""
 
-            # Exclusions: NOT ACCESSIBLE anywhere or completely empty row
-            row_strs = [str(ws_vi.cell(r, c).value or "").strip().upper() for c in range(1, 17)]
-            if any("NOT ACCESSIBLE" in s for s in row_strs):
-                continue
-            if not (tx_type or rating_kva or const_year or mfg or serial_no):
-                continue
-
-            # Extract ultrasound measurements from PCE Testsheet (TX1/TX2: Col K/L; TX3/TX4: Col V/X)
+            # Extract ultrasound measurements & thermal readings from PCE Testsheet first
             tx_us_reading = ""
             tx_us_char = ""
             hv_cable_type = ""
@@ -870,6 +863,31 @@ class TestsheetExtractor:
                     lv_cable_thermal = _extract_th(base_r + 2)
                     lv_bushing_thermal = _extract_th(base_r + 3)
                     body_thermal = _extract_th(base_r + 4)
+
+            has_pce_scanning = bool(
+                tx_photos
+                or tx_us_reading
+                or any(
+                    bool(getattr(th, k))
+                    for th in (hv_cable_thermal, hv_bushing_thermal, lv_cable_thermal, lv_bushing_thermal, body_thermal)
+                    for k in ("tmin", "tmax", "delta_t", "avg")
+                )
+            )
+
+            # Exclusions: Skip only if the unit itself is not accessible or completely empty AND no scanning was performed
+            if tx_type.upper() in ("NOT ACCESSIBLE", "NAN") and not has_pce_scanning:
+                continue
+            if not (tx_type or rating_kva or const_year or mfg or serial_no) and not has_pce_scanning:
+                continue
+            if (
+                all(s.upper() in ("", "-", "N/A", "NONE", "NAN", "NOT ACCESSIBLE") for s in (tx_type, mfg))
+                and not has_pce_scanning
+            ):
+                continue
+
+            # If tx_type was marked NOT ACCESSIBLE but scanning was done, clean it up to empty
+            if tx_type.upper() == "NOT ACCESSIBLE":
+                tx_type = ""
 
             transformers.append(
                 TransformerSpec(

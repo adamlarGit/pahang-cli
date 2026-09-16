@@ -152,7 +152,7 @@ graph TD
     T6_1 --> T6_2[T6.2: Implement FullReportWorkflow Deep Module - Closed]
     T6_2 --> T6_3[T6.3: Post-Processing PDF Conversion & Testsheet Append - Closed]
     T6_3 --> T6_4[T6.4: Wire CLI Menu & Workflow Actions - Closed]
-    T6_4 --> T6_5[T6.5: End-to-End Validation Against Canonical Benchmarks]
+    T6_4 --> T6_5[T6.5: End-to-End Validation Against Canonical Benchmarks - Closed]
 ```
 
 ---
@@ -185,7 +185,7 @@ All child tickets are tracked as sub-issues of this map on GitHub (Map Issue #19
   - Child ticket: `T6.2: Implement FullReportWorkflow Deep Module` (Closed, #35)
   - Child ticket: `T6.3: Post-Processing PDF Conversion & Testsheet Append` (Closed, #36)
   - Child ticket: `T6.4: Wire CLI Menu & Workflow Actions` (Closed, #37)
-  - Child ticket: `T6.5: End-to-End Auditing & Validation against Canonical Benchmarks` (#38)
+  - Child ticket: `T6.5: End-to-End Auditing & Validation against Canonical Benchmarks` (Closed, #38)
 
 ---
 
@@ -699,14 +699,15 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 - **Labels**: `wayfinder:task`, `ready-for-agent`
 - **GitHub Issue**: [#38](https://github.com/adamlarGit/pahang-cli/issues/38)
 - **Parent**: [Full Report Generation Workflow Map](map.md)
+- **Status**: Closed
 - **What to build**: Real-world Windows Word COM execution and visual layout audit against the three canonical ground-truth benchmarks: TALAPIA, CENDERAWASIH NO.1, and TELEKOM TANAH PUTIH.
 - **Blocked by**: T6.4
 - **Acceptance criteria**:
-  - [ ] Generates Full Report for TALAPIA: verifies RMU scanning pages, 10-way FP overview, interleaved FP F2 defect page, and condition/sticker pages.
-  - [ ] Generates Full Report for CENDERAWASIH NO.1: verifies RMU scanning pages with TX fuse compartment defect replacing panel 4 scan page.
-  - [ ] Generates Full Report for TELEKOM TANAH PUTIH: verifies PRPD waveforms and TEV defect pages appended behind each panel scan page.
-  - [ ] Verifies FLIR Tools+ ActiveX controls function interactively in compiled `.docx` files.
-  - [ ] Verifies post-processing PDF export and testsheet PDF merge completeness.
+  - [x] Generates Full Report for TALAPIA: verifies RMU scanning pages, 10-way FP overview, interleaved FP F2 defect page, and condition/sticker pages.
+  - [x] Generates Full Report for CENDERAWASIH NO.1: verifies RMU scanning pages with TX fuse compartment defect replacing panel 4 scan page.
+  - [x] Generates Full Report for TELEKOM TANAH PUTIH: verifies PRPD waveforms and TEV defect pages appended behind each panel scan page.
+  - [x] Verifies FLIR Tools+ ActiveX controls function interactively in compiled `.docx` files.
+  - [x] Verifies post-processing PDF export and testsheet PDF merge completeness.
 
 ---
 

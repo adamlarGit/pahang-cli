@@ -512,48 +512,53 @@ class FullReportPostProcessingWorkflow:
 
         with session_cm as session:
             word_app = getattr(session, "word_app", None)
-            if word_app is not None:
-                configure_uniform_printer(word_app)
+            try:
+                if word_app is not None:
+                    configure_uniform_printer(word_app)
 
-            for idx, (docx_path, ts_pdf, out_pdf) in enumerate(valid_targets, start=1):
-                if progress_sink:
-                    progress_sink(
-                        f"[{idx}/{len(valid_targets)}] Converting and merging Full Report for {docx_path.name}..."
-                    )
-                try:
-                    out_pdf.parent.mkdir(parents=True, exist_ok=True)
-                    # Temporary PDF for Word conversion before in-place PyPDF2 merge
-                    temp_conv_pdf = out_pdf.parent / f".tmp_conv_{out_pdf.name}"
-
+                for idx, (docx_path, ts_pdf, out_pdf) in enumerate(valid_targets, start=1):
+                    if progress_sink:
+                        progress_sink(
+                            f"[{idx}/{len(valid_targets)}] Converting and merging Full Report for {docx_path.name}..."
+                        )
                     try:
-                        # 1. Word COM conversion
-                        if word_app is not None:
-                            self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, word_app=word_app)
+                        out_pdf.parent.mkdir(parents=True, exist_ok=True)
+                        # Temporary PDF for Word conversion before in-place PyPDF2 merge
+                        temp_conv_pdf = out_pdf.parent / f".tmp_conv_{out_pdf.name}"
+
+                        try:
+                            # 1. Word COM conversion
+                            if word_app is not None:
+                                self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, word_app=word_app)
+                            else:
+                                self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, session=session)
+
+                            # 2. PyPDF2 merge: converted Full Report PDF + testsheet PDF -> out_pdf
+                            self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
+                        finally:
+                            if temp_conv_pdf.exists():
+                                try:
+                                    temp_conv_pdf.unlink()
+                                except Exception:
+                                    pass
+
+                        if out_pdf.exists() and out_pdf.stat().st_size > 0:
+                            deliverables.append(out_pdf)
+                            if progress_sink:
+                                progress_sink(f"Deliverable generated -> {out_pdf.name}")
                         else:
-                            self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, session=session)
-
-                        # 2. PyPDF2 merge: converted Full Report PDF + testsheet PDF -> out_pdf
-                        self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
-                    finally:
-                        if temp_conv_pdf.exists():
-                            try:
-                                temp_conv_pdf.unlink()
-                            except Exception:
-                                pass
-
-                    if out_pdf.exists() and out_pdf.stat().st_size > 0:
-                        deliverables.append(out_pdf)
-                        if progress_sink:
-                            progress_sink(f"Deliverable generated -> {out_pdf.name}")
-                    else:
-                        err_msg = f"Merged deliverable for {docx_path.name} is missing or 0 bytes."
+                            err_msg = f"Merged deliverable for {docx_path.name} is missing or 0 bytes."
+                            errors.append(err_msg)
+                    except Exception as exc:
+                        err_msg = f"Failed to post-process {docx_path.name}: {exc}"
                         errors.append(err_msg)
-                except Exception as exc:
-                    err_msg = f"Failed to post-process {docx_path.name}: {exc}"
-                    errors.append(err_msg)
-                    logger.exception(err_msg)
-                    if fail_fast:
-                        raise
+                        logger.exception(err_msg)
+                        if fail_fast:
+                            raise
+            finally:
+                word_app = None
+                import gc
+                gc.collect()
 
         duration = time.time() - start_time
 

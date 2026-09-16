@@ -1038,6 +1038,52 @@ def test_rmu_sf6_and_mrmu_panel_serial_propagation(tmp_path: Path) -> None:
     assert sg4.panels[1].serial_no == ""
 
 
+def test_extract_transformer_with_not_accessible_nameplate_when_scanned(tmp_path: Path) -> None:
+    """Verify that a transformer with 'NOT ACCESSIBLE' in nameplate fields is extracted if scanning was conducted."""
+    import openpyxl
+    p = tmp_path / "not_accessible_tx.xlsx"
+    wb = openpyxl.Workbook()
+
+    # Sheet 1: PCE Testsheet with US reading and photos in row 33 (TX 1)
+    ws_pce = wb.active
+    ws_pce.title = "PCE Testsheet"
+    ws_pce["C5"] = "PE TALAPIA"
+    ws_pce["W5"] = "FL-TALAPIA"
+    ws_pce["P4"] = "2026-08-04"
+    ws_pce["B10"] = "F01"
+    ws_pce["C10"] = "INCOMING"
+    # Row 33: Tx 1 scanning
+    ws_pce["J33"] = 100  # Photo number
+    ws_pce["K33"] = 12  # US dB reading
+    ws_pce["L33"] = "NORMAL"
+
+    # Sheet 2: PCE VI with NOT ACCESSIBLE in nameplate
+    ws_vi = wb.create_sheet(title="PCE VI")
+    ws_vi["N1"] = "PE"
+    ws_vi["C7"] = "PE TALAPIA SITE"
+    ws_vi["C11"] = "/"  # SF6
+    ws_vi["C12"] = "TAMCO"
+    ws_vi["C17"] = 1  # 1 Transformer
+    # Tx 1 in row 18:
+    ws_vi["D18"] = "H/S"  # Type
+    ws_vi["F18"] = "NOT ACCESSIBLE"  # Rating
+    ws_vi["K18"] = "MTM"  # Manufacturer
+    ws_vi["O18"] = "NOT ACCESSIBLE"  # Serial no
+
+    wb.save(p)
+
+    extractor = TestsheetExtractor()
+    data = extractor.extract_testsheet_data(p)
+    assert len(data.equipment.transformers) == 1
+    tx = data.equipment.transformers[0]
+    assert tx.tx_id == "Tx 1"
+    assert tx.manufacturer == "MTM"
+    assert tx.rating_kva == "NOT ACCESSIBLE"
+    assert tx.serial_no == "NOT ACCESSIBLE"
+    assert tx.us_reading == "12"
+
+
+
 
 
 

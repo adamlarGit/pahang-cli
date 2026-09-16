@@ -32,26 +32,73 @@ EXPECTED_TEMPLATES: tuple[str, ...] = (
     "battery-overview.docx",
 )
 
-# Declarative namespace expectations per template
-FAMILY_NAMESPACE_MAP: dict[str, tuple[str, ...]] = {
-    "swg-overview.docx": ("swg",),
-    "swg-panel.docx": ("swg", "panel", "us", "tev"),
-    "tx-overview.docx": ("tx",),
-    "tx-hv-sides.docx": ("tx", "us"),
-    "tx-lv-sides.docx": ("tx",),
-    "fp-overview.docx": ("fp",),
-    "battery-overview.docx": ("batt",),
+# Declarative namespace expectations per template matching canonical Quick Report templates
+REQUIRED_NAMESPACES_MAP: dict[str, set[str]] = {
+    "swg-overview.docx": {"substation", "swg", "visual"},
+    "swg-panel.docx": {"substation", "swg", "panel", "visual", "ir", "us", "tev", "analysis", "recommendation"},
+    "tx-overview.docx": {"substation", "tx", "visual"},
+    "tx-hv-sides.docx": {"substation", "tx", "visual", "ir", "us", "analysis", "recommendation"},
+    "tx-lv-sides.docx": {"substation", "tx", "visual", "ir", "analysis", "recommendation"},
+    "fp-overview.docx": {"substation", "fp", "visual"},
+    "battery-overview.docx": {"substation", "batt", "visual", "ir", "analysis", "recommendation"},
 }
 
-# Expected drawing count when fully bound with mock images
+# Expected drawing count when fully bound with mock images (visual.image, us.prpd, tev.prpd).
+# IR is an embedded ActiveX <w:object> control rather than an inline DrawingML drawing.
 EXPECTED_DRAWINGS_MAP: dict[str, int] = {
-    "swg-overview.docx": 2,
-    "swg-panel.docx": 4,      # IR + VI + US PRPD + TEV PRPD
-    "tx-overview.docx": 2,
-    "tx-hv-sides.docx": 3,    # IR + VI + US PRPD (no TEV on TX)
-    "tx-lv-sides.docx": 2,
-    "fp-overview.docx": 2,
-    "battery-overview.docx": 2,
+    "swg-overview.docx": 1,
+    "swg-panel.docx": 3,      # VI + US PRPD + TEV PRPD
+    "tx-overview.docx": 1,
+    "tx-hv-sides.docx": 2,    # VI + US PRPD (no TEV on TX)
+    "tx-lv-sides.docx": 1,
+    "fp-overview.docx": 1,
+    "battery-overview.docx": 1,
+}
+
+# Declarative specifications for restored FLIR ActiveX CIRViewer OLE controls
+ACTIVEX_SPEC_MAP: dict[str, dict[str, str]] = {
+    "swg-overview.docx": {
+        "control_name": "CIRViewer121111",
+        "shape_id": "_x0000_i1027",
+        "control_rel": "rId8",
+        "image_rel": "rId7",
+    },
+    "swg-panel.docx": {
+        "control_name": "CIRViewer1211111131211",
+        "shape_id": "_x0000_i1029",
+        "control_rel": "rId8",
+        "image_rel": "rId7",
+    },
+    "tx-overview.docx": {
+        "control_name": "CIRViewer1211111131",
+        "shape_id": "_x0000_i1029",
+        "control_rel": "rId8",
+        "image_rel": "rId7",
+    },
+    "tx-hv-sides.docx": {
+        "control_name": "CIRViewer1211111131",
+        "shape_id": "_x0000_i1029",
+        "control_rel": "rId8",
+        "image_rel": "rId7",
+    },
+    "tx-lv-sides.docx": {
+        "control_name": "CIRViewer1211111131",
+        "shape_id": "_x0000_i1029",
+        "control_rel": "rId8",
+        "image_rel": "rId7",
+    },
+    "fp-overview.docx": {
+        "control_name": "CIRViewer121111113121",
+        "shape_id": "_x0000_i1027",
+        "control_rel": "rId8",
+        "image_rel": "rId7",
+    },
+    "battery-overview.docx": {
+        "control_name": "CIRViewer121111113121111",
+        "shape_id": "_x0000_i1030",
+        "control_rel": "rId8",
+        "image_rel": "rId7",
+    },
 }
 
 
@@ -191,32 +238,45 @@ def test_template_placeholders_consistency(filename: str):
     doc = DocxTemplate(template_path)
     undeclared = doc.get_undeclared_template_variables()
 
-    # 1. Common root namespaces required across all 7 scanning templates
-    expected_common = {"substation", "visual", "ir"}
-    for common in expected_common:
-        assert common in undeclared, (
-            f"Template {filename} missing root namespace '{common}'. Found: {sorted(undeclared)}"
-        )
+    # 1. Verify required namespaces match canonical Quick Report template definitions
+    expected_namespaces = REQUIRED_NAMESPACES_MAP[filename]
+    assert expected_namespaces.issubset(undeclared), (
+        f"Template {filename} missing expected namespaces: {expected_namespaces - undeclared}. Found: {sorted(undeclared)}"
+    )
 
-    # 2. Family-specific equipment namespaces
-    expected_family_ns = FAMILY_NAMESPACE_MAP[filename]
-    for ns in expected_family_ns:
-        assert ns in undeclared, (
-            f"Template {filename} missing expected namespace '{ns}'. Found: {sorted(undeclared)}"
-        )
-
-    # 3. Leaf placeholder verification via document XML
+    # 2. Leaf placeholder and ActiveX container verification via document XML
     xml_content = _read_document_xml(template_path)
     assert "visual.image" in xml_content, f"Template {filename} missing visual.image placeholder"
-    assert "ir.image" in xml_content, f"Template {filename} missing ir.image placeholder"
+    assert "<w:control" in xml_content, f"Template {filename} missing <w:control> ActiveX element"
+    assert "<w:object" in xml_content, f"Template {filename} missing <w:object> container"
+    assert "ir.image" not in xml_content, f"Template {filename} should not contain raw ir.image placeholder"
     assert "substation.name_erms" in xml_content, f"Template {filename} missing substation.name_erms"
     assert "substation.date" in xml_content, f"Template {filename} missing substation.date"
-    assert "ir.severity" in xml_content, f"Template {filename} missing ir.severity"
+
+    if filename in ("swg-panel.docx", "tx-hv-sides.docx", "tx-lv-sides.docx", "battery-overview.docx"):
+        assert "ir.severity" in xml_content, f"Template {filename} missing ir.severity"
+        assert "analysis" in xml_content, f"Template {filename} missing analysis placeholder"
+        assert "recommendation" in xml_content, f"Template {filename} missing recommendation placeholder"
+
+    # Exact ActiveX specification verification per template
+    spec = ACTIVEX_SPEC_MAP[filename]
+    assert f'w:name="{spec["control_name"]}"' in xml_content, (
+        f"Template {filename} missing exact control name {spec['control_name']}"
+    )
+    assert f'w:shapeid="{spec["shape_id"]}"' in xml_content, (
+        f"Template {filename} missing exact shapeid {spec['shape_id']}"
+    )
+    assert f'r:id="{spec["control_rel"]}"' in xml_content, (
+        f"Template {filename} missing {spec['control_rel']} control relationship"
+    )
+    assert f'r:id="{spec["image_rel"]}"' in xml_content, (
+        f"Template {filename} missing {spec['image_rel']} image relationship"
+    )
 
 
 @pytest.mark.parametrize("filename", EXPECTED_TEMPLATES)
 def test_template_inline_image_binding(filename: str, tmp_path: Path, dummy_image_path: Path):
-    """Verifies image placeholders (ir.image, visual.image, us.prpd, tev.prpd) bind InlineImage cleanly."""
+    """Verifies inline image placeholders (visual.image, us.prpd, tev.prpd) bind InlineImage cleanly and ActiveX survives."""
     template_path = TEMPLATES_DIR / filename
     dt = DocxTemplate(template_path)
     ctx = _build_full_mock_context(dt, dummy_image_path)
@@ -231,6 +291,15 @@ def test_template_inline_image_binding(filename: str, tmp_path: Path, dummy_imag
     assert len(drawings) >= expected_count, (
         f"{filename} expected at least {expected_count} image drawings, found {len(drawings)}"
     )
+    spec = ACTIVEX_SPEC_MAP[filename]
+    controls = rendered_doc._body._element.xpath(".//w:control")
+    assert len(controls) == 1, f"{filename} missing ActiveX <w:control> after render"
+    assert controls[0].attrib.get(f"{{{controls[0].nsmap['w']}}}name") == spec["control_name"]
+    assert controls[0].attrib.get(f"{{{controls[0].nsmap['w']}}}shapeid") == spec["shape_id"]
+    assert controls[0].attrib.get(f"{{{controls[0].nsmap['r']}}}id") == spec["control_rel"]
+
+    objects = rendered_doc._body._element.xpath(".//w:object")
+    assert len(objects) == 1, f"{filename} missing ActiveX <w:object> after render"
 
 
 @pytest.mark.parametrize("filename", EXPECTED_TEMPLATES)
@@ -259,5 +328,17 @@ def test_render_smoke_test_all_seven_templates(filename: str, tmp_path: Path, du
     # Key metadata and banner rendered cleanly
     assert "PE TEST STATION" in full_text
     assert "01-01-2026" in full_text
-    assert "No Anomaly." in full_text
-    assert "NORMAL" in full_text
+    if filename in ("swg-panel.docx", "tx-hv-sides.docx", "tx-lv-sides.docx", "battery-overview.docx"):
+        assert "No Anomaly." in full_text
+        assert "NORMAL" in full_text
+
+    # Verify FLIR ActiveX CIRViewer container and control are fully preserved
+    spec = ACTIVEX_SPEC_MAP[filename]
+    controls = rendered_doc._body._element.xpath(".//w:control")
+    assert len(controls) == 1, f"{filename} missing ActiveX <w:control> after smoke render"
+    assert controls[0].attrib.get(f"{{{controls[0].nsmap['w']}}}name") == spec["control_name"]
+    assert controls[0].attrib.get(f"{{{controls[0].nsmap['w']}}}shapeid") == spec["shape_id"]
+    assert controls[0].attrib.get(f"{{{controls[0].nsmap['r']}}}id") == spec["control_rel"]
+
+    objects = rendered_doc._body._element.xpath(".//w:object")
+    assert len(objects) == 1, f"{filename} missing ActiveX <w:object> after smoke render"

@@ -26,7 +26,12 @@ from src.quick_report.prpd import (
     generate_prpd_graphs_for_swg_panel,
     generate_prpd_graphs_for_transformer,
 )
-from src.quick_report.utils import clear_cell_text, set_cell_shading
+from src.core.shading import (
+    _normalize_technologies,
+    apply_banner_shading,
+    apply_scan_post_processing,
+    is_defect_forwarding_text,
+)
 from src.testsheet.feeder_thermal import resolve_feeder_channel
 from src.testsheet.models import (
     BatteryBankSpec,
@@ -159,44 +164,30 @@ def _render_docx_template(
     doc.render(_preserve_blank_render_values(rendered_context), jinja_env=_build_jinja_env(), autoescape=True)
 
     is_overview = overview if overview is not None else bool(context.get("__is_overview__", False))
-    def_techs: set[str] = set()
-    if defective_technologies is not None:
-        if isinstance(defective_technologies, str):
-            def_techs = {t.strip().upper() for t in defective_technologies.replace(",", " ").replace("+", " ").split() if t.strip()}
-        else:
-            def_techs = {str(t).strip().upper() for t in defective_technologies if str(t).strip()}
-    elif "__defective_technologies__" in context:
-        raw_dt = context["__defective_technologies__"]
-        if isinstance(raw_dt, str):
-            def_techs = {t.strip().upper() for t in raw_dt.replace(",", " ").replace("+", " ").split() if t.strip()}
-        elif isinstance(raw_dt, (set, list, tuple)):
-            def_techs = {str(t).strip().upper() for t in raw_dt if str(t).strip()}
+    def_techs: set[str] = _normalize_technologies(defective_technologies)
+    if not def_techs and "__defective_technologies__" in context:
+        def_techs = _normalize_technologies(context["__defective_technologies__"])
 
-    # Post-process table cells for severity shading
-    for table in doc.docx.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                text = cell.text.strip()
-                if "__SEVERITY_IR__" in text or "{{ ir.severity }}" in text:
-                    clear_cell_text(cell)
-                    if not is_overview:
-                        set_cell_shading(cell, "EE0000" if "IR" in def_techs else "00B050")
-                    else:
-                        cell.paragraphs[0].text = "-"
-                elif "__SEVERITY_US__" in text or "{{ us.severity }}" in text:
-                    clear_cell_text(cell)
-                    if not is_overview:
-                        set_cell_shading(cell, "EE0000" if "US" in def_techs else "00B050")
-                    else:
-                        cell.paragraphs[0].text = "-"
-                elif "__SEVERITY_TEV__" in text or "{{ tev.severity }}" in text:
-                    clear_cell_text(cell)
-                    if not is_overview:
-                        set_cell_shading(cell, "EE0000" if "TEV" in def_techs else "00B050")
-                    else:
-                        cell.paragraphs[0].text = "-"
-                elif is_overview:
-                    _post_process_overview_cell(cell)
+    # On detail defect pages (is_overview=False), ensure is_defective=True,
+    # so Analysis: and Recommendation: banners are shaded Red (EE0000)!
+    if not is_overview:
+        has_defect = True
+    else:
+        has_defect = bool(def_techs or context.get("has_defect") or context.get("is_defective"))
+        if not has_defect:
+            for table in doc.docx.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        if is_defect_forwarding_text(cell.text):
+                            has_defect = True
+                            break
+
+    apply_scan_post_processing(
+        doc,
+        defective_technologies=def_techs,
+        is_defective=has_defect,
+        is_overview=is_overview,
+    )
 
     doc.save(output_path)
     del doc
@@ -210,11 +201,7 @@ def _post_process_overview_cell(cell: Any) -> None:
     - Defective rows ('Please refer to the following page for details defect.'): EE0000 (Red)
     - Non-defective rows ('No Anomaly.'): 00B050 (Green)
     """
-    text = cell.text.strip()
-    if "Please refer to the following page for detail" in text:
-        set_cell_shading(cell, "EE0000")
-    elif "No Anomaly" in text:
-        set_cell_shading(cell, "00B050")
+    apply_banner_shading(cell, is_defective=None)
 
 
 def _text_or_empty(value: Any) -> str:
@@ -424,7 +411,7 @@ def _build_fp_lvdb_render_context(
     if any(k in combined_model for k in ("(J)", "J-SLOTTED", "J SLOTTED", "J-SLOT", "LVDB")):
         fp_model = "J-SLOTTED"
     elif any(k in combined_model for k in ("(D)", " DIN", "DIN ", "-DIN", "/DIN")):
-        fp_model = "DIN"
+        fp_model = "DIN TYPE"
     elif record.model:
         fp_model = _text_or_empty(record.model)
     elif matched_lv and matched_lv.label:

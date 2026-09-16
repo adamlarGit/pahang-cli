@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import docx
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.table import _Cell
 import pytest
@@ -128,10 +129,10 @@ def test_transformer_unconditional_7_point_rows():
         "OVERVIEW",
         "OVERVIEW TOP",
         "HV BUSHING",
-        "HV CABLE",
-        "HV CABLE SPLIT",
+        "HV CABLES",
+        "CABLE SPLIT",
         "LV BUSHING",
-        "LV CABLE",
+        "LV CABLES",
     ]
     actual_areas = [r.defect_area for r in rows]
     assert actual_areas == expected_defect_areas
@@ -208,7 +209,8 @@ def test_feeder_pillar_with_defect_appends_active_feeder_rows():
     defect_row = rows[1]
     assert defect_row.is_overview is False
     assert defect_row.severity == "DEFECT"
-    assert "WAY 2" in defect_row.defect_area.upper() or "F2" in defect_row.defect_area.upper()
+    assert "F2" in defect_row.equipment.upper()
+    assert "FUSE CONTACT" in defect_row.defect_area.upper()
     assert defect_row.ir_abs == "78.4 °C"
     assert defect_row.us_dB == "-"
     assert defect_row.tev_dB == "-"
@@ -292,7 +294,7 @@ def test_cross_reference_transformer_defect():
     assert bushing_row.us_dB == "18dB"
     assert bushing_row.ir_abs == "-"
 
-    split_row = next(r for r in rows if r.defect_area == "HV CABLE SPLIT")
+    split_row = next(r for r in rows if r.defect_area in ("CABLE SPLIT", "HV CABLE SPLIT"))
     assert split_row.severity == "NORMAL"
 
 
@@ -668,12 +670,231 @@ def test_tx_has_hv_cable_split_predicate(monkeypatch):
     # Default predicate: True -> 7 rows
     rows_default = builder.build_census_rows(pkg)
     assert len(rows_default) == 7
-    assert any(r.defect_area == "HV CABLE SPLIT" for r in rows_default)
+    assert any(r.defect_area in ("CABLE SPLIT", "HV CABLE SPLIT") for r in rows_default)
 
     # Monkeypatch to False -> 6 rows
     import src.full_report.census
     monkeypatch.setattr(src.full_report.census, "has_hv_cable_split", lambda _tx: False)
     rows_no_split = builder.build_census_rows(pkg)
     assert len(rows_no_split) == 6
-    assert not any(r.defect_area == "HV CABLE SPLIT" for r in rows_no_split)
+    assert not any(r.defect_area in ("CABLE SPLIT", "HV CABLE SPLIT") for r in rows_no_split)
+
+
+def test_tx_rating_omitted_when_not_accessible():
+    """Verify that TX rating is omitted from equipment title if 'NOT ACCESSIBLE', '-', or 'N/A'."""
+    tx1 = TransformerSpec(tx_id="Tx 1", rating_kva="NOT ACCESSIBLE", manufacturer="MTM")
+    tx2 = TransformerSpec(tx_id="Tx 2", rating_kva="1000kVA", manufacturer="MTM")
+    pkg = SubstationEquipmentPackage(transformers=(tx1, tx2))
+    builder = ExecutiveSummaryCensusBuilder()
+
+    rows = builder.build_census_rows(pkg)
+    # Tx 1 should format as 'TX1 - MTM'
+    tx1_rows = [r for r in rows if r.group_no == 1]
+    assert len(tx1_rows) == 7
+    assert tx1_rows[0].equipment == "TX1 - MTM"
+
+    # Tx 2 should format as 'TX2 - MTM 1000kVA'
+    tx2_rows = [r for r in rows if r.group_no == 2]
+    assert len(tx2_rows) == 7
+    assert tx2_rows[0].equipment == "TX2 - MTM 1000kVA"
+
+
+def test_column_vertical_merge_preserves_paragraph_centering_and_template_formatting():
+    """Verify apply_column_vertical_merge sets w:jc=center, w:vAlign=center, and preserves run formatting on restart cell."""
+    doc = docx.Document()
+    table = doc.add_table(rows=4, cols=2)
+    # Pre-style restart cell with template run properties (e.g. Calibri, 18pt)
+    cell_p = table.rows[1].cells[0].paragraphs[0]
+    run = cell_p.add_run("orig")
+    rPr = run._r.get_or_add_rPr()
+    rFonts = OxmlElement("w:rFonts")
+    rFonts.set(qn("w:ascii"), "Calibri")
+    rPr.append(rFonts)
+
+    spans = [(1, 3)]  # rows 1-3 merged
+    apply_column_vertical_merge(table, spans, group_numbers=[1])
+
+    # Check restart cell at row 1 col 0
+    cell = table.rows[1].cells[0]
+    assert cell.text.strip() == "1."
+
+    # Verify paragraph centering
+    p = cell.paragraphs[0]
+    pPr = p._p.find(qn("w:pPr"))
+    assert pPr is not None
+    jc = pPr.find(qn("w:jc"))
+    assert jc is not None
+    assert jc.get(qn("w:val")) == "center"
+
+    # Verify run preserved template font Calibri
+    assert len(p.runs) >= 1
+    rPr = p.runs[0]._r.find(qn("w:rPr"))
+    assert rPr is not None
+    rFonts = rPr.find(qn("w:rFonts"))
+    assert rFonts is not None
+    assert rFonts.get(qn("w:ascii")) == "Calibri"
+
+    # Verify cell vertical centering
+    tcPr = cell._tc.find(qn("w:tcPr"))
+    assert tcPr is not None
+    v_align = tcPr.find(qn("w:vAlign"))
+    assert v_align is not None
+    assert v_align.get(qn("w:val")) == "center"
+
+
+def test_feeder_pillar_defect_matching_quick_report_summary():
+    """Verify FP defect rows reuse Quick Report summary rows matching ground truth exactly."""
+    fp = LVDBSpec(name="FP TX1", label="FP", source="TX1")
+    d1 = CbmDefectRecord(
+        equipment="FP (J)",
+        equipment_id="FP TX1 - INCOMING 1",
+        defect_area="INCOMING LINK CONNECTION",
+        additional_remarks="RED PHASE",
+        technology="IR",
+        ir_reading="64.9",
+    )
+    d2 = CbmDefectRecord(
+        equipment="FP (J)",
+        equipment_id="FP TX1 - OUTGOING F1",
+        defect_area="INCOMING FUSE CONNECTION",
+        additional_remarks="BLUE PHASE",
+        technology="IR",
+        ir_reading="64.9",
+    )
+    pkg = SubstationEquipmentPackage(lvdb_specs=(fp,))
+    builder = ExecutiveSummaryCensusBuilder()
+
+    rows = builder.build_census_rows(pkg, defects=(d1, d2))
+    # 1 overview + 2 defects = 3 rows
+    assert len(rows) == 3
+    assert rows[0].equipment == "FP TX1"
+    assert rows[0].defect_area == "OVERVIEW"
+    assert rows[0].severity == "-"
+
+    # Defect row 1 matches Quick Report Table 2 Row 1
+    assert "INCOMING 1" in rows[1].equipment
+    assert rows[1].defect_area == "INCOMING LINK CONNECTION/ RED PHASE"
+    assert rows[1].ir_abs == "64.9 °C"
+    assert rows[1].severity == "DEFECT"
+
+    # Defect row 2 matches Quick Report Table 2 Row 2
+    assert "OUTGOING F1" in rows[2].equipment
+    assert rows[2].defect_area == "INCOMING FUSE CONNECTION/ BLUE PHASE"
+    assert rows[2].ir_abs == "64.9 °C"
+    assert rows[2].severity == "DEFECT"
+
+
+def test_switchgear_overview_and_panel_equipment_formatting():
+    """Verify Q4: SWG overview formatted as 'type, mfg' and panels as 'PANEL <feeder>\n<name>' without swg_base prefix."""
+    swg = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="TAMCO",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, panel_feeder_no="CRB00679", name="PE KG ASLI BATU BALONG"),
+            SwitchgearPanelSpec(panel_no=2, panel_feeder_no="CRB00679", name="TX B"),
+        ),
+    )
+    pkg = SubstationEquipmentPackage(switchgears=(swg,))
+    builder = ExecutiveSummaryCensusBuilder()
+    rows = builder.build_census_rows(pkg)
+
+    # TAMCO: 2 overview rows + 2 panels * 2 comps = 6 rows
+    assert len(rows) == 6
+    assert rows[0].equipment == "RMU SF6, TAMCO"
+    assert rows[1].equipment == "RMU SF6, TAMCO"
+    assert rows[2].equipment == "PANEL CRB00679\nPE KG ASLI BATU BALONG"
+    assert rows[3].equipment == "PANEL CRB00679\nPE KG ASLI BATU BALONG"
+    assert rows[4].equipment == "PANEL CRB00679\nTX B"
+    assert rows[5].equipment == "PANEL CRB00679\nTX B"
+
+
+def test_column_1_dynamic_vertical_merging(tmp_path: Path):
+    """Verify Q3 & Q4: Column 1 dynamic vertical merging for SWG overview, panels, and transformers."""
+    swg = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="TAMCO",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, panel_feeder_no="CRB00679", name="PE KG ASLI BATU BALONG"),
+        ),
+    )
+    tx = TransformerSpec(tx_id="Tx 1", rating_kva="1000", manufacturer="MTM")
+    fp = LVDBSpec(name="FP TX1")
+    pkg = SubstationEquipmentPackage(
+        switchgears=(swg,),
+        transformers=(tx,),
+        lvdb_specs=(fp,),
+    )
+    builder = ExecutiveSummaryCensusBuilder()
+    out_path = tmp_path / "test_merge.docx"
+    result = builder.render(pkg, output_path=out_path)
+
+    doc = docx.Document(str(out_path))
+    table = doc.tables[0]
+
+    # Row 1-2: SWG overview (2 rows)
+    # Row 1: restart
+    vm_swg_ov1 = _get_row_tc_vmerge(table.rows[1], 1)
+    assert vm_swg_ov1 is not None and vm_swg_ov1.get(qn("w:val")) == "restart"
+    assert table.rows[1].cells[1].text.strip() == "RMU SF6, TAMCO"
+    # Row 2: continue, cleared text
+    vm_swg_ov2 = _get_row_tc_vmerge(table.rows[2], 1)
+    assert vm_swg_ov2 is not None and (vm_swg_ov2.get(qn("w:val")) is None or vm_swg_ov2.get(qn("w:val")) == "continue")
+    assert _Cell(table.rows[2]._tr.tc_lst[1], table).text.strip() == ""
+
+    # Row 3-4: Panel 1 compartments (2 rows: CABLE COMPARTMENT, CABLE ENTRY)
+    # Row 3: restart
+    vm_p1 = _get_row_tc_vmerge(table.rows[3], 1)
+    assert vm_p1 is not None and vm_p1.get(qn("w:val")) == "restart"
+    assert "PANEL CRB00679" in table.rows[3].cells[1].text
+    # Row 4: continue, cleared text
+    vm_p2 = _get_row_tc_vmerge(table.rows[4], 1)
+    assert vm_p2 is not None and (vm_p2.get(qn("w:val")) is None or vm_p2.get(qn("w:val")) == "continue")
+    assert _Cell(table.rows[4]._tr.tc_lst[1], table).text.strip() == ""
+
+    # Rows 5-11: TX1 (7 rows)
+    # Row 5: restart with TX1 title
+    vm_tx_start = _get_row_tc_vmerge(table.rows[5], 1)
+    assert vm_tx_start is not None and vm_tx_start.get(qn("w:val")) == "restart"
+    assert table.rows[5].cells[1].text.strip() == "TX1 - MTM 1000kVA"
+    # Rows 6-11: continue, cleared text
+    for r_idx in range(6, 12):
+        vm_tx_cont = _get_row_tc_vmerge(table.rows[r_idx], 1)
+        assert vm_tx_cont is not None and (vm_tx_cont.get(qn("w:val")) is None or vm_tx_cont.get(qn("w:val")) == "continue")
+        assert _Cell(table.rows[r_idx]._tr.tc_lst[1], table).text.strip() == ""
+
+    # Row 12: FP TX1 (1 row, no Col 1 merge)
+    vm_fp = _get_row_tc_vmerge(table.rows[12], 1)
+    assert vm_fp is None or vm_fp.get(qn("w:val")) not in ("restart", "continue")
+    assert table.rows[12].cells[1].text.strip() == "FP TX1"
+
+
+def test_executive_summary_template_title_formatting(tmp_path: Path):
+    """Verify Q2: Executive summary title in rendered docx carries template formatting ('EXECUTIVE SUMMARY')."""
+    builder = ExecutiveSummaryCensusBuilder()
+    out_path = tmp_path / "census_title_test.docx"
+    builder.render(
+        ExecutiveSummaryCensusContext(
+            census_items=[CensusRowItem(no="1.", equipment="SWG", defect_area="OVERVIEW", severity="-", group_no=1)],
+        ),
+        output_path=out_path,
+    )
+
+    doc = docx.Document(str(out_path))
+    p0 = doc.paragraphs[0]
+    assert p0.text.strip() == "EXECUTIVE SUMMARY"
+    # Check centered
+    pPr = p0._p.find(qn("w:pPr"))
+    assert pPr is not None
+    jc = pPr.find(qn("w:jc"))
+    assert jc is not None and jc.get(qn("w:val")) == "center"
+    # Check run font
+    assert len(p0.runs) >= 1
+    rPr = p0.runs[0]._r.find(qn("w:rPr"))
+    assert rPr is not None
+    rFonts = rPr.find(qn("w:rFonts"))
+    assert rFonts is not None
+    assert rFonts.get(qn("w:asciiTheme")) == "minorHAnsi"
+    color = rPr.find(qn("w:color"))
+    assert color is not None and color.get(qn("w:val")) == "auto"
+
 

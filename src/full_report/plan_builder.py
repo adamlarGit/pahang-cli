@@ -60,6 +60,7 @@ from src.full_report.slicer import (
     WordComDocumentSlicer,
 )
 from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
+from src.quick_report.utils import sanitize_filename
 from src.testsheet.models import SubstationEquipmentPackage
 
 logger = logging.getLogger(__name__)
@@ -276,12 +277,14 @@ class FullReportPlanBuilder:
         slicer: DocumentSlicer | None = None,
         templates_dir: Path | str | None = None,
         photo_resolver: RawPhotoResolver | None = None,
+        census_template: Path | str | None = None,
     ) -> None:
-        self.census_builder = census_builder or ExecutiveSummaryCensusBuilder()
+        self.census_builder = census_builder or ExecutiveSummaryCensusBuilder(template_path=census_template)
         self.interleaving_policy = interleaving_policy or DefectInterleavingPolicy()
         self.slicer = slicer
         self.templates_dir = Path(templates_dir) if templates_dir else DEFAULT_TEMPLATES_DIR
         self.photo_resolver = photo_resolver
+        self.census_template = Path(census_template) if census_template else getattr(self.census_builder, "template_path", None)
 
     def evaluate_component_health(
         self,
@@ -289,6 +292,7 @@ class FullReportPlanBuilder:
         equipment_id: str = "",
         cbm_defects: Sequence[Any] | None = None,
         explicit_flag: bool | None = None,
+        total_count: int = 1,
     ) -> bool:
         """Evaluate whether an equipment component/group has active CBM defects (D47).
 
@@ -301,6 +305,7 @@ class FullReportPlanBuilder:
             equipment_id=equipment_id,
             explicit_flag=explicit_flag,
             cbm_defects=cbm_defects,
+            total_count=total_count,
         )
 
     def build(
@@ -322,11 +327,14 @@ class FullReportPlanBuilder:
         survey_root: Path | str | None = None,
         prpd_catalog: dict[str, Any] | None = None,
         prpd_output_dir: Path | str | None = None,
+        prpd_mode: str = "option_c",
         sliced_overview_pages: Sequence[Path | str] | None = None,
         sliced_defects: Sequence[Path | str | CbmDefectSliceMetadata] | None = None,
         has_vi_defects: bool | None = None,
         has_active_defects: dict[str, bool] | None = None,
         scan_items: Sequence[ScanRenderItem | ScanAdapterResult] | None = None,
+        templates_dir: Path | str | None = None,
+        census_template: Path | str | None = None,
     ) -> FullReportStationPlan:
         """Construct deterministic FullReportStationPlan Bill of Materials.
 
@@ -339,6 +347,13 @@ class FullReportPlanBuilder:
         6. Visual Defect Pages (PlanPartType.VI_DEFECTS, omitted if zero VI defects)
         7. Sticker Page (PlanPartType.STICKER)
         """
+        eff_templates_dir = Path(templates_dir) if templates_dir else self.templates_dir
+        eff_census_builder = (
+            ExecutiveSummaryCensusBuilder(template_path=census_template)
+            if census_template
+            else self.census_builder
+        )
+
         info = substation_info or getattr(package, "substation_info", {}) or {}
         st_name = (
             station
@@ -375,7 +390,18 @@ class FullReportPlanBuilder:
         resolved_sliced = sliced_sections
         if resolved_sliced is None and quick_report_path:
             qr_p = Path(quick_report_path)
-            temp_target = Path(temp_parts_dir) if temp_parts_dir else (out_d / "temp_parts")
+            if temp_parts_dir:
+                temp_target = Path(temp_parts_dir)
+            else:
+                clean_sub_name = sanitize_filename(st_name)
+                clean_date = sanitize_filename(d_str).replace(" ", "_")
+                sub_num_val = getattr(package, "substation_number", 0)
+                if not sub_num_val and "pe_number" in info:
+                    try:
+                        sub_num_val = int(info["pe_number"])
+                    except (ValueError, TypeError):
+                        sub_num_val = 0
+                temp_target = Path(".temp") / "full_report" / f"{sub_num_val:03d}_{clean_sub_name}_{clean_date}" / "sliced"
             slicer_instance = self.slicer or WordComDocumentSlicer()
             has_vi_eval = bool(vi_list) if has_vi_defects is None else has_vi_defects
             resolved_sliced = slicer_instance.slice_sections(
@@ -453,7 +479,7 @@ class FullReportPlanBuilder:
 
         # Part 2: Executive Summary Census
         sub_num_str = str(getattr(package, "substation_number", "") or info.get("pe_number", ""))
-        census_ctx = self.census_builder.build_context(
+        census_ctx = eff_census_builder.build_context(
             package,
             defects=cbm_list,
             substation_number=sub_num_str,
@@ -464,7 +490,7 @@ class FullReportPlanBuilder:
                 part_type=PlanPartType.CENSUS,
                 part_name="Executive Summary Census",
                 is_sliced=False,
-                template_path=self.census_builder.template_path,
+                template_path=eff_census_builder.template_path,
                 context=census_ctx.to_dict(),
                 census_context=census_ctx,
             )
@@ -497,16 +523,6 @@ class FullReportPlanBuilder:
                 if (has_active_defects and "swg" in has_active_defects)
                 else self.evaluate_component_health("swg", cbm_defects=cbm_list)
             )
-            tx_active = (
-                has_active_defects.get("tx")
-                if (has_active_defects and "tx" in has_active_defects)
-                else self.evaluate_component_health("tx", cbm_defects=cbm_list)
-            )
-            fp_active = (
-                has_active_defects.get("fp")
-                if (has_active_defects and "fp" in has_active_defects)
-                else self.evaluate_component_health("fp", cbm_defects=cbm_list)
-            )
             bb_active = (
                 has_active_defects.get("battery")
                 if (has_active_defects and "battery" in has_active_defects)
@@ -522,14 +538,31 @@ class FullReportPlanBuilder:
                     survey_root=survey_root,
                     prpd_catalog=prpd_catalog,
                     prpd_output_dir=prpd_output_dir,
-                    templates_dir=self.templates_dir,
+                    prpd_mode=prpd_mode,
+                    templates_dir=eff_templates_dir,
                     sliced_overview_pages=pool_sliced_overviews,
                     has_active_defect=swg_active,
                     cbm_defects=cbm_list,
                 )
                 adapted_items.append(ad.adapt())
 
-            for tx_idx, tx in enumerate(getattr(package, "transformers", ()), 1):
+            tx_list = list(getattr(package, "transformers", ()))
+            total_tx_count = len(tx_list)
+            for tx_idx, tx in enumerate(tx_list, 1):
+                tx_id_str = f"tx{tx_idx}"
+                tx_active = None
+                if has_active_defects:
+                    if tx_id_str in has_active_defects:
+                        tx_active = has_active_defects[tx_id_str]
+                    elif "tx" in has_active_defects and total_tx_count <= 1:
+                        tx_active = has_active_defects["tx"]
+                if tx_active is None:
+                    tx_active = self.evaluate_component_health(
+                        "tx",
+                        equipment_id=tx_id_str,
+                        cbm_defects=cbm_list,
+                        total_count=total_tx_count,
+                    )
                 ad = TransformerScanAdapter(
                     tx=tx,
                     substation_info=info,
@@ -538,22 +571,41 @@ class FullReportPlanBuilder:
                     survey_root=survey_root,
                     prpd_catalog=prpd_catalog,
                     prpd_output_dir=prpd_output_dir,
-                    templates_dir=self.templates_dir,
+                    prpd_mode=prpd_mode,
+                    templates_dir=eff_templates_dir,
                     sliced_overview_pages=pool_sliced_overviews,
                     has_active_defect=tx_active,
                     cbm_defects=cbm_list,
+                    total_tx_count=total_tx_count,
                 )
                 adapted_items.append(ad.adapt())
 
-            for lvdb in getattr(package, "lvdb_specs", ()):
+            lvdb_list = list(getattr(package, "lvdb_specs", ()))
+            total_fp_count = len(lvdb_list)
+            for fp_idx, lvdb in enumerate(lvdb_list, 1):
+                fp_id_str = f"fp{fp_idx}"
+                fp_active = None
+                if has_active_defects:
+                    if fp_id_str in has_active_defects:
+                        fp_active = has_active_defects[fp_id_str]
+                    elif "fp" in has_active_defects and total_fp_count <= 1:
+                        fp_active = has_active_defects["fp"]
+                if fp_active is None:
+                    fp_active = self.evaluate_component_health(
+                        "fp",
+                        equipment_id=fp_id_str,
+                        cbm_defects=cbm_list,
+                        total_count=total_fp_count,
+                    )
                 ad = LVDBScanAdapter(
                     lvdb=lvdb,
                     substation_info=info,
                     photo_resolver=photo_resolver or self.photo_resolver,
-                    templates_dir=self.templates_dir,
+                    templates_dir=eff_templates_dir,
                     sliced_overview_pages=pool_sliced_overviews,
                     has_active_defect=fp_active,
                     cbm_defects=cbm_list,
+                    total_fp_count=total_fp_count,
                 )
                 adapted_items.append(ad.adapt())
 
@@ -562,7 +614,7 @@ class FullReportPlanBuilder:
                     bb=bb,
                     substation_info=info,
                     photo_resolver=photo_resolver or self.photo_resolver,
-                    templates_dir=self.templates_dir,
+                    templates_dir=eff_templates_dir,
                     sliced_overview_pages=pool_sliced_overviews,
                     has_active_defect=bb_active,
                     cbm_defects=cbm_list,

@@ -10,7 +10,7 @@ import pytest
 
 
 TEMPLATE_PATH = Path("templates/FULL REPORT/executive_summary_census.docx")
-EXPECTED_COL_WIDTHS_DXA = [630, 2742, 2719, 1019, 720, 720, 1980]
+EXPECTED_COL_WIDTHS_DXA = [679, 2693, 3067, 1432, 990, 900, 1350]
 
 
 def _get_cell_shading(cell: _Cell):
@@ -38,7 +38,7 @@ def test_census_template_heading_and_styling(census_doc: docx.Document):
 
     heading_paragraph = census_doc.paragraphs[0]
     heading_text = heading_paragraph.text.strip()
-    assert heading_text == "2.0 EXECUTIVE SUMMARY (EQUIPMENT CENSUS)"
+    assert heading_text in ("EXECUTIVE SUMMARY", "2.0 EXECUTIVE SUMMARY (EQUIPMENT CENSUS)")
     assert heading_paragraph.style.name == "Subtitle SVT"
     assert heading_paragraph.alignment == docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
     # Heading runs must be bold

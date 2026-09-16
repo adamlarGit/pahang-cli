@@ -171,6 +171,18 @@ class ProjectEnvironment:
     def get_sub_cond_dir(self) -> Path:
         return self.get_template("sub_cond_dir")
 
+    def get_full_report_templates_dir(self) -> Path:
+        return self.storage.get_full_report_templates_dir()
+
+    def get_full_report_census_template(self) -> Path:
+        return self.storage.get_full_report_census_template()
+
+    def get_full_report_normal_templates_dir(self, folder_name: str = "NORMAL IR US TEV") -> Path:
+        return self.storage.get_full_report_normal_templates_dir(folder_name)
+
+    def get_full_report_normal_template(self, filename: str, folder_name: str = "NORMAL IR US TEV") -> Path:
+        return self.storage.get_full_report_normal_template(filename, folder_name)
+
     def list_testsheet_folders(self) -> list[Path]:
         return self.storage.list_testsheet_folders()
 

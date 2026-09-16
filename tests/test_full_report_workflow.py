@@ -78,6 +78,7 @@ def _make_mock_env(tmp_path: Path) -> ProjectEnvironment:
     (root / "FULL REPORT").mkdir(parents=True, exist_ok=True)
 
     storage = LocalWorkspaceStorage(root)
+    storage._initialize_project_workspace()
     metadata = ProjectMetadata(
         key="TEST_PROJ",
         name="Test Project",
@@ -493,4 +494,34 @@ def test_resolve_target_fl_strings(tmp_path: Path) -> None:
     folders, fls = wf._resolve_target(["CRAU/PCE/J00251", "CKTN/PCE/J00030"], env)
     assert folders is None
     assert fls == ("CRAU/PCE/J00251", "CKTN/PCE/J00030")
+
+
+def test_inspect_detects_missing_full_report_templates(tmp_path: Path) -> None:
+    """inspect() flags error and sets is_ready=False when Full Report templates are missing (Bug 7)."""
+    env = _make_mock_env(tmp_path)
+    wf = FullReportWorkflow(compiler=FakeDocumentCompiler(), slicer=FakeDocumentSlicer())
+    pkg = _make_sample_pkg(pe_number=5, station_name="TALAPIA", station="RAUB")
+
+    # Set up valid QR file so preflight passes
+    qr_dir = (
+        Path(env.base_path)
+        / "QUICK REPORT"
+        / "RAUB"
+        / "08. AUGUST"
+        / "04-08-2026"
+    )
+    qr_dir.mkdir(parents=True, exist_ok=True)
+    _create_mock_qr_docx(qr_dir / "005. TALAPIA.docx")
+
+    # Delete census template from workspace
+    census_tpl = env.storage.get_full_report_census_template()
+    if census_tpl.exists():
+        census_tpl.unlink()
+
+    insp = wf.inspect(target=[pkg], environment=env)
+    assert len(insp.targets) == 1
+    telem = insp.targets[0]
+    assert telem.is_ready is False
+    assert any("census template" in err.lower() for err in telem.errors)
+
 

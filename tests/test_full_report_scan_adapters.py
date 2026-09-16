@@ -866,3 +866,173 @@ def test_scan_render_item_to_page_context(mock_substation_info: dict[str, str]) 
     assert spc.context == item.context
 
 
+def test_check_has_active_defect_disambiguates_fp_with_tx_in_name() -> None:
+    """Verify _check_has_active_defect correctly identifies FP defects without falsely triggering TX defects."""
+    from src.full_report.scan_adapters import _check_has_active_defect
+    from src.quick_report.defects import CbmDefectRecord
+
+    d_fp = CbmDefectRecord(
+        equipment="FP (J)",
+        technology="IR",
+        defect_area="INCOMING LINK CONNECTION",
+        additional_remarks="RED PHASE",
+        equipment_id="FP TX1 - INCOMING 1",
+    )
+    cbm_defects = [d_fp]
+
+    # FP category must detect defect
+    assert _check_has_active_defect("fp", "fp1", cbm_defects=cbm_defects) is True
+    assert _check_has_active_defect("fp", "FP TX1", cbm_defects=cbm_defects) is True
+
+    # TX category must NOT detect defect from FP TX1
+    assert _check_has_active_defect("tx", "TX1", cbm_defects=cbm_defects) is False
+    assert _check_has_active_defect("tx", "TX2", cbm_defects=cbm_defects) is False
+    assert _check_has_active_defect("tx", "", cbm_defects=cbm_defects) is False
+
+    # SWG category must NOT detect defect from FP TX1
+    assert _check_has_active_defect("swg", "swg1", cbm_defects=cbm_defects) is False
+
+    # Now verify true TX defect is detected
+    d_tx = CbmDefectRecord(
+        equipment="TRANSFORMER",
+        technology="IR",
+        defect_area="HV BUSHING",
+        equipment_id="TX 1",
+    )
+    tx_defects = [d_tx]
+    assert _check_has_active_defect("tx", "TX1", cbm_defects=tx_defects) is True
+    assert _check_has_active_defect("tx", "TX2", cbm_defects=tx_defects) is False
+    assert _check_has_active_defect("tx", "", cbm_defects=tx_defects) is True
+    assert _check_has_active_defect("fp", "fp1", cbm_defects=tx_defects) is False
+
+def test_switchgear_scan_adapter_tev_background_resolution():
+    """Verify SwitchgearScanAdapter reads tev_background from substation_info and defaults to '-', never '4'."""
+    swg = SwitchgearScanSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="TAMCO",
+        panels=(SwitchgearPanelScanSpec(panel_no=1, panel_feeder_no="P1", name="TX A"),),
+    )
+
+    # 1. When substation_info has no TEV background, must default to "-", NOT "4"
+    ad_empty = SwitchgearScanAdapter(swg=swg, substation_info={})
+    assert ad_empty.tev_background == "-"
+    res_empty = ad_empty.adapt()
+    panel_item_empty = [it for it in res_empty.items if not it.is_overview][0]
+    assert panel_item_empty.context["panel"]["tev"]["bg"] == "-"
+
+    # 2. When substation_info has tev_background="1", must be "1"
+    ad_with_bg = SwitchgearScanAdapter(swg=swg, substation_info={"tev_background": "1"})
+    assert ad_with_bg.tev_background == "1"
+    res_with_bg = ad_with_bg.adapt()
+    panel_item_with_bg = [it for it in res_with_bg.items if not it.is_overview][0]
+    assert panel_item_with_bg.context["panel"]["tev"]["bg"] == "1"
+
+    # 3. When substation_info has tev_bg="1", must be "1"
+    ad_with_tev_bg = SwitchgearScanAdapter(swg=swg, substation_info={"tev_bg": "1"})
+    assert ad_with_tev_bg.tev_background == "1"
+    res_with_tev_bg = ad_with_tev_bg.adapt()
+    panel_item_with_tev_bg = [it for it in res_with_tev_bg.items if not it.is_overview][0]
+    assert panel_item_with_tev_bg.context["panel"]["tev"]["bg"] == "1"
+
+    # 4. When substation_info has tev_background="-" or None, must be "-"
+    ad_dash = SwitchgearScanAdapter(swg=swg, substation_info={"tev_background": "-"})
+    assert ad_dash.tev_background == "-"
+    res_dash = ad_dash.adapt()
+    panel_item_dash = [it for it in res_dash.items if not it.is_overview][0]
+    assert panel_item_dash.context["panel"]["tev"]["bg"] == "-"
+
+
+def test_defect_isolation_per_transformer_instance() -> None:
+    """Verify zero defect leakage between TX1 and TX2 (Bug 8)."""
+    from src.full_report.scan_adapters import _check_has_active_defect
+    from src.quick_report.defects import CbmDefectRecord
+
+    # 1. Defect explicitly for TX1
+    d_tx1 = CbmDefectRecord(
+        equipment="TRANSFORMER",
+        equipment_id="TX 1",
+        defect_area="HV BUSHING",
+        technology="IR",
+    )
+    assert _check_has_active_defect("tx", "tx1", cbm_defects=[d_tx1], total_count=2) is True
+    assert _check_has_active_defect("tx", "tx2", cbm_defects=[d_tx1], total_count=2) is False
+
+    # 2. Defect explicitly for TX2
+    d_tx2 = CbmDefectRecord(
+        equipment="TRANSFORMER",
+        equipment_id="TX 2",
+        defect_area="LV CABLE",
+        technology="US",
+    )
+    assert _check_has_active_defect("tx", "tx1", cbm_defects=[d_tx2], total_count=2) is False
+    assert _check_has_active_defect("tx", "tx2", cbm_defects=[d_tx2], total_count=2) is True
+
+    # 3. Defect with generic LTX/DTX on multi-TX station (total_count=2):
+    # Maps to TX1 only, zero leakage to TX2!
+    d_generic = CbmDefectRecord(
+        equipment="LTX/DTX",
+        equipment_id="",
+        defect_area="BODY",
+        technology="IR",
+    )
+    assert _check_has_active_defect("tx", "tx1", cbm_defects=[d_generic], total_count=2) is True
+    assert _check_has_active_defect("tx", "tx2", cbm_defects=[d_generic], total_count=2) is False
+
+    # 4. Defect with generic CABLE LTX/DTX on single-TX station (total_count=1):
+    assert _check_has_active_defect("tx", "tx1", cbm_defects=[d_generic], total_count=1) is True
+
+
+def test_defect_isolation_per_feeder_pillar_instance() -> None:
+    """Verify zero defect leakage between FP1 and FP2 (Bug 8)."""
+    from src.full_report.scan_adapters import _check_has_active_defect
+    from src.quick_report.defects import CbmDefectRecord
+
+    d_fp1 = CbmDefectRecord(
+        equipment="FEEDER PILLAR",
+        equipment_id="FP 1",
+        defect_area="FUSE BASE",
+        technology="IR",
+    )
+    assert _check_has_active_defect("fp", "fp1", cbm_defects=[d_fp1], total_count=2) is True
+    assert _check_has_active_defect("fp", "fp2", cbm_defects=[d_fp1], total_count=2) is False
+
+    d_fp2 = CbmDefectRecord(
+        equipment="FEEDER PILLAR",
+        equipment_id="FP 2",
+        defect_area="BUSBAR",
+        technology="IR",
+    )
+    assert _check_has_active_defect("fp", "fp1", cbm_defects=[d_fp2], total_count=2) is False
+    assert _check_has_active_defect("fp", "fp2", cbm_defects=[d_fp2], total_count=2) is True
+
+
+def test_overview_templates_placeholders_and_activex() -> None:
+    """Verify swg-overview, tx-overview, fp-overview have Analysis/Recommendation and ActiveX controls."""
+    from pathlib import Path
+    import zipfile
+    import docx
+
+    tpl_dir = Path("templates/FULL REPORT/NORMAL IR US TEV")
+    assert not (tpl_dir / "blackbox-overview.docx").exists(), "blackbox-overview.docx must be removed"
+
+    for tpl_name in ("swg-overview.docx", "tx-overview.docx", "fp-overview.docx"):
+        tpl_path = tpl_dir / tpl_name
+        assert tpl_path.exists(), f"Template {tpl_name} missing"
+
+        # Check ActiveX preservation
+        with zipfile.ZipFile(tpl_path, "r") as zf:
+            namelist = zf.namelist()
+            assert "word/activeX/activeX1.bin" in namelist, f"ActiveX bin missing in {tpl_name}"
+            assert "word/activeX/activeX1.xml" in namelist, f"ActiveX xml missing in {tpl_name}"
+            assert "word/activeX/_rels/activeX1.xml.rels" in namelist, f"ActiveX rels missing in {tpl_name}"
+
+        # Check placeholders in table rows 35 & 36
+        doc = docx.Document(tpl_path)
+        table = doc.tables[0]
+        row_texts = [r.cells[0].text.strip() for r in table.rows]
+        analysis_rows = [t for t in row_texts if "Analysis:" in t]
+        rec_rows = [t for t in row_texts if "Recommendation:" in t]
+
+        assert any("{{ analysis }}" in t for t in analysis_rows), f"{{ analysis }} missing in {tpl_name}"
+        assert any("{{ recommendation }}" in t for t in rec_rows), f"{{ recommendation }} missing in {tpl_name}"
+

@@ -161,12 +161,12 @@ def test_e2e_benchmark_talapia_plan_and_interleaving(benchmark_env: ProjectEnvir
     assert len(swg_parts) >= 8, f"Expected at least 8 SWG scan pages, got {len(swg_parts)}"
 
     # 3. Transformer Scanning Pages
-    tx_parts = [p for p in plan.parts if p.part_type == PlanPartType.SCAN_PAGE and "Tx 2" in p.part_name]
-    assert len(tx_parts) >= 6, f"Expected at least 6 Tx 2 scan pages, got {len(tx_parts)}"
+    tx_parts = [p for p in plan.parts if p.part_type == PlanPartType.SCAN_PAGE and ("Tx 2" in p.part_name or "TX2" in p.part_name)]
+    assert len(tx_parts) >= 6, f"Expected at least 6 TX2 scan pages, got {len(tx_parts)}"
 
     # 4. FP Overview Substituted by Sliced QR (D47)
-    fp_ov_parts = [p for p in plan.parts if "LVDB 1 - OVERVIEW" in p.part_name and p.is_sliced]
-    assert len(fp_ov_parts) == 1, "LVDB 1 overview was not substituted by sliced QR"
+    fp_ov_parts = [p for p in plan.parts if ("LVDB 1 - OVERVIEW" in p.part_name or "FP 1 - OVERVIEW" in p.part_name) and p.is_sliced]
+    assert len(fp_ov_parts) == 1, "LVDB/FP 1 overview was not substituted by sliced QR"
     assert "Sliced QR" in fp_ov_parts[0].part_name
 
     # 5. Interleaved FP Defect Pages in Channel Order (D36)

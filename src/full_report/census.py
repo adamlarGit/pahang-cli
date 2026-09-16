@@ -14,6 +14,7 @@ from docx.oxml.ns import qn
 from docx.table import _Cell
 from docxtpl import DocxTemplate
 
+from src.core.normalizers import normalize_tx_id
 from src.full_report.models import (
     FullReportScanPackage,
     SwitchgearCategory,
@@ -28,6 +29,7 @@ from src.quick_report.cbm_summary import (
     format_db_reading,
     format_summary_equipment,
     format_temperature_reading,
+    prepare_tech_summary_rows,
 )
 from src.quick_report.defects import CbmDefectRecord
 from src.quick_report.utils import clear_cell_text, set_cell_shading
@@ -38,6 +40,18 @@ from src.testsheet.models import (
     SwitchgearPanelSpec,
     SwitchgearSpec,
     TransformerSpec,
+)
+
+
+# Standard 7 components for transformer census table per ADR 0004
+TRANSFORMER_CENSUS_COMPONENTS: tuple[str, ...] = (
+    "OVERVIEW",
+    "OVERVIEW TOP",
+    "HV BUSHING",
+    "HV CABLES",
+    "CABLE SPLIT",
+    "LV BUSHING",
+    "LV CABLES",
 )
 
 
@@ -59,6 +73,7 @@ class CensusRowItem:
     group_no: int = 1
     is_overview: bool = False
     is_defect: bool = False
+    eq_group_key: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize row to dictionary matching template placeholders."""
@@ -234,21 +249,26 @@ def _match_defects_for_tx_component(
             continue
 
         if total_transformers > 1:
-            tx_id_upper = tx.tx_id.upper().replace(" ", "")
-            target_upper = f"{eq_upper} {eq_id_upper}".replace(" ", "")
-            if tx_id_upper not in target_upper:
+            norm_id = normalize_tx_id(tx.tx_id)
+            target = f"{eq_upper} {eq_id_upper}".replace(" ", "")
+            m_target = re.search(r"(?:TX|TRANSFORMER)\s*[-_]?\s*(\d+)", f"{eq_upper} {eq_id_upper}")
+            if m_target:
+                target_tx_id = f"TX{m_target.group(1)}"
+                if norm_id != target_tx_id:
+                    continue
+            elif norm_id not in target and (tx.tx_id or "").upper().replace(" ", "") not in target:
                 continue
 
         comp_match = False
-        if comp_upper == "HV CABLE SPLIT":
+        if comp_upper in ("CABLE SPLIT", "HV CABLE SPLIT"):
             comp_match = "SPLIT" in area_upper
         elif comp_upper == "HV BUSHING":
             comp_match = ("HV" in area_upper and "BUSHING" in area_upper) or ("BUSHING" in area_upper and d.hv_lv == "HV") or ("BUSHING" in area_upper and "LV" not in area_upper)
-        elif comp_upper == "HV CABLE":
+        elif comp_upper in ("HV CABLE", "HV CABLES"):
             comp_match = (("HV" in area_upper and "CABLE" in area_upper) or ("CABLE" in area_upper and d.hv_lv == "HV")) and "SPLIT" not in area_upper
         elif comp_upper == "LV BUSHING":
             comp_match = ("LV" in area_upper and "BUSHING" in area_upper) or ("BUSHING" in area_upper and d.hv_lv == "LV")
-        elif comp_upper == "LV CABLE":
+        elif comp_upper in ("LV CABLE", "LV CABLES"):
             comp_match = ("LV" in area_upper and "CABLE" in area_upper) or ("CABLE" in area_upper and d.hv_lv == "LV")
         elif comp_upper == "OVERVIEW TOP":
             comp_match = "TOP" in area_upper
@@ -282,12 +302,22 @@ def _match_defects_for_lvdb(
         if not is_lvdb:
             continue
 
-        if total_lvdbs > 1 and lvdb_name_upper:
-            # Check if this defect targets another specific FP (e.g. FP 1 vs FP 2)
-            m_self = re.search(r"\b(?:FP|LVDB)\s*(\d+)\b", lvdb_name_upper)
-            m_target = re.search(r"\b(?:FP|LVDB)\s*(\d+)\b", combined)
-            if m_self and m_target and m_self.group(1) != m_target.group(1):
-                continue
+        if total_lvdbs > 1:
+            # Check if this defect targets another specific FP by TX source (e.g. FP TX1 vs FP TX2)
+            if lvdb.source and any(k in lvdb.source.upper() for k in ("TX", "TRANSFORMER")):
+                self_tx = normalize_tx_id(lvdb.source)
+                m_tx = re.search(r"\b(?:TX|TRANSFORMER)\s*[-_]?\s*(\d+)\b", combined)
+                if m_tx:
+                    target_tx = f"TX{m_tx.group(1)}"
+                    if self_tx != target_tx:
+                        continue
+
+            if lvdb_name_upper:
+                # Check if this defect targets another specific FP (e.g. FP 1 vs FP 2)
+                m_self = re.search(r"\b(?:FP|LVDB)\s*(\d+)\b", lvdb_name_upper)
+                m_target = re.search(r"\b(?:FP|LVDB)\s*(\d+)\b", combined)
+                if m_self and m_target and m_self.group(1) != m_target.group(1):
+                    continue
 
         matched.append(d)
 
@@ -371,8 +401,48 @@ def apply_column_vertical_merge(
         # 1. Restart cell
         start_tc = table.rows[start_row]._tr.tc_lst[0]
         start_cell = _Cell(start_tc, table)
-        start_cell.text = f"{g_num}."
+        if start_cell.paragraphs:
+            p = start_cell.paragraphs[0]
+            if p.runs:
+                p.runs[0].text = f"{g_num}."
+                for r_extra in p.runs[1:]:
+                    r_extra.text = ""
+            else:
+                p.text = f"{g_num}."
+        else:
+            p = start_cell.add_paragraph(f"{g_num}.")
+
+        # Preserve / enforce center alignment and line spacing
+        pPr = p._p.get_or_add_pPr()
+        jc = pPr.find(qn("w:jc"))
+        if jc is None:
+            jc = OxmlElement("w:jc")
+            pPr.append(jc)
+        jc.set(qn("w:val"), "center")
+
+        spacing = pPr.find(qn("w:spacing"))
+        if spacing is None:
+            spacing = OxmlElement("w:spacing")
+            pPr.append(spacing)
+        spacing.set(qn("w:after"), "0")
+        spacing.set(qn("w:line"), "240")
+        spacing.set(qn("w:lineRule"), "auto")
+
+        # Strip any indentation (w:ind) or list numbering (w:numPr) to prevent horizontal offset
+        ind = pPr.find(qn("w:ind"))
+        if ind is not None:
+            pPr.remove(ind)
+        numPr = pPr.find(qn("w:numPr"))
+        if numPr is not None:
+            pPr.remove(numPr)
+
         tcPr_start = start_tc.get_or_add_tcPr()
+        v_align = tcPr_start.find(qn("w:vAlign"))
+        if v_align is None:
+            v_align = OxmlElement("w:vAlign")
+            tcPr_start.append(v_align)
+        v_align.set(qn("w:val"), "center")
+
         existing_start = tcPr_start.find(qn("w:vMerge"))
         if existing_start is not None:
             tcPr_start.remove(existing_start)
@@ -387,6 +457,87 @@ def apply_column_vertical_merge(
             cont_cell = _Cell(cont_tc, table)
             clear_cell_text(cont_cell)
             tcPr_cont = cont_tc.get_or_add_tcPr()
+            v_align_c = tcPr_cont.find(qn("w:vAlign"))
+            if v_align_c is None:
+                v_align_c = OxmlElement("w:vAlign")
+                tcPr_cont.append(v_align_c)
+            v_align_c.set(qn("w:val"), "center")
+            existing_cont = tcPr_cont.find(qn("w:vMerge"))
+            if existing_cont is not None:
+                tcPr_cont.remove(existing_cont)
+            v_merge_cont = OxmlElement("w:vMerge")
+            tcPr_cont.append(v_merge_cont)
+
+
+def apply_equipment_vertical_merge(
+    table: Any,
+    items: Sequence[CensusRowItem],
+) -> None:
+    """Apply dynamic OpenXML <w:vMerge> on Column 1 (EQUIPMENT).
+
+    Dynamic grouping rules:
+    - Switchgear Overview: merged across overview rows of that switchgear.
+    - Switchgear Panels: merged across compartment rows belonging to each panel.
+    - Transformers: merged across all component rows belonging to that transformer group.
+    - Single-row items (e.g. INDKOM 1-comp panel, FP overview/defects) receive no merge.
+
+    First row of a multi-row group receives <w:vMerge w:val="restart"/> (keeping existing rendered text/formatting).
+    Subsequent rows receive <w:vMerge/> and text is cleared.
+    """
+    if not items or len(table.rows) <= 1:
+        return
+
+    groups: list[tuple[int, int]] = []
+    start_idx = 0
+    curr_key = getattr(items[0], "eq_group_key", None) or f"{items[0].group_no}_{items[0].equipment}"
+
+    for i, item in enumerate(items):
+        key = getattr(item, "eq_group_key", None) or f"{item.group_no}_{item.equipment}"
+        if key != curr_key:
+            groups.append((start_idx, i - 1))
+            curr_key = key
+            start_idx = i
+    groups.append((start_idx, len(items) - 1))
+
+    for start_i, end_i in groups:
+        span = end_i - start_i + 1
+        if span <= 1:
+            continue
+
+        start_row = 1 + start_i
+        end_row = 1 + end_i
+
+        if start_row >= len(table.rows):
+            continue
+
+        # 1. Restart cell
+        start_tc = table.rows[start_row]._tr.tc_lst[1]
+        tcPr_start = start_tc.get_or_add_tcPr()
+        v_align = tcPr_start.find(qn("w:vAlign"))
+        if v_align is None:
+            v_align = OxmlElement("w:vAlign")
+            tcPr_start.append(v_align)
+        v_align.set(qn("w:val"), "center")
+
+        existing_start = tcPr_start.find(qn("w:vMerge"))
+        if existing_start is not None:
+            tcPr_start.remove(existing_start)
+        v_merge_restart = OxmlElement("w:vMerge")
+        v_merge_restart.set(qn("w:val"), "restart")
+        tcPr_start.append(v_merge_restart)
+
+        # 2. Continuing cells
+        max_r = min(end_row, len(table.rows) - 1)
+        for r in range(start_row + 1, max_r + 1):
+            cont_tc = table.rows[r]._tr.tc_lst[1]
+            cont_cell = _Cell(cont_tc, table)
+            clear_cell_text(cont_cell)
+            tcPr_cont = cont_tc.get_or_add_tcPr()
+            v_align_c = tcPr_cont.find(qn("w:vAlign"))
+            if v_align_c is None:
+                v_align_c = OxmlElement("w:vAlign")
+                tcPr_cont.append(v_align_c)
+            v_align_c.set(qn("w:val"), "center")
             existing_cont = tcPr_cont.find(qn("w:vMerge"))
             if existing_cont is not None:
                 tcPr_cont.remove(existing_cont)
@@ -440,6 +591,7 @@ def apply_post_render_dom(
         return doc
     table = document.tables[table_index]
     apply_column_vertical_merge(table, items)
+    apply_equipment_vertical_merge(table, items)
     apply_severity_shading(table, items)
     return doc
 
@@ -475,7 +627,7 @@ class ExecutiveSummaryCensusBuilder:
         # ----------------------------------------------------------------------
         # 1. Switchgear lineup(s)
         # ----------------------------------------------------------------------
-        for swg in swgs:
+        for swg_idx, swg in enumerate(swgs, 1):
             group_num = current_group
             current_group += 1
             category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
@@ -483,14 +635,19 @@ class ExecutiveSummaryCensusBuilder:
 
             mfg = (swg.manufacturer or "").strip()
             swg_type = (swg.switchgear_type or "RMU SF6").strip()
-            swg_base = f"{swg_type} - {mfg}" if (mfg and mfg.upper() not in swg_type.upper()) else swg_type
+            if mfg and mfg.upper() not in swg_type.upper():
+                swg_overview_title = f"{swg_type}, {mfg}"
+            else:
+                swg_overview_title = swg_type
+
+            ov_group_key = f"swg_{swg_idx}_overview"
 
             # Switchgear Overview Row(s)
             for comp in overview_compartments:
                 rows.append(
                     CensusRowItem(
                         no=f"{group_num}.",
-                        equipment=swg_base,
+                        equipment=swg_overview_title,
                         defect_area=comp,
                         ir_abs="-",
                         us_dB="-",
@@ -499,29 +656,54 @@ class ExecutiveSummaryCensusBuilder:
                         group_no=group_num,
                         is_overview=True,
                         is_defect=False,
+                        eq_group_key=ov_group_key,
                     )
                 )
 
             # Switchgear Panels
             for panel in swg.panels:
-                if panel.panel_feeder_no and panel.name:
-                    panel_id = f"{panel.panel_feeder_no} - {panel.name}"
-                elif panel.panel_feeder_no:
-                    panel_id = panel.panel_feeder_no
-                elif panel.name:
-                    panel_id = panel.name
-                else:
-                    panel_id = f"PANEL {panel.panel_no}"
+                p_feeder = (panel.panel_feeder_no or "").strip()
+                p_name = (panel.name or "").strip()
 
-                panel_eq = format_summary_equipment(
-                    CbmDefectRecord(equipment=swg_base, equipment_id=panel_id)
-                )
+                clean_feeder = re.sub(r"^PANEL\s*", "", p_feeder, flags=re.I).strip()
+                clean_name = p_name
+
+                # Strip redundant feeder prefix from clean_name if present
+                if clean_feeder:
+                    clean_name = re.sub(
+                        rf"^(?:PANEL\s+)?{re.escape(clean_feeder)}\s*[-–:]?\s*",
+                        "",
+                        clean_name,
+                        flags=re.I,
+                    ).strip()
+                    clean_name = re.sub(r"^PANEL\s*", "", clean_name, flags=re.I).strip()
+                elif not clean_feeder and clean_name:
+                    m_fn = re.match(r"^(?:PANEL\s+)?([A-Za-z0-9]+)\s*[-–:]\s*(.+)$", clean_name, flags=re.I)
+                    if m_fn:
+                        clean_feeder = m_fn.group(1).strip()
+                        clean_name = m_fn.group(2).strip()
+
+                if clean_feeder and clean_name:
+                    panel_eq = f"PANEL {clean_feeder}\n{clean_name}"
+                elif clean_feeder:
+                    panel_eq = f"PANEL {clean_feeder}"
+                elif clean_name:
+                    if clean_name.upper().startswith("PANEL"):
+                        panel_eq = clean_name
+                    else:
+                        panel_eq = f"PANEL {panel.panel_no}\n{clean_name}"
+                else:
+                    panel_eq = f"PANEL {panel.panel_no}"
+
+                panel_group_key = f"swg_{swg_idx}_p{panel.panel_no}"
 
                 compartments = (
                     panel.compartments
                     if hasattr(panel, "compartments") and panel.compartments
                     else resolve_switchgear_compartments(category, panel)
                 )
+                if not compartments:
+                    compartments = ("CABLE COMPARTMENT",)
 
                 for comp in compartments:
                     matched = _match_defects_for_swg_panel(swg, panel, comp, defects)
@@ -539,6 +721,7 @@ class ExecutiveSummaryCensusBuilder:
                                 group_no=group_num,
                                 is_overview=False,
                                 is_defect=True,
+                                eq_group_key=panel_group_key,
                             )
                         )
                     else:
@@ -554,29 +737,35 @@ class ExecutiveSummaryCensusBuilder:
                                 group_no=group_num,
                                 is_overview=False,
                                 is_defect=False,
+                                eq_group_key=panel_group_key,
                             )
                         )
 
         # ----------------------------------------------------------------------
-        # 2. Transformer(s) - Unconditional 7-point rows per ADR 0004 & D27
+        # 2. Transformer(s) - Dynamic vertical merge across rows per ADR 0004 & D27
         # ----------------------------------------------------------------------
-        for tx in txs:
+        for idx, tx in enumerate(txs):
             group_num = current_group
             current_group += 1
 
-            tx_label = tx.tx_id.strip() if tx.tx_id else "Tx 1"
-            mfg = tx.manufacturer.strip()
-            rating = tx.rating_kva.strip()
-            if rating and not rating.upper().endswith("KVA"):
-                rating_str = f"{rating}kVA"
+            tx_label = normalize_tx_id(tx.tx_id, default_idx=idx + 1)
+            mfg = (tx.manufacturer or "").strip()
+            rating_raw = (tx.rating_kva or "").strip()
+            if rating_raw.upper() in ("NOT ACCESSIBLE", "-", "N/A", "NONE", "NAN", ""):
+                rating_str = ""
+            elif not rating_raw.upper().endswith("KVA"):
+                rating_str = f"{rating_raw}kVA"
             else:
-                rating_str = rating
-            spec_str = f"{mfg} {rating_str}".strip() if (mfg and rating_str) else (mfg or rating_str)
-            tx_title = f"{tx_label} – {spec_str}".strip() if spec_str else tx_label
+                rating_str = rating_raw
 
-            components = TRANSFORMER_STANDARD_COMPONENTS
+            spec_str = f"{mfg} {rating_str}".strip() if (mfg and rating_str) else (mfg or rating_str)
+            tx_title = f"{tx_label} - {spec_str}".strip() if spec_str else tx_label
+
+            components = TRANSFORMER_CENSUS_COMPONENTS
             if not has_hv_cable_split(tx):
-                components = tuple(c for c in components if c != "HV CABLE SPLIT")
+                components = tuple(c for c in components if c != "CABLE SPLIT")
+
+            tx_group_key = f"tx_{idx + 1}"
 
             for comp in components:
                 is_ov = comp in ("OVERVIEW", "OVERVIEW TOP")
@@ -597,6 +786,7 @@ class ExecutiveSummaryCensusBuilder:
                             group_no=group_num,
                             is_overview=False,
                             is_defect=True,
+                            eq_group_key=tx_group_key,
                         )
                     )
                 elif is_ov:
@@ -612,6 +802,7 @@ class ExecutiveSummaryCensusBuilder:
                             group_no=group_num,
                             is_overview=True,
                             is_defect=False,
+                            eq_group_key=tx_group_key,
                         )
                     )
                 else:
@@ -627,13 +818,14 @@ class ExecutiveSummaryCensusBuilder:
                             group_no=group_num,
                             is_overview=False,
                             is_defect=False,
+                            eq_group_key=tx_group_key,
                         )
                     )
 
         # ----------------------------------------------------------------------
         # 3. Feeder Pillar / LVDB (D22 - 1 Overview always, defects appended)
         # ----------------------------------------------------------------------
-        for lvdb in lvdbs:
+        for fp_idx, lvdb in enumerate(lvdbs, 1):
             group_num = current_group
             current_group += 1
             fp_title = lvdb.name.strip() or "FEEDER PILLAR"
@@ -651,37 +843,41 @@ class ExecutiveSummaryCensusBuilder:
                     group_no=group_num,
                     is_overview=True,
                     is_defect=False,
+                    eq_group_key=f"fp_{fp_idx}_ov",
                 )
             )
 
             # Append active defect feeder rows
             lvdb_defects = _match_defects_for_lvdb(lvdb, defects, total_lvdbs=len(lvdbs))
-            paired_defects: dict[str, list[CbmDefectRecord]] = {}
-            for d in lvdb_defects:
-                area_name = _resolve_lvdb_defect_area_name(d)
-                paired_defects.setdefault(area_name, []).append(d)
-
-            for area_name, d_list in paired_defects.items():
-                ir_s, us_s, tev_s = _format_defect_readings(d_list)
-                rows.append(
-                    CensusRowItem(
-                        no=f"{group_num}.",
-                        equipment=fp_title,
-                        defect_area=area_name,
-                        ir_abs=ir_s,
-                        us_dB=us_s,
-                        tev_dB=tev_s,
-                        severity="DEFECT",
-                        group_no=group_num,
-                        is_overview=False,
-                        is_defect=True,
+            if lvdb_defects:
+                pe_info = {"equipment_package": package, "equipment_specs": package}
+                qr_rows = prepare_tech_summary_rows(lvdb_defects, pe_info=pe_info)
+                for def_idx, qr_r in enumerate(qr_rows, 1):
+                    eq_name = (qr_r.equipment or "").strip() or fp_title
+                    if fp_title and ("TX" in fp_title.upper() or "TRANSFORMER" in fp_title.upper()):
+                        eq_name = re.sub(r"^(?:FP|LVDB)\s*\d+\s*[-–]?\s*", f"{fp_title} – ", eq_name, flags=re.IGNORECASE)
+                    if fp_title and fp_title.upper() not in eq_name.upper() and not eq_name.upper().startswith("FP"):
+                        eq_name = f"{fp_title} - {eq_name}"
+                    rows.append(
+                        CensusRowItem(
+                            no=f"{group_num}.",
+                            equipment=eq_name,
+                            defect_area=qr_r.defect_area or "DEFECT",
+                            ir_abs=qr_r.ir_reading or "-",
+                            us_dB=qr_r.us_reading or "-",
+                            tev_dB=qr_r.tev_reading or "-",
+                            severity="DEFECT",
+                            group_no=group_num,
+                            is_overview=False,
+                            is_defect=True,
+                            eq_group_key=f"fp_{fp_idx}_def_{def_idx}",
+                        )
                     )
-                )
 
         # ----------------------------------------------------------------------
         # 4. Battery Bank(s)
         # ----------------------------------------------------------------------
-        for bb in bbs:
+        for bb_idx, bb in enumerate(bbs, 1):
             group_num = current_group
             current_group += 1
             bb_title = bb.name.strip() or "BATTERY BANK 1"
@@ -701,6 +897,7 @@ class ExecutiveSummaryCensusBuilder:
                         group_no=group_num,
                         is_overview=False,
                         is_defect=True,
+                        eq_group_key=f"bb_{bb_idx}_def",
                     )
                 )
             else:
@@ -716,6 +913,7 @@ class ExecutiveSummaryCensusBuilder:
                         group_no=group_num,
                         is_overview=True,
                         is_defect=False,
+                        eq_group_key=f"bb_{bb_idx}_ov",
                     )
                 )
 
@@ -787,11 +985,13 @@ class ExecutiveSummaryCensusBuilder:
 
 
 __all__ = [
+    "TRANSFORMER_CENSUS_COMPONENTS",
     "CensusRowItem",
     "ExecutiveSummaryCensusBuilder",
     "ExecutiveSummaryCensusContext",
     "ExecutiveSummaryCensusResult",
     "apply_column_vertical_merge",
+    "apply_equipment_vertical_merge",
     "apply_post_render_dom",
     "apply_severity_shading",
 ]

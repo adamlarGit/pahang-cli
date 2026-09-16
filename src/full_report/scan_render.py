@@ -8,347 +8,48 @@ via docxtpl and dynamically applies OpenXML cell shading per D30 and D32:
 
 from __future__ import annotations
 
-import copy
 import gc
 import logging
 from pathlib import Path
-import re
-from typing import Any, Sequence
+from typing import Any
 
-import docx
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
-from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
-
+from docxtpl import DocxTemplate, InlineImage
 from PIL import Image as PILImage
 
 from src.quick_report.cbm_render import (
     _build_jinja_env,
     _preserve_blank_render_values,
-    _process_inline_images,
 )
-from src.quick_report.utils import clear_cell_text, set_cell_shading
+from src.core.shading import (
+    COLOR_DEFECT,
+    COLOR_HEALTHY,
+    COLOR_NORMAL,
+    COLOR_WHITE,
+    BANNER_HEALTHY_ANALYSIS,
+    BANNER_HEALTHY_RECOMMENDATION,
+    BANNER_DEFECT_FORWARDING,
+    BANNER_DEFECT_FORWARDING_ANALYSIS,
+    BANNER_DEFECT_FORWARDING_RECOMMENDATION,
+    SEVERITY_MARKER_IR,
+    SEVERITY_MARKER_US,
+    SEVERITY_MARKER_TEV,
+    _normalize_technologies,
+    clear_cell_text,
+    set_cell_shading,
+    get_cell_shading,
+    set_cell_no_borders,
+    detect_cell_technology,
+    is_defect_forwarding_text,
+    is_healthy_banner_text,
+    apply_technology_severity_shading,
+    apply_banner_shading,
+    cleanup_dash_measurement_units,
+    apply_scan_post_processing,
+)
 
 logger = logging.getLogger(__name__)
 
-# Canonical color hex codes
-COLOR_HEALTHY: str = "00B050"  # Green
-COLOR_DEFECT: str = "EE0000"   # Red
-COLOR_NORMAL: str = "00B050"   # Alias for healthy
-
-# Canonical banner texts per D30
-BANNER_HEALTHY_ANALYSIS: str = "No Anomaly."
-BANNER_HEALTHY_RECOMMENDATION: str = "-"
-BANNER_DEFECT_FORWARDING: str = "Please refer to the following page for details defect."
-BANNER_DEFECT_FORWARDING_ANALYSIS: str = "Please refer to the following page for details defect."
-BANNER_DEFECT_FORWARDING_RECOMMENDATION: str = "Please refer to the following page for details defect."
-
-# Sentinels for Jinja severity placeholders
-SEVERITY_MARKER_IR: str = "__SEVERITY_IR__"
-SEVERITY_MARKER_US: str = "__SEVERITY_US__"
-SEVERITY_MARKER_TEV: str = "__SEVERITY_TEV__"
-
-
-# Sentinels representing absence of defect or empty values
-_NEGATIVE_SENTINELS: frozenset[str] = frozenset({
-    "",
-    "-",
-    "--",
-    "NONE",
-    "NORMAL",
-    "HEALTHY",
-    "NO DEFECT",
-    "NO ANOMALY",
-    "NO_DEFECT",
-    "NO_ANOMALY",
-    "N/A",
-    "NA",
-    "TIADA",
-    "TIADA ANOMALI",
-    "TIADA DEFECT",
-    "NIL",
-    "EMPTY",
-    "FALSE",
-    "0",
-})
-
-_VALID_TECHNOLOGY_MAP: dict[str, str] = {
-    "IR": "IR",
-    "INFRARED": "IR",
-    "THERMAL": "IR",
-    "US": "US",
-    "ULTRASOUND": "US",
-    "TEV": "TEV",
-    "TRANSIENT": "TEV",
-}
-
-
-def _normalize_technologies(techs: set[str] | list[str] | tuple[str, ...] | str | None) -> set[str]:
-    """Normalize defective technologies specification into a set of uppercase strings.
-
-    Filters out negative/empty sentinels (e.g. '-', 'NONE', 'NORMAL', 'N/A') and
-    normalizes recognized modalities ('IR', 'US', 'TEV').
-    """
-    if techs is None:
-        return set()
-    if isinstance(techs, str):
-        raw_items = [techs]
-    else:
-        raw_items = [str(t) for t in techs]
-
-    tokens: list[str] = []
-    for item in raw_items:
-        trimmed = str(item).strip()
-        if not trimmed or trimmed.upper() in _NEGATIVE_SENTINELS:
-            continue
-        # Pre-normalize U/S variants before delimiter splitting to prevent U / S token fracturing
-        subbed = re.sub(r"(?i)\bu\s*/\s*s\b", "US", trimmed)
-        cleaned = subbed.replace(",", " ").replace("+", " ").replace("/", " ")
-        tokens.extend(cleaned.split())
-
-    res = set()
-    for tok in tokens:
-        clean_tok = tok.strip().upper().replace("/", "")
-        if clean_tok in _NEGATIVE_SENTINELS or not clean_tok:
-            continue
-        if clean_tok in _VALID_TECHNOLOGY_MAP:
-            res.add(_VALID_TECHNOLOGY_MAP[clean_tok])
-        elif clean_tok not in _NEGATIVE_SENTINELS:
-            res.add(clean_tok)
-    return res
-
-
-def detect_cell_technology(cell: Any) -> str | None:
-    """Detect if a table cell represents a technology severity cell (IR, US, TEV).
-
-    Returns 'IR', 'US', 'TEV', or None.
-    """
-    text = cell.text.strip() if hasattr(cell, "text") else ""
-    if not text:
-        return None
-
-    text_upper = text.upper()
-
-    # 1. Exact or marker substring matches
-    if SEVERITY_MARKER_IR in text_upper or "{{ IR.SEVERITY }}" in text_upper or "{{IR.SEVERITY}}" in text_upper:
-        return "IR"
-    if SEVERITY_MARKER_US in text_upper or "{{ US.SEVERITY }}" in text_upper or "{{US.SEVERITY}}" in text_upper:
-        return "US"
-    if SEVERITY_MARKER_TEV in text_upper or "{{ TEV.SEVERITY }}" in text_upper or "{{TEV.SEVERITY}}" in text_upper:
-        return "TEV"
-
-    # 2. Jinja variable pattern
-    if re.search(r"\{\{\s*ir\.severity\s*\}\}", text, re.I):
-        return "IR"
-    if re.search(r"\{\{\s*us\.severity\s*\}\}", text, re.I):
-        return "US"
-    if re.search(r"\{\{\s*tev\.severity\s*\}\}", text, re.I):
-        return "TEV"
-
-    # 3. Simple token patterns
-    if text_upper in ("IR", "IR_SEVERITY", "[IR_SEVERITY]", "IR.SEVERITY", "IR SEVERITY"):
-        return "IR"
-    if text_upper in ("US", "US_SEVERITY", "[US_SEVERITY]", "US.SEVERITY", "US SEVERITY", "U/S", "U/S_SEVERITY", "U/S.SEVERITY", "U/S SEVERITY"):
-        return "US"
-    if text_upper in ("TEV", "TEV_SEVERITY", "[TEV_SEVERITY]", "TEV.SEVERITY", "TEV SEVERITY"):
-        return "TEV"
-
-    # 4. Heading + technology patterns
-    tokens = set(re.findall(r"\b[A-Z0-9/]+\b", text_upper))
-    if "SEVERITY" in tokens:
-        if "IR" in tokens:
-            return "IR"
-        if "US" in tokens or "U/S" in tokens:
-            return "US"
-        if "TEV" in tokens:
-            return "TEV"
-
-    return None
-
-
-def is_defect_forwarding_text(text: str) -> bool:
-    """Check if cell text corresponds to downstream defect forwarding prose per D30."""
-    lower = text.lower()
-    return (
-        "please refer to the following page for detail" in lower
-        or "please refer to the following page for details" in lower
-        or "refer to the following page" in lower
-        or "following page for details defect" in lower
-        or "following page for detail defect" in lower
-    )
-
-
-def is_healthy_banner_text(text: str) -> bool:
-    """Check if cell text corresponds to healthy Analysis / Recommendation prose per D30."""
-    lower = text.lower().strip()
-    if not lower:
-        return False
-    if (
-        "no anomaly" in lower
-        or "tiada anomaly" in lower
-        or "tiada anomali" in lower
-        or "tiada defect" in lower
-        or "no defect" in lower
-    ):
-        return True
-    # Strip common prefixes and evaluate residual prose
-    clean = re.sub(r"^(?:recommendation|cadangan|analysis|analisis)\s*:\s*", "", lower).strip()
-    if clean in ("-", "tiada", "none", "n/a", "nil", "normal") or not clean:
-        return True
-    return False
-
-
-def get_cell_shading(cell: Any) -> str | None:
-    """Read w:fill hex color attribute from a table cell's tcPr/w:shd XML element."""
-    if not hasattr(cell, "_tc"):
-        return None
-    tcPr = cell._tc.get_or_add_tcPr()
-    shd = tcPr.find(qn("w:shd"))
-    if shd is None:
-        return None
-    return shd.attrib.get(qn("w:fill"))
-
-
-def _get_cell_tc(cell: Any) -> Any:
-    """Extract underlying XML _tc element from a cell or wrapper."""
-    if hasattr(cell, "_tc"):
-        return cell._tc
-    return cell
-
-
-def _is_cell(target: Any) -> bool:
-    """Check if target represents a single table cell."""
-    return hasattr(target, "paragraphs") and hasattr(target, "_tc") and not hasattr(target, "rows")
-
-
-def _iter_unique_cells(target: Any) -> list[Any]:
-    """Extract a deduplicated list of table cells from various containers.
-
-    Accepts a single _Cell, _Row, Table, Document, DocxTemplate, or sequence thereof.
-    Ensures merged cells sharing the same underlying XML _tc element are only yielded once.
-    """
-    cells: list[Any] = []
-    seen_tcs: set[Any] = set()
-
-    def _collect(obj: Any) -> None:
-        if obj is None:
-            return
-        if _is_cell(obj):
-            tc = _get_cell_tc(obj)
-            if tc not in seen_tcs:
-                seen_tcs.add(tc)
-                cells.append(obj)
-            return
-        if hasattr(obj, "cells"):  # Table row (_Row)
-            for c in obj.cells:
-                _collect(c)
-            return
-        if hasattr(obj, "rows"):  # Table
-            for r in obj.rows:
-                for c in r.cells:
-                    _collect(c)
-            return
-        if hasattr(obj, "docx") and hasattr(obj.docx, "tables"):  # DocxTemplate
-            for t in obj.docx.tables:
-                _collect(t)
-            return
-        if hasattr(obj, "tables"):  # docx.Document
-            for t in obj.tables:
-                _collect(t)
-            return
-        if isinstance(obj, (list, tuple, set)):
-            for item in obj:
-                _collect(item)
-
-    _collect(target)
-    return cells
-
-
-def apply_technology_severity_shading(
-    target: Any,
-    *,
-    defective_technologies: set[str] | list[str] | tuple[str, ...] | str | None = None,
-    technology: str | None = None,
-    is_defective: bool | None = None,
-) -> Any:
-    """Dynamically shade technology severity cells (IR, US, TEV) Green or Red, clearing text.
-
-    - Healthy cell: Green '00B050', text cleared.
-    - Defective cell: Red 'EE0000', text cleared.
-
-    Can operate on a single _Cell, a _Row, a Table, a Document, a DocxTemplate, or an iterable thereof.
-    """
-    def_techs = _normalize_technologies(defective_technologies)
-    cells = _iter_unique_cells(target)
-    single_cell_mode = len(cells) == 1 and _is_cell(target)
-
-    for cell in cells:
-        detected_tech = detect_cell_technology(cell)
-        tech = (technology or detected_tech or "").upper()
-
-        if not tech:
-            if single_cell_mode and is_defective is not None:
-                cell_defective = is_defective
-            else:
-                continue
-        else:
-            if is_defective is not None:
-                cell_defective = is_defective
-            else:
-                cell_defective = tech in def_techs
-
-        clear_cell_text(cell)
-        set_cell_shading(cell, COLOR_DEFECT if cell_defective else COLOR_HEALTHY)
-
-    return target
-
-
-def apply_banner_shading(
-    target: Any,
-    *,
-    is_defective: bool | None = None,
-) -> Any:
-    """Dynamically shade Analysis & Recommendation banner cells per D30 and D32.
-
-    - Healthy ('No Anomaly.'): Green '00B050'.
-    - Defect Forwarding prose: Red 'EE0000'.
-
-    Can operate on a single _Cell, a _Row, a Table, a Document, a DocxTemplate, or an iterable thereof.
-    """
-    cells = _iter_unique_cells(target)
-    single_cell_mode = len(cells) == 1 and _is_cell(target)
-
-    for cell in cells:
-        text = cell.text.strip()
-        lower = text.lower()
-        is_header = lower.rstrip(":").strip() in ("analysis & recommendations", "analysis & recommendation")
-        if is_header:
-            continue
-
-        if is_defective is True:
-            if (
-                single_cell_mode
-                or is_defect_forwarding_text(text)
-                or lower.startswith("analysis:")
-                or lower.startswith("recommendation:")
-            ):
-                set_cell_shading(cell, COLOR_DEFECT)
-        elif is_defective is False:
-            if (
-                single_cell_mode
-                or is_healthy_banner_text(text)
-                or (lower.startswith("analysis:") and "defect" not in lower)
-                or (lower.startswith("recommendation:") and "defect" not in lower)
-            ):
-                set_cell_shading(cell, COLOR_HEALTHY)
-        else:  # is_defective is None
-            if is_defect_forwarding_text(text):
-                set_cell_shading(cell, COLOR_DEFECT)
-            elif is_healthy_banner_text(text):
-                set_cell_shading(cell, COLOR_HEALTHY)
-
-    return target
 
 
 def _clone_context(val: Any) -> Any:
@@ -574,8 +275,12 @@ class FullReportScanPageRendererCore:
         )
 
         # Apply dynamic post-render OpenXML DOM shading
-        apply_technology_severity_shading(doc, defective_technologies=def_techs)
-        apply_banner_shading(doc, is_defective=has_defect)
+        apply_scan_post_processing(
+            doc,
+            defective_technologies=def_techs,
+            is_defective=has_defect,
+            is_overview=overview,
+        )
 
         # Save rendered and shaded document
         doc.save(str(actual_output))
@@ -653,6 +358,7 @@ __all__ = [
     # DOM post-processors
     "apply_technology_severity_shading",
     "apply_banner_shading",
+    "cleanup_dash_measurement_units",
     "get_cell_shading",
     # Core Renderer
     "FullReportScanPageRendererCore",

@@ -26,6 +26,7 @@ from src.core.normalizers import (
     format_heater_amp,
     format_temperature_float,
     format_testsheet_time,
+    normalize_tx_id,
     normalize_us_characteristic,
 )
 from src.full_report.models import (
@@ -278,8 +279,9 @@ def _check_has_active_defect(
     equipment_id: str = "",
     explicit_flag: bool | None = None,
     cbm_defects: Sequence[Any] | None = None,
+    total_count: int = 1,
 ) -> bool:
-    """Evaluate whether an equipment group has an active defect."""
+    """Evaluate whether an equipment instance/group has an active defect."""
     if explicit_flag is not None:
         return explicit_flag
 
@@ -287,36 +289,91 @@ def _check_has_active_defect(
         return False
 
     cat_upper = category.upper()
-    id_upper = equipment_id.upper()
+    id_upper = equipment_id.upper().strip()
+    id_norm = re.sub(r"\s+", "", id_upper)
+
+    target_digits = re.findall(r"\d+", id_norm)
+    target_num = target_digits[0] if target_digits else "1"
 
     for d in cbm_defects:
-        # 1. CbmDefectRecord or dict
-        eq_name = getattr(d, "equipment", "") or getattr(d, "equipment_category", "")
+        eq_name = ""
+        eq_id = ""
+        fname = ""
+
         if isinstance(d, dict):
-            eq_name = d.get("equipment") or d.get("equipment_category") or ""
+            eq_name = str(d.get("equipment") or d.get("equipment_category") or "")
+            eq_id = str(d.get("equipment_id") or "")
+            fname = str(d.get("filename") or "")
+        elif hasattr(d, "equipment") or hasattr(d, "equipment_category"):
+            eq_name = str(getattr(d, "equipment", "") or getattr(d, "equipment_category", "") or "")
+            eq_id = str(getattr(d, "equipment_id", "") or "")
+            if hasattr(d, "filename") and d.filename:
+                fname = str(d.filename)
+        elif isinstance(d, Path):
+            fname = d.name
+        elif isinstance(d, str):
+            fname = d
 
-        eq_upper = str(eq_name).upper()
-        if cat_upper in ("SWG", "SWITCHGEAR") and any(k in eq_upper for k in ("SWG", "RMU", "VCB", "SWITCHGEAR")):
-            return True
-        if cat_upper in ("TX", "TRANSFORMER") and ("TX" in eq_upper or "TRANSFORMER" in eq_upper):
-            if not id_upper or id_upper in eq_upper:
-                return True
-        if cat_upper in ("FP", "LVDB") and any(k in eq_upper for k in ("FP", "LVDB", "FEEDER PILLAR")):
-            return True
-        if cat_upper in ("BATTERY", "BATT") and "BATT" in eq_upper:
-            return True
-
-        # 2. Path or metadata object
-        fname = getattr(d, "filename", "") or (d.name if isinstance(d, Path) else str(d))
+        eq_upper = eq_name.upper()
+        eq_id_upper = eq_id.upper()
+        combined_eq = f"{eq_upper} {eq_id_upper}".strip()
         fname_upper = fname.upper()
-        if cat_upper in ("SWG", "SWITCHGEAR") and any(k in fname_upper for k in ("SWG", "RMU", "VCB")):
-            return True
-        if cat_upper in ("TX", "TRANSFORMER") and "TX" in fname_upper:
-            return True
-        if cat_upper in ("FP", "LVDB") and any(k in fname_upper for k in ("FP", "LVDB")):
-            return True
-        if cat_upper in ("BATTERY", "BATT") and "BATT" in fname_upper:
-            return True
+
+        is_fp = (
+            any(k in eq_upper for k in ("FP", "FEEDER PILLAR", "LVDB", "CABLE FP"))
+            or any(k in eq_id_upper for k in ("FP", "FEEDER PILLAR", "LVDB"))
+            or any(k in fname_upper for k in ("FP", "FEEDER PILLAR", "LVDB"))
+        )
+        is_swg = (
+            any(k in eq_upper for k in ("SWG", "RMU", "VCB", "SWITCHGEAR", "MRMU", "GIS", "EARTHING", "CABLE SWG"))
+            or any(k in fname_upper for k in ("SWG", "RMU", "VCB", "SWITCHGEAR"))
+        )
+        is_tx = (
+            any(k in eq_upper for k in ("TRANSFORMER", "TX", "LTX", "DTX", "PTX", "CABLE LTX", "CABLE DTX", "CABLE PTX"))
+            or any(k in eq_id_upper for k in ("TX", "LTX", "DTX", "PTX"))
+            or any(k in fname_upper for k in ("TRANSFORMER", "TX", "LTX", "DTX", "PTX"))
+        ) and not is_fp
+        is_batt = "BATT" in eq_upper or "BATT" in fname_upper
+
+        if cat_upper in ("SWG", "SWITCHGEAR"):
+            if is_swg:
+                return True
+
+        elif cat_upper in ("TX", "TRANSFORMER"):
+            if is_tx:
+                # Extract explicit transformer instance number from defect record
+                found_nums = (
+                    re.findall(r"(?:TX|TRANSFORMER|S)\s*0*(\d+)", combined_eq)
+                    or re.findall(r"\b0*(\d+)\b", eq_id_upper)
+                    or re.findall(r"(?:TX|S)\s*0*(\d+)", fname_upper)
+                )
+                if found_nums:
+                    if found_nums[0] == target_num:
+                        return True
+                else:
+                    # No explicit TX number: on single-TX station or for TX1, maps to TX1 (zero leakage to TX2)
+                    if total_count <= 1 or target_num == "1":
+                        return True
+
+        elif cat_upper in ("FP", "LVDB"):
+            if is_fp:
+                # Extract explicit FP instance number from defect record
+                found_nums = (
+                    re.findall(r"(?:FP|FEEDER\s*PILLAR|LVDB|F)\s*0*(\d+)", combined_eq)
+                    or re.findall(r"\b0*(\d+)\b", eq_id_upper)
+                    or re.findall(r"(?:FP|LVDB|F)\s*0*(\d+)", fname_upper)
+                )
+                if found_nums:
+                    if found_nums[0] == target_num:
+                        return True
+                else:
+                    # No explicit FP number: on single-FP station or for FP1, maps to FP1 (zero leakage to FP2)
+                    if total_count <= 1 or target_num == "1":
+                        return True
+
+        elif cat_upper in ("BATTERY", "BATT"):
+            if is_batt:
+                return True
 
     return False
 
@@ -342,7 +399,7 @@ class SwitchgearScanAdapter:
         sliced_overview_pages: Sequence[Path | str] | None = None,
         has_active_defect: bool | None = None,
         cbm_defects: Sequence[Any] | None = None,
-        tev_background: str | int = "4",
+        tev_background: str | int | None = None,
     ) -> None:
         self.swg = swg
         self.substation_info = substation_info or {}
@@ -354,7 +411,15 @@ class SwitchgearScanAdapter:
         self.templates_dir = Path(templates_dir) if templates_dir else DEFAULT_TEMPLATES_DIR
         self.sliced_overview_pages = sliced_overview_pages or ()
         self.cbm_defects = cbm_defects or ()
-        self.tev_background = str(tev_background)
+
+        if tev_background is not None and str(tev_background).strip() and str(tev_background).strip() != "-":
+            self.tev_background = str(tev_background).strip()
+        else:
+            raw_bg = self.substation_info.get("tev_background") or self.substation_info.get("tev_bg")
+            if raw_bg is not None and str(raw_bg).strip() and str(raw_bg).strip() not in ("-", "None", "N/A"):
+                self.tev_background = str(raw_bg).strip()
+            else:
+                self.tev_background = "-"
 
         # Classify switchgear category
         if isinstance(swg, SwitchgearScanSpec):
@@ -456,6 +521,8 @@ class SwitchgearScanAdapter:
                         "recommendation": banner_rec,
                     },
                     "ir": {
+                        # Deprecated: FLIR ActiveX CIRViewer object is preserved in normal docx templates;
+                        # docxtpl leaves <w:object> untouched. Kept for backward compatibility with adapter queries.
                         "image": ir_img,
                         "severity": "-",
                         "reading": "-",
@@ -565,6 +632,8 @@ class SwitchgearScanAdapter:
                         },
                     },
                     "ir": {
+                        # Deprecated: FLIR ActiveX CIRViewer object is preserved in normal docx templates;
+                        # docxtpl leaves <w:object> untouched. Kept for backward compatibility with adapter queries.
                         "image": ir_img,
                         "reading": "-",
                         "severity": "NORMAL",
@@ -671,6 +740,7 @@ class TransformerScanAdapter:
         sliced_overview_pages: Sequence[Path | str] | None = None,
         has_active_defect: bool | None = None,
         cbm_defects: Sequence[Any] | None = None,
+        total_tx_count: int = 1,
     ) -> None:
         self.tx = tx
         self.substation_info = substation_info or {}
@@ -683,13 +753,15 @@ class TransformerScanAdapter:
         self.templates_dir = Path(templates_dir) if templates_dir else DEFAULT_TEMPLATES_DIR
         self.sliced_overview_pages = sliced_overview_pages or ()
         self.cbm_defects = cbm_defects or ()
+        self.total_tx_count = total_tx_count
 
-        self.tx_id_str = str(getattr(tx, "tx_id", f"Tx {tx_index}") or f"Tx {tx_index}")
+        self.tx_id_str = normalize_tx_id(getattr(tx, "tx_id", None), default_idx=tx_index)
         self.has_active_defect = _check_has_active_defect(
             category="tx",
             equipment_id=self.tx_id_str,
             explicit_flag=has_active_defect,
             cbm_defects=self.cbm_defects,
+            total_count=self.total_tx_count,
         )
 
     def adapt(self) -> ScanAdapterResult:
@@ -754,14 +826,20 @@ class TransformerScanAdapter:
                 self.tx.lv_cable_type if "LV" in comp_name else (self.tx.hv_cable_type or self.tx.lv_cable_type or "-")
             )
 
+            raw_rating = _clean_str(self.tx.rating_kva)
+            tx_rating = "-" if raw_rating.upper() in ("NOT ACCESSIBLE", "-", "N/A", "NONE", "NAN", "") else raw_rating
+            raw_sn = _clean_str(self.tx.serial_no)
+            tx_sn = "-" if raw_sn.upper() in ("NOT ACCESSIBLE", "-", "N/A", "NONE", "NAN", "") else raw_sn
+
             tx_block = {
                 "manufacturer": _clean_str(self.tx.manufacturer),
                 "model": _clean_str(getattr(self.tx, "model", None) or getattr(self.tx, "type", "-")),
-                "rating": _clean_str(self.tx.rating_kva),
+                "rating": tx_rating,
                 "number": self.tx_id_str,
+                "panel": self.tx_id_str,
                 "location": location,
                 "area": comp_name,
-                "serialnumber": _clean_str(self.tx.serial_no),
+                "serialnumber": tx_sn,
                 "cabletype": _clean_str(cable_type),
                 "analysis": banner_analysis,
                 "recommendation": banner_rec,
@@ -772,7 +850,10 @@ class TransformerScanAdapter:
             ctx: dict[str, Any] = {
                 "substation": sub_ctx,
                 "tx": tx_block,
+                "panel": {"name": self.tx_id_str, "linknumber": self.tx_id_str},
                 "ir": {
+                    # Deprecated: FLIR ActiveX CIRViewer object is preserved in normal docx templates;
+                    # docxtpl leaves <w:object> untouched. Kept for backward compatibility with adapter queries.
                     "image": ir_img,
                     "severity": "-" if is_ov else "NORMAL",
                     "reading": "-",
@@ -901,6 +982,7 @@ class LVDBScanAdapter:
         sliced_overview_pages: Sequence[Path | str] | None = None,
         has_active_defect: bool | None = None,
         cbm_defects: Sequence[Any] | None = None,
+        total_fp_count: int = 1,
     ) -> None:
         self.lvdb = lvdb
         self.substation_info = substation_info or {}
@@ -908,6 +990,7 @@ class LVDBScanAdapter:
         self.templates_dir = Path(templates_dir) if templates_dir else DEFAULT_TEMPLATES_DIR
         self.sliced_overview_pages = sliced_overview_pages or ()
         self.cbm_defects = cbm_defects or ()
+        self.total_fp_count = total_fp_count
 
         self.name_str = _clean_str(getattr(lvdb, "name", "FP 1"), "FP 1")
         self.has_active_defect = _check_has_active_defect(
@@ -915,6 +998,7 @@ class LVDBScanAdapter:
             equipment_id=self.name_str,
             explicit_flag=has_active_defect,
             cbm_defects=self.cbm_defects,
+            total_count=self.total_fp_count,
         )
 
     def adapt(self) -> ScanAdapterResult:
@@ -975,6 +1059,8 @@ class LVDBScanAdapter:
                 "recommendation": banner_rec,
             },
             "ir": {
+                # Deprecated: FLIR ActiveX CIRViewer object is preserved in normal docx templates;
+                # docxtpl leaves <w:object> untouched. Kept for backward compatibility with adapter queries.
                 "image": ir_img,
                 "severity": "-",
                 "reading": "-",
@@ -1106,6 +1192,8 @@ class BatteryBankScanAdapter:
             "battery": batt_block,
             "batt": batt_block,  # Support both namespace conventions
             "ir": {
+                # Deprecated: FLIR ActiveX CIRViewer object is preserved in normal docx templates;
+                # docxtpl leaves <w:object> untouched. Kept for backward compatibility with adapter queries.
                 "image": ir_img,
                 "severity": "-",
                 "reading": "-",
