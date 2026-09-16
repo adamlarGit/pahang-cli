@@ -5,6 +5,14 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.1] - 2026-09-16
+
+### Fixed
+- **Front Page Scan Severity Post-Processing Isolation (`src/quick_report/front_page.py`, `src/quick_report/cbm_render.py`)**: Added `scan_post_process: bool = True` to `_render_docx_template()` and explicitly passed `scan_post_process=False` in `generate_front_page()`, preventing static table labels (`"TEV"` under `SCANNED BY` and `EQUIPMENT/TOOLS`) from being falsely detected as severity cells and wiped/painted green (`#00B050`) on non-technology defect reports while preserving all document properties, section margins, and Jinja rendering (closes #40).
+
+### Refactored
+- **Self-Documenting Scan Post-Process Parameter (`src/quick_report/cbm_render.py`, `src/quick_report/front_page.py`)**: Renamed generic `post_process` toggle to `scan_post_process` with explicit docstrings and inline context comments, documenting why scan post-processing is suppressed on metadata cover pages and avoiding local variable shadowing with `apply_scan_post_processing()`.
+
 ## [1.19.0] - 2026-09-16
 
 ### Added
