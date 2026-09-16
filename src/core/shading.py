@@ -486,7 +486,7 @@ def normalize_swg_compartment(compartment: str | None) -> str:
 
     # Specific precedence rules:
     # 1. Cable Entry before generic Cable
-    if "CABLE ENTRY" in comp_upper:
+    if any(k in comp_upper for k in ("CABLE ENTRY", "ENTRY CABLE", "CABLE INLET")):
         return "CABLE ENTRY"
 
     # 2. Busbar
@@ -497,12 +497,16 @@ def normalize_swg_compartment(compartment: str | None) -> str:
     if "FUSE" in comp_upper:
         return "FUSE COMPARTMENT"
 
-    # 4. Breaker (VCB / Spout / Chamber)
-    if any(k in comp_upper for k in ("BREAKER", "VCB", "SPOUT", "CHAMBER")):
+    # 4. Breaker (VCB / CB / Spout / Chamber)
+    if any(k in comp_upper for k in ("BREAKER", "VCB", "SPOUT", "CHAMBER")) or re.search(r"\bCB\b", comp_upper):
         return "BREAKER COMPARTMENT"
 
-    # 5. PT (Potential / Voltage Transformer)
-    if re.search(r"\bPT\b", comp_upper) or "VOLTAGE TRANSFORMER" in comp_upper:
+    # 5. PT / VT (Potential / Voltage Transformer)
+    if (
+        re.search(r"\b(PT|VT)\b", comp_upper)
+        or "VOLTAGE TRANSFORMER" in comp_upper
+        or "POTENTIAL TRANSFORMER" in comp_upper
+    ):
         return "PT COMPARTMENT"
 
     # 6. Cable (e.g. Cable Box, Cable Termination, Cable Lug)
@@ -577,7 +581,7 @@ def blank_swg_tev_cells(target: Any) -> Any:
 
     for table in tables:
         # Match swg-panel.docx 37x24 table layout
-        if len(table.rows) >= 33 and len(table.columns) >= 23:
+        if len(table.rows) >= 33 and len(table.columns) >= 24:
             seen_tcs = set()
             for r in range(21, 33):
                 for c in range(11, 23):

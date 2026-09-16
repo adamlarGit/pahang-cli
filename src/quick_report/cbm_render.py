@@ -410,7 +410,7 @@ def _extract_project_technologies(pe_info: dict[str, Any] | None) -> Sequence[st
         return pe_info["project_technologies"]
     if "technologies" in pe_info and pe_info["technologies"]:
         return pe_info["technologies"]
-    proj = pe_info.get("project")
+    proj = pe_info.get("project") or pe_info.get("metadata") or pe_info.get("project_metadata")
     if proj:
         if hasattr(proj, "technologies"):
             return proj.technologies

@@ -71,6 +71,8 @@ class TestSwitchgearCompartmentEligibility:
             ("Breaker Compartment", "BREAKER COMPARTMENT"),
             ("VCB", "BREAKER COMPARTMENT"),
             ("VCB PANEL 1", "BREAKER COMPARTMENT"),
+            ("CB", "BREAKER COMPARTMENT"),
+            ("CB Compartment", "BREAKER COMPARTMENT"),
             ("Spout", "BREAKER COMPARTMENT"),
             ("CONTACT SPOUT", "BREAKER COMPARTMENT"),
             ("Arc Chamber", "BREAKER COMPARTMENT"),
@@ -80,10 +82,15 @@ class TestSwitchgearCompartmentEligibility:
             ("Cable Lug", "CABLE COMPARTMENT"),
             ("Cable Entry", "CABLE ENTRY"),
             ("Cable Entry Bottom", "CABLE ENTRY"),
+            ("Entry Cable", "CABLE ENTRY"),
+            ("Cable Inlet", "CABLE ENTRY"),
             ("Busbar", "BUSBAR COMPARTMENT"),
             ("Busbar Compartment", "BUSBAR COMPARTMENT"),
             ("PT Compartment", "PT COMPARTMENT"),
             ("Voltage Transformer", "PT COMPARTMENT"),
+            ("Potential Transformer", "PT COMPARTMENT"),
+            ("VT", "PT COMPARTMENT"),
+            ("VT Compartment", "PT COMPARTMENT"),
             ("Fuse Compartment", "FUSE COMPARTMENT"),
             ("Outgoing Fuse", "FUSE COMPARTMENT"),
             ("Secondary Compartment", "SECONDARY COMPARTMENT"),
@@ -100,17 +107,24 @@ class TestSwitchgearCompartmentEligibility:
             ("BREAKER COMPARTMENT", True),
             ("Breaker", True),
             ("VCB", True),
+            ("CB", True),
+            ("CB Compartment", True),
             ("Spout", True),
             ("Chamber", True),
             ("CABLE COMPARTMENT", True),
             ("Cable Box", True),
             ("PT COMPARTMENT", True),
             ("Voltage Transformer", True),
+            ("Potential Transformer", True),
+            ("VT", True),
+            ("VT Compartment", True),
             ("FUSE COMPARTMENT", True),
             ("Fuse", True),
             # Non-TEV / Blanked compartments
             ("CABLE ENTRY", False),
             ("Cable Entry", False),
+            ("Entry Cable", False),
+            ("Cable Inlet", False),
             ("BUSBAR COMPARTMENT", False),
             ("Busbar", False),
             ("SECONDARY COMPARTMENT", False),
@@ -219,6 +233,15 @@ class TestOpenXmlBlanking:
         table = swg_panel_doc.tables[0]
         cell = table.rows[25].cells[15]
         assert cell.text.strip() == ""
+
+    def test_blank_swg_tev_cells_ignores_23_column_tables(self):
+        """23-column templates (such as tx-hv-sides.docx or swg-overview.docx) must not be modified."""
+        tx_doc = docx.Document("templates/FULL REPORT/NORMAL IR US TEV/tx-hv-sides.docx")
+        t = tx_doc.tables[0]
+        assert len(t.columns) == 23
+        us_text_before = t.rows[21].cells[1].text
+        blank_swg_tev_cells(tx_doc)
+        assert t.rows[21].cells[1].text == us_text_before
 
 
 # ==============================================================================
@@ -384,6 +407,50 @@ class TestFullReportScanAdapterTevBlanking:
         assert tcBorders is not None
         assert tcBorders.find(qn("w:top")).get(qn("w:val")) == "nil"
 
+    def test_vcb_7_compartments_tev_matrix(self):
+        """Verify VCB standard 7 compartments: Breaker, Cable, PT active; Busbar, Secondary, Back, Front blanked."""
+        from src.full_report.models import VCB_STANDARD_COMPARTMENTS
+        panel = SwitchgearPanelScanSpec(
+            panel_no=1,
+            name="VCB 1",
+            panel_type="VCB",
+            status="CLOSE",
+            load_amp="120",
+            heater_amp="0.8",
+            serial_no="SN-01",
+            tev_reading="18",
+            compartments=VCB_STANDARD_COMPARTMENTS,
+        )
+        swg = SwitchgearScanSpec(
+            switchgear_type="VCB",
+            manufacturer="TAMCO",
+            model="GV3",
+            rating="11kV 630A",
+            serial_no="SN-BOARD-01",
+            category=SwitchgearCategory.VCB,
+            panels=[panel],
+        )
+        adapter = SwitchgearScanAdapter(
+            swg=swg,
+            substation_info={"name_erms": "PE TEST MOCK"},
+            project_technologies=["IR", "US", "TEV"],
+        )
+        res = adapter.adapt()
+        panel_items = {it.component_name: it for it in res.items if not it.is_overview}
+        assert len(panel_items) == 7
+
+        # Active TEV compartments
+        for comp in ("BREAKER COMPARTMENT", "CABLE COMPARTMENT", "PT COMPARTMENT"):
+            assert panel_items[comp].context.get("__blank_tev__") is False
+            assert panel_items[comp].context.get("is_tev_active") is True
+            assert panel_items[comp].context["panel"]["tev"]["reading"] != ""
+
+        # Blanked compartments
+        for comp in ("BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT", "BACK COMPARTMENT", "FRONT COMPARTMENT"):
+            assert panel_items[comp].context.get("__blank_tev__") is True
+            assert panel_items[comp].context.get("is_tev_active") is False
+            assert panel_items[comp].context["panel"]["tev"]["reading"] == ""
+
 
 # ==============================================================================
 # 5. Quick Report CBM Render Integration Tests
@@ -482,3 +549,16 @@ class TestQuickReportCbmRenderTevBlanking:
         cell_tev = t.rows[30].cells[18]
         assert cell_tev.text.strip() == ""
         assert get_cell_shading(cell_tev) == "00B050"
+
+    def test_qr_extract_project_technologies_from_metadata_objects(self):
+        """Ensure _extract_project_technologies extracts from metadata or project_metadata objects."""
+        from src.quick_report.cbm_render import _extract_project_technologies
+
+        class MockMeta:
+            technologies = ("IR", "US")
+
+        pe_info_meta = {"metadata": MockMeta()}
+        assert list(_extract_project_technologies(pe_info_meta)) == ["IR", "US"]
+
+        pe_info_proj_meta = {"project_metadata": MockMeta()}
+        assert list(_extract_project_technologies(pe_info_proj_meta)) == ["IR", "US"]

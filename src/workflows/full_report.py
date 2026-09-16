@@ -731,6 +731,8 @@ class FullReportWorkflow:
             "humidity": normalize_for_report(ts_data.humidity) if ts_data else "-",
             "tev_background": normalize_for_report(ts_data.tev_background) if ts_data else "-",
             "tev_bg": normalize_for_report(ts_data.tev_background) if ts_data else "-",
+            "technologies": getattr(environment, "technologies", None),
+            "project_technologies": getattr(environment, "technologies", None),
         }
 
         census_tpl = None
