@@ -14,7 +14,7 @@ Single source of truth for:
 from __future__ import annotations
 
 import re
-from typing import Any, Sequence
+from typing import Any
 
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
@@ -37,71 +37,23 @@ SEVERITY_MARKER_IR: str = "__SEVERITY_IR__"
 SEVERITY_MARKER_US: str = "__SEVERITY_US__"
 SEVERITY_MARKER_TEV: str = "__SEVERITY_TEV__"
 
-# Sentinels representing absence of defect or empty values
-_NEGATIVE_SENTINELS: frozenset[str] = frozenset({
-    "",
-    "-",
-    "--",
-    "NONE",
-    "NORMAL",
-    "HEALTHY",
-    "NO DEFECT",
-    "NO ANOMALY",
-    "NO_DEFECT",
-    "NO_ANOMALY",
-    "N/A",
-    "NA",
-    "NIL",
-    "EMPTY",
-    "FALSE",
-    "0",
-})
+from src.core.contract import (
+    TEV_BLANKED_SWG_COMPARTMENTS,
+    TEV_ELIGIBLE_SWG_COMPARTMENTS,
+    US_BLANKED_SWG_COMPARTMENTS,
+    is_swg_compartment_tev_eligible,
+    is_swg_compartment_us_eligible,
+    is_swg_tev_active,
+    is_swg_us_active,
+    is_tev_contract_awarded,
+    is_us_contract_awarded,
+    normalize_swg_compartment,
+    normalize_technologies,
+)
 
-_VALID_TECHNOLOGY_MAP: dict[str, str] = {
-    "IR": "IR",
-    "INFRARED": "IR",
-    "THERMAL": "IR",
-    "US": "US",
-    "ULTRASOUND": "US",
-    "TEV": "TEV",
-    "TRANSIENT": "TEV",
-}
+# Backward-compatible aliases
+_normalize_technologies = normalize_technologies
 
-
-def _normalize_technologies(techs: set[str] | list[str] | tuple[str, ...] | str | None) -> set[str]:
-    """Normalize defective technologies specification into a set of uppercase strings.
-
-    Filters out negative/empty sentinels (e.g. '-', 'NONE', 'NORMAL', 'N/A') and
-    normalizes recognized modalities ('IR', 'US', 'TEV'). Supports composite
-    delimiters ('+', ',', '/').
-    """
-    if techs is None:
-        return set()
-    if isinstance(techs, str):
-        raw_items = [techs]
-    else:
-        raw_items = [str(t) for t in techs]
-
-    tokens: list[str] = []
-    for item in raw_items:
-        trimmed = str(item).strip()
-        if not trimmed or trimmed.upper() in _NEGATIVE_SENTINELS:
-            continue
-        # Pre-normalize U/S variants before delimiter splitting to prevent U / S token fracturing
-        subbed = re.sub(r"(?i)\bu\s*/\s*s\b", "US", trimmed)
-        cleaned = subbed.replace(",", " ").replace("+", " ").replace("/", " ")
-        tokens.extend(cleaned.split())
-
-    res = set()
-    for tok in tokens:
-        clean_tok = tok.strip().upper().replace("/", "")
-        if clean_tok in _NEGATIVE_SENTINELS or not clean_tok:
-            continue
-        if clean_tok in _VALID_TECHNOLOGY_MAP:
-            res.add(_VALID_TECHNOLOGY_MAP[clean_tok])
-        elif clean_tok not in _NEGATIVE_SENTINELS:
-            res.add(clean_tok)
-    return res
 
 
 def clear_cell_text(cell: Any) -> None:
@@ -412,16 +364,16 @@ def _sanitize_healthy_banner_cell(cell: Any) -> None:
         r0 = p.add_run("Analysis: ")
         r0.bold = True
         r0.italic = True
-        r1 = p.add_run(" ")
-        r2 = p.add_run("No Anomaly.")
+        p.add_run(" ")
+        p.add_run("No Anomaly.")
     elif lower.startswith("recommendation:"):
         clear_cell_text(cell)
         p = cell.paragraphs[0] if getattr(cell, "paragraphs", None) else cell.add_paragraph()
         r0 = p.add_run("Recommendation: ")
         r0.bold = True
         r0.italic = True
-        r1 = p.add_run(" ")
-        r2 = p.add_run("-")
+        p.add_run(" ")
+        p.add_run("-")
     elif is_defect_forwarding_text(text):
         clear_cell_text(cell)
         p = cell.paragraphs[0] if getattr(cell, "paragraphs", None) else cell.add_paragraph()
@@ -501,106 +453,21 @@ def cleanup_dash_measurement_units(target: Any) -> Any:
     return target
 
 
-# ─── Switchgear Compartment TEV Eligibility (Two-Tier Model) ──────────────────
-TEV_ELIGIBLE_SWG_COMPARTMENTS: frozenset[str] = frozenset({
-    "BREAKER COMPARTMENT",
-    "CABLE COMPARTMENT",
-    "PT COMPARTMENT",
-    "FUSE COMPARTMENT",
-})
-
-TEV_BLANKED_SWG_COMPARTMENTS: frozenset[str] = frozenset({
-    "CABLE ENTRY",
-    "BUSBAR COMPARTMENT",
-})
 
 
-def normalize_swg_compartment(compartment: str | None) -> str:
-    """Normalize raw compartment or defect area string to canonical switchgear compartment name."""
-    if not compartment:
-        return ""
-    comp_upper = str(compartment).strip().upper()
 
-    # Direct canonical membership check
-    if comp_upper in TEV_ELIGIBLE_SWG_COMPARTMENTS or comp_upper in TEV_BLANKED_SWG_COMPARTMENTS:
-        return comp_upper
-
-    # Specific precedence rules:
-    # 1. Cable Entry before generic Cable
-    if any(k in comp_upper for k in ("CABLE ENTRY", "ENTRY CABLE", "CABLE INLET")):
-        return "CABLE ENTRY"
-
-    # 2. Busbar
-    if "BUSBAR" in comp_upper:
-        return "BUSBAR COMPARTMENT"
-
-    # 3. Fuse (e.g. INDKOM RMU fuse compartment / outgoing fuse)
-    if "FUSE" in comp_upper:
-        return "FUSE COMPARTMENT"
-
-    # 4. Breaker (VCB / CB / Spout / Chamber)
-    if any(k in comp_upper for k in ("BREAKER", "VCB", "SPOUT", "CHAMBER")) or re.search(r"\bCB\b", comp_upper):
-        return "BREAKER COMPARTMENT"
-
-    # 5. PT / VT (Potential / Voltage Transformer)
-    if (
-        re.search(r"\b(PT|VT)\b", comp_upper)
-        or "VOLTAGE TRANSFORMER" in comp_upper
-        or "POTENTIAL TRANSFORMER" in comp_upper
-    ):
-        return "PT COMPARTMENT"
-
-    # 6. Cable (e.g. Cable Box, Cable Termination, Cable Lug)
-    if "CABLE" in comp_upper:
-        return "CABLE COMPARTMENT"
-
-    return comp_upper
-
-
-def is_swg_compartment_tev_eligible(compartment: str | None) -> bool:
-    """Determine if a switchgear compartment is eligible for TEV testing (Tier 2).
-
-    TEV-Eligible:
-    - BREAKER COMPARTMENT
-    - CABLE COMPARTMENT
-    - PT COMPARTMENT
-    - FUSE COMPARTMENT (e.g. INDKOM RMUs)
-
-    Non-TEV / Blanked:
-    - CABLE ENTRY
-    - BUSBAR COMPARTMENT
-    - Any other compartment not in the eligible set.
-    """
-    normalized = normalize_swg_compartment(compartment)
-    return normalized in TEV_ELIGIBLE_SWG_COMPARTMENTS
-
-
-def is_tev_contract_awarded(technologies: Sequence[str] | set[str] | None) -> bool:
-    """Check if TEV is in project awarded technologies (Tier 1).
-
-    If technologies is omitted or None, defaults to True (standard 3-technology contract).
-    """
-    if technologies is None:
-        return True
-    norm_techs = _normalize_technologies(technologies)
-    if not norm_techs:
-        return True
-    return "TEV" in norm_techs
-
-
-def is_swg_tev_active(
-    project_technologies: Sequence[str] | set[str] | None = None,
-    compartment: str | None = None,
-) -> bool:
-    """Two-tier evaluation of switchgear panel TEV activity.
-
-    Returns True only if:
-    1. Tier 1: Contract includes TEV technology.
-    2. Tier 2: Switchgear compartment is TEV-eligible.
-    """
-    if not is_tev_contract_awarded(project_technologies):
-        return False
-    return is_swg_compartment_tev_eligible(compartment)
+def _collect_tables(obj: Any) -> list[Any]:
+    collected = []
+    if hasattr(obj, "docx") and hasattr(obj.docx, "tables"):
+        collected.extend(obj.docx.tables)
+    elif hasattr(obj, "tables"):
+        collected.extend(obj.tables)
+    elif hasattr(obj, "rows") and hasattr(obj, "columns"):
+        collected.append(obj)
+    elif isinstance(obj, (list, tuple, set)):
+        for item in obj:
+            collected.extend(_collect_tables(item))
+    return collected
 
 
 def blank_swg_tev_cells(target: Any) -> Any:
@@ -616,19 +483,6 @@ def blank_swg_tev_cells(target: Any) -> Any:
     Also clears bordering spacer borders facing the TEV block (col 10 right border,
     col 23 left border, row 20 bottom border, row 33 top border) to eliminate ghost borders.
     """
-    def _collect_tables(obj: Any) -> list[Any]:
-        collected = []
-        if hasattr(obj, "docx") and hasattr(obj.docx, "tables"):
-            collected.extend(obj.docx.tables)
-        elif hasattr(obj, "tables"):
-            collected.extend(obj.tables)
-        elif hasattr(obj, "rows") and hasattr(obj, "columns"):
-            collected.append(obj)
-        elif isinstance(obj, (list, tuple, set)):
-            for item in obj:
-                collected.extend(_collect_tables(item))
-        return collected
-
     tables = _collect_tables(target)
 
     for table in tables:
@@ -706,6 +560,96 @@ def blank_swg_tev_cells(target: Any) -> Any:
     return target
 
 
+def blank_swg_us_cells(target: Any) -> Any:
+    """Blank Ultrasound (US) measurement cells in swg-panel.docx 37x24 table.
+
+    Operates on rows 21–32 (indices 21..32 inclusive) and columns 1–8 (indices 1..8 inclusive).
+    Directly iterates over raw XML <w:tc> elements in each row's <w:tr> to bypass python-docx
+    vMerge masking (where table.cell() on vertically merged continuation cells resolves back
+    to the anchor cell, leaving continuation row borders visible around the {{ us.prpd }} quadrant).
+    - Clears cell text
+    - Removes background cell shading (<w:shd>)
+    - Sets all borders to <w:val="nil"/>
+    Also clears bordering spacer borders facing the US block (col 0 right border,
+    col 9 left border, row 20 bottom border, row 33 top border) to eliminate ghost borders.
+    """
+    tables = _collect_tables(target)
+
+    for table in tables:
+        # Match swg-panel.docx 37x24 table layout (tightened guard: exactly 24 columns)
+        if len(table.rows) >= 33 and len(table.columns) == 24:
+            # 1. Process rows 21..32 at the raw XML <w:tc> level
+            for r_idx in range(21, 33):
+                row = table.rows[r_idx]
+                col_idx = 0
+                for tc in row._tr.findall(qn("w:tc")):
+                    tcPr = tc.find(qn("w:tcPr"))
+                    gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+                    span = 1
+                    if gridSpan_elem is not None:
+                        try:
+                            span = int(gridSpan_elem.attrib.get(qn("w:val"), 1))
+                        except (ValueError, TypeError):
+                            span = 1
+                    col_start = col_idx
+                    col_end = col_idx + span - 1
+                    col_idx += span
+
+                    # If this cell falls entirely within US columns (cols 1..8)
+                    if col_start >= 1 and col_end <= 8:
+                        clear_cell_text(tc)
+                        clear_cell_shading(tc)
+                        set_cell_no_borders(tc)
+
+                    # If this cell is the adjacent left spacer (ending at col 0)
+                    elif col_end == 0:
+                        _set_tc_border_nil(tc, "right")
+
+                    # If this cell is the adjacent right spacer (starting at col 9)
+                    elif col_start == 9:
+                        _set_tc_border_nil(tc, "left")
+
+            # 2. Clear bottom borders of adjacent top spacer cells (Row 20) facing US columns
+            if len(table.rows) > 20:
+                row_20 = table.rows[20]
+                col_idx = 0
+                for tc in row_20._tr.findall(qn("w:tc")):
+                    tcPr = tc.find(qn("w:tcPr"))
+                    gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+                    span = 1
+                    if gridSpan_elem is not None:
+                        try:
+                            span = int(gridSpan_elem.attrib.get(qn("w:val"), 1))
+                        except (ValueError, TypeError):
+                            span = 1
+                    col_start = col_idx
+                    col_end = col_idx + span - 1
+                    col_idx += span
+                    if max(col_start, 1) <= min(col_end, 8):
+                        _set_tc_border_nil(tc, "bottom")
+
+            # 3. Clear top borders of adjacent bottom spacer cells (Row 33) facing US columns
+            if len(table.rows) > 33:
+                row_33 = table.rows[33]
+                col_idx = 0
+                for tc in row_33._tr.findall(qn("w:tc")):
+                    tcPr = tc.find(qn("w:tcPr"))
+                    gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+                    span = 1
+                    if gridSpan_elem is not None:
+                        try:
+                            span = int(gridSpan_elem.attrib.get(qn("w:val"), 1))
+                        except (ValueError, TypeError):
+                            span = 1
+                    col_start = col_idx
+                    col_end = col_idx + span - 1
+                    col_idx += span
+                    if max(col_start, 1) <= min(col_end, 8):
+                        _set_tc_border_nil(tc, "top")
+
+    return target
+
+
 def apply_scan_post_processing(
     target: Any,
     *,
@@ -713,18 +657,23 @@ def apply_scan_post_processing(
     is_defective: bool | None = None,
     is_overview: bool = False,
     blank_tev: bool = False,
+    blank_us: bool = False,
 ) -> Any:
     """Unified post-render processing engine for scanning pages and CBM defect pages.
 
     1. If blank_tev is True, clears text, shading, and sets nil borders for TEV cells on swg-panel.docx.
-    2. Applies technology severity shading (IR, US, TEV cells) Green/Red, clearing text.
+    2. If blank_us is True, clears text, shading, and sets nil borders for US cells on swg-panel.docx.
+    3. Applies technology severity shading (IR, US, TEV cells) Green/Red, clearing text.
        (If is_overview is True, clears text and sets to '-' if applicable).
-    3. Applies banner shading (Analysis / Recommendation) Green ('00B050') or Red ('EE0000').
-    4. Cleans up dash measurement unit artifacts ('-dB', '-°C', etc.).
-    5. If blank_tev is True, re-verifies TEV cells remain strictly blanked, unshaded, and borderless.
+    4. Applies banner shading (Analysis / Recommendation) Green ('00B050') or Red ('EE0000').
+    5. Cleans up dash measurement unit artifacts ('-dB', '-°C', etc.).
+    6. If blank_tev is True, re-verifies TEV cells remain strictly blanked, unshaded, and borderless.
+    7. If blank_us is True, re-verifies US cells remain strictly blanked, unshaded, and borderless.
     """
     if blank_tev:
         blank_swg_tev_cells(target)
+    if blank_us:
+        blank_swg_us_cells(target)
 
     def_techs = _normalize_technologies(defective_technologies)
     if is_defective is True and not def_techs and not is_overview:
@@ -732,6 +681,8 @@ def apply_scan_post_processing(
 
     if blank_tev and "TEV" in def_techs:
         def_techs.remove("TEV")
+    if blank_us and "US" in def_techs:
+        def_techs.remove("US")
 
     apply_technology_severity_shading(
         target,
@@ -743,6 +694,8 @@ def apply_scan_post_processing(
 
     if blank_tev:
         blank_swg_tev_cells(target)
+    if blank_us:
+        blank_swg_us_cells(target)
 
     return target
 
@@ -762,6 +715,7 @@ __all__ = [
     "SEVERITY_MARKER_TEV",
     "TEV_ELIGIBLE_SWG_COMPARTMENTS",
     "TEV_BLANKED_SWG_COMPARTMENTS",
+    "US_BLANKED_SWG_COMPARTMENTS",
     "clear_cell_text",
     "set_cell_shading",
     "get_cell_shading",
@@ -772,9 +726,15 @@ __all__ = [
     "is_healthy_banner_text",
     "normalize_swg_compartment",
     "is_swg_compartment_tev_eligible",
+    "is_swg_compartment_us_eligible",
     "is_tev_contract_awarded",
+    "is_us_contract_awarded",
     "is_swg_tev_active",
+    "is_swg_us_active",
+    "normalize_technologies",
+    "_normalize_technologies",
     "blank_swg_tev_cells",
+    "blank_swg_us_cells",
     "apply_technology_severity_shading",
     "apply_banner_shading",
     "cleanup_dash_measurement_units",

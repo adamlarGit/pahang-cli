@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import config
+from src.core.contract import ContractScope
 from src.project.models import CameraConfig, ProjectMetadata, PrpdConfig
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
@@ -61,6 +62,10 @@ class ProjectEnvironment:
     @property
     def technologies(self) -> list[str]:
         return list(self.metadata.technologies)
+
+    @property
+    def contract(self) -> ContractScope:
+        return ContractScope.from_source(self.metadata.technologies)
 
     def validate(self) -> None:
         self.storage.validate_existence()
@@ -120,10 +125,9 @@ class ProjectEnvironment:
         return dict(config.STATION_MAPPING)
 
     def get_cbm_defect_folder_name(self) -> str:
-        techs = {t.upper() for t in self.metadata.technologies}
-        if "TEV" in techs:
+        if self.contract.has_tev:
             return "DEFECT IR US TEV"
-        elif "US" in techs:
+        elif self.contract.has_us:
             return "DEFECT IR US"
         return "DEFECT IR"
 
@@ -147,10 +151,9 @@ class ProjectEnvironment:
         )
 
     def get_vi_front_page_template(self) -> Path:
-        techs = {t.upper() for t in self.metadata.technologies}
-        if "TEV" in techs:
+        if self.contract.has_tev:
             return self.get_template("vi_front_page_ir_us_tev")
-        elif "US" in techs:
+        elif self.contract.has_us:
             return self.get_template("vi_front_page_ir_us")
         return self.get_template("vi_front_page_ir")
 
@@ -158,10 +161,9 @@ class ProjectEnvironment:
         return self.get_template("vi_summary")
 
     def get_cbm_summary_template(self) -> Path:
-        techs = {t.upper() for t in self.metadata.technologies}
-        if "TEV" in techs:
+        if self.contract.has_tev:
             return self.get_template("cbm_summary_ir_us_tev")
-        elif "US" in techs:
+        elif self.contract.has_us:
             return self.get_template("cbm_summary_ir_us")
         return self.get_template("cbm_summary_ir")
 

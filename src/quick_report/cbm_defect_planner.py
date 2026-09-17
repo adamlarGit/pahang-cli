@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Sequence
 
+from src.core.contract import normalize_technologies
 from src.quick_report.cbm_family import (
     QUICK_REPORT_FAMILY_SPECS,
     QuickReportDetailRoleSpec,
@@ -330,10 +331,9 @@ class CbmDefectPlanner:
             if eq_upper not in [ev.upper() for ev in spec.equipment_values]:
                 return False
         if spec.technologies and defect.technology:
-            tech_upper = defect.technology.upper()
-            tech_tokens = [t.strip() for t in tech_upper.replace("+", " ").replace("/", " ").split() if t.strip()]
-            spec_techs = [t.upper() for t in spec.technologies]
-            if not any(token in spec_techs for token in tech_tokens):
+            tech_tokens = normalize_technologies(defect.technology)
+            spec_techs = normalize_technologies(spec.technologies)
+            if not (tech_tokens & spec_techs):
                 return False
         return True
 
@@ -345,10 +345,8 @@ class CbmDefectPlanner:
             if eq_upper not in [ev.upper() for ev in role.equipment_values]:
                 return False
         if role.technologies and defect.technology:
-            tech_upper = defect.technology.upper()
-            tech_tokens = [t.strip() for t in tech_upper.replace("+", " ").replace("/", " ").split() if t.strip()]
-            role_techs = [t.upper() for t in role.technologies]
-            if not any(token in role_techs for token in tech_tokens):
+            tech_tokens = normalize_technologies(defect.technology)
+            role_techs = normalize_technologies(role.technologies)
+            if not (tech_tokens & role_techs):
                 return False
         return True
-

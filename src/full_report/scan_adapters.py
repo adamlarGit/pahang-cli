@@ -19,16 +19,16 @@ import shutil
 import tempfile
 from typing import Any, Sequence
 
-from src.core.shading import (
+from src.core.contract import (
+    ContractScope,
     is_swg_compartment_tev_eligible,
-    is_swg_tev_active,
+    is_swg_compartment_us_eligible,
 )
 from src.core.normalizers import (
     format_busbar_position,
     format_date_cbm,
     format_db_int,
     format_heater_amp,
-    format_temperature_float,
     format_testsheet_time,
     normalize_tx_id,
     normalize_us_characteristic,
@@ -62,7 +62,6 @@ from src.testsheet.models import (
     BatteryBankSpec,
     LVDBSpec,
     SubstationEquipmentPackage,
-    SwitchgearPanelSpec,
     SwitchgearSpec,
     TransformerSpec,
 )
@@ -416,11 +415,12 @@ class SwitchgearScanAdapter:
         self.templates_dir = Path(templates_dir) if templates_dir else DEFAULT_TEMPLATES_DIR
         self.sliced_overview_pages = sliced_overview_pages or ()
         self.cbm_defects = cbm_defects or ()
-        self.project_technologies = (
-            project_technologies
-            or self.substation_info.get("technologies")
-            or self.substation_info.get("project_technologies")
+        self.contract = (
+            ContractScope.from_source(project_technologies)
+            if project_technologies is not None
+            else ContractScope.from_source(self.substation_info)
         )
+        self.project_technologies = self.contract.awarded_technologies
 
         if tev_background is not None and str(tev_background).strip() and str(tev_background).strip() != "-":
             self.tev_background = str(tev_background).strip()
@@ -592,13 +592,9 @@ class SwitchgearScanAdapter:
                 ir_img = self.photo_resolver.resolve_ir_photo(ir_num) if self.photo_resolver else ""
                 vis_img = self.photo_resolver.resolve_visual_photo(ir_num) if self.photo_resolver else ""
 
-                # Evaluate TEV activity via Two-Tier model:
-                # Tier 1: Contract awarded technologies
-                # Tier 2: Switchgear compartment eligibility
-                comp_tev_active = is_swg_tev_active(
-                    project_technologies=self.project_technologies,
-                    compartment=comp_name,
-                )
+                # Evaluate TEV and US activity via Two-Tier model:
+                comp_tev_active = self.contract.is_swg_tev_active(comp_name)
+                comp_us_active = self.contract.is_swg_us_active(comp_name)
 
                 # Resolve PRPD graphs for panel and compartment
                 us_prpd, tev_prpd = self._resolve_prpd(
@@ -606,12 +602,28 @@ class SwitchgearScanAdapter:
                     panel_name=p_name,
                     compartment=comp_name,
                     include_tev=comp_tev_active,
+                    include_us=comp_us_active,
                 )
 
                 # Format parameters
                 h_amp = format_heater_amp(panel.heater_amp, is_vcb=is_vcb)
                 bus_pos = format_busbar_position(f"{p_name} {panel.panel_feeder_no}", is_vcb=is_vcb)
                 us_char_norm = normalize_us_characteristic(panel.us_char, default="NORMAL")
+
+                if comp_us_active:
+                    us_ctx = {
+                        "reading": format_db_int(panel.us_reading),
+                        "char": us_char_norm,
+                        "severity": "NORMAL",
+                        "prpd": us_prpd,
+                    }
+                else:
+                    us_ctx = {
+                        "reading": "",
+                        "char": "",
+                        "severity": "",
+                        "prpd": "",
+                    }
 
                 if comp_tev_active:
                     tev_ctx = {
@@ -658,12 +670,7 @@ class SwitchgearScanAdapter:
                             "reading": "-",
                             "severity": "NORMAL",
                         },
-                        "us": {
-                            "reading": format_db_int(panel.us_reading),
-                            "char": us_char_norm,
-                            "severity": "NORMAL",
-                            "prpd": us_prpd,
-                        },
+                        "us": us_ctx,
                         "tev": tev_ctx,
                     },
                     "ir": {
@@ -676,12 +683,7 @@ class SwitchgearScanAdapter:
                     "visual": {
                         "image": vis_img,
                     },
-                    "us": {
-                        "reading": format_db_int(panel.us_reading),
-                        "char": us_char_norm,
-                        "severity": "NORMAL",
-                        "prpd": us_prpd,
-                    },
+                    "us": us_ctx,
                     "tev": tev_ctx,
                     "banner": {
                         "analysis": BANNER_HEALTHY_ANALYSIS,
@@ -691,6 +693,8 @@ class SwitchgearScanAdapter:
                     "recommendation": BANNER_HEALTHY_RECOMMENDATION,
                     "__blank_tev__": not comp_tev_active,
                     "is_tev_active": comp_tev_active,
+                    "__blank_us__": not comp_us_active,
+                    "is_us_active": comp_us_active,
                 }
 
                 items.append(
@@ -724,16 +728,18 @@ class SwitchgearScanAdapter:
         panel_name: str = "",
         compartment: str | None = None,
         include_tev: bool = True,
+        include_us: bool = True,
     ) -> tuple[str, str]:
         """Resolve US and TEV PRPD waveform image file paths, falling back to clean '' per D08."""
         should_gen_tev = include_tev and (compartment is None or is_swg_compartment_tev_eligible(compartment))
+        should_gen_us = include_us and (compartment is None or is_swg_compartment_us_eligible(compartment))
 
         # 1. Catalog lookup
         if self.prpd_catalog and "swg" in self.prpd_catalog:
             swg_cat = self.prpd_catalog["swg"]
             if panel_no in swg_cat:
                 entry = swg_cat[panel_no]
-                us_p = str(entry.get("us") or "")
+                us_p = str(entry.get("us") or "") if should_gen_us else ""
                 tev_p = str(entry.get("tev") or "") if should_gen_tev else ""
                 return us_p, tev_p
 
@@ -750,6 +756,7 @@ class SwitchgearScanAdapter:
                     mode=self.prpd_mode,
                     compartment=compartment,
                     include_tev=should_gen_tev,
+                    include_us=should_gen_us,
                 )
                 return (str(us_png) if us_png else ""), (str(tev_png) if tev_png else "")
             except Exception as exc:
@@ -781,6 +788,7 @@ class TransformerScanAdapter:
         has_active_defect: bool | None = None,
         cbm_defects: Sequence[Any] | None = None,
         total_tx_count: int = 1,
+        project_technologies: Sequence[str] | set[str] | None = None,
     ) -> None:
         self.tx = tx
         self.substation_info = substation_info or {}
@@ -794,6 +802,12 @@ class TransformerScanAdapter:
         self.sliced_overview_pages = sliced_overview_pages or ()
         self.cbm_defects = cbm_defects or ()
         self.total_tx_count = total_tx_count
+        self.contract = (
+            ContractScope.from_source(project_technologies)
+            if project_technologies is not None
+            else ContractScope.from_source(self.substation_info)
+        )
+        self.project_technologies = self.contract.awarded_technologies
 
         self.tx_id_str = normalize_tx_id(getattr(tx, "tx_id", None), default_idx=tx_index)
         self.has_active_defect = _check_has_active_defect(
@@ -1321,6 +1335,7 @@ def adapt_equipment_package(
             templates_dir=templates_dir,
             sliced_overview_pages=sliced_overview_pages,
             cbm_defects=cbm_defects,
+            project_technologies=project_technologies,
         )
         results.append(adapter.adapt())
 

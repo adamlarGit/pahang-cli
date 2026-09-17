@@ -22,17 +22,14 @@ Tests:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import docx
 from docx.oxml.ns import qn
 import pytest
 
 from src.core.shading import (
-    TEV_BLANKED_SWG_COMPARTMENTS,
-    TEV_ELIGIBLE_SWG_COMPARTMENTS,
     blank_swg_tev_cells,
-    clear_cell_shading,
     get_cell_shading,
     is_swg_compartment_tev_eligible,
     is_swg_tev_active,
@@ -324,7 +321,7 @@ class TestOpenXmlBlanking:
     def test_clear_cell_text_removes_drawings_from_raw_tc(self):
         """clear_cell_text must strip drawing and pict elements from raw <w:tc>."""
         from docx.oxml import OxmlElement
-        from src.core.shading import clear_cell_text, _resolve_tc
+        from src.core.shading import clear_cell_text
         doc = docx.Document()
         table = doc.add_table(rows=1, cols=1)
         tc = table.cell(0, 0)._tc
@@ -713,14 +710,15 @@ class TestQuickReportCbmRenderTevBlanking:
         assert get_cell_shading(cell_tev) == "00B050"
 
     def test_qr_extract_project_technologies_from_metadata_objects(self):
-        """Ensure _extract_project_technologies extracts from metadata or project_metadata objects."""
-        from src.quick_report.cbm_render import _extract_project_technologies
+        """Ensure ContractScope extracts awarded technologies from metadata or project_metadata objects."""
+        from src.core.contract import ContractScope
 
         class MockMeta:
             technologies = ("IR", "US")
 
         pe_info_meta = {"metadata": MockMeta()}
-        assert list(_extract_project_technologies(pe_info_meta)) == ["IR", "US"]
+        assert ContractScope.from_source(pe_info_meta).awarded_technologies == frozenset({"IR", "US"})
 
         pe_info_proj_meta = {"project_metadata": MockMeta()}
-        assert list(_extract_project_technologies(pe_info_proj_meta)) == ["IR", "US"]
+        assert ContractScope.from_source(pe_info_proj_meta).awarded_technologies == frozenset({"IR", "US"})
+

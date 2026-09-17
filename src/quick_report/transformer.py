@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from src.core.contract import ContractScope
 from src.core.normalizers import (
     format_date_cbm,
     format_date_front_page,
@@ -71,6 +72,8 @@ class QuickReportTransformer:
 
         pe_info: dict[str, Any] = {
             "prpd_mode": prpd_mode,
+            "contract": ContractScope.from_source(environment),
+            "project_technologies": getattr(environment, "technologies", None),
             "purchaseorder": {
                 "number": po_num,
             },

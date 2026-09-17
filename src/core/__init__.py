@@ -1,5 +1,6 @@
 """Core module for Pahang CLI."""
 
+from src.core.contract import ContractScope
 from src.core.normalizers import (
     extract_background_temperature,
     format_busbar_position,
@@ -23,6 +24,7 @@ from src.core.normalizers import (
 )
 
 __all__ = [
+    "ContractScope",
     "extract_background_temperature",
     "format_busbar_position",
     "format_cbm_reading",

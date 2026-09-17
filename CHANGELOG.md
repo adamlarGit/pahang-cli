@@ -5,6 +5,20 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - 2026-09-17
+
+### Added
+- **Switchgear Ultrasound (US) Dynamic Blanking Engine (`src/core/shading.py`)**: Implemented `blank_swg_us_cells()` to dynamically blank inactive Ultrasound measurement blocks on `swg-panel.docx` 37x24 tables (rows 21–32, columns 1–8) with two-tier contract and compartment eligibility across Full Report and Quick Report workflows. Directly traverses raw XML `<w:tc>` elements to clear text, strip `<w:shd>` background shading, set all interior borders to `<w:val="nil"/>`, and clear adjacent spacer borders facing the US block (closes #42).
+- **Secondary Compartment & Link Box Exclusion Rules (`src/core/shading.py`, `src/core/contract.py`)**: Added canonical switchgear compartment exclusion rules for `SECONDARY COMPARTMENT` and `LINK BOX` with robust regex boundary and conjunction matching in `normalize_swg_compartment()`, ensuring link boxes are never misclassified as cable compartments and control/metering compartments remain ultrasound-blanked.
+- **Ultrasound PRPD Image Short-Circuiting (`src/quick_report/prpd.py`, `src/full_report/scan_adapters.py`)**: Short-circuited Ultrasound PRPD waveform generation in native matplotlib and Chromium rendering pipelines when US is inactive or excluded, eliminating unnecessary disk I/O and process execution overhead.
+- **Pure-Domain Contract Scope Deep Module (`src/core/contract.py`)**: Extracted dedicated pure-domain deep module `ContractScope` featuring universal `from_source()` factory to unify contract technology parsing, modality queries (`is_active()`, `is_swg_us_active()`, `is_swg_tev_active()`), and compartment eligibility checks across Full Report, Quick Report, and project workflows (closes #43).
+
+### Fixed
+- **Quick Report Transformer Contract Technology Propagation (`src/quick_report/transformer.py`)**: Fixed production bug in Quick Report `transformer.py` ensuring contract awarded technologies propagate into `pe_info` metadata for accurate downstream template rendering.
+
+### Cleaned
+- **Codebase Simplification & Dead Code Elimination (`src/core/shading.py`, `src/quick_report/cbm_render.py`, `src/full_report/scan_adapters.py`, `src/full_report/scan_render.py`, `src/quick_report/cbm_defect_planner.py`)**: Purged dead code, unused imports, and redundant token-splitting logic across shading, scan adapters, renderers, and defect planners in favor of the consolidated `ContractScope` interface.
+
 ## [1.20.0] - 2026-09-17
 
 ### Added

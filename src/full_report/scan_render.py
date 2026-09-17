@@ -25,7 +25,6 @@ from src.core.shading import (
     COLOR_DEFECT,
     COLOR_HEALTHY,
     COLOR_NORMAL,
-    COLOR_WHITE,
     BANNER_HEALTHY_ANALYSIS,
     BANNER_HEALTHY_RECOMMENDATION,
     BANNER_DEFECT_FORWARDING,
@@ -35,10 +34,7 @@ from src.core.shading import (
     SEVERITY_MARKER_US,
     SEVERITY_MARKER_TEV,
     _normalize_technologies,
-    clear_cell_text,
-    set_cell_shading,
     get_cell_shading,
-    set_cell_no_borders,
     detect_cell_technology,
     is_defect_forwarding_text,
     is_healthy_banner_text,
@@ -137,6 +133,7 @@ class FullReportScanPageRendererCore:
         overview: bool = False,
         image_width_mm: float = 80.0,
         blank_tev: bool | None = None,
+        blank_us: bool | None = None,
     ) -> Path:
         """Render scanning template with docxtpl and apply dynamic OpenXML cell shading.
 
@@ -275,7 +272,7 @@ class FullReportScanPageRendererCore:
             autoescape=True,
         )
 
-        # Resolve whether switchgear TEV cells should be blanked
+        # Resolve whether switchgear TEV/US cells should be blanked
         should_blank_tev = (
             blank_tev
             if blank_tev is not None
@@ -283,6 +280,15 @@ class FullReportScanPageRendererCore:
                 render_ctx.get("__blank_tev__")
                 or render_ctx.get("blank_tev")
                 or (render_ctx.get("is_tev_active") is False)
+            )
+        )
+        should_blank_us = (
+            blank_us
+            if blank_us is not None
+            else bool(
+                render_ctx.get("__blank_us__")
+                or render_ctx.get("blank_us")
+                or (render_ctx.get("is_us_active") is False)
             )
         )
 
@@ -293,6 +299,7 @@ class FullReportScanPageRendererCore:
             is_defective=has_defect,
             is_overview=overview,
             blank_tev=should_blank_tev,
+            blank_us=should_blank_us,
         )
 
         # Save rendered and shaded document
@@ -314,6 +321,7 @@ class FullReportScanPageRendererCore:
         overview: bool = False,
         image_width_mm: float = 80.0,
         blank_tev: bool | None = None,
+        blank_us: bool | None = None,
     ) -> Path:
         """Convenience class method to render and shade a scan page."""
         renderer = cls()
@@ -326,6 +334,7 @@ class FullReportScanPageRendererCore:
             overview=overview,
             image_width_mm=image_width_mm,
             blank_tev=blank_tev,
+            blank_us=blank_us,
         )
 
 
@@ -339,6 +348,7 @@ def render_scan_page(
     overview: bool = False,
     image_width_mm: float = 80.0,
     blank_tev: bool | None = None,
+    blank_us: bool | None = None,
 ) -> Path:
     """Standalone helper function to render a scan page with dynamic OpenXML shading."""
     return FullReportScanPageRendererCore.render_page(
@@ -350,6 +360,7 @@ def render_scan_page(
         overview=overview,
         image_width_mm=image_width_mm,
         blank_tev=blank_tev,
+        blank_us=blank_us,
     )
 
 

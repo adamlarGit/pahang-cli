@@ -25,7 +25,6 @@ import threading
 import time
 from typing import Any
 import urllib.parse
-import uuid
 
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
@@ -35,7 +34,10 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
-from src.core.shading import is_swg_compartment_tev_eligible
+from src.core.contract import (
+    is_swg_compartment_tev_eligible,
+    is_swg_compartment_us_eligible,
+)
 
 
 # Non-overlapping Flexbox Layout: 320px Left Measurement Table + 840px Right PRPD Graph
@@ -726,12 +728,13 @@ def generate_prpd_graphs_for_swg_panel(
     *,
     compartment: str | None = None,
     include_tev: bool = True,
+    include_us: bool = True,
 ) -> tuple[Path | None, Path | None]:
     """Generate US and TEV PRPD PNG graph images for a switchgear panel.
 
     Supports mode='option_c' (Headless Chrome) and mode='option_b' (Native Python).
-    When compartment is not TEV-eligible or include_tev is False, skips TEV PRPD graph
-    generation completely to eliminate unnecessary disk I/O and computation.
+    When compartment is not US/TEV-eligible or include_us/include_tev is False, skips corresponding
+    PRPD graph generation completely to eliminate unnecessary disk I/O and computation.
     Returns (us_png_path, tev_png_path).
     """
     if not survey_root:
@@ -747,21 +750,23 @@ def generate_prpd_graphs_for_swg_panel(
         return None, None
 
     should_gen_tev = include_tev and (compartment is None or is_swg_compartment_tev_eligible(compartment))
+    should_gen_us = include_us and (compartment is None or is_swg_compartment_us_eligible(compartment))
     us_png: Path | None = None
     tev_png: Path | None = None
 
     if mode == "option_b":
-        # 1. Ultrasonic Graph (Option B)
-        us_dir = find_latest_measurement_dir(feeder_dir, "US")
-        if us_dir:
-            us_file = us_dir / "ultrasonic_phase_plot.js"
-            if us_file.exists():
-                try:
-                    events = decode_ultrasonic_phase_plot(us_file)
-                    us_out = output_dir / f"prpd_swg_panel{panel_no}_us.png"
-                    us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
-                except Exception:
-                    us_png = None
+        # 1. Ultrasonic Graph (Option B) - Skipped if compartment is non-US or include_us is False
+        if should_gen_us:
+            us_dir = find_latest_measurement_dir(feeder_dir, "US")
+            if us_dir:
+                us_file = us_dir / "ultrasonic_phase_plot.js"
+                if us_file.exists():
+                    try:
+                        events = decode_ultrasonic_phase_plot(us_file)
+                        us_out = output_dir / f"prpd_swg_panel{panel_no}_us.png"
+                        us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
+                    except Exception:
+                        us_png = None
 
         # 2. TEV Graph (Option B) - Skipped if compartment is non-TEV or include_tev is False
         if should_gen_tev:
@@ -777,7 +782,7 @@ def generate_prpd_graphs_for_swg_panel(
                         tev_png = None
     else:
         # Option C: Headless Chrome
-        us_dir = find_latest_measurement_dir(feeder_dir, "US")
+        us_dir = find_latest_measurement_dir(feeder_dir, "US") if should_gen_us else None
         tev_dir = find_latest_measurement_dir(feeder_dir, "TEV") if should_gen_tev else None
         if not us_dir and not tev_dir:
             return None, None
