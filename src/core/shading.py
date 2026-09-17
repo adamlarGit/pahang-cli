@@ -105,16 +105,42 @@ def _normalize_technologies(techs: set[str] | list[str] | tuple[str, ...] | str 
 
 
 def clear_cell_text(cell: Any) -> None:
-    """Clear paragraph text and run text in a python-docx table cell."""
+    """Clear paragraph text, runs, and drawing objects in a python-docx table cell or raw <w:tc> element."""
     for paragraph in getattr(cell, "paragraphs", ()):
         for run in getattr(paragraph, "runs", ()):
             run.text = ""
         paragraph.text = ""
+    tc = _resolve_tc(cell)
+    if tc is not None and hasattr(tc, "iter"):
+        for parent in list(tc.iter()):
+            for child in list(parent):
+                tag = getattr(child, "tag", "")
+                if isinstance(tag, str) and tag.endswith(("}drawing", "}pict", "}object", "drawing", "pict", "object")):
+                    parent.remove(child)
+        for node in tc.iter():
+            if isinstance(node.tag, str) and node.tag.endswith("}t"):
+                node.text = ""
+
+
+def _resolve_tc(target: Any) -> Any:
+    """Extract <w:tc> oxml element from a Cell or raw tc element, or return None."""
+    if hasattr(target, "_tc"):
+        return target._tc
+    tag = getattr(target, "tag", None)
+    if isinstance(tag, str) and (tag.endswith("}tc") or tag in ("w:tc", "tc")):
+        return target
+    return None
 
 
 def set_cell_shading(cell: Any, hex_color: str) -> None:
     """Set background fill color on a python-docx table cell (e.g. 'EE0000' or '00B050')."""
-    tcPr = cell._tc.get_or_add_tcPr()
+    tc = _resolve_tc(cell)
+    if tc is None:
+        return
+    tcPr = tc.get_or_add_tcPr() if hasattr(tc, "get_or_add_tcPr") else tc.find(qn("w:tcPr"))
+    if tcPr is None:
+        tcPr = OxmlElement("w:tcPr")
+        tc.insert(0, tcPr) if hasattr(tc, "insert") else tc.append(tcPr)
     shd = tcPr.find(qn("w:shd"))
     if shd is None:
         shd = OxmlElement("w:shd")
@@ -126,9 +152,12 @@ def set_cell_shading(cell: Any, hex_color: str) -> None:
 
 def get_cell_shading(cell: Any) -> str | None:
     """Read w:fill hex color attribute from a table cell's tcPr/w:shd XML element."""
-    if not hasattr(cell, "_tc"):
+    tc = _resolve_tc(cell)
+    if tc is None:
         return None
-    tcPr = cell._tc.get_or_add_tcPr()
+    tcPr = tc.find(qn("w:tcPr"))
+    if tcPr is None:
+        return None
     shd = tcPr.find(qn("w:shd"))
     if shd is None:
         return None
@@ -136,20 +165,26 @@ def get_cell_shading(cell: Any) -> str | None:
 
 
 def clear_cell_shading(cell: Any) -> None:
-    """Remove background shading (<w:shd>) from a table cell."""
-    if not hasattr(cell, "_tc"):
+    """Remove background shading (<w:shd>) from a table cell or raw <w:tc> element."""
+    tc = _resolve_tc(cell)
+    if tc is None:
         return
-    tcPr = cell._tc.get_or_add_tcPr()
-    shd = tcPr.find(qn("w:shd"))
-    if shd is not None:
-        tcPr.remove(shd)
+    tcPr = tc.find(qn("w:tcPr"))
+    if tcPr is not None:
+        shd = tcPr.find(qn("w:shd"))
+        if shd is not None:
+            tcPr.remove(shd)
 
 
 def _set_tc_border_nil(cell: Any, border_name: str) -> None:
-    """Set a specific border on a cell to nil."""
-    if not hasattr(cell, "_tc"):
+    """Set a specific border on a cell or raw <w:tc> element to nil."""
+    tc = _resolve_tc(cell)
+    if tc is None:
         return
-    tcPr = cell._tc.get_or_add_tcPr()
+    tcPr = tc.get_or_add_tcPr() if hasattr(tc, "get_or_add_tcPr") else tc.find(qn("w:tcPr"))
+    if tcPr is None:
+        tcPr = OxmlElement("w:tcPr")
+        tc.insert(0, tcPr) if hasattr(tc, "insert") else tc.append(tcPr)
     tcBorders = tcPr.find(qn("w:tcBorders"))
     if tcBorders is None:
         tcBorders = OxmlElement("w:tcBorders")
@@ -162,14 +197,20 @@ def _set_tc_border_nil(cell: Any, border_name: str) -> None:
 
 
 def set_cell_no_borders(cell: Any) -> None:
-    """Set all borders on a python-docx table cell to nil (invisible)."""
-    tcPr = cell._tc.get_or_add_tcPr()
+    """Set all borders on a python-docx table cell or raw <w:tc> element to nil (invisible)."""
+    tc = _resolve_tc(cell)
+    if tc is None:
+        return
+    tcPr = tc.get_or_add_tcPr() if hasattr(tc, "get_or_add_tcPr") else tc.find(qn("w:tcPr"))
+    if tcPr is None:
+        tcPr = OxmlElement("w:tcPr")
+        tc.insert(0, tcPr) if hasattr(tc, "insert") else tc.append(tcPr)
     tcBorders = tcPr.find(qn("w:tcBorders"))
     if tcBorders is None:
         tcBorders = OxmlElement("w:tcBorders")
         tcPr.append(tcBorders)
 
-    for border_name in ("top", "left", "bottom", "right", "insideH", "insideV"):
+    for border_name in ("top", "left", "bottom", "right", "insideH", "insideV", "tl2br", "tr2bl"):
         border = tcBorders.find(qn(f"w:{border_name}"))
         if border is None:
             border = OxmlElement(f"w:{border_name}")
@@ -566,41 +607,101 @@ def blank_swg_tev_cells(target: Any) -> Any:
     """Blank TEV measurement cells in swg-panel.docx 37x24 table.
 
     Operates on rows 21–32 (indices 21..32 inclusive) and columns 11–22 (indices 11..22 inclusive).
+    Directly iterates over raw XML <w:tc> elements in each row's <w:tr> to bypass python-docx
+    vMerge masking (where table.cell() on vertically merged continuation cells resolves back
+    to the anchor cell, leaving continuation row borders visible around the {{ tev.prpd }} quadrant).
     - Clears cell text
     - Removes background cell shading (<w:shd>)
     - Sets all borders to <w:val="nil"/>
-    Also clears bordering spacer borders facing the TEV block to avoid ghost border artifacts.
+    Also clears bordering spacer borders facing the TEV block (col 10 right border,
+    col 23 left border, row 20 bottom border, row 33 top border) to eliminate ghost borders.
     """
-    tables = []
-    if hasattr(target, "docx") and hasattr(target.docx, "tables"):
-        tables = target.docx.tables
-    elif hasattr(target, "tables"):
-        tables = target.tables
-    elif hasattr(target, "rows") and hasattr(target, "columns"):
-        tables = [target]
+    def _collect_tables(obj: Any) -> list[Any]:
+        collected = []
+        if hasattr(obj, "docx") and hasattr(obj.docx, "tables"):
+            collected.extend(obj.docx.tables)
+        elif hasattr(obj, "tables"):
+            collected.extend(obj.tables)
+        elif hasattr(obj, "rows") and hasattr(obj, "columns"):
+            collected.append(obj)
+        elif isinstance(obj, (list, tuple, set)):
+            for item in obj:
+                collected.extend(_collect_tables(item))
+        return collected
+
+    tables = _collect_tables(target)
 
     for table in tables:
-        # Match swg-panel.docx 37x24 table layout
-        if len(table.rows) >= 33 and len(table.columns) >= 24:
-            seen_tcs = set()
-            for r in range(21, 33):
-                for c in range(11, 23):
-                    cell = table.cell(r, c)
-                    if cell._tc not in seen_tcs:
-                        seen_tcs.add(cell._tc)
-                        clear_cell_text(cell)
-                        clear_cell_shading(cell)
-                        set_cell_no_borders(cell)
+        # Match swg-panel.docx 37x24 table layout (tightened guard: exactly 24 columns)
+        if len(table.rows) >= 33 and len(table.columns) == 24:
+            # 1. Process rows 21..32 at the raw XML <w:tc> level
+            for r_idx in range(21, 33):
+                row = table.rows[r_idx]
+                col_idx = 0
+                for tc in row._tr.findall(qn("w:tc")):
+                    tcPr = tc.find(qn("w:tcPr"))
+                    gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+                    span = 1
+                    if gridSpan_elem is not None:
+                        try:
+                            span = int(gridSpan_elem.attrib.get(qn("w:val"), 1))
+                        except (ValueError, TypeError):
+                            span = 1
+                    col_start = col_idx
+                    col_end = col_idx + span - 1
+                    col_idx += span
 
-            # Clear adjacent spacer borders facing the TEV block
-            for r in range(21, 33):
-                _set_tc_border_nil(table.cell(r, 10), "right")
-                if len(table.columns) > 23:
-                    _set_tc_border_nil(table.cell(r, 23), "left")
-            for c in range(11, 23):
-                _set_tc_border_nil(table.cell(20, c), "bottom")
-                if len(table.rows) > 33:
-                    _set_tc_border_nil(table.cell(33, c), "top")
+                    # If this cell falls entirely within TEV columns (cols 11..22)
+                    if col_start >= 11 and col_end <= 22:
+                        clear_cell_text(tc)
+                        clear_cell_shading(tc)
+                        set_cell_no_borders(tc)
+
+                    # If this cell is the adjacent left spacer (ending at col 10)
+                    elif col_end == 10:
+                        _set_tc_border_nil(tc, "right")
+
+                    # If this cell is the adjacent right spacer (starting at col 23)
+                    elif col_start == 23:
+                        _set_tc_border_nil(tc, "left")
+
+            # 2. Clear bottom borders of adjacent top spacer cells (Row 20) facing TEV columns
+            if len(table.rows) > 20:
+                row_20 = table.rows[20]
+                col_idx = 0
+                for tc in row_20._tr.findall(qn("w:tc")):
+                    tcPr = tc.find(qn("w:tcPr"))
+                    gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+                    span = 1
+                    if gridSpan_elem is not None:
+                        try:
+                            span = int(gridSpan_elem.attrib.get(qn("w:val"), 1))
+                        except (ValueError, TypeError):
+                            span = 1
+                    col_start = col_idx
+                    col_end = col_idx + span - 1
+                    col_idx += span
+                    if max(col_start, 11) <= min(col_end, 22):
+                        _set_tc_border_nil(tc, "bottom")
+
+            # 3. Clear top borders of adjacent bottom spacer cells (Row 33) facing TEV columns
+            if len(table.rows) > 33:
+                row_33 = table.rows[33]
+                col_idx = 0
+                for tc in row_33._tr.findall(qn("w:tc")):
+                    tcPr = tc.find(qn("w:tcPr"))
+                    gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+                    span = 1
+                    if gridSpan_elem is not None:
+                        try:
+                            span = int(gridSpan_elem.attrib.get(qn("w:val"), 1))
+                        except (ValueError, TypeError):
+                            span = 1
+                    col_start = col_idx
+                    col_end = col_idx + span - 1
+                    col_idx += span
+                    if max(col_start, 11) <= min(col_end, 22):
+                        _set_tc_border_nil(tc, "top")
 
     return target
 

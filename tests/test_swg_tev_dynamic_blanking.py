@@ -202,7 +202,7 @@ class TestOpenXmlBlanking:
         # Apply blanking
         blank_swg_tev_cells(swg_panel_doc)
 
-        # 1. Verify all TEV cells (rows 21..32, cols 11..22) are blanked
+        # 1. Verify all TEV cells (rows 21..32, cols 11..22) are blanked via python-docx cell interface
         for r_idx in range(21, 33):
             for c_idx in range(11, 23):
                 cell = table.rows[r_idx].cells[c_idx]
@@ -222,9 +222,88 @@ class TestOpenXmlBlanking:
                     assert b is not None, f"Cell ({r_idx}, {c_idx}) missing border {b_name}"
                     assert b.get(qn("w:val")) == "nil", f"Cell ({r_idx}, {c_idx}) border {b_name} not nil"
 
-        # 2. Verify US cells (rows 21..32, cols 1..10) are NOT blanked / corrupted
+        # 2. Verify raw XML <w:tc> elements in rows 21..32 (including vMerge=continue rows 24..26 for tev.prpd)
+        for r_idx in range(21, 33):
+            row = table.rows[r_idx]
+            col_idx = 0
+            for tc in row._tr.findall(qn("w:tc")):
+                tcPr = tc.find(qn("w:tcPr"))
+                gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+                span = int(gridSpan_elem.attrib.get(qn("w:val"), 1)) if gridSpan_elem is not None else 1
+                col_start = col_idx
+                col_end = col_idx + span - 1
+                col_idx += span
+
+                # TEV cells (cols 11..22)
+                if col_start >= 11 and col_end <= 22:
+                    txt = "".join(tc.itertext()).strip()
+                    assert txt == "", f"Row {r_idx} cols {col_start}..{col_end} XML text not empty: {txt}"
+                    shd = tcPr.find(qn("w:shd")) if tcPr is not None else None
+                    assert shd is None or shd.get(qn("w:fill")) in (None, "FFFFFF", "clear")
+                    tcBorders = tcPr.find(qn("w:tcBorders")) if tcPr is not None else None
+                    assert tcBorders is not None, f"Row {r_idx} cols {col_start}..{col_end} missing tcBorders"
+                    for b_name in ("top", "left", "bottom", "right"):
+                        b = tcBorders.find(qn(f"w:{b_name}"))
+                        assert b is not None, f"Row {r_idx} cols {col_start}..{col_end} missing border {b_name}"
+                        assert b.get(qn("w:val")) == "nil", f"Row {r_idx} cols {col_start}..{col_end} border {b_name} not nil"
+
+                # Adjacent left spacer (ending at col 10)
+                elif col_end == 10:
+                    tcBorders = tcPr.find(qn("w:tcBorders")) if tcPr is not None else None
+                    assert tcBorders is not None, f"Row {r_idx} col 10 spacer missing tcBorders"
+                    b_right = tcBorders.find(qn("w:right"))
+                    assert b_right is not None, f"Row {r_idx} col 10 spacer missing right border"
+                    assert b_right.get(qn("w:val")) == "nil", f"Row {r_idx} col 10 spacer right border not nil"
+
+                # Adjacent right spacer (starting at col 23)
+                elif col_start == 23:
+                    tcBorders = tcPr.find(qn("w:tcBorders")) if tcPr is not None else None
+                    assert tcBorders is not None, f"Row {r_idx} col 23 spacer missing tcBorders"
+                    b_left = tcBorders.find(qn("w:left"))
+                    assert b_left is not None, f"Row {r_idx} col 23 spacer missing left border"
+                    assert b_left.get(qn("w:val")) == "nil", f"Row {r_idx} col 23 spacer left border not nil"
+
+        # 3. Verify Row 20 top spacer bottom borders facing TEV block
+        row_20 = table.rows[20]
+        col_idx = 0
+        for tc in row_20._tr.findall(qn("w:tc")):
+            tcPr = tc.find(qn("w:tcPr"))
+            gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+            span = int(gridSpan_elem.attrib.get(qn("w:val"), 1)) if gridSpan_elem is not None else 1
+            col_start = col_idx
+            col_end = col_idx + span - 1
+            col_idx += span
+            if max(col_start, 11) <= min(col_end, 22):
+                tcBorders = tcPr.find(qn("w:tcBorders")) if tcPr is not None else None
+                assert tcBorders is not None
+                b_bot = tcBorders.find(qn("w:bottom"))
+                assert b_bot is not None
+                assert b_bot.get(qn("w:val")) == "nil", "Row 20 spacer bottom border facing TEV not nil"
+
+        # 4. Verify Row 33 bottom spacer top borders facing TEV block
+        row_33 = table.rows[33]
+        col_idx = 0
+        for tc in row_33._tr.findall(qn("w:tc")):
+            tcPr = tc.find(qn("w:tcPr"))
+            gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+            span = int(gridSpan_elem.attrib.get(qn("w:val"), 1)) if gridSpan_elem is not None else 1
+            col_start = col_idx
+            col_end = col_idx + span - 1
+            col_idx += span
+            if max(col_start, 11) <= min(col_end, 22):
+                tcBorders = tcPr.find(qn("w:tcBorders")) if tcPr is not None else None
+                assert tcBorders is not None
+                b_top = tcBorders.find(qn("w:top"))
+                assert b_top is not None
+                assert b_top.get(qn("w:val")) == "nil", "Row 33 spacer top border facing TEV not nil"
+
+        # 5. Verify US cells (rows 21..32, cols 1..8) are NOT blanked / corrupted
         cell_us_head = table.rows[21].cells[1]
         assert "ULTRASOUND" in cell_us_head.text.upper()
+        tc_us_prpd = table.rows[23].cells[1]._tc
+        tcBorders = tc_us_prpd.find(qn("w:tcPr")).find(qn("w:tcBorders"))
+        assert tcBorders.find(qn("w:top")).get(qn("w:val")) == "single"
+        assert tcBorders.find(qn("w:right")).get(qn("w:val")) == "single"
 
     def test_blank_swg_tev_cells_idempotent(self, swg_panel_doc: docx.Document):
         """Blanking twice should not raise errors."""
@@ -234,14 +313,97 @@ class TestOpenXmlBlanking:
         cell = table.rows[25].cells[15]
         assert cell.text.strip() == ""
 
-    def test_blank_swg_tev_cells_ignores_23_column_tables(self):
-        """23-column templates (such as tx-hv-sides.docx or swg-overview.docx) must not be modified."""
+    def test_blank_swg_tev_cells_supports_iterable_of_documents(self):
+        """blank_swg_tev_cells must support being passed a list/tuple of Document objects."""
+        doc1 = docx.Document(SWG_PANEL_TEMPLATE)
+        doc2 = docx.Document(SWG_PANEL_TEMPLATE)
+        blank_swg_tev_cells([doc1, doc2])
+        assert doc1.tables[0].rows[23].cells[11].text.strip() == ""
+        assert doc2.tables[0].rows[23].cells[11].text.strip() == ""
+
+    def test_clear_cell_text_removes_drawings_from_raw_tc(self):
+        """clear_cell_text must strip drawing and pict elements from raw <w:tc>."""
+        from docx.oxml import OxmlElement
+        from src.core.shading import clear_cell_text, _resolve_tc
+        doc = docx.Document()
+        table = doc.add_table(rows=1, cols=1)
+        tc = table.cell(0, 0)._tc
+        p = tc.find(qn("w:p"))
+        drawing = OxmlElement("w:drawing")
+        p.append(drawing)
+        assert len(tc.findall(".//" + qn("w:drawing"))) == 1
+        clear_cell_text(tc)
+        assert len(tc.findall(".//" + qn("w:drawing"))) == 0
+
+    def test_resolve_tc_strict_matching(self):
+        """_resolve_tc extracts valid <w:tc> and rejects non-tc nodes or strings."""
+        from docx.oxml import OxmlElement
+        from src.core.shading import _resolve_tc
+        doc = docx.Document()
+        table = doc.add_table(rows=1, cols=1)
+        cell = table.cell(0, 0)
+        tc = cell._tc
+
+        assert _resolve_tc(cell) is tc
+        assert _resolve_tc(tc) is tc
+        assert _resolve_tc("some_string") is None
+        assert _resolve_tc(None) is None
+
+        # Ruby text container (<w:rtc>) must not resolve as <w:tc>
+        rtc = OxmlElement("w:rtc")
+        assert _resolve_tc(rtc) is None
+
+    def test_blank_swg_tev_cells_ignores_non_24_column_tables(self):
+        """Tables not matching exactly 24 columns (e.g. 23 or 25 cols) must not be modified."""
+        # 23-column table
         tx_doc = docx.Document("templates/FULL REPORT/NORMAL IR US TEV/tx-hv-sides.docx")
-        t = tx_doc.tables[0]
-        assert len(t.columns) == 23
-        us_text_before = t.rows[21].cells[1].text
+        t23 = tx_doc.tables[0]
+        assert len(t23.columns) == 23
+        us_text_before = t23.rows[21].cells[1].text
         blank_swg_tev_cells(tx_doc)
-        assert t.rows[21].cells[1].text == us_text_before
+        assert t23.rows[21].cells[1].text == us_text_before
+
+        # 25-column synthetic table
+        synthetic_doc = docx.Document()
+        t25 = synthetic_doc.add_table(rows=35, cols=25)
+        t25.rows[21].cells[11].text = "DO_NOT_CLEAR"
+        blank_swg_tev_cells(synthetic_doc)
+        assert t25.rows[21].cells[11].text == "DO_NOT_CLEAR"
+
+    def test_blank_swg_tev_cells_quick_report_template(self):
+        """Verify Quick Report template swg-panel.docx TEV PRPD quadrant borders are all nil."""
+        if not QR_SWG_PANEL_TEMPLATE.exists():
+            pytest.skip("QR template swg-panel.docx not found.")
+        doc = docx.Document(QR_SWG_PANEL_TEMPLATE)
+        blank_swg_tev_cells(doc)
+        table = doc.tables[0]
+        # Inspect rows 21..32 raw XML <w:tc> elements for cols 11..22 (including {{ tev.prpd }})
+        for r_idx in range(21, 33):
+            row = table.rows[r_idx]
+            col_idx = 0
+            for tc in row._tr.findall(qn("w:tc")):
+                tcPr = tc.find(qn("w:tcPr"))
+                gridSpan_elem = tcPr.find(qn("w:gridSpan")) if tcPr is not None else None
+                span = int(gridSpan_elem.attrib.get(qn("w:val"), 1)) if gridSpan_elem is not None else 1
+                col_start = col_idx
+                col_end = col_idx + span - 1
+                col_idx += span
+
+                if col_start >= 11 and col_end <= 22:
+                    assert "".join(tc.itertext()).strip() == ""
+                    tcBorders = tcPr.find(qn("w:tcBorders"))
+                    assert tcBorders is not None
+                    for b_name in ("top", "left", "bottom", "right"):
+                        b = tcBorders.find(qn(f"w:{b_name}"))
+                        assert b is not None and b.get(qn("w:val")) == "nil"
+                elif col_end == 10:
+                    tcBorders = tcPr.find(qn("w:tcBorders"))
+                    assert tcBorders is not None
+                    assert tcBorders.find(qn("w:right")).get(qn("w:val")) == "nil"
+                elif col_start == 23:
+                    tcBorders = tcPr.find(qn("w:tcBorders"))
+                    assert tcBorders is not None
+                    assert tcBorders.find(qn("w:left")).get(qn("w:val")) == "nil"
 
 
 # ==============================================================================

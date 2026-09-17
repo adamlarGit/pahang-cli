@@ -5,6 +5,18 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-09-17
+
+### Added
+- **Dynamic Switchgear TEV Blanking Engine (`src/core/shading.py`)**: Implemented `blank_swg_tev_cells()` to dynamically blank inactive TEV measurement blocks on `swg-panel.docx` 37x24 tables (rows 21–32, columns 11–22) across Full Report and Quick Report workflows. Directly traverses raw XML `<w:tc>` elements within each `<w:tr>` to bypass python-docx `vMerge` continuation masking (which otherwise maps vertically merged continuation cells back to the top anchor and leaves borders visible around the `{{ tev.prpd }}` quadrant), cleanly wiping text, removing background shading (`<w:shd>`), and setting all interior borders to `<w:val="nil"/>` (including diagonal borders). Supports Document, list/iterable of Documents, Table, or docxtpl targets.
+- **Two-Tier Technology Eligibility Architecture (`src/full_report/scan_adapters.py`, `src/quick_report/cbm_render.py`)**: Introduced two-tier evaluation model for switchgear TEV activation: Tier 1 verifies contract awarded technologies (`TEV` in project metadata / awarded scope); Tier 2 verifies compartment eligibility (`BREAKER COMPARTMENT`, `CABLE COMPARTMENT`, `PT COMPARTMENT`, and `FUSE COMPARTMENT` are TEV-eligible; `CABLE ENTRY`, `BUSBAR COMPARTMENT`, and unspecified compartments are non-TEV).
+- **TEV PRPD Graph Rendering Optimization (`src/quick_report/prpd.py`)**: Dynamically skips TEV PRPD waveform image generation for non-TEV compartments or contracts lacking TEV, eliminating redundant headless browser rendering, temporary disk I/O, and compute overhead (closes #41).
+- **Dynamic Context Injection Sanitization (`src/full_report/scan_adapters.py`, `src/quick_report/cbm_render.py`)**: Injects empty strings for TEV placeholders (`bg`, `reading`, `ppc`, `char`, `severity`, `prpd`) whenever TEV is inactive, preventing Jinja2 placeholder leak and template evaluation errors.
+
+### Fixed
+- **OpenXML Border Nil & Spacer Artifact Prevention (`src/core/shading.py`)**: Eliminates ghost borders by setting `<w:val="nil"/>` on adjacent spacer cells facing the TEV block (column 10 right border, column 23 left border, row 20 bottom border, and row 33 top border).
+- **Table Dimension & Alias Normalization Guards (`src/core/shading.py`, `src/quick_report/cbm_render.py`, `src/workflows/full_report.py`)**: Enforced exact 24-column table detection to isolate switchgear panel tables and prevent inadvertent blanking on 23-column transformer templates, and expanded compartment normalization aliases for circuit breakers (`CB`), voltage transformers (`VT`, `POTENTIAL TRANSFORMER`), and cable entries.
+
 ## [1.19.1] - 2026-09-16
 
 ### Fixed
