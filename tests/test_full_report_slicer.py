@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+import docx
 import pytest
 
 from src.full_report.slicer import (
+    CbmDefectSliceMetadata,
     DocumentSlicer,
     FakeDocumentSlicer,
     ParagraphBoundary,
@@ -546,5 +548,233 @@ def test_word_com_slicer_slices_cbm_defects_with_d37_names(tmp_path: Path):
     sections = slicer.slice_sections(source_doc_path, target_dir, station="CENDERAWASIH")
     assert len(sections.cbm_defect_pages) == 1
     assert sections.cbm_defect_pages[0].name == "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx"
+
+
+def test_slice_cbm_defects_rejects_foreign_substation_metadata(tmp_path: Path):
+    """Verify slice_cbm_defects unlinks and rejects candidate defect slices from foreign substations."""
+    source_doc_path = tmp_path / "source.docx"
+    source_doc_path.touch()
+    target_dir = tmp_path / "temp_parts" / "PERPUSTAKAAN_AWAM"
+
+    mock_word = MagicMock()
+    mock_source_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_source_doc
+    mock_source_doc.ComputeStatistics.return_value = 3
+    mock_source_doc.GoTo.return_value = MagicMock(Start=50)
+
+    p_cond = MagicMock()
+    p_cond.Range.Start = 100
+    p_cond.Range.Information.return_value = 3
+    p_cond.Range.Text = "SUBSTATION CONDITION\r"
+    mock_source_doc.Paragraphs = [p_cond]
+    mock_source_doc.Content.Find.Execute.return_value = False
+
+    # Mock parser returning foreign substation "TELEKOM TANAH PUTIH"
+    mock_parser = MagicMock()
+    mock_parser.parse.return_value = CbmDefectSliceMetadata(
+        equipment_category="swg",
+        equipment_instance="swg1",
+        sequence="p01",
+        equipment_id="VCB1",
+        defect_area="CABLE_BOX",
+        substation="TELEKOM TANAH PUTIH",
+        filename="swg1_p01_VCB1_CABLE_BOX_01.docx",
+    )
+
+    slicer = WordComDocumentSlicer(word_app=mock_word, header_parser=mock_parser)
+    cbm_slices = slicer.slice_cbm_defects(source_doc_path, target_dir, station="PERPUSTAKAAN AWAM")
+
+    # Rejected because "TELEKOM TANAH PUTIH" conflicts with target "PERPUSTAKAAN AWAM"
+    assert len(cbm_slices) == 0
+
+
+def test_slice_sections_rejects_foreign_front_page_after_retries(tmp_path: Path):
+    """Verify slice_sections retries 3 times and raises SlicingError if front page attribution fails."""
+    source_doc_path = tmp_path / "source.docx"
+    source_doc_path.touch()
+    target_dir = tmp_path / "temp_parts" / "PERPUSTAKAAN_AWAM"
+
+    mock_word = MagicMock()
+    mock_source_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_source_doc
+    mock_source_doc.ComputeStatistics.return_value = 3
+    mock_source_doc.GoTo.return_value = MagicMock(Start=50)
+
+    p_cond = MagicMock()
+    p_cond.Range.Start = 100
+    p_cond.Range.Information.return_value = 2
+    p_cond.Range.Text = "SUBSTATION CONDITION\r"
+
+    p_stk = MagicMock()
+    p_stk.Range.Start = 200
+    p_stk.Range.Information.return_value = 3
+    p_stk.Range.Text = "NORMAL/DEFECT STICKER\r"
+
+    mock_source_doc.Paragraphs = [p_cond, p_stk]
+    mock_source_doc.Content.Find.Execute.return_value = False
+
+    slicer = WordComDocumentSlicer(word_app=mock_word)
+
+    with patch("src.full_report.slicer._slice_range_to_doc") as mock_slice_range:
+        # Create a real docx file on disk that contains foreign front page
+        front_p = target_dir / "front_page.docx"
+        def fake_slice(*args, **kwargs):
+            doc = docx.Document()
+            doc.add_table(rows=1, cols=3)
+            t1 = doc.add_table(rows=4, cols=3)
+            t1.rows[2].cells[0].text = "SUBSTATION NAME (ERMS)"
+            t1.rows[2].cells[2].text = "TELEKOM TANAH PUTIH"
+            t1.rows[3].cells[0].text = "SUBSTATION NAME (SITE)"
+            t1.rows[3].cells[2].text = "TELEKOM TANAH PUTIH"
+            front_p.parent.mkdir(parents=True, exist_ok=True)
+            doc.save(front_p)
+            return front_p
+
+        mock_slice_range.side_effect = fake_slice
+
+        with pytest.raises(SlicingError, match="failed attribution"):
+            slicer.slice_sections(
+                source_doc_path,
+                target_dir,
+                station="PERPUSTAKAAN AWAM",
+                has_vi_summary=False,
+                has_vi_defects=False,
+            )
+        # Verify it retried 3 times
+        assert mock_slice_range.call_count == 3
+
+
+def test_slice_sections_rejects_invalid_condition_structure_after_retries(tmp_path: Path):
+    """Verify slice_sections retries 3 times and raises SlicingError if condition_pages has no images."""
+    source_doc_path = tmp_path / "source.docx"
+    source_doc_path.touch()
+    target_dir = tmp_path / "temp_parts" / "PERPUSTAKAAN_AWAM"
+
+    mock_word = MagicMock()
+    mock_source_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_source_doc
+    mock_source_doc.ComputeStatistics.return_value = 3
+    mock_source_doc.GoTo.return_value = MagicMock(Start=50)
+
+    p_cond = MagicMock()
+    p_cond.Range.Start = 100
+    p_cond.Range.Information.return_value = 2
+    p_cond.Range.Text = "SUBSTATION CONDITION\r"
+
+    p_stk = MagicMock()
+    p_stk.Range.Start = 200
+    p_stk.Range.Information.return_value = 3
+    p_stk.Range.Text = "NORMAL/DEFECT STICKER\r"
+
+    mock_source_doc.Paragraphs = [p_cond, p_stk]
+    mock_source_doc.Content.Find.Execute.return_value = False
+
+    slicer = WordComDocumentSlicer(word_app=mock_word)
+
+    with patch("src.full_report.slicer._slice_range_to_doc") as mock_slice_range:
+        # Create valid front page but invalid condition page (no images)
+        front_p = target_dir / "front_page.docx"
+        cond_p = target_dir / "condition_pages.docx"
+
+        def fake_slice(word_app, source_doc, start_pos, end_pos, output_path, is_front_page=False, **kwargs):
+            doc = docx.Document()
+            if is_front_page:
+                doc.add_table(rows=1, cols=3)
+                t1 = doc.add_table(rows=4, cols=3)
+                t1.rows[2].cells[0].text = "SUBSTATION NAME (ERMS)"
+                t1.rows[2].cells[2].text = "PERPUSTAKAAN AWAM"
+                t1.rows[3].cells[0].text = "SUBSTATION NAME (SITE)"
+                t1.rows[3].cells[2].text = "PERPUSTAKAAN AWAM"
+            else:
+                # condition_pages: has table but NO images
+                doc.add_table(rows=2, cols=2)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            doc.save(output_path)
+            return output_path
+
+        mock_slice_range.side_effect = fake_slice
+
+        with pytest.raises(SlicingError, match="condition_pages failed attribution or structural guard after 3 attempts"):
+            slicer.slice_sections(
+                source_doc_path,
+                target_dir,
+                station="PERPUSTAKAAN AWAM",
+                has_vi_summary=False,
+                has_vi_defects=False,
+            )
+
+
+def test_slice_sections_recovers_on_retry(tmp_path: Path):
+    """Verify slice_sections recovers if guard fails on first attempt and succeeds on second attempt."""
+    source_doc_path = tmp_path / "source.docx"
+    source_doc_path.touch()
+    target_dir = tmp_path / "temp_parts" / "PERPUSTAKAAN_AWAM"
+
+    mock_word = MagicMock()
+    mock_source_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_source_doc
+    mock_source_doc.ComputeStatistics.return_value = 3
+    mock_source_doc.GoTo.return_value = MagicMock(Start=50)
+
+    p_cond = MagicMock()
+    p_cond.Range.Start = 100
+    p_cond.Range.Information.return_value = 2
+    p_cond.Range.Text = "SUBSTATION CONDITION\r"
+
+    p_stk = MagicMock()
+    p_stk.Range.Start = 200
+    p_stk.Range.Information.return_value = 3
+    p_stk.Range.Text = "NORMAL/DEFECT STICKER\r"
+
+    mock_source_doc.Paragraphs = [p_cond, p_stk]
+    mock_source_doc.Content.Find.Execute.return_value = False
+
+    slicer = WordComDocumentSlicer(word_app=mock_word)
+
+    attempt_count = [0]
+    with patch("src.full_report.slicer._slice_range_to_doc") as mock_slice_range:
+        def fake_slice(word_app, source_doc, start_pos, end_pos, output_path, is_front_page=False, **kwargs):
+            doc = docx.Document()
+            if is_front_page:
+                attempt_count[0] += 1
+                doc.add_table(rows=1, cols=3)
+                t1 = doc.add_table(rows=4, cols=3)
+                t1.rows[2].cells[0].text = "SUBSTATION NAME (ERMS)"
+                t1.rows[3].cells[0].text = "SUBSTATION NAME (SITE)"
+                if attempt_count[0] == 1:
+                    # Stale clipboard on attempt 1
+                    t1.rows[2].cells[2].text = "TELEKOM TANAH PUTIH"
+                    t1.rows[3].cells[2].text = "TELEKOM TANAH PUTIH"
+                else:
+                    # Clean correct clipboard on attempt 2
+                    t1.rows[2].cells[2].text = "PERPUSTAKAAN AWAM"
+                    t1.rows[3].cells[2].text = "PERPUSTAKAAN AWAM"
+            elif "condition_pages" in output_path.name:
+                doc.add_table(rows=1, cols=1)
+                p = doc.add_paragraph()
+                r = p.add_run()
+                from docx.oxml import parse_xml
+                from docx.oxml.ns import nsdecls
+                r._r.append(parse_xml(r'<w:drawing %s><w:inline><a:graphic %s><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic %s><pic:blipFill><a:blip r:embed="rId1"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></w:inline></w:drawing>' % (nsdecls('w'), nsdecls('a'), nsdecls('pic', 'r'))))
+            elif "sticker_page" in output_path.name:
+                doc.add_paragraph("NORMAL STICKER")
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            doc.save(output_path)
+            return output_path
+
+        mock_slice_range.side_effect = fake_slice
+
+        sections = slicer.slice_sections(
+            source_doc_path,
+            target_dir,
+            station="PERPUSTAKAAN AWAM",
+            has_vi_summary=False,
+            has_vi_defects=False,
+        )
+        assert sections.station == "PERPUSTAKAAN AWAM"
+        assert attempt_count[0] == 2
+
+
 
 

@@ -24,6 +24,10 @@ from src.core.normalizers import (
     resolve_station_code,
     resolve_station_from_fl,
 )
+from src.full_report.attribution import (
+    inspect_deliverable_attribution,
+    quarantine_deliverable,
+)
 from src.full_report.composer import FullReportComposer
 from src.full_report.photo_resolver import RawPhotoResolver
 from src.full_report.plan_builder import FullReportPlanBuilder, FullReportStationPlan
@@ -367,7 +371,6 @@ class FullReportWorkflow:
 
         ordered_results: list[FullReportStationExecutionResult | None] = [None] * len(packages)
         generated_paths: list[Path] = []
-        valid_plans: list[tuple[int, SubstationTestsheetPackage, FullReportStationPlan, PreFlightValidationResult, Path]] = []
 
         base_temp_root = (
             Path(temp_dir).resolve()
@@ -375,7 +378,7 @@ class FullReportWorkflow:
             else (Path(environment.base_path).resolve() / ".temp" / "full_report")
         )
 
-        # Step 1 & 2: Single shared BatchComSession context across ALL phases (slicing & compilation)
+        # Single shared BatchComSession context across ALL phases (slicing & compilation)
         session_cm = self._establish_batch_session(com_session)
 
         with session_cm as session:
@@ -394,11 +397,17 @@ class FullReportWorkflow:
                     self._slicer._word_app = word_app
 
             try:
-                # Step 1: Pre-flight validation, plan synthesis, and slicing per substation
+                # Unified single-phase lifecycle per substation:
+                # [Preflight -> Slice -> Render -> Compile -> Sanity Check -> Success]
                 for pkg_idx, pkg in enumerate(packages):
                     st_name = self._resolve_substation_display_name(pkg)
-                    qr_path = self._resolve_quick_report_path(environment, pkg)
+                    if progress_sink:
+                        progress_sink(
+                            f"[{pkg_idx + 1}/{len(packages)}] Generating Full Report for {st_name}..."
+                        )
 
+                    # 1. Pre-flight validation
+                    qr_path = self._resolve_quick_report_path(environment, pkg)
                     val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
                     if not val_res.is_valid:
                         # SubstationIsolatedBatchResiliencePolicy: record upfront validation failure
@@ -414,6 +423,7 @@ class FullReportWorkflow:
                         )
                         continue
 
+                    # 2. Workspace allocation
                     sub_num = pkg.substation_number or (pkg.data.pe_number if getattr(pkg, "data", None) else 0) or 0
                     date_str = pkg.date_str or (pkg.data.date if getattr(pkg, "data", None) else "") or "01-01-2026"
                     clean_name = sanitize_filename(st_name)
@@ -429,6 +439,7 @@ class FullReportWorkflow:
                     (station_temp_dir / "prpd").mkdir(parents=True, exist_ok=True)
 
                     try:
+                        # 3. Slicing & Plan building
                         plan = self._build_station_plan(
                             pkg,
                             environment,
@@ -436,61 +447,61 @@ class FullReportWorkflow:
                             output_dir=output_dir,
                             station_temp_dir=station_temp_dir,
                         )
-                        valid_plans.append((pkg_idx, pkg, plan, val_res, station_temp_dir))
-                    except Exception as exc:
-                        err_msg = f"Failed to build plan for {st_name}: {exc}"
-                        errors.append(err_msg)
-                        logger.exception(err_msg)
-                        if not keep_temp and station_temp_dir.exists():
-                            shutil.rmtree(station_temp_dir, ignore_errors=True)
-                        ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                            station=st_name,
-                            substation_number=pkg.substation_number,
-                            output_path=None,
-                            is_success=False,
-                            error_message=str(exc),
-                            preflight_result=val_res,
-                        )
 
-                # Step 2: Compilation per substation
-                for idx, (pkg_idx, pkg, plan, val_res, station_temp_dir) in enumerate(valid_plans, start=1):
-                    st_name = self._resolve_substation_display_name(pkg)
-                    if progress_sink:
-                        progress_sink(
-                            f"[{idx}/{len(valid_plans)}] Generating Full Report for {st_name}..."
-                        )
+                        # 4. Rendering & Compilation
+                        rendered_dir = station_temp_dir / "rendered"
+                        rendered_dir.mkdir(parents=True, exist_ok=True)
 
-                    rendered_dir = station_temp_dir / "rendered"
-                    rendered_dir.mkdir(parents=True, exist_ok=True)
-
-                    try:
                         comp_res = self._composer.compose(
                             plan,
                             keep_temp=keep_temp,
                             temp_dir=rendered_dir,
                             base_dir=environment.base_path,
                         )
-                        if comp_res.output_path and comp_res.output_path.exists() and comp_res.output_path.stat().st_size > 0:
-                            generated_paths.append(comp_res.output_path)
-                            ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                                station=st_name,
-                                substation_number=pkg.substation_number,
-                                output_path=comp_res.output_path,
-                                is_success=True,
-                                parts_count=comp_res.part_count,
-                                preflight_result=val_res,
-                            )
-                        else:
+
+                        out_path = comp_res.output_path
+                        if not out_path or not out_path.exists() or out_path.stat().st_size == 0:
                             err_msg = f"Generated report for {st_name} is missing or 0 bytes."
                             errors.append(err_msg)
                             ordered_results[pkg_idx] = FullReportStationExecutionResult(
                                 station=st_name,
                                 substation_number=pkg.substation_number,
-                                output_path=comp_res.output_path,
+                                output_path=out_path,
                                 is_success=False,
                                 error_message=err_msg,
                                 preflight_result=val_res,
                             )
+                        else:
+                            # 5. Seam 4: Post-Compilation Deliverable Sanity Check
+                            is_attr_ok, attr_reason = inspect_deliverable_attribution(
+                                out_path,
+                                target_substation=st_name,
+                            )
+                            if not is_attr_ok:
+                                quarantined_path = quarantine_deliverable(out_path)
+                                err_msg = (
+                                    f"Post-compilation attribution sanity check failed for {st_name}: "
+                                    f"{attr_reason}. Deliverable quarantined to '{quarantined_path.name}'."
+                                )
+                                errors.append(err_msg)
+                                ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                                    station=st_name,
+                                    substation_number=pkg.substation_number,
+                                    output_path=None,
+                                    is_success=False,
+                                    error_message=err_msg,
+                                    preflight_result=val_res,
+                                )
+                            else:
+                                generated_paths.append(out_path)
+                                ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                                    station=st_name,
+                                    substation_number=pkg.substation_number,
+                                    output_path=out_path,
+                                    is_success=True,
+                                    parts_count=comp_res.part_count,
+                                    preflight_result=val_res,
+                                )
                     except Exception as exc:
                         # SubstationIsolatedBatchResiliencePolicy
                         err_msg = f"Failed to compile Full Report for {st_name}: {exc}"
@@ -505,8 +516,12 @@ class FullReportWorkflow:
                             preflight_result=val_res,
                         )
                     finally:
+                        # Immediate workspace cleanup (Seam 5)
                         if not keep_temp and station_temp_dir.exists():
                             shutil.rmtree(station_temp_dir, ignore_errors=True)
+
+                        # In-process COM handle flush (Seam 5)
+                        self._flush_substation_com_handles(word_app, st_name)
             finally:
                 if hasattr(self._compiler, "_word_app"):
                     self._compiler._word_app = orig_word_app
@@ -556,6 +571,52 @@ class FullReportWorkflow:
             pass
 
         return self._composer.session()
+
+    def _flush_substation_com_handles(self, word_app: Any, st_name: str) -> None:
+        """In-process COM handle flush per substation: close open docs, clear clipboard, gc, assert count == 0."""
+        if word_app is None:
+            return
+
+        # 1. Close all open document handles without saving
+        try:
+            docs = getattr(word_app, "Documents", None)
+            if docs is not None:
+                doc_count = getattr(docs, "Count", 0)
+                if isinstance(doc_count, int):
+                    attempts = 0
+                    while getattr(docs, "Count", 0) > 0 and attempts < 20:
+                        attempts += 1
+                        try:
+                            docs(1).Close(False)
+                        except Exception:
+                            break
+        except Exception as exc:
+            logger.debug("Failed closing lingering COM documents for %s: %s", st_name, exc)
+
+        # 2. Purge Windows clipboard
+        try:
+            from src.quick_report.compiler import _clear_clipboard
+            _clear_clipboard()
+        except Exception:
+            pass
+
+        # 3. Garbage collection
+        import gc
+        gc.collect()
+
+        # 4. Assert / check documents count is 0
+        try:
+            docs = getattr(word_app, "Documents", None)
+            if docs is not None:
+                doc_count = getattr(docs, "Count", 0)
+                if isinstance(doc_count, int) and doc_count != 0:
+                    logger.error(
+                        "Lingering COM documents detected after substation %s: %d open",
+                        st_name,
+                        doc_count,
+                    )
+        except Exception:
+            pass
 
     def _inspect_single_package(
         self,

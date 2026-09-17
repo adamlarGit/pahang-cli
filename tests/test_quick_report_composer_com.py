@@ -700,3 +700,37 @@ def test_composer_load_cleans_temp_dir_on_compilation_error(tmp_path: Path):
     temp_dir = out_dir / "temp_parts"
     assert not temp_dir.exists()
 
+
+def test_compile_pre_copy_clipboard_zeroing_and_retry(tmp_path: Path):
+    """Verify WordComDocumentCompiler purges clipboard before copy and retries if paste does not expand content."""
+    p1 = tmp_path / "part1.docx"
+    p1.touch()
+    out = tmp_path / "out.docx"
+
+    mock_word = MagicMock()
+    mock_main_doc = MagicMock()
+    mock_part_doc = MagicMock()
+
+    mock_word.Documents.Add.return_value = mock_main_doc
+    mock_word.Documents.Open.return_value = mock_part_doc
+    mock_main_doc.Tables.Count = 0
+
+    compiler = WordComDocumentCompiler(word_app=mock_word)
+
+    with patch("src.quick_report.compiler._clear_clipboard") as mock_clear:
+        # Attempt 1: Content.End stays 1 (not expanded)
+        # Attempt 2: Content.End expands to 50
+        content_mock = MagicMock()
+        content_mock.Information.return_value = False
+        from unittest.mock import PropertyMock
+        type(content_mock).End = PropertyMock(side_effect=[1, 1, 1, 50])
+        mock_main_doc.Content = content_mock
+
+        compiler.compile([p1], out)
+
+        # _clear_clipboard called before copy and in finally
+        assert mock_clear.call_count >= 2
+        # Copy was retried
+        assert mock_part_doc.Content.Copy.call_count == 2
+
+

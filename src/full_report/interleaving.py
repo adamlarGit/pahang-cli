@@ -21,6 +21,7 @@ from pathlib import Path
 import re
 from typing import Sequence
 
+from src.full_report.attribution import verify_cbm_defect_attribution
 from src.full_report.defect_parser import (
     CbmDefectHeaderParser,
     CbmDefectSliceMetadata,
@@ -42,6 +43,7 @@ class InterleavingActionType(str, Enum):
     APPEND_AFTER = "APPEND_AFTER"
     INSERT_BEHIND = "INSERT_BEHIND"
     ORPHAN_APPEND = "ORPHAN_APPEND"
+    FOREIGN_DISCARD = "FOREIGN_DISCARD"
 
 
 @dataclass
@@ -227,6 +229,7 @@ class DefectInterleavingPolicy:
         scan_items: Sequence[ScanRenderItem | ScanAdapterResult],
         sliced_defects: Sequence[Path | str | CbmDefectSliceMetadata] | Path | str | None = None,
         cbm_records: Sequence[CbmDefectRecord] | None = None,
+        target_substation: str = "",
     ) -> InterleavingResult:
         """Interleave sliced CBM defect pages into the component scanning stream.
 
@@ -234,6 +237,7 @@ class DefectInterleavingPolicy:
             scan_items: Baseline component scan items from equipment scan adapters.
             sliced_defects: Sliced defect documents or metadata from temp_parts/cbm_defects/.
             cbm_records: Optional QR03 CBA defect records for dual-layer technology resolution.
+            target_substation: Optional target substation name for attribution assertion.
 
         Returns:
             InterleavingResult containing the final ordered parts, actions, orphans, and replaced items.
@@ -245,8 +249,31 @@ class DefectInterleavingPolicy:
         orphans: list[InterleavedPart] = []
         replaced_items: list[ScanRenderItem] = []
 
+        # Attribution check: discard foreign defect slices (Ticket #44 / Seam 2)
+        valid_defect_metas: list[CbmDefectSliceMetadata] = []
+        for d in defect_metas:
+            if target_substation and not verify_cbm_defect_attribution(d, target_substation):
+                logger.error(
+                    "FOREIGN_DISCARD: Sliced defect '%s' (category=%s, substation='%s') explicitly conflicts with target substation '%s'. Discarding from equipment stream and orphan list.",
+                    d.filename,
+                    d.equipment_category,
+                    d.substation,
+                    target_substation,
+                )
+                action_discard = InterleavingAction(
+                    action_type=InterleavingActionType.FOREIGN_DISCARD,
+                    target_sequence=d.sequence,
+                    target_component=d.defect_area,
+                    defect_filename=d.filename,
+                    reason=f"Foreign defect slice with substation '{d.substation}' explicitly conflicts with target '{target_substation}'",
+                    defect_metadata=d,
+                )
+                actions.append(action_discard)
+                continue
+            valid_defect_metas.append(d)
+
         # If no defects, return all scan items directly as parts
-        if not defect_metas:
+        if not valid_defect_metas:
             parts = tuple(
                 InterleavedPart(
                     part_name=item.page_name,
@@ -261,7 +288,7 @@ class DefectInterleavingPolicy:
             )
             return InterleavingResult(
                 parts=parts,
-                actions=(),
+                actions=tuple(actions),
                 orphans=(),
                 replaced_items=(),
             )
@@ -273,7 +300,7 @@ class DefectInterleavingPolicy:
         batt_defects: list[CbmDefectSliceMetadata] = []
         raw_orphans: list[CbmDefectSliceMetadata] = []
 
-        for d in defect_metas:
+        for d in valid_defect_metas:
             cat = d.equipment_category.lower()
             if cat in ("swg", "switchgear"):
                 swg_defects.append(d)
@@ -551,7 +578,7 @@ class DefectInterleavingPolicy:
         # ----------------------------------------------------------------------
         # Check for any unconsumed defects across all categories (no silent drop!)
         all_unconsumed = [
-            d for d in defect_metas
+            d for d in valid_defect_metas
             if d.filename not in consumed_defects
         ]
 

@@ -410,9 +410,10 @@ class FullReportPlanBuilder:
                 station=st_name,
                 has_vi_summary=has_vi_eval,
                 has_vi_defects=has_vi_eval,
+                expected_vi_defect_count=len(vi_list),
             )
             if hasattr(slicer_instance, "slice_cbm_defects") and not resolved_sliced.cbm_defect_pages:
-                sliced_cbm = slicer_instance.slice_cbm_defects(qr_p, temp_target)
+                sliced_cbm = slicer_instance.slice_cbm_defects(qr_p, temp_target, station=st_name)
                 if sliced_cbm:
                     resolved_sliced = SlicedSections(
                         station=resolved_sliced.station,
@@ -630,6 +631,7 @@ class FullReportPlanBuilder:
             scan_items=adapted_items,
             sliced_defects=pool_sliced_defects,
             cbm_records=cbm_list,
+            target_substation=st_name,
         )
 
         for p in interleaving_res.parts:

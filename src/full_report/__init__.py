@@ -112,6 +112,18 @@ from src.full_report.composer import (
     FullReportComposer,
     composer_temp_workspace,
 )
+from src.full_report.attribution import (
+    inspect_deliverable_attribution,
+    is_substation_attribution_match,
+    normalize_substation_tokens,
+    quarantine_deliverable,
+    verify_cbm_defect_attribution,
+    verify_condition_pages_structure,
+    verify_front_page_attribution,
+    verify_sticker_page_structure,
+    verify_vi_defect_pages_structure,
+    verify_vi_summary_structure,
+)
 
 __all__ = [
     # Pre-Flight
@@ -211,6 +223,17 @@ __all__ = [
     "FullReportCompilationResult",
     "FullReportComposer",
     "composer_temp_workspace",
+    # Attribution & Structural Guards (Ticket #44 / Seam 1 & 4)
+    "inspect_deliverable_attribution",
+    "is_substation_attribution_match",
+    "normalize_substation_tokens",
+    "quarantine_deliverable",
+    "verify_cbm_defect_attribution",
+    "verify_condition_pages_structure",
+    "verify_front_page_attribution",
+    "verify_sticker_page_structure",
+    "verify_vi_defect_pages_structure",
+    "verify_vi_summary_structure",
 ]
 
 

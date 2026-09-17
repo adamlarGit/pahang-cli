@@ -878,3 +878,66 @@ def test_get_feeder_channel_sort_key_helper() -> None:
     # Order: overview (-1) < in1 (0, 1) < in2 (0, 2) < ot1 (1, 1) < f2 (1, 2)
     assert k_ov < k_in1 < k_in2 < k_ot1 < k_ot2
     assert k_ot2[:2] == k_f2[:2] == (1, 2)
+
+
+def test_foreign_defect_slices_discarded_with_foreign_discard_action() -> None:
+    """Verify foreign defect slices are omitted from both scan stream and orphans, recording FOREIGN_DISCARD."""
+    policy = DefectInterleavingPolicy()
+    items = _make_mock_swg_items()
+
+    matching_defect = CbmDefectSliceMetadata(
+        equipment_category="swg",
+        equipment_instance="swg1",
+        sequence="p02",
+        equipment_id="CKN01310",
+        defect_area="CABLE_BOX",
+        substation="PE 12 PERPUSTAKAAN AWAM",
+        filename="swg1_p02_CKN01310_CABLE_BOX_01.docx",
+    )
+
+    foreign_swg_defect = CbmDefectSliceMetadata(
+        equipment_category="swg",
+        equipment_instance="swg1",
+        sequence="p01",
+        equipment_id="CKN01308",
+        defect_area="CABLE_BOX",
+        substation="TELEKOM TANAH PUTIH",
+        filename="swg1_p01_CKN01308_CABLE_BOX_01.docx",
+    )
+
+    foreign_orphan_defect = CbmDefectSliceMetadata(
+        equipment_category="tx",
+        equipment_instance="tx1",
+        sequence="s02",
+        equipment_id="TX1",
+        defect_area="HV_BUSHING",
+        substation="PE 5 TALAPIA",
+        filename="tx1_s02_TX1_HV_BUSHING_01.docx",
+    )
+
+    result = policy.interleave(
+        scan_items=items,
+        sliced_defects=[matching_defect, foreign_swg_defect, foreign_orphan_defect],
+        target_substation="PERPUSTAKAAN AWAM",
+    )
+
+    # 1. Matching defect is interleaved
+    part_names = [p.part_name for p in result.parts]
+    assert "swg1_p02_CKN01310_CABLE_BOX_01.docx" in part_names
+
+    # 2. Foreign defects omitted from stream and orphans
+    assert "swg1_p01_CKN01308_CABLE_BOX_01.docx" not in part_names
+    assert "tx1_s02_TX1_HV_BUSHING_01.docx" not in part_names
+    orphan_names = [o.part_name for o in result.orphans]
+    assert "tx1_s02_TX1_HV_BUSHING_01.docx" not in orphan_names
+    assert "swg1_p01_CKN01308_CABLE_BOX_01.docx" not in orphan_names
+
+    # 3. Actions contain FOREIGN_DISCARD
+    discard_actions = [a for a in result.actions if a.action_type == InterleavingActionType.FOREIGN_DISCARD]
+    assert len(discard_actions) == 2
+    discarded_filenames = {a.defect_filename for a in discard_actions}
+    assert discarded_filenames == {
+        "swg1_p01_CKN01308_CABLE_BOX_01.docx",
+        "tx1_s02_TX1_HV_BUSHING_01.docx",
+    }
+

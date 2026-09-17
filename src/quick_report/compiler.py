@@ -140,7 +140,12 @@ class FakeDocumentCompiler:
     def compile(self, parts: Sequence[Path], output_path: Path) -> Path:
         output_path = Path(output_path).resolve()
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_bytes(b"PK\x03\x04stub_docx_payload")
+        try:
+            import docx
+            doc = docx.Document()
+            doc.save(str(output_path))
+        except Exception:
+            output_path.write_bytes(b"PK\x03\x04stub_docx_payload")
         self.compiled_calls.append((tuple(parts), output_path))
         return output_path
 
@@ -251,14 +256,35 @@ class WordComDocumentCompiler:
                 part_doc = None
                 try:
                     part_doc = word_app.Documents.Open(part_path, False, True)
-                    part_doc.Content.Copy()
 
-                    rng = _collapse_and_escape_table(main_doc)
-                    if idx > 0:
-                        rng.InsertBreak(7)  # wdPageBreak = 7
+                    # Atomic copy-paste handshake with pre-copy zeroing and range expansion assertion (Ticket #44 / Seam 3)
+                    for attempt in range(1, 4):
+                        _clear_clipboard()
+                        part_doc.Content.Copy()
+
                         rng = _collapse_and_escape_table(main_doc)
+                        if idx > 0 and attempt == 1:
+                            rng.InsertBreak(7)  # wdPageBreak = 7
+                            rng = _collapse_and_escape_table(main_doc)
 
-                    _paste_with_retry(rng)
+                        end_before = getattr(getattr(main_doc, "Content", None), "End", None)
+                        _paste_with_retry(rng)
+                        end_after = getattr(getattr(main_doc, "Content", None), "End", None)
+
+                        if isinstance(end_before, (int, float)) and isinstance(end_after, (int, float)):
+                            if end_after > end_before:
+                                break
+                        else:
+                            # In mock testing environments where Content.End is a MagicMock
+                            break
+
+                        if attempt == 3:
+                            logger.warning(
+                                "Compilation paste did not expand document content for %s after 3 attempts",
+                                part_path,
+                            )
+                        _clear_clipboard()
+                        time.sleep(0.1)
                 finally:
                     _clear_clipboard()
                     if part_doc is not None:

@@ -525,3 +525,98 @@ def test_inspect_detects_missing_full_report_templates(tmp_path: Path) -> None:
     assert any("census template" in err.lower() for err in telem.errors)
 
 
+# ==============================================================================
+# 7. Post-Compilation Sanity Check & COM Flush Tests (Ticket #44 / Seams 4 & 5)
+# ==============================================================================
+
+def test_generate_post_compilation_sanity_check_quarantine(tmp_path: Path) -> None:
+    """If a deliverable contains foreign substation tables, it is quarantined and marked failed."""
+    import docx
+    env = _make_mock_env(tmp_path)
+    pkg = _make_sample_pkg(pe_number=5, station_name="PE TALAPIA", station="RAUB")
+
+    qr_dir = env.get_quick_report_dir() / "RAUB" / "08. AUGUST" / "04-08-2026"
+    qr_path = qr_dir / "005. PE TALAPIA (IR).docx"
+    _create_mock_qr_docx(qr_path, media_count=8, target_size_bytes=1_200_000)
+
+    class CompromisedDocCompiler:
+        """Compiler producing a deliverable with leaked foreign defect table."""
+        def compile(self, parts, output_path):
+            p = Path(output_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            doc = docx.Document()
+            t = doc.add_table(rows=1, cols=2)
+            t.rows[0].cells[0].text = "Substation"
+            t.rows[0].cells[1].text = "TELEKOM TANAH PUTIH"  # Foreign substation!
+            doc.save(str(p))
+            return p
+
+    wf = FullReportWorkflow(compiler=CompromisedDocCompiler(), slicer=FakeDocumentSlicer())
+    result = wf.generate(target=pkg, environment=env)
+
+    assert result.total_stations == 1
+    assert result.succeeded_count == 0
+    assert result.failed_count == 1
+    assert result.is_success is False
+
+    st_res = result.station_results[0]
+    assert st_res.is_success is False
+    assert "attribution sanity check failed" in st_res.error_message.lower()
+    assert "quarantined" in st_res.error_message.lower()
+
+    # Original deliverable moved to quarantine
+    expected_out = wf._resolve_target_output_path(env, pkg, "005. PE TALAPIA")
+    assert not expected_out.exists()
+    quarantined = expected_out.parent / ".quarantine" / expected_out.name
+    assert quarantined.exists()
+
+
+def test_flush_substation_com_handles(tmp_path: Path) -> None:
+    """_flush_substation_com_handles closes open COM docs, clears clipboard, and collects garbage."""
+    wf = FullReportWorkflow(compiler=FakeDocumentCompiler(), slicer=FakeDocumentSlicer())
+
+    mock_word = MagicMock()
+    mock_docs = MagicMock()
+    mock_doc1 = MagicMock()
+    doc_state = {"count": 2}
+
+    def mock_close(save):
+        doc_state["count"] = max(0, doc_state["count"] - 1)
+
+    mock_doc1.Close.side_effect = mock_close
+    type(mock_docs).Count = property(lambda self: doc_state["count"])
+    mock_docs.side_effect = lambda idx: mock_doc1
+    mock_word.Documents = mock_docs
+
+    with patch("src.quick_report.compiler._clear_clipboard") as mock_clear, \
+         patch("gc.collect") as mock_gc:
+        wf._flush_substation_com_handles(mock_word, "PE TALAPIA")
+
+        assert mock_doc1.Close.call_count == 2
+        mock_doc1.Close.assert_called_with(False)
+        assert doc_state["count"] == 0
+        mock_clear.assert_called_once()
+        mock_gc.assert_called_once()
+
+
+def test_generate_immediate_workspace_cleanup(tmp_path: Path) -> None:
+    """Workspace temp directory is cleaned up immediately after station generation."""
+    env = _make_mock_env(tmp_path)
+    pkg = _make_sample_pkg(pe_number=5, station_name="PE TALAPIA", station="RAUB")
+
+    qr_dir = env.get_quick_report_dir() / "RAUB" / "08. AUGUST" / "04-08-2026"
+    qr_path = qr_dir / "005. PE TALAPIA (IR).docx"
+    _create_mock_qr_docx(qr_path, media_count=8, target_size_bytes=1_200_000)
+
+    wf = FullReportWorkflow(compiler=FakeDocumentCompiler(), slicer=FakeDocumentSlicer())
+    result = wf.generate(target=pkg, environment=env, keep_temp=False)
+
+    assert result.is_success is True
+    temp_dir = Path(env.base_path) / ".temp" / "full_report"
+    # Temp station subfolders should not exist
+    if temp_dir.exists():
+        sub_dirs = list(temp_dir.iterdir())
+        assert len(sub_dirs) == 0
+
+
+

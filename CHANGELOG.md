@@ -5,6 +5,16 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.1] - 2026-09-18
+
+### Fixed
+- **Substation COM Lifecycle Isolation & Attribution Leakage Guards (`src/full_report/`, `src/workflows/full_report.py`)**: Implemented 5-layer defense-in-depth architecture eliminating cross-substation clipboard leakage during batch Full Report compilation (closes #44):
+  - **Attribution & Structural Guards (Seam 1)**: Added canonical stem token normalization (`normalize_substation_tokens`), subset matching (`is_substation_attribution_match`), front page dual-field (`name_erms` / `name_site`) validation, CBM defect metadata verification, and non-header structural guards (`condition_pages`, `sticker_page`, `vi_summary`, `vi_defect_pages`) with 3-attempt atomic retries in `src/full_report/attribution.py` and `src/full_report/slicer.py`.
+  - **Defect Interleaving Attribution Enforcement (Seam 2)**: Added `FOREIGN_DISCARD` action type to `DefectInterleavingPolicy.interleave()` in `src/full_report/interleaving.py`, discarding foreign defect slices from equipment scan stream and orphan append.
+  - **Atomic COM Copy-Paste Handshake (Seam 3)**: Added pre-copy clipboard zeroing (`_clear_clipboard`) immediately before `part_doc.Content.Copy()` and range expansion verification loop with backoff in `src/quick_report/compiler.py`.
+  - **Post-Compilation Deliverable Sanity Check & Quarantine (Seam 4)**: Headless OpenXML table header inspection across compiled deliverables in `inspect_deliverable_attribution()`; automatically moves compromised reports to `.quarantine/<STEM>.docx` and reports station failure.
+  - **Unified Per-Substation Batch Pipeline & In-Process COM Flush (Seam 5)**: Migrated `FullReportWorkflow.generate()` into a unified per-substation lifecycle (`Preflight -> Slice -> Render -> Compile -> Sanity Check -> Success`) with strict `finally` temp directory cleanup and in-process COM handle flush (`_flush_substation_com_handles`).
+
 ## [1.21.0] - 2026-09-17
 
 ### Added
