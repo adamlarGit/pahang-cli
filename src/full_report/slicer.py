@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-import ctypes
 from dataclasses import dataclass
 import gc
 import logging
@@ -51,6 +50,11 @@ from src.full_report.attribution import (
     verify_vi_defect_pages_structure,
     verify_vi_summary_structure,
 )
+from src.quick_report.compiler import (
+    _clear_clipboard,
+    _paste_with_retry,
+    _terminate_word_process,
+)
 
 __all__ = [
     "DocumentSlicer",
@@ -91,72 +95,6 @@ class SlicedSections:
     vi_summary: Path | None = None
     vi_defect_pages: Path | None = None
     cbm_defect_pages: tuple[Path, ...] = ()
-
-
-def _clear_clipboard() -> None:
-    """Clear Windows clipboard to eliminate Word COM OLE serialization stall on document close."""
-    for _ in range(3):
-        try:
-            if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "user32"):
-                if ctypes.windll.user32.OpenClipboard(None):
-                    ctypes.windll.user32.EmptyClipboard()
-                    ctypes.windll.user32.CloseClipboard()
-                    return
-        except Exception:
-            pass
-        time.sleep(0.01)
-
-
-def _paste_with_retry(rng: Any, max_attempts: int = 5, delay: float = 0.15) -> None:
-    """Retry rng.PasteAndFormat(16) / rng.Paste() up to max_attempts times to preserve source formatting."""
-    exceptions: tuple[type[BaseException], ...]
-    if pywintypes and hasattr(pywintypes, "com_error"):
-        exceptions = (pywintypes.com_error, Exception)
-    else:
-        exceptions = (Exception,)
-
-    for attempt in range(1, max_attempts + 1):
-        try:
-            if hasattr(rng, "PasteAndFormat"):
-                try:
-                    rng.PasteAndFormat(WD_FORMAT_ORIGINAL)
-                    return
-                except (AttributeError, TypeError):
-                    rng.Paste()
-                    return
-            else:
-                rng.Paste()
-                return
-        except exceptions as exc:
-            if attempt == max_attempts:
-                logger.error("Word COM range paste failed after %d attempts: %s", max_attempts, exc)
-                raise
-            time.sleep(delay)
-
-
-def _terminate_word_process(pid: int | None, timeout_ms: int = 500) -> None:
-    """Safely terminate Word COM process if still running in background after Quit."""
-    if not pid:
-        return
-    try:
-        if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "kernel32"):
-            handle = ctypes.windll.kernel32.OpenProcess(0x00101000, False, pid)
-            if handle:
-                wait_res = ctypes.windll.kernel32.WaitForSingleObject(handle, timeout_ms)
-                ctypes.windll.kernel32.CloseHandle(handle)
-                if wait_res == 0:
-                    return
-
-        import subprocess
-
-        subprocess.run(
-            ["taskkill", "/F", "/PID", str(pid)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-    except Exception:
-        pass
 
 
 @runtime_checkable
@@ -536,7 +474,6 @@ def _slice_cbm_defects_from_doc(
     total_pages: int,
     cond_start: int | None,
     p_cond: ParagraphBoundary | None,
-    vi_summary_start: int | None = None,
     header_parser: CbmDefectHeaderParser | None = None,
     station: str = "",
 ) -> tuple[Path, ...]:
@@ -958,7 +895,6 @@ class WordComDocumentSlicer:
                 total_pages=num_pages,
                 cond_start=cond_start,
                 p_cond=p_cond,
-                vi_summary_start=vi_summary_start,
                 header_parser=self._header_parser,
                 station=station_name,
             )
@@ -1010,9 +946,6 @@ class WordComDocumentSlicer:
             p_cond = _find_paragraph(source_doc, "SUBSTATION CONDITION")
             cond_start = p_cond.start if p_cond else None
 
-            p_visum = _find_paragraph(source_doc, "VISUAL DEFECT SUMMARY", start_pos=0, end_pos=cond_start)
-            vi_summary_start = p_visum.start if p_visum else None
-
             return _slice_cbm_defects_from_doc(
                 word_app=word_app,
                 source_doc=source_doc,
@@ -1020,7 +953,6 @@ class WordComDocumentSlicer:
                 total_pages=total_pages,
                 cond_start=cond_start,
                 p_cond=p_cond,
-                vi_summary_start=vi_summary_start,
                 header_parser=self._header_parser,
                 station=st_name,
             )

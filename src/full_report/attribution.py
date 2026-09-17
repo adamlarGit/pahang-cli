@@ -45,15 +45,10 @@ def normalize_substation_tokens(name: str | None) -> set[str]:
     text = re.sub(r"\bP/E\b", "PE", text, flags=re.IGNORECASE)
     text = re.sub(r"\bS/S\b", "SS", text, flags=re.IGNORECASE)
 
-    # 3. Strip leading number / dot sequences e.g. "005. " or "179. "
-    text = re.sub(r"^\s*\d+\s*[\.\-]?\s*", " ", text)
-
-    # 4. Strip leading electrical prefixes + possible PE numbers e.g. "PE 144 ", "SSU 2 "
-    text = re.sub(r"^\s*\b(?:PE|SSU|PPU|PMU|SS)\b\s*(?:\d+[\.\-]?)?\s*", " ", text, flags=re.IGNORECASE)
-
-    # Repeat strip in case of chained "005. PE TALAPIA"
-    text = re.sub(r"^\s*\d+\s*[\.\-]?\s*", " ", text)
-    text = re.sub(r"^\s*\b(?:PE|SSU|PPU|PMU|SS)\b\s*(?:\d+[\.\-]?)?\s*", " ", text, flags=re.IGNORECASE)
+    # 3. Strip leading number / dot sequences and electrical prefixes (e.g. "005. PE TALAPIA")
+    for _ in range(2):
+        text = re.sub(r"^\s*\d+\s*[\.\-]?\s*", " ", text)
+        text = re.sub(r"^\s*\b(?:PE|SSU|PPU|PMU|SS)\b\s*(?:\d+[\.\-]?)?\s*", " ", text, flags=re.IGNORECASE)
 
     # 5. Extract alphanumeric tokens
     raw_tokens = re.findall(r"[A-Za-z0-9]+", text.upper())

@@ -10,9 +10,9 @@ Decisions and Architectural Policies Enforced:
 
 from __future__ import annotations
 
-from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import datetime
+import gc
 import logging
 from pathlib import Path
 import shutil
@@ -21,8 +21,6 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator, Sequence
 from src.core.normalizers import (
     format_month_folder,
     normalize_for_report,
-    resolve_station_code,
-    resolve_station_from_fl,
 )
 from src.full_report.attribution import (
     inspect_deliverable_attribution,
@@ -39,7 +37,6 @@ from src.full_report.preflight import (
 from src.full_report.slicer import (
     DocumentSlicer,
     FakeDocumentSlicer,
-    SlicedSections,
     WordComDocumentSlicer,
 )
 from src.postprocessing.converters import BatchComSession
@@ -528,7 +525,6 @@ class FullReportWorkflow:
                 if hasattr(self._slicer, "_word_app"):
                     self._slicer._word_app = orig_slicer_word_app
                 word_app = None
-                import gc
                 gc.collect()
 
         if progress_sink:
@@ -601,7 +597,6 @@ class FullReportWorkflow:
             pass
 
         # 3. Garbage collection
-        import gc
         gc.collect()
 
         # 4. Assert / check documents count is 0

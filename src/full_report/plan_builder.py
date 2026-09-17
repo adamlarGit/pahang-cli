@@ -50,8 +50,6 @@ from src.full_report.scan_adapters import (
     ScanRenderItem,
     SwitchgearScanAdapter,
     TransformerScanAdapter,
-    adapt_equipment_package,
-    find_sliced_overview_page,
 )
 from src.full_report.scan_render import FullReportScanPageRendererCore
 from src.full_report.slicer import (
