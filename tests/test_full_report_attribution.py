@@ -198,12 +198,14 @@ def test_inspect_deliverable_attribution_and_quarantine(tmp_path: Path):
     # 2. Compromised deliverable with foreign header
     doc_foreign = docx.Document()
     t_front = doc_foreign.add_table(rows=1, cols=3)
-    t_front.rows[0].cells[0].text = "SUBSTATION"
+    t_front.rows[0].cells[0].text = "SUBSTATION NAME (ERMS)"
     t_front.rows[0].cells[2].text = "PERPUSTAKAAN AWAM"
     # Leaked foreign defect page table!
     t_leak = doc_foreign.add_table(rows=2, cols=2)
     t_leak.rows[0].cells[0].text = "Substation"
     t_leak.rows[0].cells[1].text = "TELEKOM TANAH PUTIH"
+    t_leak.rows[1].cells[0].text = "Equipment"
+    t_leak.rows[1].cells[1].text = "VCB"
 
     compromised_path = tmp_path / "compromised_report.docx"
     doc_foreign.save(compromised_path)
@@ -220,4 +222,63 @@ def test_inspect_deliverable_attribution_and_quarantine(tmp_path: Path):
     assert quarantined_path.exists()
     assert quarantined_path.parent == quarantine_dir
     assert quarantined_path.name == "compromised_report.docx"
+
+
+def test_inspect_deliverable_attribution_ignores_defect_summaries_and_photo_grids(tmp_path: Path):
+    """Regression test (Issue #45): Ensure defect tables with 'SUBSTATION' equipment & photo grids don't false alarm."""
+    from src.full_report.attribution import inspect_deliverable_attribution
+
+    doc = docx.Document()
+
+    # 1. Front page header
+    t_front = doc.add_table(rows=1, cols=3)
+    t_front.rows[0].cells[0].text = "SUBSTATION NAME (ERMS)"
+    t_front.rows[0].cells[2].text = "PERPUSTAKAAN AWAM(VCB)"
+
+    # 2. Visual Inspection Defect Summary Table (with 'SUBSTATION' equipment)
+    t_defect = doc.add_table(rows=3, cols=4)
+    t_defect.rows[0].cells[0].text = "NO."
+    t_defect.rows[0].cells[1].text = "EQUIPMENT"
+    t_defect.rows[0].cells[2].text = "DEFECT DESCRIPTION"
+    t_defect.rows[0].cells[3].text = "ADDITIONAL REMARKS"
+
+    t_defect.rows[1].cells[0].text = "1"
+    t_defect.rows[1].cells[1].text = "SUBSTATION"
+    t_defect.rows[1].cells[2].text = "CPR POSTER OLD VERSION"
+    t_defect.rows[1].cells[3].text = "SWG ROOM"
+
+    t_defect.rows[2].cells[0].text = "2"
+    t_defect.rows[2].cells[1].text = "SIGNBOARD"
+    t_defect.rows[2].cells[2].text = "NO FUNCTIONAL LOCATION"
+    t_defect.rows[2].cells[3].text = "-"
+
+    # 3. Defect Photo Grid Table (with 'SUBSTATION' & 'SIGNBOARD' headers)
+    t_grid = doc.add_table(rows=2, cols=2)
+    t_grid.rows[0].cells[0].text = "SUBSTATION"
+    t_grid.rows[0].cells[1].text = "SIGNBOARD"
+    t_grid.rows[1].cells[0].text = "CPR POSTER OLD VERSION – SWG ROOM"
+    t_grid.rows[1].cells[1].text = "NO FUNCTIONAL LOCATION"
+
+    # 4. Photo Grid with Arbitrary/Non-standard category (e.g. 'EARTHING & LIGHTNING ARRESTOR')
+    t_grid2 = doc.add_table(rows=2, cols=2)
+    t_grid2.rows[0].cells[0].text = "SUBSTATION"
+    t_grid2.rows[0].cells[1].text = "EARTHING & LIGHTNING ARRESTOR"
+    t_grid2.rows[1].cells[0].text = "Photo A"
+    t_grid2.rows[1].cells[1].text = "Photo B"
+
+    # 5. Valid CBM Test Sheet Table
+    t_cbm = doc.add_table(rows=2, cols=4)
+    t_cbm.rows[0].cells[0].text = "Substation"
+    t_cbm.rows[0].cells[1].text = "PERPUSTAKAAN AWAM(VCB)"
+    t_cbm.rows[0].cells[2].text = "Date: 25/08/2026"
+    t_cbm.rows[1].cells[0].text = "Equipment"
+    t_cbm.rows[1].cells[1].text = "VCB"
+
+    report_path = tmp_path / "157. PERPUSTAKAAN AWAM(VCB) (VI).docx"
+    doc.save(report_path)
+
+    is_valid, reason = inspect_deliverable_attribution(report_path, "PERPUSTAKAAN AWAM(VCB)")
+    assert is_valid is True
+    assert reason == ""
+
 

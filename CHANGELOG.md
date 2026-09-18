@@ -5,6 +5,13 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.2] - 2026-09-18
+
+### Fixed
+- **Attribution Guard False Positive on Defect Tables (`src/full_report/attribution.py`)**: Fixed false-positive deliverable quarantine during Full Report attribution sanity checks when visual defect summary tables or photo grids contain equipment category `"SUBSTATION"` (closes #45).
+  - Filtered visual defect summary tables (`_is_defect_summary_table()`) so rows containing `"SUBSTATION"` under the `EQUIPMENT` column are never misconstrued as substation name metadata headers.
+  - Added component and photo grid title exclusion (`COMPONENT_GRID_TITLES`) to prevent adjacent captions (e.g. `SUBSTATION | SIGNBOARD`) from being evaluated as key-value pairs.
+
 ## [1.21.1] - 2026-09-18
 
 ### Fixed

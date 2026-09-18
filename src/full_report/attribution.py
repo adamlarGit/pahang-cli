@@ -282,6 +282,45 @@ def verify_vi_defect_pages_structure(path: Path | str) -> tuple[bool, str]:
     return True, ""
 
 
+# Component & photo grid titles that should not be misconstrued as substation values
+PHOTO_GRID_COMPONENT_TITLES = frozenset({
+    "SIGNBOARD",
+    "SWITCHGEAR",
+    "TRANSFORMER",
+    "FEEDER PILLAR",
+    "BATTERY CHARGER",
+    "BATTERY CHARGER 1",
+    "BATTERY CHARGER 2",
+    "BATTERY BANK",
+    "RTU",
+    "EFI",
+    "FIRE EXTINGUISHER",
+    "BUILDING",
+    "DOOR",
+    "TRENCH",
+    "COMPOUND",
+    "OVERVIEW",
+    "EARTHING",
+    "LIGHTNING ARRESTOR",
+    "FENCE",
+    "DRAINAGE",
+    "CIVIL",
+    "SAFETY",
+})
+
+
+def _is_defect_summary_table(table: Any) -> bool:
+    """Check if table is a visual defect summary grid (e.g. NO | EQUIPMENT | DEFECT DESCRIPTION)."""
+    for row in table.rows[:3]:
+        cells_upper = [c.text.strip().upper() for c in row.cells]
+        if "DEFECT DESCRIPTION" in cells_upper or ("EQUIPMENT" in cells_upper and ("NO." in cells_upper or "ADDITIONAL REMARKS" in cells_upper or "REMARKS" in cells_upper)):
+            return True
+        row_text = " ".join(cells_upper)
+        if "DEFECT DESCRIPTION" in row_text:
+            return True
+    return False
+
+
 def _is_substation_name_label(text: str) -> bool:
     """Check if table cell text specifically represents a substation name label."""
     up = text.upper().strip().rstrip(":")
@@ -338,6 +377,9 @@ def inspect_deliverable_attribution(
         return True, ""
 
     for table_idx, table in enumerate(doc.tables):
+        if _is_defect_summary_table(table):
+            continue
+
         for row_idx, row in enumerate(table.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell_text = cell.text.strip()
@@ -353,11 +395,15 @@ def inspect_deliverable_attribution(
 
                 # Check 2: cell itself is label, value in subsequent cells
                 if not candidate_val and _is_substation_name_label(cell_text):
+                    is_bare_substation = cell_text.upper().strip().rstrip(":") in {"SUBSTATION", "STATION"}
                     for next_cell in row.cells[c_idx + 1:]:
                         if next_cell._tc is cell._tc or next_cell.text.strip() == cell_text:
                             continue
                         val = next_cell.text.strip().lstrip(":").strip()
                         if val:
+                            if is_bare_substation and any(val.upper().startswith(title) for title in PHOTO_GRID_COMPONENT_TITLES):
+                                # Photo grid header e.g. "SUBSTATION | SIGNBOARD"
+                                break
                             candidate_val = val
                             break
 
