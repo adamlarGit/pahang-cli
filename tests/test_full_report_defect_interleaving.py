@@ -941,3 +941,87 @@ def test_foreign_defect_slices_discarded_with_foreign_discard_action() -> None:
         "tx1_s02_TX1_HV_BUSHING_01.docx",
     }
 
+
+def test_vcb_standard_5_compartment_defect_matching() -> None:
+    """Verify that in standard 5-compartment VCB panel, specific compartment defects match only their target compartment."""
+    from src.full_report.models import VCB_STANDARD_COMPARTMENTS
+
+    items = [
+        ScanRenderItem(
+            page_name=f"Panel 1 (VCB 1) - {comp}",
+            template_name="swg-panel.docx",
+            equipment_category="swg",
+            component_name=comp,
+            sequence="p01",
+            equipment_id="swg1",
+            panel_no=1,
+            context={"panel": {"feeder_no": "CKN01", "name": "VCB 1"}},
+        )
+        for comp in VCB_STANDARD_COMPARTMENTS
+    ]
+
+    # Defect on Busbar Compartment
+    defect_busbar = CbmDefectSliceMetadata(
+        equipment_category="swg",
+        equipment_instance="swg1",
+        sequence="p01",
+        equipment_id="CKN01",
+        defect_area="BUSBAR_COMPARTMENT",
+        filename="swg1_p01_CKN01_BUSBAR_COMPARTMENT_01.docx",
+        technology="IR",
+    )
+
+    policy = DefectInterleavingPolicy()
+    result = policy.interleave(scan_items=items, sliced_defects=[defect_busbar])
+
+    # Sliced IR defect replaces ONLY the BUSBAR COMPARTMENT page, not BREAKER COMPARTMENT
+    assert len(result.parts) == 5
+    part_names = [p.part_name for p in result.parts]
+    assert part_names[0] == "Panel 1 (VCB 1) - BREAKER COMPARTMENT"
+    assert part_names[1] == "Panel 1 (VCB 1) - CABLE COMPARTMENT"
+    assert part_names[2] == "swg1_p01_CKN01_BUSBAR_COMPARTMENT_01.docx"
+    assert part_names[3] == "Panel 1 (VCB 1) - PT COMPARTMENT"
+    assert part_names[4] == "Panel 1 (VCB 1) - SECONDARY COMPARTMENT"
+
+
+def test_vcb_transition_panel_defect_matching_and_rear_normalization() -> None:
+    """Verify transition panel defect interleaving matches FRONT and BACK/REAR compartments correctly."""
+    from src.full_report.models import VCB_TRANSITION_COMPARTMENTS
+
+    items = [
+        ScanRenderItem(
+            page_name=f"Panel 2 (TRANSITION) - {comp}",
+            template_name="swg-panel.docx",
+            equipment_category="swg",
+            component_name=comp,
+            sequence="p02",
+            equipment_id="swg1",
+            panel_no=2,
+            context={"panel": {"feeder_no": "CKN02", "name": "TRANSITION PANEL"}},
+        )
+        for comp in VCB_TRANSITION_COMPARTMENTS
+    ]
+
+    # Defect named BACK_COMPARTMENT should match REAR COMPARTMENT
+    defect_back = CbmDefectSliceMetadata(
+        equipment_category="swg",
+        equipment_instance="swg1",
+        sequence="p02",
+        equipment_id="CKN02",
+        defect_area="BACK_COMPARTMENT",
+        filename="swg1_p02_CKN02_BACK_COMPARTMENT_01.docx",
+        technology="IR",
+    )
+
+    policy = DefectInterleavingPolicy()
+    result = policy.interleave(scan_items=items, sliced_defects=[defect_back])
+
+    assert len(result.parts) == 5
+    part_names = [p.part_name for p in result.parts]
+    assert part_names[0] == "Panel 2 (TRANSITION) - FRONT COMPARTMENT"
+    assert part_names[1] == "swg1_p02_CKN02_BACK_COMPARTMENT_01.docx"
+    assert part_names[2] == "Panel 2 (TRANSITION) - BUSBAR COMPARTMENT"
+    assert part_names[3] == "Panel 2 (TRANSITION) - PT COMPARTMENT"
+    assert part_names[4] == "Panel 2 (TRANSITION) - SECONDARY COMPARTMENT"
+
+

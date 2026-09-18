@@ -898,3 +898,41 @@ def test_executive_summary_template_title_formatting(tmp_path: Path):
     assert color is not None and color.get(qn("w:val")) == "auto"
 
 
+def test_census_builder_vcb_transition_panel_defect_matching():
+    """Verify census builder maps BACK COMPARTMENT defect to REAR COMPARTMENT row on transition panel."""
+    from src.full_report.census import _match_defects_for_swg_panel
+
+    panel_trans = SwitchgearPanelSpec(
+        panel_no=2,
+        name="TRANSITION PANEL",
+        panel_feeder_no="CKN02",
+        panel_type="VCB",
+    )
+    swg = SwitchgearSpec(
+        switchgear_type="VCB",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="FEEDER 1", panel_feeder_no="CKN01", panel_type="VCB"),
+            panel_trans,
+        ),
+    )
+
+    defect_back = CbmDefectRecord(
+        equipment="VCB",
+        equipment_id="CKN02",
+        defect_area="BACK COMPARTMENT",
+        additional_remarks="Partial discharge detected on rear barrier",
+    )
+
+    # REAR COMPARTMENT matches
+    m_rear = _match_defects_for_swg_panel(swg, panel_trans, "REAR COMPARTMENT", [defect_back])
+    assert len(m_rear) == 1
+    assert m_rear[0].defect_area == "BACK COMPARTMENT"
+
+    # FRONT COMPARTMENT, BUSBAR COMPARTMENT do not match
+    m_front = _match_defects_for_swg_panel(swg, panel_trans, "FRONT COMPARTMENT", [defect_back])
+    assert len(m_front) == 0
+    m_busbar = _match_defects_for_swg_panel(swg, panel_trans, "BUSBAR COMPARTMENT", [defect_back])
+    assert len(m_busbar) == 0
+
+
+

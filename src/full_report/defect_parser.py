@@ -106,6 +106,7 @@ def parse_d37_filename(filename_or_path: str | Path) -> CbmDefectSliceMetadata |
         "PT_COMPARTMENT",
         "SECONDARY_COMPARTMENT",
         "BACK_COMPARTMENT",
+        "REAR_COMPARTMENT",
         "FRONT_COMPARTMENT",
         "HV_BUSHING",
         "HV_CABLE",

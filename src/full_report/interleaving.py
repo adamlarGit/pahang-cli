@@ -21,6 +21,7 @@ from pathlib import Path
 import re
 from typing import Sequence
 
+from src.core.contract import normalize_swg_compartment
 from src.full_report.attribution import verify_cbm_defect_attribution
 from src.full_report.defect_parser import (
     CbmDefectHeaderParser,
@@ -791,6 +792,8 @@ class DefectInterleavingPolicy:
         item_panel_no = item.panel_no
         item_comp = normalize_defect_area(item.component_name)
 
+        norm_item_comp = normalize_swg_compartment(item.component_name)
+
         panel_ctx = item.context.get("panel", {}) if isinstance(item.context, dict) else {}
         item_feeder_no = normalize_equipment_id(
             str(
@@ -811,6 +814,7 @@ class DefectInterleavingPolicy:
             d_seq = d.sequence.lower()
             d_id = normalize_equipment_id(d.equipment_id)
             d_area = normalize_defect_area(d.defect_area)
+            norm_d_comp = normalize_swg_compartment(d.defect_area.replace("_", " "))
 
             # Sequence match: e.g. p04 == p04
             seq_matched = item_seq == d_seq
@@ -826,18 +830,40 @@ class DefectInterleavingPolicy:
             id_matched = bool(item_feeder_no and d_id and (item_feeder_no == d_id or d_id in item_feeder_no))
 
             # TX Feeder match for fuse compartment defects
-            tx_fuse_matched = bool(panel_is_tx and d_area == "FUSE_COMPARTMENT" and (panel_no_matched or id_matched))
+            tx_fuse_matched = bool(panel_is_tx and norm_d_comp == "FUSE COMPARTMENT" and (panel_no_matched or id_matched))
 
             if seq_matched or panel_no_matched or id_matched or tx_fuse_matched:
-                # If panel has multiple compartments (e.g. CABLE COMPARTMENT and CABLE ENTRY),
-                # check compartment match:
+                # If defect specifies a canonical switchgear compartment, match strictly on that compartment
+                if norm_d_comp in (
+                    "BREAKER COMPARTMENT",
+                    "CABLE COMPARTMENT",
+                    "BUSBAR COMPARTMENT",
+                    "PT COMPARTMENT",
+                    "SECONDARY COMPARTMENT",
+                    "FRONT COMPARTMENT",
+                    "REAR COMPARTMENT",
+                    "CABLE ENTRY",
+                    "FUSE COMPARTMENT",
+                ):
+                    if norm_d_comp == norm_item_comp:
+                        matches.append(d)
+                    continue
+
+                # If defect area has substring match with component
                 if d_area and d_area != "OVERVIEW":
                     if d_area in item_comp or item_comp in d_area:
                         matches.append(d)
                         continue
-                    # For multi-compartment panels, do not duplicate on CABLE ENTRY unless matched
-                    if item_comp == "CABLE_ENTRY":
+                    # For multi-compartment panels, do not attach non-matching specific defects
+                    if norm_item_comp in (
+                        "CABLE ENTRY",
+                        "SECONDARY COMPARTMENT",
+                        "PT COMPARTMENT",
+                        "BUSBAR COMPARTMENT",
+                        "REAR COMPARTMENT",
+                    ):
                         continue
+
                 matches.append(d)
 
         return matches

@@ -60,6 +60,18 @@ class SwitchgearPanelSpec:
     tev_char: str = ""
     photo_numbers: tuple[int, ...] = ()
 
+    @property
+    def is_tx_feeder(self) -> bool:
+        """Return True if this panel is a transformer (TX) feeder."""
+        from src.full_report.models import is_tx_feeder
+        return is_tx_feeder(self)
+
+    @property
+    def is_transition_panel(self) -> bool:
+        """Return True if this panel is a transition panel."""
+        from src.full_report.models import is_transition_panel
+        return is_transition_panel(self)
+
 
 @dataclass(frozen=True)
 class SwitchgearSpec:

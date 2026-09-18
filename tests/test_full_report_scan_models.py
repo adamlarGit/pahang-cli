@@ -363,12 +363,29 @@ def test_switchgear_compartment_matrix_vcb() -> None:
         "SECONDARY COMPARTMENT",
     )
 
-    # Predicates and ScanSpec property
+    # Predicates and ScanSpec / Spec properties
     assert is_transition_panel(transition_panel) is True
+    assert transition_panel.is_transition_panel is True
     assert is_transition_panel("TRANSITION") is True
     assert is_transition_panel("TRANSITION PANEL") is True
+    assert is_transition_panel("PANEL PERALIHAN") is True
+    assert is_transition_panel("TRANSISYEN") is True
+    assert is_transition_panel({"name": "TRANSITION BAY"}) is True
+    assert is_transition_panel({"panel_type": "TRANSITION"}) is True
+    assert is_transition_panel(None) is False
     assert is_transition_panel(standard_panel) is False
+    assert standard_panel.is_transition_panel is False
     assert is_transition_panel("INCOMING 1") is False
+
+    assert is_tx_feeder(None) is False
+    assert is_tx_feeder({"name": "TX 1"}) is True
+    assert is_tx_feeder({"panel_feeder_no": "TX"}) is True
+    assert is_tx_feeder("TRANSFORMER 1") is True
+    assert is_tx_feeder("INCOMING 1") is False
+
+    tx_spec = SwitchgearPanelSpec(panel_no=3, name="TX 1")
+    assert tx_spec.is_tx_feeder is True
+    assert tx_spec.is_transition_panel is False
 
     trans_spec = build_switchgear_panel_scan_spec(transition_panel, SwitchgearCategory.VCB)
     assert trans_spec.is_transition_panel is True

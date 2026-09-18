@@ -14,6 +14,7 @@ from docx.oxml.ns import qn
 from docx.table import _Cell
 from docxtpl import DocxTemplate
 
+from src.core.contract import normalize_swg_compartment
 from src.core.normalizers import normalize_tx_id
 from src.full_report.models import (
     FullReportScanPackage,
@@ -204,18 +205,46 @@ def _match_defects_for_swg_panel(
             continue
 
         # Check if defect targets this specific compartment
+        norm_comp = normalize_swg_compartment(compartment)
+        norm_area = normalize_swg_compartment(d.defect_area)
+        norm_remarks = normalize_swg_compartment(area_upper)
+
         comp_match = False
-        if comp_upper == "FUSE COMPARTMENT":
+        if norm_area in (
+            "BREAKER COMPARTMENT",
+            "CABLE COMPARTMENT",
+            "BUSBAR COMPARTMENT",
+            "PT COMPARTMENT",
+            "SECONDARY COMPARTMENT",
+            "FRONT COMPARTMENT",
+            "REAR COMPARTMENT",
+            "CABLE ENTRY",
+            "FUSE COMPARTMENT",
+        ):
+            comp_match = (norm_comp == norm_area)
+        elif norm_remarks in (
+            "BREAKER COMPARTMENT",
+            "CABLE COMPARTMENT",
+            "BUSBAR COMPARTMENT",
+            "PT COMPARTMENT",
+            "SECONDARY COMPARTMENT",
+            "FRONT COMPARTMENT",
+            "REAR COMPARTMENT",
+            "CABLE ENTRY",
+            "FUSE COMPARTMENT",
+        ):
+            comp_match = (norm_comp == norm_remarks)
+        elif comp_upper == "FUSE COMPARTMENT":
             comp_match = "FUSE" in area_upper
         elif comp_upper == "CABLE ENTRY":
             comp_match = "ENTRY" in area_upper
         elif comp_upper == "CABLE COMPARTMENT":
             comp_match = ("CABLE" in area_upper or "BOX" in area_upper or "TERMINATION" in area_upper) and not ("ENTRY" in area_upper or "FUSE" in area_upper)
-            if not comp_match and not any(k in area_upper for k in ("FUSE", "ENTRY", "OVERVIEW", "BREAKER", "BUSBAR", "PT", "SECONDARY", "FRONT", "BACK")):
+            if not comp_match and not any(k in area_upper for k in ("FUSE", "ENTRY", "OVERVIEW", "BREAKER", "BUSBAR", "PT", "SECONDARY", "FRONT", "BACK", "REAR")):
                 comp_match = True
         elif comp_upper in area_upper:
             comp_match = True
-        elif not any(k in area_upper for k in ("FUSE", "ENTRY", "OVERVIEW", "BREAKER", "BUSBAR", "PT", "SECONDARY", "FRONT", "BACK", "CABLE")):
+        elif not any(k in area_upper for k in ("FUSE", "ENTRY", "OVERVIEW", "BREAKER", "BUSBAR", "PT", "SECONDARY", "FRONT", "BACK", "REAR", "CABLE")):
             comp_match = True
 
         if comp_match:

@@ -80,31 +80,50 @@ def classify_switchgear(
     return SwitchgearCategory.OTHER_RMU
 
 
-def is_tx_feeder(panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str = "") -> bool:
+def is_tx_feeder(
+    panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | dict | str | None = "",
+) -> bool:
     """Determine if a switchgear panel/bay is a transformer (TX) feeder."""
-    if isinstance(panel_or_name, str):
-        combined = panel_or_name.upper()
-    else:
-        combined = f"{panel_or_name.name} {panel_or_name.panel_feeder_no} {panel_or_name.panel_type}".upper()
-
-    if any(k in combined for k in ("TRANSFORMER", "ALATUBAH", "TEE-OFF", "TEE OFF", "FUSE")):
-        return True
-    return bool(re.search(r"\bTX\d*\b", combined))
-
-
-def is_transition_panel(panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str = "") -> bool:
-    """Determine if a switchgear panel/bay is a transition panel."""
     if panel_or_name is None:
         return False
     if isinstance(panel_or_name, str):
         combined = panel_or_name.upper()
+    elif isinstance(panel_or_name, dict):
+        name = panel_or_name.get("name", "") or ""
+        feeder = panel_or_name.get("panel_feeder_no", "") or panel_or_name.get("feeder_no", "") or ""
+        p_type = panel_or_name.get("panel_type", "") or ""
+        combined = f"{name} {feeder} {p_type}".upper()
     else:
         name = getattr(panel_or_name, "name", "") or ""
         feeder = getattr(panel_or_name, "panel_feeder_no", "") or ""
         p_type = getattr(panel_or_name, "panel_type", "") or ""
         combined = f"{name} {feeder} {p_type}".upper()
 
-    return "TRANSITION" in combined
+    if any(k in combined for k in ("TRANSFORMER", "ALATUBAH", "TEE-OFF", "TEE OFF", "FUSE")):
+        return True
+    return bool(re.search(r"\bTX\d*\b", combined))
+
+
+def is_transition_panel(
+    panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | dict | str | None = "",
+) -> bool:
+    """Determine if a switchgear panel/bay is a transition panel."""
+    if panel_or_name is None:
+        return False
+    if isinstance(panel_or_name, str):
+        combined = panel_or_name.upper()
+    elif isinstance(panel_or_name, dict):
+        name = panel_or_name.get("name", "") or ""
+        feeder = panel_or_name.get("panel_feeder_no", "") or panel_or_name.get("feeder_no", "") or ""
+        p_type = panel_or_name.get("panel_type", "") or ""
+        combined = f"{name} {feeder} {p_type}".upper()
+    else:
+        name = getattr(panel_or_name, "name", "") or ""
+        feeder = getattr(panel_or_name, "panel_feeder_no", "") or ""
+        p_type = getattr(panel_or_name, "panel_type", "") or ""
+        combined = f"{name} {feeder} {p_type}".upper()
+
+    return any(k in combined for k in ("TRANSITION", "PERALIHAN", "TRANSISYEN"))
 
 
 OVERVIEW_COMPARTMENTS_MAP: dict[SwitchgearCategory, tuple[str, ...]] = {
