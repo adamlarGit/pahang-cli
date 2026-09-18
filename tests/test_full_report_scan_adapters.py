@@ -29,6 +29,7 @@ from src.full_report.models import (
     SwitchgearScanSpec,
     TransformerScanSpec,
     VCB_STANDARD_COMPARTMENTS,
+    VCB_TRANSITION_COMPARTMENTS,
 )
 from src.full_report.photo_resolver import PhotoPair, RawPhotoResolver
 from src.full_report.scan_adapters import (
@@ -224,8 +225,8 @@ def test_switchgear_adapter_indkom_compartment_matrix(mock_substation_info: dict
     assert result.items[2].component_name == "FUSE COMPARTMENT"
 
 
-def test_switchgear_adapter_vcb_standard_7_compartments(mock_substation_info: dict[str, str]) -> None:
-    """VCB generates 1 overview and 7 standard compartments per panel per D26."""
+def test_switchgear_adapter_vcb_standard_5_compartments(mock_substation_info: dict[str, str]) -> None:
+    """VCB generates 1 overview and 5 standard compartments per standard panel per D26."""
     swg = SwitchgearScanSpec(
         switchgear_type="VCB 11kV",
         manufacturer="TAMCO",
@@ -244,11 +245,45 @@ def test_switchgear_adapter_vcb_standard_7_compartments(mock_substation_info: di
     adapter = SwitchgearScanAdapter(swg=swg, substation_info=mock_substation_info)
     result = adapter.adapt()
 
-    # 1 overview + 1 panel * 7 compartments = 8 pages
-    assert result.page_count == 8
+    # 1 overview + 1 panel * 5 compartments = 6 pages
+    assert result.page_count == 6
     assert result.items[0].component_name == "OVERVIEW"
     panel_compartments = [item.component_name for item in result.items[1:]]
     assert tuple(panel_compartments) == VCB_STANDARD_COMPARTMENTS
+
+
+def test_switchgear_adapter_vcb_transition_5_compartments(mock_substation_info: dict[str, str]) -> None:
+    """VCB generates 1 overview and 5 transition compartments for a transition panel per D26."""
+    swg = SwitchgearScanSpec(
+        switchgear_type="VCB 11kV",
+        manufacturer="TAMCO",
+        category=SwitchgearCategory.VCB,
+        overview_compartments=("OVERVIEW",),
+        panels=(
+            SwitchgearPanelScanSpec(
+                panel_no=1,
+                name="TRANSITION PANEL",
+                compartments=VCB_TRANSITION_COMPARTMENTS,
+            ),
+        ),
+        photo_numbers=(30,),
+    )
+
+    adapter = SwitchgearScanAdapter(swg=swg, substation_info=mock_substation_info)
+    result = adapter.adapt()
+
+    # 1 overview + 1 panel * 5 compartments = 6 pages
+    assert result.page_count == 6
+    assert result.items[0].component_name == "OVERVIEW"
+    panel_compartments = [item.component_name for item in result.items[1:]]
+    assert tuple(panel_compartments) == VCB_TRANSITION_COMPARTMENTS
+    assert tuple(panel_compartments) == (
+        "FRONT COMPARTMENT",
+        "REAR COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
 
 
 def test_switchgear_adapter_prpd_integration_and_clean_fallback(

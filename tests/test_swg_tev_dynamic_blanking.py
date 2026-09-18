@@ -91,8 +91,18 @@ class TestSwitchgearCompartmentEligibility:
             ("Fuse Compartment", "FUSE COMPARTMENT"),
             ("Outgoing Fuse", "FUSE COMPARTMENT"),
             ("Secondary Compartment", "SECONDARY COMPARTMENT"),
-            ("Back Compartment", "BACK COMPARTMENT"),
+            ("Back Compartment", "REAR COMPARTMENT"),
+            ("BACK COMPARTMENT", "REAR COMPARTMENT"),
+            ("Back", "REAR COMPARTMENT"),
+            ("BACK", "REAR COMPARTMENT"),
+            ("Rear Compartment", "REAR COMPARTMENT"),
+            ("REAR COMPARTMENT", "REAR COMPARTMENT"),
+            ("Rear", "REAR COMPARTMENT"),
+            ("REAR", "REAR COMPARTMENT"),
             ("Front Compartment", "FRONT COMPARTMENT"),
+            ("FRONT COMPARTMENT", "FRONT COMPARTMENT"),
+            ("Front", "FRONT COMPARTMENT"),
+            ("FRONT", "FRONT COMPARTMENT"),
         ],
     )
     def test_normalize_swg_compartment(self, raw_comp: str, expected_norm: str):
@@ -126,7 +136,11 @@ class TestSwitchgearCompartmentEligibility:
             ("Busbar", False),
             ("SECONDARY COMPARTMENT", False),
             ("BACK COMPARTMENT", False),
+            ("Back Compartment", False),
+            ("REAR COMPARTMENT", False),
+            ("Rear Compartment", False),
             ("FRONT COMPARTMENT", False),
+            ("Front Compartment", False),
             ("", False),
             (None, False),
         ],
@@ -566,8 +580,8 @@ class TestFullReportScanAdapterTevBlanking:
         assert tcBorders is not None
         assert tcBorders.find(qn("w:top")).get(qn("w:val")) == "nil"
 
-    def test_vcb_7_compartments_tev_matrix(self):
-        """Verify VCB standard 7 compartments: Breaker, Cable, PT active; Busbar, Secondary, Back, Front blanked."""
+    def test_vcb_5_standard_compartments_tev_matrix(self):
+        """Verify VCB standard 5 compartments: Breaker, Cable, PT active; Busbar, Secondary blanked."""
         from src.full_report.models import VCB_STANDARD_COMPARTMENTS
         panel = SwitchgearPanelScanSpec(
             panel_no=1,
@@ -596,7 +610,7 @@ class TestFullReportScanAdapterTevBlanking:
         )
         res = adapter.adapt()
         panel_items = {it.component_name: it for it in res.items if not it.is_overview}
-        assert len(panel_items) == 7
+        assert len(panel_items) == 5
 
         # Active TEV compartments
         for comp in ("BREAKER COMPARTMENT", "CABLE COMPARTMENT", "PT COMPARTMENT"):
@@ -605,7 +619,50 @@ class TestFullReportScanAdapterTevBlanking:
             assert panel_items[comp].context["panel"]["tev"]["reading"] != ""
 
         # Blanked compartments
-        for comp in ("BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT", "BACK COMPARTMENT", "FRONT COMPARTMENT"):
+        for comp in ("BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT"):
+            assert panel_items[comp].context.get("__blank_tev__") is True
+            assert panel_items[comp].context.get("is_tev_active") is False
+            assert panel_items[comp].context["panel"]["tev"]["reading"] == ""
+
+    def test_vcb_5_transition_compartments_tev_matrix(self):
+        """Verify VCB transition 5 compartments: PT active; Front, Rear, Busbar, Secondary blanked."""
+        from src.full_report.models import VCB_TRANSITION_COMPARTMENTS
+        panel = SwitchgearPanelScanSpec(
+            panel_no=1,
+            name="TRANSITION PANEL",
+            panel_type="VCB",
+            status="CLOSE",
+            load_amp="0",
+            heater_amp="0.8",
+            serial_no="SN-TRANS-01",
+            tev_reading="18",
+            compartments=VCB_TRANSITION_COMPARTMENTS,
+        )
+        swg = SwitchgearScanSpec(
+            switchgear_type="VCB",
+            manufacturer="TAMCO",
+            model="GV3",
+            rating="11kV 630A",
+            serial_no="SN-BOARD-01",
+            category=SwitchgearCategory.VCB,
+            panels=[panel],
+        )
+        adapter = SwitchgearScanAdapter(
+            swg=swg,
+            substation_info={"name_erms": "PE TEST MOCK"},
+            project_technologies=["IR", "US", "TEV"],
+        )
+        res = adapter.adapt()
+        panel_items = {it.component_name: it for it in res.items if not it.is_overview}
+        assert len(panel_items) == 5
+
+        # Active TEV compartment (only PT)
+        assert panel_items["PT COMPARTMENT"].context.get("__blank_tev__") is False
+        assert panel_items["PT COMPARTMENT"].context.get("is_tev_active") is True
+        assert panel_items["PT COMPARTMENT"].context["panel"]["tev"]["reading"] != ""
+
+        # Blanked compartments (Front, Rear, Busbar, Secondary)
+        for comp in ("FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT"):
             assert panel_items[comp].context.get("__blank_tev__") is True
             assert panel_items[comp].context.get("is_tev_active") is False
             assert panel_items[comp].context["panel"]["tev"]["reading"] == ""

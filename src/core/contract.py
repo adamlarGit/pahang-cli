@@ -99,6 +99,9 @@ TEV_ELIGIBLE_SWG_COMPARTMENTS: frozenset[str] = frozenset({
 TEV_BLANKED_SWG_COMPARTMENTS: frozenset[str] = frozenset({
     "CABLE ENTRY",
     "BUSBAR COMPARTMENT",
+    "FRONT COMPARTMENT",
+    "REAR COMPARTMENT",
+    "BACK COMPARTMENT",
 })
 
 US_BLANKED_SWG_COMPARTMENTS: frozenset[str] = frozenset({
@@ -112,6 +115,23 @@ def normalize_swg_compartment(compartment: str | None) -> str:
     if not compartment:
         return ""
     comp_upper = str(compartment).strip().upper()
+
+    # Pre-normalization precedence:
+    # 1. Back / Rear Compartment -> canonical REAR COMPARTMENT
+    if (
+        any(k in comp_upper for k in ("BACK COMPARTMENT", "REAR COMPARTMENT", "BACK", "REAR"))
+        or re.search(r"\b(BACK|REAR)[\s\-_/]*COMPARTMENT\b", comp_upper)
+        or re.search(r"\b(BACK|REAR)\b", comp_upper)
+    ):
+        return "REAR COMPARTMENT"
+
+    # 2. Front Compartment -> canonical FRONT COMPARTMENT
+    if (
+        any(k in comp_upper for k in ("FRONT COMPARTMENT", "FRONT"))
+        or re.search(r"\bFRONT[\s\-_/]*COMPARTMENT\b", comp_upper)
+        or re.search(r"\bFRONT\b", comp_upper)
+    ):
+        return "FRONT COMPARTMENT"
 
     # Direct canonical membership check
     if (

@@ -47,6 +47,7 @@ from src.full_report.models import (
     SwitchgearPanelScanSpec,
     SwitchgearScanSpec,
     VCB_STANDARD_COMPARTMENTS,
+    VCB_TRANSITION_COMPARTMENTS,
 )
 from src.full_report.scan_adapters import SwitchgearScanAdapter
 from src.full_report.scan_render import FullReportScanPageRendererCore
@@ -112,8 +113,19 @@ class TestSwitchgearCompartmentUsEligibility:
             ("VT Compartment", "PT COMPARTMENT"),
             ("Fuse Compartment", "FUSE COMPARTMENT"),
             ("Outgoing Fuse", "FUSE COMPARTMENT"),
-            ("Back Compartment", "BACK COMPARTMENT"),
+            ("Secondary Compartment", "SECONDARY COMPARTMENT"),
+            ("Back Compartment", "REAR COMPARTMENT"),
+            ("BACK COMPARTMENT", "REAR COMPARTMENT"),
+            ("Back", "REAR COMPARTMENT"),
+            ("BACK", "REAR COMPARTMENT"),
+            ("Rear Compartment", "REAR COMPARTMENT"),
+            ("REAR COMPARTMENT", "REAR COMPARTMENT"),
+            ("Rear", "REAR COMPARTMENT"),
+            ("REAR", "REAR COMPARTMENT"),
             ("Front Compartment", "FRONT COMPARTMENT"),
+            ("FRONT COMPARTMENT", "FRONT COMPARTMENT"),
+            ("Front", "FRONT COMPARTMENT"),
+            ("FRONT", "FRONT COMPARTMENT"),
         ],
     )
     def test_normalize_swg_compartment(self, raw_comp: str, expected_norm: str):
@@ -162,7 +174,11 @@ class TestSwitchgearCompartmentUsEligibility:
             ("BUSBAR COMPARTMENT", True),
             ("Busbar", True),
             ("BACK COMPARTMENT", True),
+            ("Back Compartment", True),
+            ("REAR COMPARTMENT", True),
+            ("Rear Compartment", True),
             ("FRONT COMPARTMENT", True),
+            ("Front Compartment", True),
         ],
     )
     def test_is_swg_compartment_us_eligible(self, comp: str | None, expected_eligible: bool):
@@ -630,8 +646,8 @@ class TestFullReportScanAdapterUsBlanking:
         assert tcBorders is not None
         assert tcBorders.find(qn("w:top")).get(qn("w:val")) == "nil"
 
-    def test_vcb_7_compartments_us_matrix(self):
-        """Verify VCB standard 7 compartments: Breaker, Cable, PT, Busbar, Front, Back active; Secondary blanked."""
+    def test_vcb_5_standard_compartments_us_matrix(self):
+        """Verify VCB standard 5 compartments: Breaker, Cable, PT, Busbar active; Secondary blanked."""
         panel = SwitchgearPanelScanSpec(
             panel_no=1,
             name="VCB 1",
@@ -660,16 +676,63 @@ class TestFullReportScanAdapterUsBlanking:
         )
         res = adapter.adapt()
         panel_items = {it.component_name: it for it in res.items if not it.is_overview}
-        assert len(panel_items) == 7
+        assert len(panel_items) == 5
 
-        # Active US compartments (6 out of 7)
+        # Active US compartments (4 out of 5)
         for comp in (
             "BREAKER COMPARTMENT",
             "CABLE COMPARTMENT",
             "PT COMPARTMENT",
             "BUSBAR COMPARTMENT",
-            "BACK COMPARTMENT",
+        ):
+            assert panel_items[comp].context.get("__blank_us__") is False
+            assert panel_items[comp].context.get("is_us_active") is True
+            assert panel_items[comp].context["panel"]["us"]["reading"] != ""
+
+        # Blanked US compartment (only Secondary Compartment)
+        sec_item = panel_items["SECONDARY COMPARTMENT"]
+        assert sec_item.context.get("__blank_us__") is True
+        assert sec_item.context.get("is_us_active") is False
+        assert sec_item.context["panel"]["us"]["reading"] == ""
+
+    def test_vcb_5_transition_compartments_us_matrix(self):
+        """Verify VCB transition 5 compartments: Front, Rear, PT, Busbar active; Secondary blanked."""
+        panel = SwitchgearPanelScanSpec(
+            panel_no=1,
+            name="TRANSITION PANEL",
+            panel_type="VCB",
+            status="CLOSE",
+            load_amp="0",
+            heater_amp="0.8",
+            serial_no="SN-TRANS-01",
+            us_reading="14",
+            tev_reading="18",
+            compartments=VCB_TRANSITION_COMPARTMENTS,
+        )
+        swg = SwitchgearScanSpec(
+            switchgear_type="VCB",
+            manufacturer="TAMCO",
+            model="GV3",
+            rating="11kV 630A",
+            serial_no="SN-BOARD-01",
+            category=SwitchgearCategory.VCB,
+            panels=[panel],
+        )
+        adapter = SwitchgearScanAdapter(
+            swg=swg,
+            substation_info={"name_erms": "PE TEST MOCK"},
+            project_technologies=["IR", "US", "TEV"],
+        )
+        res = adapter.adapt()
+        panel_items = {it.component_name: it for it in res.items if not it.is_overview}
+        assert len(panel_items) == 5
+
+        # Active US compartments (4 out of 5: Front, Rear, Busbar, PT)
+        for comp in (
             "FRONT COMPARTMENT",
+            "REAR COMPARTMENT",
+            "PT COMPARTMENT",
+            "BUSBAR COMPARTMENT",
         ):
             assert panel_items[comp].context.get("__blank_us__") is False
             assert panel_items[comp].context.get("is_us_active") is True

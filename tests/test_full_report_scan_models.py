@@ -15,6 +15,7 @@ from src.full_report.models import (
     TransformerScanSpec,
     TRANSFORMER_STANDARD_COMPONENTS,
     VCB_STANDARD_COMPARTMENTS,
+    VCB_TRANSITION_COMPARTMENTS,
     build_battery_bank_scan_spec,
     build_full_report_scan_package,
     build_lvdb_scan_spec,
@@ -24,6 +25,7 @@ from src.full_report.models import (
     classify_switchgear,
     has_battery_bank,
     has_hv_cable_split,
+    is_transition_panel,
     is_tx_feeder,
     resolve_overview_compartments,
     resolve_panel_page_count,
@@ -327,8 +329,9 @@ def test_switchgear_compartment_matrix_other_rmu() -> None:
 
 
 def test_switchgear_compartment_matrix_vcb() -> None:
-    """VCB: Evaluated per panel emitting its 7 standard compartments per D26."""
-    panel = SwitchgearPanelSpec(panel_no=1, name="SSU UITM VCB 5", panel_feeder_no="CRB00764")
+    """VCB: Evaluated per panel emitting standard 5 compartments or transition 5 compartments per D26."""
+    standard_panel = SwitchgearPanelSpec(panel_no=1, name="SSU UITM VCB 5", panel_feeder_no="CRB00764")
+    transition_panel = SwitchgearPanelSpec(panel_no=2, name="TRANSITION PANEL", panel_feeder_no="CRB00765")
 
     # Overview
     assert resolve_overview_compartments(SwitchgearCategory.VCB) == ("OVERVIEW",)
@@ -336,19 +339,46 @@ def test_switchgear_compartment_matrix_vcb() -> None:
     # Canonical category set (when panel is omitted)
     assert resolve_switchgear_compartments(SwitchgearCategory.VCB) == VCB_STANDARD_COMPARTMENTS
 
-    # Panel emits standard 7 compartments
-    compartments = resolve_switchgear_compartments(SwitchgearCategory.VCB, panel)
+    # Standard VCB panel emits 5 standard compartments
+    compartments = resolve_switchgear_compartments(SwitchgearCategory.VCB, standard_panel)
     assert compartments == VCB_STANDARD_COMPARTMENTS
-    assert len(compartments) == 7
+    assert len(compartments) == 5
     assert compartments == (
         "BREAKER COMPARTMENT",
         "CABLE COMPARTMENT",
         "BUSBAR COMPARTMENT",
         "PT COMPARTMENT",
         "SECONDARY COMPARTMENT",
-        "BACK COMPARTMENT",
-        "FRONT COMPARTMENT",
     )
+
+    # Transition panel emits 5 transition compartments (BREAKER -> FRONT, CABLE -> REAR)
+    trans_compartments = resolve_switchgear_compartments(SwitchgearCategory.VCB, transition_panel)
+    assert trans_compartments == VCB_TRANSITION_COMPARTMENTS
+    assert len(trans_compartments) == 5
+    assert trans_compartments == (
+        "FRONT COMPARTMENT",
+        "REAR COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
+
+    # Predicates and ScanSpec property
+    assert is_transition_panel(transition_panel) is True
+    assert is_transition_panel("TRANSITION") is True
+    assert is_transition_panel("TRANSITION PANEL") is True
+    assert is_transition_panel(standard_panel) is False
+    assert is_transition_panel("INCOMING 1") is False
+
+    trans_spec = build_switchgear_panel_scan_spec(transition_panel, SwitchgearCategory.VCB)
+    assert trans_spec.is_transition_panel is True
+    assert trans_spec.compartments == VCB_TRANSITION_COMPARTMENTS
+    assert trans_spec.page_count == 5
+
+    std_spec = build_switchgear_panel_scan_spec(standard_panel, SwitchgearCategory.VCB)
+    assert std_spec.is_transition_panel is False
+    assert std_spec.compartments == VCB_STANDARD_COMPARTMENTS
+    assert std_spec.page_count == 5
 
 
 # ==============================================================================
@@ -373,8 +403,8 @@ def test_resolve_panel_page_count_rules_per_d29() -> None:
     assert resolve_panel_page_count(SwitchgearCategory.OTHER_RMU, tx_feeder) == 1
 
     # 4. VCB: 1 scanning page for each active compartment
-    # Default without explicit active compartments emits 7
-    assert resolve_panel_page_count(SwitchgearCategory.VCB, incomer) == 7
+    # Default without explicit active compartments emits 5
+    assert resolve_panel_page_count(SwitchgearCategory.VCB, incomer) == 5
     # Custom active compartments (e.g. Cable, Breaker, PT)
     assert resolve_panel_page_count(
         SwitchgearCategory.VCB,
@@ -702,7 +732,7 @@ def test_canonical_benchmark_telekom_tanah_putih() -> None:
 
 
 def test_vcb_substation_sk_raub_indah() -> None:
-    """VCB Station SK RAUB INDAH: VCB (4 panels, 7 compartments/panel), 0 TX, 1 FP, 1 Battery = 31 pages."""
+    """VCB Station SK RAUB INDAH: VCB (4 standard panels, 5 compartments/panel), 0 TX, 1 FP, 1 Battery = 23 pages."""
     swg = SwitchgearSpec(
         switchgear_type="VCB",
         manufacturer="HV12",
@@ -730,16 +760,51 @@ def test_vcb_substation_sk_raub_indah() -> None:
     assert pkg.switchgear.panel_count == 4
     for p in pkg.switchgear.panels:
         assert p.compartments == VCB_STANDARD_COMPARTMENTS
-        assert p.page_count == 7
+        assert p.page_count == 5
 
-    # 1 overview + 4 * 7 = 29 swg pages
-    assert pkg.switchgear.total_page_count == 29
+    # 1 overview + 4 * 5 = 21 swg pages
+    assert pkg.switchgear.total_page_count == 21
     assert pkg.transformer_count == 0
     assert pkg.lvdb_count == 1
     assert pkg.has_battery_bank is True
 
-    # Total: 29 (swg) + 0 (tx) + 1 (fp) + 1 (battery) = 31 pages
-    assert pkg.total_page_count == 31
+    # Total: 21 (swg) + 0 (tx) + 1 (fp) + 1 (battery) = 23 pages
+    assert pkg.total_page_count == 23
+
+
+def test_vcb_substation_with_transition_panel() -> None:
+    """VCB lineup containing both standard panels and a transition panel."""
+    swg = SwitchgearSpec(
+        switchgear_type="VCB",
+        manufacturer="TAMCO",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, panel_feeder_no="CKN03901", name="INCOMING 1"),
+            SwitchgearPanelSpec(panel_no=2, panel_feeder_no="CKN03902", name="TRANSITION PANEL"),
+            SwitchgearPanelSpec(panel_no=3, panel_feeder_no="CKN03903", name="TX 1"),
+        ),
+    )
+    eq = SubstationEquipmentPackage(
+        switchgears=(swg,),
+        transformers=(),
+        lvdb_specs=(),
+        battery_banks=(),
+    )
+    pkg = build_full_report_scan_package(eq, substation_number=157, station_name="PERPUSTAKAAN AWAM")
+
+    assert pkg.switchgear.category == SwitchgearCategory.VCB
+    assert pkg.switchgear.panel_count == 3
+    # Panel 1: standard
+    assert pkg.switchgear.panels[0].compartments == VCB_STANDARD_COMPARTMENTS
+    assert pkg.switchgear.panels[0].is_transition_panel is False
+    # Panel 2: transition
+    assert pkg.switchgear.panels[1].compartments == VCB_TRANSITION_COMPARTMENTS
+    assert pkg.switchgear.panels[1].is_transition_panel is True
+    # Panel 3: standard
+    assert pkg.switchgear.panels[2].compartments == VCB_STANDARD_COMPARTMENTS
+    assert pkg.switchgear.panels[2].is_transition_panel is False
+
+    # 1 overview + 3 panels * 5 = 16 swg pages
+    assert pkg.switchgear.total_page_count == 16
 
 
 

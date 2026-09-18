@@ -27,15 +27,22 @@ class SwitchgearCategory(str, Enum):
     VCB = "VCB"
 
 
-# Standard 7 compartments for VCB switchgear per D26
+# Standard 5 compartments for VCB switchgear per D26
 VCB_STANDARD_COMPARTMENTS: tuple[str, ...] = (
     "BREAKER COMPARTMENT",
     "CABLE COMPARTMENT",
     "BUSBAR COMPARTMENT",
     "PT COMPARTMENT",
     "SECONDARY COMPARTMENT",
-    "BACK COMPARTMENT",
+)
+
+# Transition 5 compartments for VCB switchgear transition panels
+VCB_TRANSITION_COMPARTMENTS: tuple[str, ...] = (
     "FRONT COMPARTMENT",
+    "REAR COMPARTMENT",
+    "BUSBAR COMPARTMENT",
+    "PT COMPARTMENT",
+    "SECONDARY COMPARTMENT",
 )
 
 # Standard 7 components for distribution transformers per D31 / ADR 0004
@@ -85,6 +92,21 @@ def is_tx_feeder(panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | 
     return bool(re.search(r"\bTX\d*\b", combined))
 
 
+def is_transition_panel(panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str = "") -> bool:
+    """Determine if a switchgear panel/bay is a transition panel."""
+    if panel_or_name is None:
+        return False
+    if isinstance(panel_or_name, str):
+        combined = panel_or_name.upper()
+    else:
+        name = getattr(panel_or_name, "name", "") or ""
+        feeder = getattr(panel_or_name, "panel_feeder_no", "") or ""
+        p_type = getattr(panel_or_name, "panel_type", "") or ""
+        combined = f"{name} {feeder} {p_type}".upper()
+
+    return "TRANSITION" in combined
+
+
 OVERVIEW_COMPARTMENTS_MAP: dict[SwitchgearCategory, tuple[str, ...]] = {
     SwitchgearCategory.TAMCO_LUCY: ("OVERVIEW", "OVERVIEW BOTTOM"),
     SwitchgearCategory.VCB: ("OVERVIEW",),
@@ -108,7 +130,7 @@ def resolve_switchgear_compartments(
     - TAMCO / LUCY: ("CABLE COMPARTMENT", "CABLE ENTRY")
     - INDKOM: ("FUSE COMPARTMENT",) for TX feeder bays, ("CABLE COMPARTMENT",) for other bays
       (or ("FUSE COMPARTMENT", "CABLE COMPARTMENT") when panel is omitted)
-    - VCB: 7 standard compartments
+    - VCB: 5 standard compartments (or 5 transition compartments for transition panels)
     - OTHER_RMU: ("CABLE COMPARTMENT",)
 
     Board-level overview scanning ('OVERVIEW', 'OVERVIEW BOTTOM' via swg-overview.docx) is cleanly
@@ -118,6 +140,8 @@ def resolve_switchgear_compartments(
         return ("CABLE COMPARTMENT", "CABLE ENTRY")
 
     if category == SwitchgearCategory.VCB:
+        if panel is not None and is_transition_panel(panel):
+            return VCB_TRANSITION_COMPARTMENTS
         return VCB_STANDARD_COMPARTMENTS
 
     if category == SwitchgearCategory.INDKOM:
@@ -316,6 +340,11 @@ class SwitchgearPanelScanSpec:
     def is_tx_feeder(self) -> bool:
         """Return True if this panel is a transformer (TX) feeder."""
         return is_tx_feeder(self)
+
+    @property
+    def is_transition_panel(self) -> bool:
+        """Return True if this panel is a transition panel."""
+        return is_transition_panel(self)
 
 
 @dataclass(frozen=True)
