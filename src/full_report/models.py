@@ -99,7 +99,22 @@ def is_tx_feeder(
         p_type = getattr(panel_or_name, "panel_type", "") or ""
         combined = f"{name} {feeder} {p_type}".upper()
 
-    if any(k in combined for k in ("TRANSFORMER", "ALATUBAH", "TEE-OFF", "TEE OFF", "FUSE")):
+    if any(
+        k in combined
+        for k in (
+            "TRANSFORMER",
+            "ALATUBAH",
+            "TEE-OFF",
+            "TEE OFF",
+            "FUSE",
+            "100KVA",
+            "300KVA",
+            "500KVA",
+            "750KVA",
+            "1000KVA",
+            "KVA",
+        )
+    ):
         return True
     return bool(re.search(r"\bTX\d*\b", combined))
 
@@ -123,7 +138,10 @@ def is_transition_panel(
         p_type = getattr(panel_or_name, "panel_type", "") or ""
         combined = f"{name} {feeder} {p_type}".upper()
 
-    return any(k in combined for k in ("TRANSITION", "PERALIHAN", "TRANSISYEN"))
+    return any(
+        k in combined
+        for k in ("TRANSITION", "PERALIHAN", "TRANSISYEN", "TOOLS", "TOOL")
+    )
 
 
 OVERVIEW_COMPARTMENTS_MAP: dict[SwitchgearCategory, tuple[str, ...]] = {

@@ -5,6 +5,19 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.4] - 2026-09-19
+
+### Fixed
+- **Switchgear Standard vs. Transition Compartment Matrix Modeling (`src/full_report/models.py`)**: Resolved defect where 7 compartments (including extraneous `FRONT COMPARTMENT` and `REAR COMPARTMENT` / `BACK COMPARTMENT`) were unconditionally generated across all standard VCB panels in Executive Summary Table 2 and the equipment scan stream (closes #47):
+  - **Standard VCB 5-Compartment Model**: Restricted `VCB_STANDARD_COMPARTMENTS` to the 5 canonical compartments (`BREAKER COMPARTMENT`, `CABLE COMPARTMENT`, `BUSBAR COMPARTMENT`, `PT COMPARTMENT`, `SECONDARY COMPARTMENT`).
+  - **Transition Panel Replacement Logic**: Defined `VCB_TRANSITION_COMPARTMENTS` with 5 compartments (`FRONT COMPARTMENT`, `REAR COMPARTMENT`, `BUSBAR COMPARTMENT`, `PT COMPARTMENT`, `SECONDARY COMPARTMENT`), replacing Breaker with Front and Cable with Rear for breaker-less/cable-less transition bays.
+  - **Robust Detection Predicates**: Added `is_transition_panel()` predicate supporting transition and tool room keywords (`TRANSITION`, `PERALIHAN`, `TRANSISYEN`, `TOOLS`, `TOOL`) and safe handling across string, dict, `None`, and panel spec objects with `@property is_transition_panel` on `SwitchgearPanelScanSpec` and `SwitchgearPanelSpec`.
+  - **Transformer Feeder Keyword Expansion**: Enhanced `is_tx_feeder()` to detect transformer kVA ratings (`100KVA`, `300KVA`, `500KVA`, `750KVA`, `1000KVA`, `KVA`) while preserving existing `TRANSFORMER`, `ALATUBAH`, `TEE-OFF`, `TEE OFF`, `FUSE`, and word-boundary `TX` regex patterns.
+- **VCB & Transition Compartment Defect Interleaving & Census Mapping (`src/full_report/interleaving.py`, `src/full_report/census.py`, `src/full_report/defect_parser.py`, `src/core/contract.py`)**:
+  - **Strict Compartment Equality**: Enforced strict 1:1 compartment equality in `_find_swg_panel_defects()`, preventing defects on subsequent compartments (e.g. Busbar or Cable) from inadvertently matching preceding compartments (e.g. Breaker or Front).
+  - **Bidirectional Compartment Normalization**: Normalized `BACK`, `BACK COMPARTMENT`, `REAR`, `REAR COMPARTMENT` to `REAR COMPARTMENT` in `normalize_swg_compartment()` and census defect matching, with `REAR` added to negative exclusion checks.
+  - **Defect Area Recognition**: Added `REAR_COMPARTMENT` to recognized area names in `defect_parser.py` for defect slice and photo mapping.
+
 ## [1.21.3] - 2026-09-18
 
 ### Fixed

@@ -245,6 +245,9 @@ def test_is_tx_feeder_detection() -> None:
     assert is_tx_feeder("ALATUBAH") is True
     assert is_tx_feeder("TEE-OFF") is True
     assert is_tx_feeder("TRANSFORMER 1") is True
+    assert is_tx_feeder("TX 300KVA") is True
+    assert is_tx_feeder("300KVA") is True
+    assert is_tx_feeder("1000KVA") is True
 
     # Negatives
     assert is_tx_feeder("INCOMING 1") is False
@@ -370,6 +373,8 @@ def test_switchgear_compartment_matrix_vcb() -> None:
     assert is_transition_panel("TRANSITION PANEL") is True
     assert is_transition_panel("PANEL PERALIHAN") is True
     assert is_transition_panel("TRANSISYEN") is True
+    assert is_transition_panel("TOOLS") is True
+    assert is_transition_panel("TOOL COMPARTMENT") is True
     assert is_transition_panel({"name": "TRANSITION BAY"}) is True
     assert is_transition_panel({"panel_type": "TRANSITION"}) is True
     assert is_transition_panel(None) is False
