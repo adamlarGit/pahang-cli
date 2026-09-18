@@ -125,6 +125,98 @@ def verify_cbm_defect_attribution(
     return matched
 
 
+def _extract_label_value(row: Any, c_idx: int, cell: Any, cell_text: str) -> str:
+    """Extract field value following a metadata label in the same cell or subsequent cells."""
+    if ":" in cell_text:
+        return cell_text.split(":", 1)[1].strip()
+    for next_cell in row.cells[c_idx + 1:]:
+        if next_cell._tc is cell._tc:
+            continue
+        val = next_cell.text.strip().lstrip(":").strip()
+        if val:
+            return val
+    return ""
+
+
+def _extract_front_page_substations(table: Any) -> tuple[bool, str, str]:
+    """Check if table is a front page metadata table and extract ERMS and SITE values.
+
+    Returns:
+        (is_front_page, substation_erms, substation_site)
+    """
+    is_front_page = False
+    for row in table.rows:
+        for cell in row.cells:
+            cell_text = cell.text.strip().upper()
+            if "SUBSTATION NAME (ERMS)" in cell_text or "SUBSTATION NAME (SITE)" in cell_text:
+                is_front_page = True
+                break
+        if is_front_page:
+            break
+
+    if not is_front_page:
+        return False, "", ""
+
+    substation_erms = ""
+    substation_site = ""
+    for row in table.rows:
+        for c_idx, cell in enumerate(row.cells):
+            cell_text = cell.text.strip()
+            label_up = cell_text.upper()
+            if "SUBSTATION NAME (ERMS)" in label_up:
+                val = _extract_label_value(row, c_idx, cell, cell_text)
+                if val and not substation_erms:
+                    substation_erms = val
+            elif "SUBSTATION NAME (SITE)" in label_up:
+                val = _extract_label_value(row, c_idx, cell, cell_text)
+                if val and not substation_site:
+                    substation_site = val
+
+    return True, substation_erms, substation_site
+
+
+def _evaluate_dual_attribution(
+    erms_name: str,
+    site_name: str,
+    target_substation: str | None,
+    context_prefix: str = "front page",
+) -> tuple[bool, str]:
+    """Evaluate ERMS and SITE substation names against target substation with dual-name tolerance."""
+    erms_val = erms_name.strip()
+    site_val = site_name.strip()
+    erms_present = bool(erms_val and erms_val != "-")
+    site_present = bool(site_val and site_val != "-")
+
+    if erms_present and site_present:
+        erms_match = is_substation_attribution_match(target_substation, erms_val)
+        site_match = is_substation_attribution_match(target_substation, site_val)
+        if erms_match or site_match:
+            return True, ""
+        return (
+            False,
+            f"Explicit foreign substation detected in {context_prefix}: ERMS='{erms_val}', SITE='{site_val}' "
+            f"(target: '{target_substation}')",
+        )
+    elif erms_present:
+        if is_substation_attribution_match(target_substation, erms_val):
+            return True, ""
+        return (
+            False,
+            f"Explicit foreign substation detected in {context_prefix} ERMS field: '{erms_val}' "
+            f"(target: '{target_substation}')",
+        )
+    elif site_present:
+        if is_substation_attribution_match(target_substation, site_val):
+            return True, ""
+        return (
+            False,
+            f"Explicit foreign substation detected in {context_prefix} SITE field: '{site_val}' "
+            f"(target: '{target_substation}')",
+        )
+
+    return True, ""
+
+
 def verify_front_page_attribution(
     front_page_path: Path | str,
     target_substation: str | None,
@@ -151,34 +243,19 @@ def verify_front_page_attribution(
     substation_site: str = ""
 
     for table in doc.tables:
-        for row in table.rows:
-            if len(row.cells) >= 2:
-                label = row.cells[0].text.strip().upper()
-                val = row.cells[-1].text.strip()
-                if "SUBSTATION NAME (ERMS)" in label:
-                    substation_erms = val
-                elif "SUBSTATION NAME (SITE)" in label:
-                    substation_site = val
-                elif "SUBSTATION NAME" in label and not substation_erms:
-                    substation_erms = val
+        is_fp, erms, site = _extract_front_page_substations(table)
+        if is_fp:
+            if erms and not substation_erms:
+                substation_erms = erms
+            if site and not substation_site:
+                substation_site = site
 
-    # Verify ERMS name if present
-    if substation_erms and not is_substation_attribution_match(target_substation, substation_erms):
-        return (
-            False,
-            f"Explicit foreign substation detected in front page ERMS field: '{substation_erms}' "
-            f"(target: '{target_substation}')",
-        )
-
-    # Verify SITE name if present
-    if substation_site and not is_substation_attribution_match(target_substation, substation_site):
-        return (
-            False,
-            f"Explicit foreign substation detected in front page SITE field: '{substation_site}' "
-            f"(target: '{target_substation}')",
-        )
-
-    return True, ""
+    return _evaluate_dual_attribution(
+        substation_erms,
+        substation_site,
+        target_substation,
+        context_prefix="front page",
+    )
 
 
 def verify_condition_pages_structure(path: Path | str) -> tuple[bool, str]:
@@ -234,7 +311,7 @@ def verify_vi_summary_structure(
     path: Path | str,
     expected_count: int,
 ) -> tuple[bool, str]:
-    """Assert Table 1 row count matches expected visual defect count."""
+    """Assert Table 1 non-empty defect row count matches expected visual defect count."""
     p = Path(path).resolve()
     if not p.exists():
         return False, f"vi_summary file not found: {p}"
@@ -248,16 +325,17 @@ def verify_vi_summary_structure(
         return False, f"vi_summary has {len(doc.tables)} tables (expected >= 1)"
 
     t = doc.tables[0]
-    row_count = len(t.rows)
+    data_rows = [r for r in t.rows[1:] if any(c.text.strip() for c in r.cells)]
 
-    # Table has 1 header row + N data rows (or N rows directly)
-    if row_count != expected_count and (row_count - 1) != expected_count:
-        return (
-            False,
-            f"vi_summary Table 1 row count {row_count} does not match expected defect count {expected_count}",
-        )
+    # Table has non-empty data rows matching expected defect count
+    if len(data_rows) == expected_count:
+        return True, ""
 
-    return True, ""
+    return (
+        False,
+        f"vi_summary Table 1 non-empty defect row count ({len(data_rows)} data rows) "
+        f"does not match expected defect count {expected_count}",
+    )
 
 
 def verify_vi_defect_pages_structure(path: Path | str) -> tuple[bool, str]:
@@ -282,41 +360,52 @@ def verify_vi_defect_pages_structure(path: Path | str) -> tuple[bool, str]:
     return True, ""
 
 
-# Component & photo grid titles that should not be misconstrued as substation values
-PHOTO_GRID_COMPONENT_TITLES = frozenset({
-    "SIGNBOARD",
-    "SWITCHGEAR",
-    "TRANSFORMER",
-    "FEEDER PILLAR",
-    "BATTERY CHARGER",
-    "BATTERY CHARGER 1",
-    "BATTERY CHARGER 2",
-    "BATTERY BANK",
-    "RTU",
-    "EFI",
-    "FIRE EXTINGUISHER",
-    "BUILDING",
-    "DOOR",
-    "TRENCH",
-    "COMPOUND",
-    "OVERVIEW",
-    "EARTHING",
-    "LIGHTNING ARRESTOR",
-    "FENCE",
-    "DRAINAGE",
-    "CIVIL",
-    "SAFETY",
-})
+# Keywords identifying CBM measurement test sheets that may contain embedded images
+CBM_MEASUREMENT_KEYWORDS = (
+    "SPOT TEMP",
+    "SPOT TEMPERATURE",
+    "AMBIENT TEMP",
+    "AMBIENT TEMPERATURE",
+    "DELTA T",
+    "DELTA-T",
+    "DELTA_T",
+    "ΔT",
+    "LOAD",
+    "HUMIDITY",
+    "ULTRASOUND",
+    "TRANSIENT EARTH",
+    "TEV",
+    "PRPD",
+    "DATE:",
+    "DATE :",
+)
+
+
+def _is_photo_grid_table(table: Any) -> bool:
+    """Check if table is a photo grid (contains image shapes and lacks CBM measurement fields)."""
+    try:
+        has_images = len(table._tbl.xpath(".//a:blip | .//w:drawing | .//w:pict")) > 0
+    except Exception:
+        has_images = False
+
+    if not has_images:
+        return False
+
+    table_text = " ".join(c.text for r in table.rows for c in r.cells).upper()
+    is_cbm_measurement = any(kw in table_text for kw in CBM_MEASUREMENT_KEYWORDS)
+    return not is_cbm_measurement
 
 
 def _is_defect_summary_table(table: Any) -> bool:
     """Check if table is a visual defect summary grid (e.g. NO | EQUIPMENT | DEFECT DESCRIPTION)."""
-    for row in table.rows[:3]:
+    for row in table.rows[:4]:
         cells_upper = [c.text.strip().upper() for c in row.cells]
-        if "DEFECT DESCRIPTION" in cells_upper or ("EQUIPMENT" in cells_upper and ("NO." in cells_upper or "ADDITIONAL REMARKS" in cells_upper or "REMARKS" in cells_upper)):
-            return True
         row_text = " ".join(cells_upper)
         if "DEFECT DESCRIPTION" in row_text:
+            return True
+        if "EQUIPMENT" in row_text and any(k in row_text for k in ("REMARKS", "NO.", "NO ")):
+            return True
+        if "EQUIPMENT" in cells_upper and any(k in cells_upper for k in ("REMARKS", "ADDITIONAL REMARKS", "NO.", "NO")):
             return True
     return False
 
@@ -332,8 +421,6 @@ def _is_substation_name_label(text: str) -> bool:
         "SUBSTATION NAME",
         "STATION",
         "STATION NAME",
-        "SUBSTATION NAME (ERMS)",
-        "SUBSTATION NAME (SITE)",
     }:
         return True
 
@@ -346,8 +433,6 @@ def _is_substation_name_label(text: str) -> bool:
     if tokens in [
         ["SUBSTATION", "NAME"],
         ["STATION", "NAME"],
-        ["SUBSTATION", "NAME", "ERMS"],
-        ["SUBSTATION", "NAME", "SITE"],
         ["NAME", "OF", "SUBSTATION"],
         ["NAME", "OF", "STATION"],
     ]:
@@ -361,8 +446,12 @@ def inspect_deliverable_attribution(
 ) -> tuple[bool, str]:
     """Execute fast headless OpenXML inspection on compiled deliverable.
 
-    Inspects all tables across the document searching for rows where header
-    cells represent substation name fields (ignoring feeders, panels, etc.).
+    Inspects all tables across the document using table-level structural classification:
+    1. Visual defect summary data grids are skipped.
+    2. Front page metadata tables are validated with dual-name tolerance (ERMS/SITE).
+    3. Photo grid tables (containing images and lacking CBM measurements) are skipped.
+    4. CBM test sheet headers and metadata tables (first 4 rows) are inspected and validated.
+
     Returns (True, "") if all substation attribution checks pass, or (False, error_reason)
     if any explicit foreign substation name is detected.
     """
@@ -377,10 +466,29 @@ def inspect_deliverable_attribution(
         return True, ""
 
     for table_idx, table in enumerate(doc.tables):
+        # 1. Data Grids (Visual Defect Summary)
         if _is_defect_summary_table(table):
             continue
 
-        for row_idx, row in enumerate(table.rows):
+        # 2. Front Page Metadata Tables (Dual-name tolerance)
+        is_front_page, erms_name, site_name = _extract_front_page_substations(table)
+        if is_front_page:
+            is_valid, reason = _evaluate_dual_attribution(
+                erms_name,
+                site_name,
+                target_substation,
+                context_prefix=f"deliverable table {table_idx + 1}",
+            )
+            if not is_valid:
+                return False, reason
+            continue
+
+        # 3. Photo Grids
+        if _is_photo_grid_table(table):
+            continue
+
+        # 4. CBM Test Sheet Header Tables & Metadata Tables (Inspect first 4 rows)
+        for row_idx, row in enumerate(table.rows[:4]):
             for c_idx, cell in enumerate(row.cells):
                 cell_text = cell.text.strip()
                 if not cell_text:
@@ -395,15 +503,11 @@ def inspect_deliverable_attribution(
 
                 # Check 2: cell itself is label, value in subsequent cells
                 if not candidate_val and _is_substation_name_label(cell_text):
-                    is_bare_substation = cell_text.upper().strip().rstrip(":") in {"SUBSTATION", "STATION"}
                     for next_cell in row.cells[c_idx + 1:]:
                         if next_cell._tc is cell._tc or next_cell.text.strip() == cell_text:
                             continue
                         val = next_cell.text.strip().lstrip(":").strip()
                         if val:
-                            if is_bare_substation and any(val.upper().startswith(title) for title in PHOTO_GRID_COMPONENT_TITLES):
-                                # Photo grid header e.g. "SUBSTATION | SIGNBOARD"
-                                break
                             candidate_val = val
                             break
 

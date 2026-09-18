@@ -5,6 +5,14 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.3] - 2026-09-18
+
+### Fixed
+- **Structural Table Attribution & Photo Grid Classification (`src/full_report/attribution.py`)**: Replaced fragile cell-level label matching with robust table-level structural classification in `inspect_deliverable_attribution()`, eliminating false-positive foreign substation quarantines (closes #46):
+  - **Photo Grid Image-Shape Detection**: Slices and skips visual defect photo grids (`_is_photo_grid_table()`) containing drawing shapes (`<w:drawing>`, `<a:blip>`, `<w:pict>`) without CBM measurement headers, preventing photo captions (`SUBSTATION | FP/LVDB`, `SUBSTATION | SIGNBOARD`) from being falsely parsed as key-value pairs.
+  - **Front Page Dual-Name Tolerance**: Tolerates physical site signboard aliases (e.g. `SITE: KPRC S/B` with `ERMS: TALAPIA`) when either non-empty field matches the target substation, rejecting only when non-empty fields explicitly conflict.
+  - **Visual Inspection Summary Guard Non-Empty Row Validation**: Validates populated defect rows (`data_rows = [r for r in t.rows[1:] if any(c.text.strip() for c in r.cells)]`), ignoring trailing empty template rows.
+
 ## [1.21.2] - 2026-09-18
 
 ### Fixed
