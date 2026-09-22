@@ -42,13 +42,14 @@ Integrate the switchgear topology engine directly into Full Report scan adapters
 
 **Blocked by:** #49, #50
 
-**Status:** ready-for-agent
+<!-- status: closed -->
+**Status:** closed
 
-- [ ] Update `build_switchgear_scan_spec` and `build_switchgear_panel_scan_spec` in `src/full_report/models.py` to consume `SwitchgearTopologyEngine`.
-- [ ] Implement strict 1-to-1 photo pairing with zero-fallback in `SwitchgearScanAdapter` (`src/full_report/scan_adapters.py`), mapping `"FRONT COMPARTMENT"` $\to$ `panel.breaker_photo` and `"REAR COMPARTMENT"` $\to$ `panel.cable_photo`, and explicitly eliminating the `ir_num = panel.photo_numbers[0]` fallback line.
-- [ ] Update `SwitchgearScanAdapter` overview photo mapping to handle Front (Row 27), Rear (Row 26), and Top (Row 28) views.
-- [ ] Migrate `resolve_switchgear_compartments()` callsite at line ~580 in `src/full_report/scan_adapters.py` to `SwitchgearTopologyEngine`.
-- [ ] Update `ExecutiveSummaryCensusBuilder` (`src/full_report/census.py`) to generate switchgear rows dynamically via `SwitchgearTopologyEngine` using `CbmDefectRecord` objects.
-- [ ] Ensure omitted compartments generate zero census rows in Table 2.
-- [ ] Add unit tests in `tests/test_full_report_scan_adapters.py` validating zero-fallback.
-- [ ] Add unit tests in `tests/test_full_report_census_builder.py` validating dynamic census row generation across all 6 archetypes.
+- [x] Update `build_switchgear_scan_spec` and `build_switchgear_panel_scan_spec` in `src/full_report/models.py` to consume `SwitchgearTopologyEngine`.
+- [x] Implement strict 1-to-1 photo pairing with zero-fallback in `SwitchgearScanAdapter` (`src/full_report/scan_adapters.py`), mapping `"FRONT COMPARTMENT"` $\to$ `panel.breaker_photo` and `"REAR COMPARTMENT"` $\to$ `panel.cable_photo`, and explicitly eliminating the `ir_num = panel.photo_numbers[0]` fallback line.
+- [x] Update `SwitchgearScanAdapter` overview photo mapping to handle Front (Row 27), Rear (Row 26), and Top (Row 28) views.
+- [x] Migrate `resolve_switchgear_compartments()` callsite at line ~580 in `src/full_report/scan_adapters.py` to `SwitchgearTopologyEngine`.
+- [x] Update `ExecutiveSummaryCensusBuilder` (`src/full_report/census.py`) to generate switchgear rows dynamically via `SwitchgearTopologyEngine` using `CbmDefectRecord` objects.
+- [x] Ensure omitted compartments generate zero census rows in Table 2.
+- [x] Add unit tests in `tests/test_full_report_scan_adapters.py` validating zero-fallback.
+- [x] Add unit tests in `tests/test_full_report_census_builder.py` validating dynamic census row generation across all 6 archetypes.

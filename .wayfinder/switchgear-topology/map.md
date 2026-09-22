@@ -33,7 +33,7 @@ This refactor replaces the legacy model with a **hybrid hierarchical topology en
 graph TD
     T49[#49: Core Domain Models & Topology Engine - Closed]
     T50[#50: Panel Spec Extension & Sub-Row Extraction - Closed]
-    T49 --> T51[#51: Scan Adapters & Census Integration - Planned]
+    T49 --> T51[#51: Scan Adapters & Census Integration - Closed]
     T50 --> T51
     T51 --> T52[#52: Benchmark Deliverables & Regression Alignment - Planned]
     T52 --> T53[#53: Legacy Category Purge & Docs Update - Planned]
@@ -75,18 +75,18 @@ graph TD
 ---
 
 ### #51: Scan Adapters & Executive Summary Census Integration
-- **Status**: Planned
+- **Status**: Closed
 - **GitHub Issue**: [#51](https://github.com/adamlarGit/pahang-cli/issues/51)
 - **Blocked by**: #49, #50
 - **Ticket File**: [.wayfinder/switchgear-topology/tickets/051-scan-adapters-and-executive-summary-census-integration.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/switchgear-topology/tickets/051-scan-adapters-and-executive-summary-census-integration.md)
-- [ ] Update `build_switchgear_scan_spec` and `build_switchgear_panel_scan_spec` in `src/full_report/models.py` to consume `SwitchgearTopologyEngine`.
-- [ ] Implement strict 1-to-1 photo pairing with zero-fallback in `SwitchgearScanAdapter` (`src/full_report/scan_adapters.py`), mapping `"FRONT COMPARTMENT"` $\to$ `panel.breaker_photo` and `"REAR COMPARTMENT"` $\to$ `panel.cable_photo`, and explicitly eliminating the `ir_num = panel.photo_numbers[0]` fallback line.
-- [ ] Update `SwitchgearScanAdapter` overview photo mapping to handle Front (Row 27), Rear (Row 26), and Top (Row 28) views.
-- [ ] Migrate `resolve_switchgear_compartments()` callsite at line ~580 in `src/full_report/scan_adapters.py` to `SwitchgearTopologyEngine`.
-- [ ] Update `ExecutiveSummaryCensusBuilder` (`src/full_report/census.py`) to generate switchgear rows dynamically via `SwitchgearTopologyEngine` using `CbmDefectRecord` objects.
-- [ ] Ensure omitted compartments generate zero census rows in Table 2.
-- [ ] Add unit tests in `tests/test_full_report_scan_adapters.py` validating zero-fallback.
-- [ ] Add unit tests in `tests/test_full_report_census_builder.py` validating dynamic census row generation across all 6 archetypes.
+- [x] Update `build_switchgear_scan_spec` and `build_switchgear_panel_scan_spec` in `src/full_report/models.py` to consume `SwitchgearTopologyEngine`.
+- [x] Implement strict 1-to-1 photo pairing with zero-fallback in `SwitchgearScanAdapter` (`src/full_report/scan_adapters.py`), mapping `"FRONT COMPARTMENT"` $\to$ `panel.breaker_photo` and `"REAR COMPARTMENT"` $\to$ `panel.cable_photo`, and explicitly eliminating the `ir_num = panel.photo_numbers[0]` fallback line.
+- [x] Update `SwitchgearScanAdapter` overview photo mapping to handle Front (Row 27), Rear (Row 26), and Top (Row 28) views.
+- [x] Migrate `resolve_switchgear_compartments()` callsite at line ~580 in `src/full_report/scan_adapters.py` to `SwitchgearTopologyEngine`.
+- [x] Update `ExecutiveSummaryCensusBuilder` (`src/full_report/census.py`) to generate switchgear rows dynamically via `SwitchgearTopologyEngine` using `CbmDefectRecord` objects.
+- [x] Ensure omitted compartments generate zero census rows in Table 2.
+- [x] Add unit tests in `tests/test_full_report_scan_adapters.py` validating zero-fallback.
+- [x] Add unit tests in `tests/test_full_report_census_builder.py` validating dynamic census row generation across all 6 archetypes.
 
 ---
 
