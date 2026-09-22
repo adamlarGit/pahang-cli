@@ -22,10 +22,36 @@ from src.core.normalizers import (
     normalize_us_characteristic,
     parse_background_temp,
 )
+from src.core.topology import (
+    BayRole,
+    BoardClassification,
+    SwitchgearArchetype,
+    SwitchgearTopologyEngine,
+    VoltageClass,
+    classify_bay_role,
+    classify_voltage_rating,
+    eval_pt_gate,
+    eval_secondary_gate,
+    extract_model_from_manufacturer,
+    resolve_overview_compartments,
+    resolve_panel_compartments,
+    resolve_switchgear_archetype,
+)
+
 
 __all__ = [
+    "BayRole",
+    "BoardClassification",
     "ContractScope",
+    "SwitchgearArchetype",
+    "SwitchgearTopologyEngine",
+    "VoltageClass",
+    "classify_bay_role",
+    "classify_voltage_rating",
+    "eval_pt_gate",
+    "eval_secondary_gate",
     "extract_background_temperature",
+    "extract_model_from_manufacturer",
     "format_busbar_position",
     "format_cbm_reading",
     "format_date_cbm",
@@ -44,4 +70,9 @@ __all__ = [
     "normalize_for_report",
     "normalize_us_characteristic",
     "parse_background_temp",
+    "resolve_overview_compartments",
+    "resolve_panel_compartments",
+    "resolve_switchgear_archetype",
 ]
+
+
