@@ -32,7 +32,7 @@ This refactor replaces the legacy model with a **hybrid hierarchical topology en
 ```mermaid
 graph TD
     T49[#49: Core Domain Models & Topology Engine - Closed]
-    T50[#50: Panel Spec Extension & Sub-Row Extraction - Ready]
+    T50[#50: Panel Spec Extension & Sub-Row Extraction - Closed]
     T49 --> T51[#51: Scan Adapters & Census Integration - Planned]
     T50 --> T51
     T51 --> T52[#52: Benchmark Deliverables & Regression Alignment - Planned]
@@ -60,17 +60,17 @@ graph TD
 ---
 
 ### #50: SwitchgearPanelSpec Model Extension & Sub-Row Extraction
-- **Status**: Ready
+- **Status**: Closed
 - **GitHub Issue**: [#50](https://github.com/adamlarGit/pahang-cli/issues/50)
 - **Blocked by**: None (parallel execution with #49)
 - **Ticket File**: [.wayfinder/switchgear-topology/tickets/050-switchgear-panel-spec-model-extension-and-subrow-extraction.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/switchgear-topology/tickets/050-switchgear-panel-spec-model-extension-and-subrow-extraction.md)
-- [ ] Add `cable_photo`, `breaker_photo`, `secondary_photo`, `busbar_photo`, `pt_photo`, and `has_pt_measurement` to `SwitchgearPanelSpec` in `src/testsheet/models.py` and `SwitchgearPanelScanSpec` in `src/full_report/models.py`.
-- [ ] Propagate all 6 sub-row attributes in `build_switchgear_panel_scan_spec()`.
-- [ ] Update `_extract_overview_photos` in `src/testsheet/extractor.py` to extract rows 26, 27, and 28.
-- [ ] Implement Col P secondary photo regex parsing (with bare digit support) in `src/testsheet/extractor.py`.
-- [ ] Update `_extract_panels` in `src/testsheet/extractor.py` to extract all 4 sub-rows (`r..r+3`) and Col P.
-- [ ] Update panel slot exclusion logic to check all sub-row photo attributes.
-- [ ] Add unit tests in `tests/test_testsheet_extractor.py` verifying sub-row and overview photo extraction against benchmark workbooks (`157` including `secondary_photo == 520`, `082`, `156`).
+- [x] Add `cable_photo`, `breaker_photo`, `secondary_photo`, `busbar_photo`, `pt_photo`, and `has_pt_measurement` to `SwitchgearPanelSpec` in `src/testsheet/models.py` and `SwitchgearPanelScanSpec` in `src/full_report/models.py`.
+- [x] Propagate all 6 sub-row attributes in `build_switchgear_panel_scan_spec()`.
+- [x] Update `_extract_overview_photos` in `src/testsheet/extractor.py` to extract rows 26, 27, and 28.
+- [x] Implement Col P secondary photo regex parsing (with bare digit support) in `src/testsheet/extractor.py`.
+- [x] Update `_extract_panels` in `src/testsheet/extractor.py` to extract all 4 sub-rows (`r..r+3`) and Col P.
+- [x] Update panel slot exclusion logic to check all sub-row photo attributes.
+- [x] Add unit tests in `tests/test_testsheet_extractor.py` verifying sub-row and overview photo extraction against benchmark workbooks (`157` including `secondary_photo == 520`, `082`, `156`).
 
 ---
 
