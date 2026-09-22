@@ -7,6 +7,7 @@ from enum import Enum
 import re
 from typing import Sequence
 
+from src.core.topology import SwitchgearArchetype, SwitchgearTopologyEngine, VoltageClass
 from src.testsheet.models import (
     BatteryBankSpec,
     LVDBFeederSpec,
@@ -205,14 +206,44 @@ def resolve_panel_page_count(
 
 def build_switchgear_panel_scan_spec(
     panel: SwitchgearPanelSpec,
-    category: SwitchgearCategory,
+    category: SwitchgearCategory | SwitchgearArchetype | None = None,
     active_compartments: Sequence[str] | None = None,
+    archetype: SwitchgearArchetype | None = None,
+    voltage_class: VoltageClass = VoltageClass.KV_11,
 ) -> SwitchgearPanelScanSpec:
-    """Construct strongly-typed SwitchgearPanelScanSpec applying D26 compartments and D29 page counts."""
+    """Construct strongly-typed SwitchgearPanelScanSpec applying topology engine compartments."""
+    resolved_category = category if isinstance(category, SwitchgearCategory) else None
+    resolved_archetype = archetype
+    if resolved_archetype is None and isinstance(category, SwitchgearArchetype):
+        resolved_archetype = category
+
     if active_compartments is not None and len(active_compartments) > 0:
         compartments = tuple(active_compartments)
+    elif getattr(panel, "compartments", None):
+        compartments = tuple(panel.compartments)
+    elif resolved_archetype is not None:
+        compartments = SwitchgearTopologyEngine.resolve_panel_compartments(
+            archetype=resolved_archetype,
+            panel=panel,
+        )
+    elif resolved_category is not None:
+        compartments = resolve_switchgear_compartments(resolved_category, panel)
     else:
-        compartments = resolve_switchgear_compartments(category, panel)
+        resolved_archetype = SwitchgearArchetype.RMU_STANDARD
+        compartments = SwitchgearTopologyEngine.resolve_panel_compartments(
+            archetype=resolved_archetype,
+            panel=panel,
+        )
+
+    if resolved_archetype is None:
+        if resolved_category == SwitchgearCategory.VCB:
+            resolved_archetype = SwitchgearArchetype.VCB_CUBICLE
+        elif resolved_category == SwitchgearCategory.TAMCO_LUCY:
+            resolved_archetype = SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY
+        elif resolved_category == SwitchgearCategory.INDKOM:
+            resolved_archetype = SwitchgearArchetype.RMU_STANDARD
+        else:
+            resolved_archetype = SwitchgearArchetype.RMU_STANDARD
 
     return SwitchgearPanelScanSpec(
         panel_no=panel.panel_no,
@@ -236,20 +267,55 @@ def build_switchgear_panel_scan_spec(
         busbar_photo=panel.busbar_photo,
         pt_photo=panel.pt_photo,
         has_pt_measurement=panel.has_pt_measurement,
+        archetype=resolved_archetype,
+        voltage_class=voltage_class,
         compartments=compartments,
     )
 
 
 def build_switchgear_scan_spec(
     swg: SwitchgearSpec,
+    archetype: SwitchgearArchetype | None = None,
+    voltage_class: VoltageClass | None = None,
 ) -> SwitchgearScanSpec:
     """Construct strongly-typed SwitchgearScanSpec from SwitchgearSpec."""
-    category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
-    overview = resolve_overview_compartments(category)
-    panels = tuple(
-        build_switchgear_panel_scan_spec(p, category)
-        for p in swg.panels
+    board = SwitchgearTopologyEngine.classify_board(
+        switchgear_type=swg.switchgear_type,
+        manufacturer=swg.manufacturer,
+        model=swg.model,
+        rating=swg.rating,
+        swg=swg,
     )
+    category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
+    res_archetype = archetype or getattr(swg, "archetype", None) or board.archetype
+    res_voltage = voltage_class or getattr(swg, "voltage_class", None) or board.voltage_class
+
+    if archetype is not None or getattr(swg, "archetype", None) is not None:
+        overview = SwitchgearTopologyEngine.resolve_overview_compartments(res_archetype)
+        panels = tuple(
+            build_switchgear_panel_scan_spec(
+                p,
+                archetype=res_archetype,
+                voltage_class=res_voltage,
+            )
+            for p in swg.panels
+        )
+    else:
+        if getattr(swg, "overview_compartments", None):
+            overview = tuple(swg.overview_compartments)
+        elif category in (SwitchgearCategory.INDKOM, SwitchgearCategory.VCB):
+            overview = resolve_overview_compartments(category)
+        else:
+            overview = board.overview_compartments
+
+        panels = tuple(
+            build_switchgear_panel_scan_spec(
+                p,
+                category=category,
+                voltage_class=res_voltage,
+            )
+            for p in swg.panels
+        )
 
     return SwitchgearScanSpec(
         switchgear_type=swg.switchgear_type,
@@ -259,6 +325,8 @@ def build_switchgear_scan_spec(
         rating=swg.rating,
         serial_no=swg.serial_no,
         category=category,
+        archetype=res_archetype,
+        voltage_class=res_voltage,
         overview_compartments=overview,
         panels=panels,
         photo_numbers=swg.photo_numbers,
@@ -303,6 +371,7 @@ def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
         label=lvdb.label,
         source=lvdb.source,
         manufacturer=lvdb.manufacturer,
+        model=lvdb.model,
         serial_no=lvdb.serial_no,
         rating=lvdb.rating,
         cable_type=lvdb.cable_type,
@@ -378,6 +447,8 @@ class SwitchgearPanelScanSpec:
     busbar_photo: int | None = None
     pt_photo: int | None = None
     has_pt_measurement: bool = False
+    archetype: SwitchgearArchetype = SwitchgearArchetype.RMU_STANDARD
+    voltage_class: VoltageClass = VoltageClass.KV_11
     compartments: tuple[str, ...] = ()
 
     @property
@@ -407,6 +478,8 @@ class SwitchgearScanSpec:
     rating: str = ""
     serial_no: str = ""
     category: SwitchgearCategory = SwitchgearCategory.OTHER_RMU
+    archetype: SwitchgearArchetype = SwitchgearArchetype.RMU_STANDARD
+    voltage_class: VoltageClass = VoltageClass.KV_11
     overview_compartments: tuple[str, ...] = ()
     panels: tuple[SwitchgearPanelScanSpec, ...] = ()
     photo_numbers: tuple[int, ...] = ()

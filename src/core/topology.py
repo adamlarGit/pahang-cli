@@ -423,5 +423,13 @@ class SwitchgearTopologyEngine:
             has_pt_measurement=has_pt_measurement,
         )
 
+    @staticmethod
+    def resolve_overview_compartments(
+        archetype: SwitchgearArchetype,
+        voltage_class: VoltageClass = VoltageClass.KV_11,
+    ) -> tuple[str, ...]:
+        """Resolve overview scanning page compartments for switchgear archetype."""
+        return resolve_overview_compartments(archetype, voltage_class)
+
 
 

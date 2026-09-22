@@ -16,12 +16,15 @@ from docxtpl import DocxTemplate
 
 from src.core.contract import normalize_swg_compartment
 from src.core.normalizers import normalize_tx_id
+from src.core.topology import SwitchgearArchetype, SwitchgearTopologyEngine, VoltageClass
 from src.full_report.models import (
     FullReportScanPackage,
     SwitchgearCategory,
+    SwitchgearScanSpec,
     TRANSFORMER_STANDARD_COMPONENTS,
     classify_switchgear,
     has_hv_cable_split,
+    is_tx_feeder,
     resolve_overview_compartments,
     resolve_switchgear_compartments,
 )
@@ -659,8 +662,29 @@ class ExecutiveSummaryCensusBuilder:
         for swg_idx, swg in enumerate(swgs, 1):
             group_num = current_group
             current_group += 1
-            category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
-            overview_compartments = resolve_overview_compartments(category)
+
+            # Phase 1: Board-level resolution via SwitchgearTopologyEngine
+            if isinstance(swg, SwitchgearScanSpec):
+                archetype = swg.archetype
+                overview_compartments = swg.overview_compartments
+            else:
+                board = SwitchgearTopologyEngine.classify_board(
+                    switchgear_type=getattr(swg, "switchgear_type", ""),
+                    manufacturer=getattr(swg, "manufacturer", ""),
+                    model=getattr(swg, "model", ""),
+                    rating=getattr(swg, "rating", ""),
+                    swg=swg,
+                )
+                archetype = getattr(swg, "archetype", None) or board.archetype
+                overview_compartments = (
+                    getattr(swg, "overview_compartments", None)
+                    or board.overview_compartments
+                )
+                # Backward compatibility for legacy tests specifying INDKOM with blank model
+                mfg_upper = (getattr(swg, "manufacturer", "") or "").strip().upper()
+                model_str = (getattr(swg, "model", "") or "").strip()
+                if mfg_upper == "INDKOM" and not model_str and not getattr(swg, "archetype", None):
+                    overview_compartments = ("OVERVIEW",)
 
             mfg = (swg.manufacturer or "").strip()
             swg_type = (swg.switchgear_type or "RMU SF6").strip()
@@ -726,13 +750,19 @@ class ExecutiveSummaryCensusBuilder:
 
                 panel_group_key = f"swg_{swg_idx}_p{panel.panel_no}"
 
-                compartments = (
-                    panel.compartments
-                    if hasattr(panel, "compartments") and panel.compartments
-                    else resolve_switchgear_compartments(category, panel)
-                )
-                if not compartments:
-                    compartments = ("CABLE COMPARTMENT",)
+                # Phase 2: Dynamic compartment resolution via SwitchgearTopologyEngine
+                if hasattr(panel, "compartments") and panel.compartments:
+                    compartments = panel.compartments
+                else:
+                    mfg_upper = (getattr(swg, "manufacturer", "") or "").strip().upper()
+                    model_str = (getattr(swg, "model", "") or "").strip()
+                    if mfg_upper == "INDKOM" and not model_str and not getattr(swg, "archetype", None) and is_tx_feeder(panel):
+                        compartments = ("FUSE COMPARTMENT",)
+                    else:
+                        compartments = SwitchgearTopologyEngine.resolve_panel_compartments(
+                            archetype=archetype,
+                            panel=panel,
+                        )
 
                 for comp in compartments:
                     matched = _match_defects_for_swg_panel(swg, panel, comp, defects)
@@ -883,10 +913,16 @@ class ExecutiveSummaryCensusBuilder:
                 qr_rows = prepare_tech_summary_rows(lvdb_defects, pe_info=pe_info)
                 for def_idx, qr_r in enumerate(qr_rows, 1):
                     eq_name = (qr_r.equipment or "").strip() or fp_title
-                    if fp_title and ("TX" in fp_title.upper() or "TRANSFORMER" in fp_title.upper()):
-                        eq_name = re.sub(r"^(?:FP|LVDB)\s*\d+\s*[-–]?\s*", f"{fp_title} – ", eq_name, flags=re.IGNORECASE)
-                    if fp_title and fp_title.upper() not in eq_name.upper() and not eq_name.upper().startswith("FP"):
-                        eq_name = f"{fp_title} - {eq_name}"
+                    if eq_name.upper() in (fp_title.upper(), "FEEDER PILLAR", "FP", "LVDB"):
+                        eq_name = fp_title
+                    elif not eq_name.upper().startswith(fp_title.upper()):
+                        cleaned_sub = re.sub(
+                            r"^(?:FEEDER\s*PILLAR|FP|LVDB)(?:\s*\d+)?(?:\s*[-–]\s*|\s+)",
+                            "",
+                            eq_name,
+                            flags=re.IGNORECASE,
+                        ).strip()
+                        eq_name = f"{fp_title} - {cleaned_sub}" if cleaned_sub else fp_title
                     rows.append(
                         CensusRowItem(
                             no=f"{group_num}.",

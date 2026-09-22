@@ -24,11 +24,13 @@ from src.core.contract import (
     is_swg_compartment_tev_eligible,
     is_swg_compartment_us_eligible,
 )
+from src.core.topology import SwitchgearArchetype, SwitchgearTopologyEngine, VoltageClass
 from src.core.normalizers import (
     format_busbar_position,
     format_date_cbm,
     format_db_int,
     format_heater_amp,
+    format_load_amp,
     format_testsheet_time,
     normalize_tx_id,
     normalize_us_characteristic,
@@ -43,8 +45,6 @@ from src.full_report.models import (
     TransformerScanSpec,
     classify_switchgear,
     has_hv_cable_split,
-    resolve_overview_compartments,
-    resolve_switchgear_compartments,
 )
 from src.full_report.photo_resolver import RawPhotoResolver
 from src.full_report.scan_render import (
@@ -381,6 +381,42 @@ def _check_has_active_defect(
     return False
 
 
+def _resolve_swg_overview_photo_num(
+    archetype: SwitchgearArchetype,
+    ov_area: str,
+    photo_numbers: tuple[int, ...],
+) -> int | None:
+    """Map switchgear overview compartment view to photo number per ADR 0005.
+
+    - VCB / GIS:
+      - OVERVIEW FRONT: Row 27 photo (photo_numbers[0])
+      - OVERVIEW REAR: Row 26 photo (photo_numbers[1])
+      - OVERVIEW TOP: Row 28 photo (photo_numbers[2])
+    - RMU:
+      - OVERVIEW: Row 26 photo (photo_numbers[0])
+      - OVERVIEW TOP / OVERVIEW BOTTOM: Row 28 photo (photo_numbers[1])
+    """
+    if not photo_numbers:
+        return None
+
+    if archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
+        if ov_area == "OVERVIEW FRONT" and len(photo_numbers) > 0:
+            return photo_numbers[0]
+        elif ov_area == "OVERVIEW REAR" and len(photo_numbers) > 1:
+            return photo_numbers[1]
+        elif ov_area == "OVERVIEW TOP" and len(photo_numbers) > 2:
+            return photo_numbers[2]
+        elif ov_area == "OVERVIEW" and len(photo_numbers) > 0:
+            return photo_numbers[0]
+        return None
+    else:
+        if ov_area == "OVERVIEW" and len(photo_numbers) > 0:
+            return photo_numbers[0]
+        elif ov_area in ("OVERVIEW TOP", "OVERVIEW BOTTOM") and len(photo_numbers) > 1:
+            return photo_numbers[1]
+        return None
+
+
 # ==============================================================================
 # 1. Switchgear Scan Adapter (D26, D29, D08, D47)
 # ==============================================================================
@@ -431,11 +467,51 @@ class SwitchgearScanAdapter:
             else:
                 self.tev_background = "-"
 
-        # Classify switchgear category
+        # Classify switchgear category and archetype via SwitchgearTopologyEngine
         if isinstance(swg, SwitchgearScanSpec):
             self.category = swg.category
+            if swg.archetype != SwitchgearArchetype.RMU_STANDARD:
+                self.archetype = swg.archetype
+            else:
+                board = SwitchgearTopologyEngine.classify_board(
+                    switchgear_type=swg.switchgear_type,
+                    manufacturer=swg.manufacturer,
+                    model=swg.model,
+                    rating=swg.rating,
+                    swg=swg,
+                )
+                if board.archetype != SwitchgearArchetype.RMU_STANDARD:
+                    self.archetype = board.archetype
+                elif swg.category == SwitchgearCategory.VCB:
+                    self.archetype = SwitchgearArchetype.VCB_CUBICLE
+                elif swg.category == SwitchgearCategory.TAMCO_LUCY:
+                    self.archetype = SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY
+                elif swg.category == SwitchgearCategory.INDKOM:
+                    self.archetype = (
+                        SwitchgearArchetype.RMU_STANDARD
+                        if str(getattr(swg, "model", "")).upper() == "JMW12"
+                        else SwitchgearArchetype.RMU_FUSE_CANISTER
+                    )
+                else:
+                    self.archetype = swg.archetype
+            self.voltage_class = swg.voltage_class
         else:
-            self.category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
+            board = SwitchgearTopologyEngine.classify_board(
+                switchgear_type=getattr(swg, "switchgear_type", ""),
+                manufacturer=getattr(swg, "manufacturer", ""),
+                model=getattr(swg, "model", ""),
+                rating=getattr(swg, "rating", ""),
+                swg=swg,
+            )
+            self.archetype = getattr(swg, "archetype", None) or board.archetype
+            self.voltage_class = getattr(swg, "voltage_class", None) or board.voltage_class
+            self.category = classify_switchgear(
+                getattr(swg, "switchgear_type", ""),
+                getattr(swg, "manufacturer", ""),
+            )
+            if self.category == SwitchgearCategory.INDKOM and str(getattr(swg, "model", "")).upper() != "JMW12":
+                if self.archetype == SwitchgearArchetype.RMU_STANDARD:
+                    self.archetype = SwitchgearArchetype.RMU_FUSE_CANISTER
 
         self.has_active_defect = _check_has_active_defect(
             category="swg",
@@ -455,7 +531,7 @@ class SwitchgearScanAdapter:
         overview_comps = (
             self.swg.overview_compartments
             if isinstance(self.swg, SwitchgearScanSpec) and self.swg.overview_compartments
-            else resolve_overview_compartments(self.category)
+            else SwitchgearTopologyEngine.resolve_overview_compartments(self.archetype)
         )
 
         # Check for D47 overview substitution
@@ -511,9 +587,13 @@ class SwitchgearScanAdapter:
                 seq = "p00" if ov_idx == 0 else f"p00_{ov_idx}"
                 ov_name = f"SWG Overview - {ov_area}"
 
-                ir_num = self.swg.photo_numbers[ov_idx] if len(self.swg.photo_numbers) > ov_idx else None
-                ir_img = self.photo_resolver.resolve_ir_photo(ir_num) if self.photo_resolver else ""
-                vis_img = self.photo_resolver.resolve_visual_photo(ir_num) if self.photo_resolver else ""
+                ir_num = _resolve_swg_overview_photo_num(self.archetype, ov_area, self.swg.photo_numbers)
+                if ir_num is not None and self.photo_resolver:
+                    ir_img = self.photo_resolver.resolve_ir_photo(ir_num)
+                    vis_img = self.photo_resolver.resolve_visual_photo(ir_num)
+                else:
+                    ir_img = ""
+                    vis_img = ""
 
                 banner_analysis = BANNER_DEFECT_FORWARDING if self.has_active_defect else BANNER_HEALTHY_ANALYSIS
                 banner_rec = BANNER_DEFECT_FORWARDING if self.has_active_defect else BANNER_HEALTHY_RECOMMENDATION
@@ -567,7 +647,10 @@ class SwitchgearScanAdapter:
         # ----------------------------------------------------------------------
         # 2. Panel Scanning Pages (D26 / D29)
         # ----------------------------------------------------------------------
-        is_vcb = self.category == SwitchgearCategory.VCB
+        is_vcb = (
+            self.archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE)
+            or self.category == SwitchgearCategory.VCB
+        )
 
         for panel in self.swg.panels:
             p_no = panel.panel_no
@@ -577,20 +660,43 @@ class SwitchgearScanAdapter:
             compartments = (
                 panel.compartments
                 if isinstance(panel, SwitchgearPanelScanSpec) and panel.compartments
-                else resolve_switchgear_compartments(self.category, panel)
+                else SwitchgearTopologyEngine.resolve_panel_compartments(archetype=self.archetype, panel=panel)
             )
 
             for comp_idx, comp_name in enumerate(compartments):
-                # IR & Visual photo mapping
+                # IR & Visual photo mapping: Strict 1-to-1 photo pairing & zero fallback
                 ir_num = None
-                if panel.photo_numbers:
-                    if len(panel.photo_numbers) > comp_idx:
-                        ir_num = panel.photo_numbers[comp_idx]
+                if is_vcb:
+                    if comp_name in ("BREAKER COMPARTMENT", "FRONT COMPARTMENT"):
+                        ir_num = panel.breaker_photo
+                    elif comp_name in ("CABLE COMPARTMENT", "REAR COMPARTMENT"):
+                        ir_num = panel.cable_photo
+                    elif comp_name == "BUSBAR COMPARTMENT":
+                        ir_num = panel.busbar_photo
+                    elif comp_name == "PT COMPARTMENT":
+                        ir_num = panel.pt_photo
+                    elif comp_name == "SECONDARY COMPARTMENT":
+                        ir_num = panel.secondary_photo
                     else:
-                        ir_num = panel.photo_numbers[0]
+                        ir_num = None
+                else:
+                    # RMU Archetypes:
+                    if comp_name == "CABLE COMPARTMENT":
+                        ir_num = panel.cable_photo if panel.cable_photo is not None else (panel.photo_numbers[0] if panel.photo_numbers else None)
+                    elif comp_name == "FUSE COMPARTMENT":
+                        ir_num = panel.cable_photo if panel.cable_photo is not None else (panel.photo_numbers[0] if panel.photo_numbers else None)
+                    elif comp_name == "CABLE ENTRY":
+                        ir_num = panel.photo_numbers[1] if (panel.photo_numbers and len(panel.photo_numbers) > 1) else None
+                    else:
+                        ir_num = None
 
-                ir_img = self.photo_resolver.resolve_ir_photo(ir_num) if self.photo_resolver else ""
-                vis_img = self.photo_resolver.resolve_visual_photo(ir_num) if self.photo_resolver else ""
+                # Strict Zero-Fallback: if ir_num is None, no photo is resolved
+                if ir_num is not None and self.photo_resolver:
+                    ir_img = self.photo_resolver.resolve_ir_photo(ir_num)
+                    vis_img = self.photo_resolver.resolve_visual_photo(ir_num)
+                else:
+                    ir_img = ""
+                    vis_img = ""
 
                 # Evaluate TEV and US activity via Two-Tier model:
                 comp_tev_active = self.contract.is_swg_tev_active(comp_name)
@@ -659,11 +765,12 @@ class SwitchgearScanAdapter:
                         "feeder_no": _clean_str(panel.panel_feeder_no or ""),
                         "area": comp_name,
                         "serialnumber": _clean_str(panel.serial_no),
+                        "serial_no": _clean_str(panel.serial_no),
                         "heateramp": h_amp,
                         "breakerstatus": _clean_str(panel.status, "CLOSE"),
                         "busbarposition": bus_pos,
                         "cabletype": _clean_str(panel.cable_type),
-                        "loadamp": _clean_str(panel.load_amp),
+                        "loadamp": format_load_amp(panel.load_amp) if panel.load_amp else "-",
                         "analysis": BANNER_HEALTHY_ANALYSIS,
                         "recommendation": BANNER_HEALTHY_RECOMMENDATION,
                         "ir": {
@@ -1095,14 +1202,14 @@ class LVDBScanAdapter:
         ir_img = self.photo_resolver.resolve_ir_photo(ir_num) if self.photo_resolver else ""
         vis_img = self.photo_resolver.resolve_visual_photo(ir_num) if self.photo_resolver else ""
 
-        label_source = self.lvdb.label or self.lvdb.source or self.lvdb.name or "FP"
+        label_source = self.lvdb.name
 
         fp_ctx = {
             "substation": sub_ctx,
             "fp": {
                 "labelsource": label_source,
                 "manufacturer": _clean_str(self.lvdb.manufacturer),
-                "model": _clean_str(getattr(self.lvdb, "model", "-")),
+                "model": _clean_str(self.lvdb.model),
                 "rating": _clean_str(self.lvdb.rating),
                 "area": "OVERVIEW",
                 "serialnumber": _clean_str(self.lvdb.serial_no),

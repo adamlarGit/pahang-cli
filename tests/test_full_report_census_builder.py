@@ -935,4 +935,142 @@ def test_census_builder_vcb_transition_panel_defect_matching():
     assert len(m_busbar) == 0
 
 
+def test_census_builder_dynamic_rows_across_all_6_archetypes() -> None:
+    """Validate dynamic census row generation across all 6 physical archetypes."""
+    builder = ExecutiveSummaryCensusBuilder()
+
+    # 1. VCB_CUBICLE
+    swg_vcb = SwitchgearSpec(
+        switchgear_type="VCB 11kV",
+        manufacturer="TAMCO",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="FEEDER 1"),  # standard, no PT -> 4 comp
+            SwitchgearPanelSpec(panel_no=2, name="FEEDER 2", pt_photo=150),  # standard with PT -> 5 comp
+            SwitchgearPanelSpec(panel_no=3, name="TRANSITION 1"),  # transition, no sec -> 3 comp
+            SwitchgearPanelSpec(panel_no=4, name="TRANSITION 2", secondary_photo=520),  # transition with sec -> 4 comp
+            SwitchgearPanelSpec(panel_no=5, name="BUS SECTION"),  # bus section -> 4 comp
+        ),
+    )
+    rows_vcb = builder.build_census_rows(SubstationEquipmentPackage(switchgears=(swg_vcb,)))
+    # Overviews: 3 ("OVERVIEW FRONT", "OVERVIEW REAR", "OVERVIEW TOP")
+    # Panel 1: 4 ("BREAKER COMPARTMENT", "CABLE COMPARTMENT", "BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT")
+    # Panel 2: 5 ("BREAKER COMPARTMENT", "CABLE COMPARTMENT", "BUSBAR COMPARTMENT", "PT COMPARTMENT", "SECONDARY COMPARTMENT")
+    # Panel 3: 3 ("FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT")
+    # Panel 4: 4 ("FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT")
+    # Panel 5: 4 ("BREAKER COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT")
+    # Total = 3 + 4 + 5 + 3 + 4 + 4 = 23 rows
+    assert len(rows_vcb) == 23
+    assert [r.defect_area for r in rows_vcb[:3]] == ["OVERVIEW FRONT", "OVERVIEW REAR", "OVERVIEW TOP"]
+
+    # Check panel 1 (no PT) vs panel 2 (with PT)
+    p1_areas = [r.defect_area for r in rows_vcb[3:7]]
+    assert p1_areas == ["BREAKER COMPARTMENT", "CABLE COMPARTMENT", "BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT"]
+    assert "PT COMPARTMENT" not in p1_areas
+
+    p2_areas = [r.defect_area for r in rows_vcb[7:12]]
+    assert p2_areas == ["BREAKER COMPARTMENT", "CABLE COMPARTMENT", "BUSBAR COMPARTMENT", "PT COMPARTMENT", "SECONDARY COMPARTMENT"]
+
+    # Check panel 3 (transition no sec) vs panel 4 (transition with sec)
+    p3_areas = [r.defect_area for r in rows_vcb[12:15]]
+    assert p3_areas == ["FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT"]
+    assert "SECONDARY COMPARTMENT" not in p3_areas
+    assert "PT COMPARTMENT" not in p3_areas
+
+    p4_areas = [r.defect_area for r in rows_vcb[15:19]]
+    assert p4_areas == ["FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT"]
+
+    # 2. GIS_CUBICLE
+    swg_gis = SwitchgearSpec(
+        switchgear_type="GIS 11kV",
+        manufacturer="ABB",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="BAY 1", has_pt_measurement=True),  # 5 comp
+        ),
+    )
+    rows_gis = builder.build_census_rows(SubstationEquipmentPackage(switchgears=(swg_gis,)))
+    # Overviews: 3 + Panel 1: 5 = 8 rows
+    assert len(rows_gis) == 8
+    assert [r.defect_area for r in rows_gis[:3]] == ["OVERVIEW FRONT", "OVERVIEW REAR", "OVERVIEW TOP"]
+
+    # 3. RMU_DUAL_CABLE_ENTRY (Tamco or Lucy)
+    swg_dual = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="LUCY",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="LINE 1"),
+        ),
+    )
+    rows_dual = builder.build_census_rows(SubstationEquipmentPackage(switchgears=(swg_dual,)))
+    # Overviews: 2 ("OVERVIEW", "OVERVIEW BOTTOM") + Panel 1: 2 ("CABLE COMPARTMENT", "CABLE ENTRY") = 4 rows
+    assert len(rows_dual) == 4
+    assert [r.defect_area for r in rows_dual[:2]] == ["OVERVIEW", "OVERVIEW BOTTOM"]
+    assert [r.defect_area for r in rows_dual[2:]] == ["CABLE COMPARTMENT", "CABLE ENTRY"]
+
+    # 4. RMU_FUSE_CANISTER (Indkom INS24)
+    swg_fuse = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="INDKOM",
+        model="INS24",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="INCOMING 1"),
+            SwitchgearPanelSpec(panel_no=2, name="TX 1 TEE-OFF"),
+        ),
+    )
+    rows_fuse = builder.build_census_rows(SubstationEquipmentPackage(switchgears=(swg_fuse,)))
+    # Overviews: 2 ("OVERVIEW", "OVERVIEW TOP") + Panel 1: 1 ("CABLE COMPARTMENT") + Panel 2: 1 ("FUSE COMPARTMENT") = 4 rows
+    assert len(rows_fuse) == 4
+    assert [r.defect_area for r in rows_fuse[:2]] == ["OVERVIEW", "OVERVIEW TOP"]
+    assert rows_fuse[2].defect_area == "CABLE COMPARTMENT"
+    assert rows_fuse[3].defect_area == "FUSE COMPARTMENT"
+
+    # 5. RMU_OIL (Lucy VRN2a)
+    swg_oil = SwitchgearSpec(
+        switchgear_type="RMU OIL",
+        manufacturer="LUCY",
+        model="VRN2A",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="PANEL 1"),
+        ),
+    )
+    rows_oil = builder.build_census_rows(SubstationEquipmentPackage(switchgears=(swg_oil,)))
+    # Overviews: 2 ("OVERVIEW", "OVERVIEW BOTTOM") + Panel 1: 2 ("CABLE COMPARTMENT", "CABLE ENTRY") = 4 rows
+    assert len(rows_oil) == 4
+    assert [r.defect_area for r in rows_oil[:2]] == ["OVERVIEW", "OVERVIEW BOTTOM"]
+    assert [r.defect_area for r in rows_oil[2:]] == ["CABLE COMPARTMENT", "CABLE ENTRY"]
+
+    # 6. RMU_STANDARD (Indkom JMW12 or generic)
+    swg_std = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="SIEMENS",
+        model="8DJH",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="PANEL 1"),
+        ),
+    )
+    rows_std = builder.build_census_rows(SubstationEquipmentPackage(switchgears=(swg_std,)))
+    # Overviews: 1 ("OVERVIEW") + Panel 1: 1 ("CABLE COMPARTMENT") = 2 rows
+    assert len(rows_std) == 2
+    assert rows_std[0].defect_area == "OVERVIEW"
+    assert rows_std[1].defect_area == "CABLE COMPARTMENT"
+
+
+def test_census_builder_omitted_compartments_generate_zero_rows() -> None:
+    """Ensure omitted compartments (e.g. absent PT, absent transition secondary) generate zero rows in Table 2."""
+    builder = ExecutiveSummaryCensusBuilder()
+    swg = SwitchgearSpec(
+        switchgear_type="VCB",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="FEEDER 1"),  # No PT evidence -> 4 comp
+            SwitchgearPanelSpec(panel_no=2, name="TRANSITION 1"),  # No secondary photo -> 3 comp
+        ),
+    )
+    rows = builder.build_census_rows(SubstationEquipmentPackage(switchgears=(swg,)))
+    areas = [r.defect_area for r in rows]
+    assert "PT COMPARTMENT" not in areas
+    assert "SECONDARY COMPARTMENT" in areas  # Feeder 1 has secondary unconditionally
+    # Exactly 3 overviews + 4 feeder + 3 transition = 10 rows
+    assert len(rows) == 10
+
+
+
 

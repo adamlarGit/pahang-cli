@@ -31,6 +31,7 @@ from src.full_report.models import (
     VCB_STANDARD_COMPARTMENTS,
     VCB_TRANSITION_COMPARTMENTS,
 )
+from src.core.topology import SwitchgearArchetype
 from src.full_report.photo_resolver import PhotoPair, RawPhotoResolver
 from src.full_report.scan_adapters import (
     BatteryBankScanAdapter,
@@ -1070,4 +1071,191 @@ def test_overview_templates_placeholders_and_activex() -> None:
 
         assert any("{{ analysis }}" in t for t in analysis_rows), f"{{ analysis }} missing in {tpl_name}"
         assert any("{{ recommendation }}" in t for t in rec_rows), f"{{ recommendation }} missing in {tpl_name}"
+
+
+def test_switchgear_adapter_strict_zero_fallback(mock_substation_info: dict[str, str]) -> None:
+    """Verify missing compartment photo produces blank image strings and does NOT fall back to photo_numbers[0] or cable_photo."""
+    fake_resolver = FakePhotoResolver({
+        101: ("/photos/IR_101.jpg", "/photos/VIS_101.jpg"),
+    })
+    panel = SwitchgearPanelScanSpec(
+        panel_no=1,
+        name="FEEDER 1",
+        cable_photo=101,
+        breaker_photo=None,
+        busbar_photo=None,
+        secondary_photo=None,
+        photo_numbers=(101,),
+        compartments=(
+            "BREAKER COMPARTMENT",
+            "CABLE COMPARTMENT",
+            "BUSBAR COMPARTMENT",
+            "SECONDARY COMPARTMENT",
+        ),
+    )
+    swg = SwitchgearScanSpec(
+        switchgear_type="VCB 11kV",
+        manufacturer="TAMCO",
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        overview_compartments=("OVERVIEW FRONT",),
+        panels=(panel,),
+        photo_numbers=(50,),
+    )
+    adapter = SwitchgearScanAdapter(
+        swg=swg,
+        substation_info=mock_substation_info,
+        photo_resolver=fake_resolver,
+    )
+    result = adapter.adapt()
+    items = result.items
+
+    assert items[0].is_overview is True
+
+    # Item 1 is BREAKER COMPARTMENT: breaker_photo is None -> ir.image and visual.image must be blank ""
+    breaker_item = items[1]
+    assert breaker_item.component_name == "BREAKER COMPARTMENT"
+    assert breaker_item.context["ir"]["image"] == ""
+    assert breaker_item.context["visual"]["image"] == ""
+
+    # Item 2 is CABLE COMPARTMENT: cable_photo is 101 -> ir.image and visual.image must be resolved
+    cable_item = items[2]
+    assert cable_item.component_name == "CABLE COMPARTMENT"
+    assert cable_item.context["ir"]["image"] == "/photos/IR_101.jpg"
+    assert cable_item.context["visual"]["image"] == "/photos/VIS_101.jpg"
+
+    # Item 3 is BUSBAR COMPARTMENT: busbar_photo is None -> blank ""
+    busbar_item = items[3]
+    assert busbar_item.component_name == "BUSBAR COMPARTMENT"
+    assert busbar_item.context["ir"]["image"] == ""
+    assert busbar_item.context["visual"]["image"] == ""
+
+    # Item 4 is SECONDARY COMPARTMENT: secondary_photo is None -> blank ""
+    sec_item = items[4]
+    assert sec_item.component_name == "SECONDARY COMPARTMENT"
+    assert sec_item.context["ir"]["image"] == ""
+    assert sec_item.context["visual"]["image"] == ""
+
+
+def test_switchgear_adapter_vcb_transition_front_rear_photo_mapping(mock_substation_info: dict[str, str]) -> None:
+    """Verify VCB transition bay maps FRONT COMPARTMENT -> breaker_photo and REAR COMPARTMENT -> cable_photo."""
+    fake_resolver = FakePhotoResolver({
+        201: ("/photos/IR_201.jpg", "/photos/VIS_201.jpg"),
+        202: ("/photos/IR_202.jpg", "/photos/VIS_202.jpg"),
+    })
+    panel = SwitchgearPanelScanSpec(
+        panel_no=1,
+        name="TRANSITION",
+        breaker_photo=201,  # Should map to FRONT COMPARTMENT
+        cable_photo=202,    # Should map to REAR COMPARTMENT
+        busbar_photo=None,
+        photo_numbers=(201, 202),
+        compartments=("FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT"),
+    )
+    swg = SwitchgearScanSpec(
+        switchgear_type="VCB 11kV",
+        manufacturer="TAMCO",
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        overview_compartments=("OVERVIEW FRONT",),
+        panels=(panel,),
+        photo_numbers=(50,),
+    )
+    adapter = SwitchgearScanAdapter(
+        swg=swg,
+        substation_info=mock_substation_info,
+        photo_resolver=fake_resolver,
+    )
+    result = adapter.adapt()
+    items = result.items
+
+    front_item = next(it for it in items if it.component_name == "FRONT COMPARTMENT")
+    assert front_item.context["ir"]["image"] == "/photos/IR_201.jpg"
+    assert front_item.context["visual"]["image"] == "/photos/VIS_201.jpg"
+
+    rear_item = next(it for it in items if it.component_name == "REAR COMPARTMENT")
+    assert rear_item.context["ir"]["image"] == "/photos/IR_202.jpg"
+    assert rear_item.context["visual"]["image"] == "/photos/VIS_202.jpg"
+
+    busbar_item = next(it for it in items if it.component_name == "BUSBAR COMPARTMENT")
+    assert busbar_item.context["ir"]["image"] == ""
+    assert busbar_item.context["visual"]["image"] == ""
+
+
+def test_switchgear_adapter_overview_photo_mapping_vcb_and_rmu(mock_substation_info: dict[str, str]) -> None:
+    """Verify overview photo mapping for VCB (Front=Row 27, Rear=Row 26, Top=Row 28) and RMU."""
+    fake_resolver = FakePhotoResolver({
+        50: ("/photos/IR_50.jpg", "/photos/VIS_50.jpg"),
+        60: ("/photos/IR_60.jpg", "/photos/VIS_60.jpg"),
+        70: ("/photos/IR_70.jpg", "/photos/VIS_70.jpg"),
+        80: ("/photos/IR_80.jpg", "/photos/VIS_80.jpg"),
+        90: ("/photos/IR_90.jpg", "/photos/VIS_90.jpg"),
+    })
+
+    # 1. VCB: photo_numbers has [Row 27 (Front), Row 26 (Rear), Row 28 (Top)]
+    swg_vcb = SwitchgearScanSpec(
+        switchgear_type="VCB 11kV",
+        manufacturer="TAMCO",
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        overview_compartments=("OVERVIEW FRONT", "OVERVIEW REAR", "OVERVIEW TOP"),
+        panels=(),
+        photo_numbers=(50, 60, 70),
+    )
+    adapter_vcb = SwitchgearScanAdapter(
+        swg=swg_vcb,
+        substation_info=mock_substation_info,
+        photo_resolver=fake_resolver,
+    )
+    res_vcb = adapter_vcb.adapt()
+    assert len(res_vcb.items) == 3
+    assert res_vcb.items[0].component_name == "OVERVIEW FRONT"
+    assert res_vcb.items[0].context["ir"]["image"] == "/photos/IR_50.jpg"
+    assert res_vcb.items[1].component_name == "OVERVIEW REAR"
+    assert res_vcb.items[1].context["ir"]["image"] == "/photos/IR_60.jpg"
+    assert res_vcb.items[2].component_name == "OVERVIEW TOP"
+    assert res_vcb.items[2].context["ir"]["image"] == "/photos/IR_70.jpg"
+
+    # 2. RMU: photo_numbers has [Row 26 (Overview), Row 28 (Overview Bottom/Top)]
+    swg_rmu = SwitchgearScanSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="TAMCO",
+        archetype=SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY,
+        overview_compartments=("OVERVIEW", "OVERVIEW BOTTOM"),
+        panels=(),
+        photo_numbers=(80, 90),
+    )
+    adapter_rmu = SwitchgearScanAdapter(
+        swg=swg_rmu,
+        substation_info=mock_substation_info,
+        photo_resolver=fake_resolver,
+    )
+    res_rmu = adapter_rmu.adapt()
+    assert len(res_rmu.items) == 2
+    assert res_rmu.items[0].component_name == "OVERVIEW"
+    assert res_rmu.items[0].context["ir"]["image"] == "/photos/IR_80.jpg"
+    assert res_rmu.items[1].component_name == "OVERVIEW BOTTOM"
+    assert res_rmu.items[1].context["ir"]["image"] == "/photos/IR_90.jpg"
+
+
+def test_switchgear_adapter_panel_serial_number_in_render_context(mock_substation_info: dict[str, str]) -> None:
+    """Verify panel.serial_no is passed directly into panel render context."""
+    panel = SwitchgearPanelScanSpec(
+        panel_no=1,
+        name="PANEL 1",
+        serial_no="SN-PANEL-9988",
+        compartments=("CABLE COMPARTMENT",),
+    )
+    swg = SwitchgearScanSpec(
+        switchgear_type="VCB 11kV",
+        manufacturer="TAMCO",
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        overview_compartments=("OVERVIEW FRONT",),
+        panels=(panel,),
+    )
+    adapter = SwitchgearScanAdapter(
+        swg=swg,
+        substation_info=mock_substation_info,
+    )
+    result = adapter.adapt()
+    panel_item = result.items[1]
+    assert panel_item.context["panel"]["serialnumber"] == "SN-PANEL-9988"
+
 
