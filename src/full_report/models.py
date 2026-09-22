@@ -230,6 +230,12 @@ def build_switchgear_panel_scan_spec(
         tev_ppc=panel.tev_ppc,
         tev_char=panel.tev_char,
         photo_numbers=panel.photo_numbers,
+        cable_photo=panel.cable_photo,
+        breaker_photo=panel.breaker_photo,
+        secondary_photo=panel.secondary_photo,
+        busbar_photo=panel.busbar_photo,
+        pt_photo=panel.pt_photo,
+        has_pt_measurement=panel.has_pt_measurement,
         compartments=compartments,
     )
 
@@ -366,6 +372,12 @@ class SwitchgearPanelScanSpec:
     tev_ppc: str = ""
     tev_char: str = ""
     photo_numbers: tuple[int, ...] = ()
+    cable_photo: int | None = None
+    breaker_photo: int | None = None
+    secondary_photo: int | None = None
+    busbar_photo: int | None = None
+    pt_photo: int | None = None
+    has_pt_measurement: bool = False
     compartments: tuple[str, ...] = ()
 
     @property

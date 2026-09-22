@@ -105,17 +105,67 @@ def parse_photo_numbers(val: object) -> tuple[int, ...]:
     if val is None or isinstance(val, bool):
         return ()
     if isinstance(val, int):
+        if 100000 <= val <= 999999:
+            first, second = divmod(val, 1000)
+            if first > 0 and second > 0:
+                return (first, second)
         return (val,)
     if isinstance(val, float):
         if math.isnan(val) or math.isinf(val):
             return ()
-        return (int(val),)
+        ival = int(val)
+        if 100000 <= ival <= 999999:
+            first, second = divmod(ival, 1000)
+            if first > 0 and second > 0:
+                return (first, second)
+        return (ival,)
     s = str(val).strip()
     if not s or s.upper() in ("-", "NONE", "N/A", "#REF!", "NAN"):
         return ()
     s = re.sub(r"\.\d+\b", "", s)
     matches = re.findall(r"\d+", s)
-    return tuple(int(m) for m in matches)
+    res: list[int] = []
+    for m in matches:
+        num = int(m)
+        if 100000 <= num <= 999999:
+            first, second = divmod(num, 1000)
+            if first > 0 and second > 0:
+                res.extend([first, second])
+                continue
+        res.append(num)
+    return tuple(res)
+
+
+def parse_secondary_photo(val: object) -> int | None:
+    """Parse secondary panel IR photo number from Col P (row r+1).
+
+    Matches 'S.PANEL IR <num>', 'S PANEL IR <num>', 'IR <num>', etc.
+    Falls back to bare integer parsing.
+    """
+    if val is None or isinstance(val, bool):
+        return None
+    if isinstance(val, int):
+        return val if val > 0 else None
+    if isinstance(val, float):
+        if math.isnan(val) or math.isinf(val):
+            return None
+        ival = int(val)
+        return ival if ival > 0 else None
+
+    s = str(val).strip()
+    if not s or s.upper() in ("-", "NONE", "N/A", "#REF!", "NAN"):
+        return None
+
+    m = re.search(r"(?:S\.?\s*PANEL\s*IR|IR)[\s\:\-]*(\d+)", s, re.IGNORECASE)
+    if m:
+        return int(m.group(1))
+
+    bare_m = re.search(r"^\s*(\d+)(?:\.0+)?\s*$", s)
+    if bare_m:
+        return int(bare_m.group(1))
+
+    return None
+
 
 
 class TestsheetExtractor:
@@ -507,6 +557,8 @@ class TestsheetExtractor:
         """Extract switchgear panels across all PCE Testsheet worksheets."""
         panels: list[SwitchgearPanelSpec] = []
         panel_idx = 1
+        # Measurement columns across K..V (excluding Col O which is dedicated to pt_photo)
+        pt_cols = ("K", "L", "M", "N", "P", "Q", "R", "S", "T", "U", "V")
 
         for ws in pce_sheets:
             for r in (10, 14, 18, 22):
@@ -514,16 +566,43 @@ class TestsheetExtractor:
                 name = clean_val(ws[f"C{r}"].value) or ""
                 serial_no = clean_val(ws[f"I{r}"].value) or ""
 
-                # Inline IR photo numbers for panel from Col O
-                photo_nums: list[int] = list(parse_photo_numbers(ws[f"O{r}"].value))
-                if not photo_nums:
-                    for sub_r in range(r + 1, r + 4):
-                        if sub_r <= ws.max_row:
-                            sub_nums = parse_photo_numbers(ws[f"O{sub_r}"].value)
-                            if sub_nums:
-                                photo_nums.extend(sub_nums)
-                                break
-                photo_numbers = tuple(photo_nums)
+                # Sub-row photo parsing across 4-row block (r..r+3)
+                cable_photos = parse_photo_numbers(ws[f"O{r}"].value) if r <= ws.max_row else ()
+                cable_photo = cable_photos[0] if cable_photos else None
+
+                breaker_photos = parse_photo_numbers(ws[f"O{r+1}"].value) if (r + 1) <= ws.max_row else ()
+                breaker_photo = breaker_photos[0] if breaker_photos else None
+
+                secondary_photo = parse_secondary_photo(ws[f"P{r+1}"].value) if (r + 1) <= ws.max_row else None
+
+                busbar_photos = parse_photo_numbers(ws[f"O{r+2}"].value) if (r + 2) <= ws.max_row else ()
+                busbar_photo = busbar_photos[0] if busbar_photos else None
+
+                pt_photos = parse_photo_numbers(ws[f"O{r+3}"].value) if (r + 3) <= ws.max_row else ()
+                pt_photo = pt_photos[0] if pt_photos else None
+
+                # Detect PT measurements across K{r+3}..V{r+3} (non-empty, non-sentinel values)
+                has_pt_measurement = False
+                if (r + 3) <= ws.max_row:
+                    has_pt_measurement = any(clean_val(ws[f"{c}{r+3}"].value) is not None for c in pt_cols)
+
+                # Populate photo_numbers tuple with all discovered distinct photo integers in order
+                discovered: list[int] = []
+                for n in cable_photos:
+                    if n not in discovered:
+                        discovered.append(n)
+                for n in breaker_photos:
+                    if n not in discovered:
+                        discovered.append(n)
+                if secondary_photo is not None and secondary_photo not in discovered:
+                    discovered.append(secondary_photo)
+                for n in busbar_photos:
+                    if n not in discovered:
+                        discovered.append(n)
+                for n in pt_photos:
+                    if n not in discovered:
+                        discovered.append(n)
+                photo_numbers = tuple(discovered)
 
                 # Exclude slots where name, panel_feeder_no, serial_no, and photo_numbers are all blank
                 if not (feeder_no or name or serial_no or photo_numbers):
@@ -599,6 +678,12 @@ class TestsheetExtractor:
                         tev_ppc=tev_ppc,
                         tev_char=tev_char,
                         photo_numbers=photo_numbers,
+                        cable_photo=cable_photo,
+                        breaker_photo=breaker_photo,
+                        secondary_photo=secondary_photo,
+                        busbar_photo=busbar_photo,
+                        pt_photo=pt_photo,
+                        has_pt_measurement=has_pt_measurement,
                     )
                 )
                 panel_idx += 1
@@ -666,17 +751,37 @@ class TestsheetExtractor:
 
         def _extract_overview_photos(ws: openpyxl.worksheet.worksheet.Worksheet) -> tuple[int, ...]:
             nums: list[int] = []
-            # Primary overview: Row 26 Col O
-            for n in parse_photo_numbers(ws["O26"].value):
-                if n not in nums:
-                    nums.append(n)
-            # Secondary overview: Row 28 Col O, fallback to Col J
-            overview_secondary_photos = parse_photo_numbers(ws["O28"].value)
-            if not overview_secondary_photos:
-                overview_secondary_photos = parse_photo_numbers(ws["J28"].value)
-            for n in overview_secondary_photos:
-                if n not in nums:
-                    nums.append(n)
+            front_photos = parse_photo_numbers(ws["O27"].value)
+            rear_photos = parse_photo_numbers(ws["O26"].value)
+            top_photos = parse_photo_numbers(ws["O28"].value)
+            if not top_photos:
+                top_photos = parse_photo_numbers(ws["J28"].value)
+
+            if front_photos:
+                # Row 27 Col O (BREAKER): Front overview photo
+                for n in front_photos:
+                    if n not in nums:
+                        nums.append(n)
+                        break
+                # Row 26 Col O (CABLE): Rear overview photo
+                for n in rear_photos:
+                    if n not in nums:
+                        nums.append(n)
+                        break
+                # Row 28 Col O (TOP PANEL): Top overview photo
+                for n in top_photos:
+                    if n not in nums:
+                        nums.append(n)
+                        break
+            else:
+                # RMU overview (Row 26 primary overview, Row 28 secondary/bottom overview)
+                for n in rear_photos:
+                    if n not in nums:
+                        nums.append(n)
+                for n in top_photos:
+                    if n not in nums:
+                        nums.append(n)
+
             return tuple(nums)
 
         swg1_photo_numbers: tuple[int, ...] = ()

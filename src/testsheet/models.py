@@ -59,6 +59,12 @@ class SwitchgearPanelSpec:
     tev_ppc: str = ""
     tev_char: str = ""
     photo_numbers: tuple[int, ...] = ()
+    cable_photo: int | None = None
+    breaker_photo: int | None = None
+    secondary_photo: int | None = None
+    busbar_photo: int | None = None
+    pt_photo: int | None = None
+    has_pt_measurement: bool = False
 
     @property
     def is_tx_feeder(self) -> bool:

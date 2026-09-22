@@ -3,6 +3,7 @@
 from src.testsheet.extractor import (
     TestsheetExtractor,
     parse_photo_numbers,
+    parse_secondary_photo,
 )
 from src.testsheet.mapper import (
     TestsheetReadingMapper,
@@ -47,6 +48,7 @@ __all__ = [
     "TransformerSpec",
     "TestsheetExtractor",
     "parse_photo_numbers",
+    "parse_secondary_photo",
     "SubstationTestsheetRepository",
     "TestsheetReadingMapper",
     "get_sheet_name",

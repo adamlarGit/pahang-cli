@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import os
 from pathlib import Path
 import openpyxl
 import pytest
+
+REAL_DATASET_ROOT = Path(
+    os.getenv("PAHANG_BENCHMARK_ROOT", r"C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD")
+)
 
 from src.core.normalizers import format_month_folder
 from src.testsheet.extractor import (
@@ -16,7 +21,7 @@ from src.testsheet.extractor import (
     normalize_fl_erms,
     to_excel_date,
 )
-from src.testsheet.models import PhotoRange, RawPhotoRanges, TestsheetData
+from src.testsheet.models import PhotoRange, RawPhotoRanges, SwitchgearPanelSpec, TestsheetData
 
 
 def test_format_month_folder() -> None:
@@ -305,5 +310,327 @@ def test_extract_testsheet_metadata(sample_testsheet_file: Path) -> None:
     assert meta.cycle_1 == datetime(2026, 5, 1)
     assert meta.substation_type == "RM"
     assert meta.station_name == "RAUB"
+
+
+def test_switchgear_panel_spec_subrow_attributes() -> None:
+    """Verify SwitchgearPanelSpec accepts and defaults sub-row photo attributes."""
+    default_panel = SwitchgearPanelSpec()
+    assert default_panel.cable_photo is None
+    assert default_panel.breaker_photo is None
+    assert default_panel.secondary_photo is None
+    assert default_panel.busbar_photo is None
+    assert default_panel.pt_photo is None
+    assert default_panel.has_pt_measurement is False
+
+    spec = SwitchgearPanelSpec(
+        cable_photo=10,
+        breaker_photo=11,
+        secondary_photo=12,
+        busbar_photo=13,
+        pt_photo=14,
+        has_pt_measurement=True,
+    )
+    assert spec.cable_photo == 10
+    assert spec.breaker_photo == 11
+    assert spec.secondary_photo == 12
+    assert spec.busbar_photo == 13
+    assert spec.pt_photo == 14
+    assert spec.has_pt_measurement is True
+
+
+def test_build_switchgear_panel_scan_spec_propagation() -> None:
+    """Verify build_switchgear_panel_scan_spec propagates all 6 sub-row attributes."""
+    from src.full_report.models import SwitchgearCategory, build_switchgear_panel_scan_spec
+
+    panel = SwitchgearPanelSpec(
+        panel_no=1,
+        name="INCOMING",
+        cable_photo=498,
+        breaker_photo=493,
+        secondary_photo=520,
+        busbar_photo=503,
+        pt_photo=526,
+        has_pt_measurement=True,
+    )
+    scan_spec = build_switchgear_panel_scan_spec(panel, SwitchgearCategory.VCB)
+    assert scan_spec.cable_photo == 498
+    assert scan_spec.breaker_photo == 493
+    assert scan_spec.secondary_photo == 520
+    assert scan_spec.busbar_photo == 503
+    assert scan_spec.pt_photo == 526
+    assert scan_spec.has_pt_measurement is True
+
+
+def test_parse_secondary_photo() -> None:
+    """Verify parse_secondary_photo parses 'S.PANEL IR <num>', 'IR <num>', bare digits, and sentinels."""
+    from src.testsheet.extractor import parse_secondary_photo
+
+    assert parse_secondary_photo(None) is None
+    assert parse_secondary_photo("") is None
+    assert parse_secondary_photo("-") is None
+    assert parse_secondary_photo("NONE") is None
+    assert parse_secondary_photo("N/A") is None
+    assert parse_secondary_photo("S.PANEL IR 520") == 520
+    assert parse_secondary_photo("S PANEL IR 521") == 521
+    assert parse_secondary_photo("SPANEL IR 522") == 522
+    assert parse_secondary_photo("S. PANEL IR  523") == 523
+    assert parse_secondary_photo("IR 524") == 524
+    assert parse_secondary_photo("IR525") == 525
+    assert parse_secondary_photo("526") == 526
+    assert parse_secondary_photo(527) == 527
+    assert parse_secondary_photo(528.0) == 528
+    assert parse_secondary_photo("CABLE") is None
+
+
+def test_parse_photo_numbers_six_digit_concatenation() -> None:
+    """Verify parse_photo_numbers splits 6-digit concatenated photo numbers (e.g. 485489.0 -> 485, 489)."""
+    from src.testsheet.extractor import parse_photo_numbers
+
+    assert parse_photo_numbers(485489.0) == (485, 489)
+    assert parse_photo_numbers(488492.0) == (488, 492)
+    assert parse_photo_numbers(140145) == (140, 145)
+    assert parse_photo_numbers(142176) == (142, 176)
+    assert parse_photo_numbers("485489") == (485, 489)
+
+
+def test_extract_overview_photos_rows_26_27_28() -> None:
+    """Verify _extract_overview_photos extracts Row 27 (Front), Row 26 (Rear), Row 28 (Top)."""
+    extractor = TestsheetExtractor()
+    wb = openpyxl.Workbook()
+    ws_pce = wb.active
+    ws_pce.title = "PCE Testsheet"
+
+    # VCB multi-overview case: Row 27 (Front), Row 26 (Rear), Row 28 (Top)
+    ws_pce["O27"] = 485
+    ws_pce["O26"] = 488
+    ws_pce["O28"] = 491
+
+    swgs = extractor._extract_switchgear_specs(wb, ws_vi=None, pce_sheets=[ws_pce])
+    assert len(swgs) == 1
+    assert swgs[0].photo_numbers == (485, 488, 491)
+
+    # RMU case where Row 27 is empty
+    wb_rmu = openpyxl.Workbook()
+    ws_rmu = wb_rmu.active
+    ws_rmu.title = "PCE Testsheet"
+    ws_rmu["O26"] = 28
+    ws_rmu["O28"] = 33
+
+    swgs_rmu = extractor._extract_switchgear_specs(wb_rmu, ws_vi=None, pce_sheets=[ws_rmu])
+    assert len(swgs_rmu) == 1
+    assert swgs_rmu[0].photo_numbers == (28, 33)
+
+
+def test_extract_panels_subrow_extraction() -> None:
+    """Verify _extract_panels extracts all 4 sub-rows, Col P, PT measurements, distinct photo_numbers, and exclusion."""
+    extractor = TestsheetExtractor()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "PCE Testsheet"
+
+    # Panel 1: Complete 4-row sub-grid (without PT)
+    ws["B10"] = "F01"
+    ws["C10"] = "FEEDER 1"
+    ws["O10"] = 100
+    ws["O11"] = 101
+    ws["P11"] = "S.PANEL IR 102"
+    ws["O12"] = 103
+
+    # Panel 2: With PT photo and PT measurement
+    ws["B14"] = "F02"
+    ws["C14"] = "FEEDER 2"
+    ws["O14"] = 104
+    ws["O15"] = 105
+    ws["O16"] = 106
+    ws["O17"] = 107
+    ws["K17"] = 35.0  # PT measurement reading
+
+    # Panel 3: Valid panel with blank top metadata but photo in sub-row 19 (r+1)
+    ws["O19"] = 200
+
+    # Panel 4: Completely blank slot (r=22..25) - must be excluded
+
+    panels = extractor._extract_panels([ws])
+    assert len(panels) == 3
+
+    p1 = panels[0]
+    assert p1.cable_photo == 100
+    assert p1.breaker_photo == 101
+    assert p1.secondary_photo == 102
+    assert p1.busbar_photo == 103
+    assert p1.pt_photo is None
+    assert p1.has_pt_measurement is False
+    assert p1.photo_numbers == (100, 101, 102, 103)
+
+    p2 = panels[1]
+    assert p2.cable_photo == 104
+    assert p2.breaker_photo == 105
+    assert p2.secondary_photo is None
+    assert p2.busbar_photo == 106
+    assert p2.pt_photo == 107
+    assert p2.has_pt_measurement is True
+    assert p2.photo_numbers == (104, 105, 106, 107)
+
+    p3 = panels[2]
+    assert p3.breaker_photo == 200
+    assert p3.photo_numbers == (200,)
+
+
+@pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
+def test_benchmark_157_perpustakaan_awam_subrow_extraction() -> None:
+    """Verify sub-row and overview photo extraction against PE 157 Perpustakaan Awam benchmark."""
+    workbook_path = (
+        REAL_DATASET_ROOT
+        / "TESTSHEET"
+        / "KUANTAN"
+        / "01. AUGUST"
+        / "25-08-2026"
+        / "157. PERPUSTAKAAN AWAM(VCB).xlsx"
+    )
+    assert workbook_path.is_file(), f"Benchmark workbook missing: {workbook_path}"
+
+    extractor = TestsheetExtractor()
+    data = extractor.extract_testsheet_data(workbook_path)
+    assert len(data.equipment.switchgears) >= 1
+    swg = data.equipment.switchgears[0]
+
+    # Overview extraction captures Row 27 photo 485, Row 26 photo 488, Row 28 photo 491
+    assert swg.photo_numbers == (485, 488, 491)
+
+    # Panels 1 to 4 assertions
+    assert len(swg.panels) == 5
+
+    # Panel 1: secondary_photo == 520 (parsed from 'S.PANEL IR 520')
+    p1 = swg.panels[0]
+    assert p1.cable_photo == 498
+    assert p1.breaker_photo == 493
+    assert p1.secondary_photo == 520
+    assert p1.busbar_photo == 503
+    assert p1.pt_photo is None
+    assert p1.has_pt_measurement is False
+    assert p1.photo_numbers == (498, 493, 520, 503)
+
+    # Panel 2: secondary_photo == 521
+    p2 = swg.panels[1]
+    assert p2.cable_photo == 499
+    assert p2.breaker_photo == 494
+    assert p2.secondary_photo == 521
+    assert p2.busbar_photo == 504
+    assert p2.pt_photo is None
+    assert p2.has_pt_measurement is False
+    assert p2.photo_numbers == (499, 494, 521, 504)
+
+    # Panel 3: secondary_photo == 522
+    p3 = swg.panels[2]
+    assert p3.cable_photo == 500
+    assert p3.breaker_photo == 495
+    assert p3.secondary_photo == 522
+    assert p3.busbar_photo == 505
+    assert p3.pt_photo is None
+    assert p3.has_pt_measurement is False
+    assert p3.photo_numbers == (500, 495, 522, 505)
+
+    # Panel 4: secondary_photo == 523, pt_photo == 526, has_pt_measurement is True
+    p4 = swg.panels[3]
+    assert p4.cable_photo == 501
+    assert p4.breaker_photo == 496
+    assert p4.secondary_photo == 523
+    assert p4.busbar_photo == 506
+    assert p4.pt_photo == 526
+    assert p4.has_pt_measurement is True
+    assert p4.photo_numbers == (501, 496, 523, 506, 526)
+
+
+@pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
+def test_benchmark_082_ssu_pam_air_kobat_subrow_extraction() -> None:
+    """Verify sub-row and overview photo extraction against PE 082 SSU Pam Air Kobat benchmark."""
+    workbook_path = (
+        REAL_DATASET_ROOT
+        / "TESTSHEET"
+        / "KUANTAN"
+        / "01. AUGUST"
+        / "14-08-2026"
+        / "082. SSU PAM AIR KOBAT.xlsx"
+    )
+    assert workbook_path.is_file(), f"Benchmark workbook missing: {workbook_path}"
+
+    extractor = TestsheetExtractor()
+    data = extractor.extract_testsheet_data(workbook_path)
+    assert len(data.equipment.switchgears) >= 1
+    swg = data.equipment.switchgears[0]
+
+    # Overview photos: Front (Row 27: 140), Rear (Row 26: 142), Top (Row 28: 147)
+    assert swg.photo_numbers == (140, 142, 147)
+
+    # Panel 1 (L / TX): cable=177 (from 177193), breaker=148, sec=217, bus=162
+    p1 = swg.panels[0]
+    assert p1.cable_photo == 177
+    assert p1.breaker_photo == 148
+    assert p1.secondary_photo == 217
+    assert p1.busbar_photo == 162
+    assert p1.pt_photo is None
+    assert p1.has_pt_measurement is False
+
+    # Transition Panel: secondary_photo is None
+    transition_panel = [p for p in swg.panels if "TRANSITION" in p.name.upper()][0]
+    assert transition_panel.cable_photo == 183
+    assert transition_panel.breaker_photo == 154
+    assert transition_panel.secondary_photo is None
+    assert transition_panel.busbar_photo == 168
+
+    # Bus Section Panel: secondary_photo == 223
+    bs_panel = [p for p in swg.panels if p.name.upper() == "B/S"][0]
+    assert bs_panel.cable_photo == 184
+    assert bs_panel.breaker_photo == 155
+    assert bs_panel.secondary_photo == 223
+
+    # PT Panel (MSB PENGGUNA 1): pt_photo == 232, has_pt_measurement is True
+    pt_panel = [p for p in swg.panels if "MSB PENGGUNA 1" in p.name.upper()][0]
+    assert pt_panel.pt_photo == 232
+    assert pt_panel.has_pt_measurement is True
+
+
+@pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
+def test_benchmark_156_ssu_wisma_mpk_subrow_extraction() -> None:
+    """Verify sub-row and overview photo extraction against PE 156 SSU Wisma MPK benchmark."""
+    workbook_path = (
+        REAL_DATASET_ROOT
+        / "TESTSHEET"
+        / "KUANTAN"
+        / "01. AUGUST"
+        / "25-08-2026"
+        / "156. SSU WISMA MPK.xlsx"
+    )
+    assert workbook_path.is_file(), f"Benchmark workbook missing: {workbook_path}"
+
+    extractor = TestsheetExtractor()
+    data = extractor.extract_testsheet_data(workbook_path)
+    assert len(data.equipment.switchgears) >= 1
+    swg = data.equipment.switchgears[0]
+
+    # Overview photos: Front (Row 27: 424), Rear (Row 26: 427), Top (Row 28: 426)
+    assert swg.photo_numbers == (424, 427, 426)
+
+    # Panel 1 (MSB): cable=442, breaker=432, secondary=475, busbar=452, pt=462, has_pt=True
+    p1 = swg.panels[0]
+    assert p1.cable_photo == 442
+    assert p1.breaker_photo == 432
+    assert p1.secondary_photo == 475
+    assert p1.busbar_photo == 452
+    assert p1.pt_photo == 462
+    assert p1.has_pt_measurement is True
+
+    # Transition panel: secondary_photo is None
+    transition_panel = [p for p in swg.panels if "TRANSITION" in p.name.upper()][0]
+    assert transition_panel.secondary_photo is None
+
+    # Bus Section Panel: secondary_photo == 479
+    bs_panel = [p for p in swg.panels if p.name.upper() == "B/S"][0]
+    assert bs_panel.secondary_photo == 479
+
+
+
+
+
 
 
