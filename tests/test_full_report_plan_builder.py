@@ -863,20 +863,23 @@ def test_multipart_vcb_produces_multiple_chunks(tmp_path: Path) -> None:
     # 1 summary + 5 panels + 1 TX/Condition = 7 chunks
     assert len(chunks) == 7
 
+    stem = "005. PE TALAPIA"
     # First chunk is summary
     assert chunks[0].label == "Part 01 - Summary"
     assert chunks[0].chunk_index == 1
-    assert "Part 01" in chunks[0].output_filename
+    assert chunks[0].output_filename == f"{stem} - {chunks[0].label}.docx"
 
     # Panel chunks (2-6)
     for i, panel_chunk in enumerate(chunks[1:6], start=2):
         assert panel_chunk.chunk_index == i
         assert f"Part {i:02d}" in panel_chunk.output_filename
         assert "Panel" in panel_chunk.label
+        assert panel_chunk.output_filename == f"{stem} - {panel_chunk.label}.docx"
 
     # Last chunk is TX and Condition
     assert chunks[6].label == "Part 07 - TX and Condition"
     assert chunks[6].chunk_index == 7
+    assert chunks[6].output_filename == f"{stem} - {chunks[6].label}.docx"
 
 
 def test_rmu_produces_single_chunk(tmp_path: Path) -> None:
@@ -909,7 +912,7 @@ def test_rmu_produces_single_chunk(tmp_path: Path) -> None:
 
 
 def test_multipart_chunk_output_filenames_use_stem(tmp_path: Path) -> None:
-    """Multi-part chunk filenames follow pattern: {stem} - Part {XX}.docx."""
+    """Multi-part chunk filenames follow pattern: {stem} - {label}.docx."""
     pkg = _make_vcb_5_panel_package()
     sliced = SlicedSections(
         station="PE TALAPIA",
@@ -928,9 +931,11 @@ def test_multipart_chunk_output_filenames_use_stem(tmp_path: Path) -> None:
         output_filename="005. PE TALAPIA (IR+VI).docx",
     )
 
+    stem = "005. PE TALAPIA (IR+VI)"
     for chunk in plan.chunks:
         if plan.is_multipart:
-            assert f"005. PE TALAPIA (IR+VI) - Part {chunk.chunk_index:02d}.docx" == chunk.output_filename
+            assert chunk.output_filename == f"{stem} - {chunk.label}.docx"
+            assert chunk.destination_path == (tmp_path / "output" / f"{stem} - {chunk.label}.docx")
 
 
 def test_multipart_summary_chunk_contains_front_page_and_census(tmp_path: Path) -> None:
@@ -1075,6 +1080,8 @@ def test_multipart_vcb_with_inline_defect_pages_partitioning(tmp_path: Path) -> 
 
     # Invariant: all parts accounted for across chunks
     assert sum(len(c.parts) for c in chunks) == len(plan.parts)
+    for c in chunks:
+        assert c.output_filename == f"005. PE TALAPIA (IR) - {c.label}.docx"
 
 
 

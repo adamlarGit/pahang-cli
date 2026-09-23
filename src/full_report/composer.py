@@ -141,6 +141,10 @@ class FullReportComposer:
                 self._purge_existing_parts(dest_path.parent, stem)
 
                 # Partition rendered files by chunk boundaries
+                assert sum(len(c.parts) for c in chunks) == len(all_rendered_parts), (
+                    f"Rendered parts count ({len(all_rendered_parts)}) does not match "
+                    f"total chunk parts ({sum(len(c.parts) for c in chunks)})"
+                )
                 chunk_paths: list[Path] = []
                 offset = 0
                 for chunk in chunks:

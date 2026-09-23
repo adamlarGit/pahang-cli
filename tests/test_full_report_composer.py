@@ -24,6 +24,7 @@ from src.full_report.composer import (
 from src.full_report.plan_builder import (
     FullReportPlanBuilder,
     FullReportStationPlan,
+    PlanDocumentChunk,
     PlanPartItem,
     PlanPartType,
 )
@@ -304,8 +305,6 @@ def test_composer_end_to_end_with_plan_builder(tmp_path: Path) -> None:
 # Multi-Part Composer Chunking Tests (Ticket #56)
 # ==============================================================================
 
-from src.full_report.plan_builder import PlanDocumentChunk
-
 
 def _make_vcb_multipart_plan(tmp_path: Path) -> FullReportStationPlan:
     """Create a VCB plan that will partition into multiple chunks."""
@@ -347,12 +346,18 @@ def test_composer_multipart_compiles_each_chunk_separately(tmp_path: Path) -> No
     """Multi-part plan causes multiple compiler.compile() calls."""
     plan = _make_vcb_multipart_plan(tmp_path)
     assert plan.is_multipart is True
+    stem = plan.output_filename.removesuffix(".docx")
+    for chunk in plan.chunks:
+        assert chunk.output_filename == f"{stem} - {chunk.label}.docx"
+
     fake_compiler = FakeDocumentCompiler()
     composer = FullReportComposer(compiler=fake_compiler)
     result = composer.compose(plan, base_dir=tmp_path)
     assert result.is_multipart is True
     assert len(result.chunk_paths) == len(plan.chunks)
     assert len(fake_compiler.compiled_calls) == len(plan.chunks)
+    for cp, chunk in zip(result.chunk_paths, plan.chunks):
+        assert cp.name == f"{stem} - {chunk.label}.docx"
 
 
 def test_composer_multipart_primary_output_is_part_01(tmp_path: Path) -> None:
@@ -392,11 +397,13 @@ def test_composer_purge_existing_parts(tmp_path: Path) -> None:
     stem = "005. PE TALAPIA (IR+VI)"
     (dest_dir / f"{stem} - Part 01.docx").write_bytes(b"old")
     (dest_dir / f"{stem} - Part 02.docx").write_bytes(b"old")
+    (dest_dir / f"{stem} - Part 01 - Summary.docx").write_bytes(b"old")
     unrelated = dest_dir / "other_report.docx"
     unrelated.write_bytes(b"keep")
     FullReportComposer._purge_existing_parts(dest_dir, stem)
     assert not (dest_dir / f"{stem} - Part 01.docx").exists()
     assert not (dest_dir / f"{stem} - Part 02.docx").exists()
+    assert not (dest_dir / f"{stem} - Part 01 - Summary.docx").exists()
     assert unrelated.exists()
 
 

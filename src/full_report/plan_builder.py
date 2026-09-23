@@ -223,8 +223,8 @@ class MultiPartPartitionPolicy:
         """Resolve the primary switchgear archetype from the plan's package."""
         pkg = plan.package
         swgs = getattr(pkg, "switchgears", ())
-        if swgs:
-            swg = swgs[0]
+        swg = swgs[0] if swgs else getattr(pkg, "switchgear", None)
+        if swg is not None:
             arch = getattr(swg, "archetype", None)
             if arch is not None:
                 return arch
@@ -236,21 +236,6 @@ class MultiPartPartitionPolicy:
                 model=getattr(swg, "model", ""),
                 rating=getattr(swg, "rating", ""),
                 swg=swg,
-            )
-            return board.archetype
-        swg_single = getattr(pkg, "switchgear", None)
-        if swg_single is not None:
-            arch = getattr(swg_single, "archetype", None)
-            if arch is not None:
-                return arch
-            from src.core.topology import SwitchgearTopologyEngine
-
-            board = SwitchgearTopologyEngine.classify_board(
-                switchgear_type=getattr(swg_single, "switchgear_type", ""),
-                manufacturer=getattr(swg_single, "manufacturer", ""),
-                model=getattr(swg_single, "model", ""),
-                rating=getattr(swg_single, "rating", ""),
-                swg=swg_single,
             )
             return board.archetype
         return SwitchgearArchetype.RMU_STANDARD
@@ -284,12 +269,14 @@ class MultiPartPartitionPolicy:
                 remaining_parts.append(p)
 
         chunk_idx = 1
+        label = f"Part {chunk_idx:02d} - Summary"
+        output_filename = f"{stem} - {label}.docx"
         chunks.append(
             PlanDocumentChunk(
                 chunk_index=chunk_idx,
-                label=f"Part {chunk_idx:02d} - Summary",
-                output_filename=f"{stem} - Part {chunk_idx:02d}.docx",
-                destination_path=dest_dir / f"{stem} - Part {chunk_idx:02d}.docx",
+                label=label,
+                output_filename=output_filename,
+                destination_path=dest_dir / output_filename,
                 parts=tuple(summary_parts),
             )
         )
@@ -329,12 +316,13 @@ class MultiPartPartitionPolicy:
 
             panel_name = getattr(panel, "name", "") or f"Panel {panel.panel_no}"
             label = f"Part {chunk_idx:02d} - Panel {panel.panel_no} ({panel_name})"
+            output_filename = f"{stem} - {label}.docx"
             chunks.append(
                 PlanDocumentChunk(
                     chunk_index=chunk_idx,
                     label=label,
-                    output_filename=f"{stem} - Part {chunk_idx:02d}.docx",
-                    destination_path=dest_dir / f"{stem} - Part {chunk_idx:02d}.docx",
+                    output_filename=output_filename,
+                    destination_path=dest_dir / output_filename,
                     parts=tuple(panel_parts),
                 )
             )
@@ -342,12 +330,14 @@ class MultiPartPartitionPolicy:
         # --- Chunk N+2: TX and Condition ---
         # Everything remaining: TX, LVDB, Battery, Condition, VI Defects, Sticker
         chunk_idx += 1
+        label = f"Part {chunk_idx:02d} - TX and Condition"
+        output_filename = f"{stem} - {label}.docx"
         chunks.append(
             PlanDocumentChunk(
                 chunk_index=chunk_idx,
-                label=f"Part {chunk_idx:02d} - TX and Condition",
-                output_filename=f"{stem} - Part {chunk_idx:02d}.docx",
-                destination_path=dest_dir / f"{stem} - Part {chunk_idx:02d}.docx",
+                label=label,
+                output_filename=output_filename,
+                destination_path=dest_dir / output_filename,
                 parts=tuple(remaining_parts),
             )
         )
@@ -357,6 +347,17 @@ class MultiPartPartitionPolicy:
     @staticmethod
     def _extract_panel_no(part: PlanPartItem) -> int | None:
         """Extract panel number from a PlanPartItem's scan_item, interleaved_part, or metadata."""
+        def parse_panel_seq(seq: str | None) -> int | None:
+            if not seq:
+                return None
+            s = seq.lower()
+            if s.startswith("p") and len(s) >= 3:
+                try:
+                    return int(s[1:3])
+                except ValueError:
+                    return None
+            return None
+
         # From scan_item
         scan = part.scan_item
         if scan is not None:
@@ -369,29 +370,19 @@ class MultiPartPartitionPolicy:
             panel_no = getattr(ip, "panel_no", None)
             if panel_no is not None:
                 return panel_no
-            # Try sequence parsing: e.g. "p01", "p02" -> panel 1, 2
-            seq = getattr(ip, "sequence", "") or ""
-            if seq.startswith("p") and len(seq) >= 3:
-                try:
-                    return int(seq[1:3])
-                except ValueError:
-                    pass
+            parsed = parse_panel_seq(getattr(ip, "sequence", ""))
+            if parsed is not None:
+                return parsed
         # From part.sequence
-        seq = getattr(part, "sequence", "") or ""
-        if seq.startswith("p") and len(seq) >= 3:
-            try:
-                return int(seq[1:3])
-            except ValueError:
-                pass
+        parsed = parse_panel_seq(getattr(part, "sequence", ""))
+        if parsed is not None:
+            return parsed
         # From defect_metadata
         meta = getattr(part, "defect_metadata", None)
         if meta is not None:
-            m_seq = getattr(meta, "sequence", "") or ""
-            if m_seq.startswith("p") and len(m_seq) >= 3:
-                try:
-                    return int(m_seq[1:3])
-                except ValueError:
-                    pass
+            parsed = parse_panel_seq(getattr(meta, "sequence", ""))
+            if parsed is not None:
+                return parsed
         # From component_name
         comp = part.component_name or ""
         if comp:
