@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 import logging
 from pathlib import Path
+import re
 import shutil
 from typing import Any, Sequence
 
@@ -26,7 +27,7 @@ from src.core.normalizers import (
     resolve_station_code,
     resolve_station_from_fl,
 )
-from src.core.topology import SwitchgearArchetype
+from src.core.topology import SwitchgearArchetype, SwitchgearTopologyEngine
 from src.full_report.census import (
     CensusRowItem,
     ExecutiveSummaryCensusBuilder,
@@ -228,7 +229,6 @@ class MultiPartPartitionPolicy:
             arch = getattr(swg, "archetype", None)
             if arch is not None:
                 return arch
-            from src.core.topology import SwitchgearTopologyEngine
 
             board = SwitchgearTopologyEngine.classify_board(
                 switchgear_type=getattr(swg, "switchgear_type", ""),
@@ -386,7 +386,6 @@ class MultiPartPartitionPolicy:
         # From component_name
         comp = part.component_name or ""
         if comp:
-            import re
             m = re.search(r'panel[\s_]*(\d+)', comp, re.IGNORECASE)
             if m:
                 return int(m.group(1))

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+import fnmatch
 import gc
 import logging
 from pathlib import Path
@@ -186,7 +187,6 @@ class FullReportComposer:
         """Delete pre-existing part documents matching exact stem pattern."""
         if not directory.exists():
             return
-        import fnmatch
         pattern = f"{exact_stem} - Part *.docx"
         for f in directory.iterdir():
             if f.is_file() and fnmatch.fnmatch(f.name, pattern):
