@@ -1191,11 +1191,11 @@ def test_bind_inline_images_rejects_blank_and_invalid_images(tmp_path: Path):
     green_img = tmp_path / "solid_green.png"
     Image.new("RGB", (100, 100), color=(0, 176, 80)).save(green_img)
 
-    # 3. Two-color image (near zero variance)
-    two_col = tmp_path / "two_colors.png"
-    im2 = Image.new("RGB", (50, 50), color="white")
-    im2.putpixel((0, 0), (0, 0, 0))
-    im2.save(two_col)
+    # 3. Near-zero variance canvas (subtle noise stddev < 1.0)
+    near_zero = tmp_path / "near_zero_noise.png"
+    im_nz = Image.new("RGB", (100, 100), color=(255, 255, 255))
+    im_nz.putpixel((0, 0), (254, 254, 254))
+    im_nz.save(near_zero)
 
     # 4. Corrupt/empty file
     empty_file = tmp_path / "empty.png"
@@ -1212,15 +1212,24 @@ def test_bind_inline_images_rejects_blank_and_invalid_images(tmp_path: Path):
     v_im.putpixel((0, 2), (0, 0, 255))
     v_im.save(valid_img)
 
+    # 7. Valid 2-color monochrome graph (should NOT be blanked)
+    mono_img = tmp_path / "two_color_mono.png"
+    im_m = Image.new("RGB", (100, 100), color="white")
+    for i in range(100):
+        im_m.putpixel((i, 50), (0, 0, 0))
+    im_m.save(mono_img)
+
     doc = DocxTemplate(TEMPLATES_DIR / "swg-panel.docx")
     context = {
         "ir": {"image": str(white_img)},
         "visual": {"image": green_img},
-        "us": {"prpd": str(two_col)},
+        "us": {"prpd": str(near_zero)},
         "tev": {"prpd": empty_file},
         "missing": {"prpd": str(missing_file)},
         "good": {"prpd": str(valid_img)},
+        "mono": {"prpd": str(mono_img)},
         "prebound_blank": {"image": InlineImage(doc, str(white_img))},
+        "prebound_valid": {"image": InlineImage(doc, str(valid_img))},
     }
 
     _bind_inline_images(doc, context)
@@ -1231,7 +1240,10 @@ def test_bind_inline_images_rejects_blank_and_invalid_images(tmp_path: Path):
     assert context["tev"]["prpd"] == ""
     assert context["missing"]["prpd"] == ""
     assert isinstance(context["good"]["prpd"], InlineImage)
+    assert isinstance(context["mono"]["prpd"], InlineImage)
     assert context["prebound_blank"]["image"] == ""
+    assert isinstance(context["prebound_valid"]["image"], InlineImage)
+    assert context["prebound_valid"]["image"].tpl == doc
 
 
 

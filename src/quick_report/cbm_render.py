@@ -128,6 +128,10 @@ def _process_inline_images(doc: DocxTemplate, context: dict) -> None:
     def _convert(obj: Any) -> None:
         if isinstance(obj, dict):
             for k, v in list(obj.items()):
+                if isinstance(v, InlineImage):
+                    if is_blank_or_invalid_image(v):
+                        obj[k] = ""
+                    continue
                 k_str = str(k).lower()
                 if (
                     k_str in ("prpd", "image")
@@ -145,32 +149,14 @@ def _process_inline_images(doc: DocxTemplate, context: dict) -> None:
                                 obj[k] = InlineImage(doc, str(v_path), width=Mm(80))
                             except Exception:
                                 obj[k] = ""
-                    elif isinstance(v, InlineImage):
-                        if (
-                            hasattr(v, "image_descriptor")
-                            and isinstance(v.image_descriptor, (str, Path))
-                            and is_blank_or_invalid_image(v.image_descriptor)
-                        ):
-                            obj[k] = ""
                     elif v is None:
-                        obj[k] = ""
-                elif isinstance(v, InlineImage):
-                    if (
-                        hasattr(v, "image_descriptor")
-                        and isinstance(v.image_descriptor, (str, Path))
-                        and is_blank_or_invalid_image(v.image_descriptor)
-                    ):
                         obj[k] = ""
                 else:
                     _convert(v)
         elif isinstance(obj, list):
             for idx, item in enumerate(obj):
                 if isinstance(item, InlineImage):
-                    if (
-                        hasattr(item, "image_descriptor")
-                        and isinstance(item.image_descriptor, (str, Path))
-                        and is_blank_or_invalid_image(item.image_descriptor)
-                    ):
+                    if is_blank_or_invalid_image(item):
                         obj[idx] = ""
                 else:
                     _convert(item)

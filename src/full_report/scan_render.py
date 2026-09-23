@@ -63,6 +63,12 @@ def _bind_inline_images(doc: DocxTemplate, context: dict, image_width_mm: float 
     def _convert(obj: Any) -> None:
         if isinstance(obj, dict):
             for k, v in list(obj.items()):
+                if isinstance(v, InlineImage):
+                    if is_blank_or_invalid_image(v):
+                        obj[k] = ""
+                    else:
+                        v.tpl = doc
+                    continue
                 k_str = str(k).lower()
                 if (
                     k_str in ("prpd", "image")
@@ -93,36 +99,14 @@ def _bind_inline_images(doc: DocxTemplate, context: dict, image_width_mm: float 
                                         exc,
                                     )
                                     obj[k] = ""
-                    elif isinstance(v, InlineImage):
-                        if (
-                            hasattr(v, "image_descriptor")
-                            and isinstance(v.image_descriptor, (str, Path))
-                            and is_blank_or_invalid_image(v.image_descriptor)
-                        ):
-                            obj[k] = ""
-                        else:
-                            v.tpl = doc
                     elif v is None:
                         obj[k] = ""
-                elif isinstance(v, InlineImage):
-                    if (
-                        hasattr(v, "image_descriptor")
-                        and isinstance(v.image_descriptor, (str, Path))
-                        and is_blank_or_invalid_image(v.image_descriptor)
-                    ):
-                        obj[k] = ""
-                    else:
-                        v.tpl = doc
                 else:
                     _convert(v)
         elif isinstance(obj, list):
             for idx, item in enumerate(obj):
                 if isinstance(item, InlineImage):
-                    if (
-                        hasattr(item, "image_descriptor")
-                        and isinstance(item.image_descriptor, (str, Path))
-                        and is_blank_or_invalid_image(item.image_descriptor)
-                    ):
+                    if is_blank_or_invalid_image(item):
                         obj[idx] = ""
                     else:
                         item.tpl = doc

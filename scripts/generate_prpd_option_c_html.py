@@ -11,7 +11,11 @@ import threading
 import time
 import urllib.parse
 
-from src.quick_report.prpd import ThreadedTCPServer, is_blank_or_invalid_image
+from src.quick_report.prpd import (
+    OPTION_C_INJECTION_TEMPLATE,
+    ThreadedTCPServer,
+    is_blank_or_invalid_image,
+)
 
 
 def safe_path(p: Path | str) -> str:
@@ -206,67 +210,9 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
 
 
 
-# Non-overlapping Flexbox Layout: 320px Left Measurement Table + 840px Right PRPD Graph
-INJECTION_TEMPLATE = """
-<style>
-header, ul.nav, #graphcontroltab, #maximise_prpd, #zoom_help, #tf_wfm_section, .navbar-fixed-bottom { display: none !important; }
-#survey-container .panel:nth-child(1), #survey-container .panel:nth-child(2) { display: none !important; }
-#survey-container .panel:nth-child(3) { display: block !important; margin: 0 !important; border: 1px solid #bce8f1 !important; }
-#survey-container .panel-heading { font-weight: bold !important; font-size: 13px !important; padding: 6px 12px !important; }
-#survey-container table { font-size: 11px !important; margin-bottom: 0 !important; width: 100% !important; }
-#survey-container table td { padding: 4px 8px !important; }
-</style>
-<script>
-window.addEventListener('load', function() {
-    document.body.style.cssText = 'display: flex !important; flex-direction: row !important; align-items: stretch !important; justify-content: flex-start !important; width: 1200px !important; height: 380px !important; margin: 0 !important; padding: 10px !important; box-sizing: border-box !important; background: white !important; overflow: hidden !important;';
+# Reused from src.quick_report.prpd
+INJECTION_TEMPLATE = OPTION_C_INJECTION_TEMPLATE
 
-    var surveyEl = document.querySelector('.survey');
-    if (surveyEl) {
-        surveyEl.className = 'survey';
-        surveyEl.style.cssText = 'width: 320px !important; min-width: 320px !important; max-width: 320px !important; flex: 0 0 320px !important; margin: 0 15px 0 0 !important; padding: 0 !important; float: none !important;';
-        var surveyTab = surveyEl.querySelector('.tab-content');
-        if (surveyTab) surveyTab.style.cssText = 'width: 100% !important; padding: 0 !important; margin: 0 !important;';
-    }
-
-    var allTabContents = document.querySelectorAll('.tab-content');
-    var graphTabContent = allTabContents[allTabContents.length - 1];
-    if (graphTabContent) {
-        graphTabContent.style.cssText = 'flex: 1 1 840px !important; width: 840px !important; height: 360px !important; margin: 0 !important; padding: 0 !important; float: none !important; overflow: hidden !important;';
-    }
-
-    var phaseTab = document.getElementById('phase_tab');
-    if (phaseTab) {
-        phaseTab.style.cssText = 'width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; float: none !important; display: block !important;';
-    }
-
-    var prpdSection = document.getElementById('prpd_section');
-    if (prpdSection) {
-        prpdSection.style.cssText = 'width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; float: none !important; position: relative !important;';
-    }
-
-    var prpdGraph = document.getElementById('prpd_graph');
-    if (prpdGraph) {
-        prpdGraph.style.cssText = 'width: 100% !important; height: 100% !important;';
-    }
-
-    function tryPlot(attemptsLeft) {
-        if (typeof prpd !== 'undefined' && typeof prpd.Plot === 'function') {
-            try {
-                prpd.sinewave_mode = 0;
-                prpd.Plot();
-                return;
-            } catch (e) {}
-        }
-        if (attemptsLeft > 0) {
-            setTimeout(function() {
-                tryPlot(attemptsLeft - 1);
-            }, 50);
-        }
-    }
-    tryPlot(30);
-});
-</script>
-"""
 
 
 def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path | str) -> list[dict]:

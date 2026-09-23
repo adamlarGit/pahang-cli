@@ -9,7 +9,7 @@ from pathlib import Path
 import struct
 import subprocess
 import docx
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
 from PIL import Image
 import pytest
 
@@ -848,13 +848,49 @@ def test_is_blank_or_invalid_image_solid_white_and_single_color(tmp_path: Path):
     assert is_blank_or_invalid_image(p_rgba) is True
 
 
-def test_is_blank_or_invalid_image_near_zero_variance_two_colors(tmp_path: Path):
-    """Verify is_blank_or_invalid_image detects images with only <= 2 unique colors."""
-    two_col = tmp_path / "two_colors.png"
-    im2 = Image.new("RGB", (40, 40), color="white")
-    im2.putpixel((0, 0), (0, 0, 0))
+def test_is_blank_or_invalid_image_near_zero_variance(tmp_path: Path):
+    """Verify is_blank_or_invalid_image detects near-zero variance and preserves 2-color graphs."""
+    # Near-zero variance canvas (e.g. solid white canvas with tiny noise stddev < 1.0)
+    nz_file = tmp_path / "near_zero_noise.png"
+    im_nz = Image.new("RGB", (100, 100), color=(255, 255, 255))
+    im_nz.putpixel((0, 0), (254, 254, 254))
+    im_nz.save(nz_file)
+    assert is_blank_or_invalid_image(nz_file) is True
+
+    # Legitimate 2-color monochrome graph (palette count == 2, but high variance)
+    two_col = tmp_path / "two_color_graph.png"
+    im2 = Image.new("RGB", (100, 100), color="white")
+    for i in range(100):
+        im2.putpixel((i, 50), (0, 0, 0))
     im2.save(two_col)
-    assert is_blank_or_invalid_image(two_col) is True
+    assert len(im2.getcolors(maxcolors=20)) == 2
+    assert is_blank_or_invalid_image(two_col) is False
+
+
+def test_is_blank_or_invalid_image_inline_image_support(tmp_path: Path):
+    """Verify is_blank_or_invalid_image directly accepts and inspects InlineImage objects."""
+    doc = DocxTemplate("templates/FULL REPORT/NORMAL IR US TEV/swg-panel.docx")
+
+    # Blank image wrapped in InlineImage
+    p_white = tmp_path / "white_inline.png"
+    Image.new("RGB", (40, 40), color="white").save(p_white)
+    inline_blank = InlineImage(doc, str(p_white))
+    assert is_blank_or_invalid_image(inline_blank) is True
+
+    # Valid image wrapped in InlineImage
+    p_valid = tmp_path / "valid_inline.png"
+    im_v = Image.new("RGB", (40, 40), color="white")
+    im_v.putpixel((0, 0), (255, 0, 0))
+    im_v.putpixel((0, 1), (0, 255, 0))
+    im_v.putpixel((0, 2), (0, 0, 255))
+    im_v.save(p_valid)
+    inline_valid = InlineImage(doc, str(p_valid))
+    assert is_blank_or_invalid_image(inline_valid) is False
+
+    # Missing file path in InlineImage
+    class MockInlineImage:
+        image_descriptor = str(tmp_path / "nonexistent.png")
+    assert is_blank_or_invalid_image(MockInlineImage()) is True
 
 
 def test_is_blank_or_invalid_image_valid_content(tmp_path: Path):
@@ -1053,12 +1089,20 @@ def test_is_blank_or_invalid_image_transparency_and_whitespace(tmp_path: Path):
     im_alpha0.save(p_alpha0)
     assert is_blank_or_invalid_image(p_alpha0) is True
 
-    # 3. Transparent background with single colored pixel (<= 2 colors against white background)
-    p_single = tmp_path / "single_dot_transparent.png"
-    im_single = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
-    im_single.putpixel((5, 5), (255, 0, 0, 255))
+    # 3. Transparent background with near-zero variance noise against white background
+    p_single = tmp_path / "near_zero_transparent.png"
+    im_single = Image.new("RGBA", (100, 100), (255, 255, 255, 0))
+    im_single.putpixel((5, 5), (254, 254, 254, 255))
     im_single.save(p_single)
     assert is_blank_or_invalid_image(p_single) is True
+
+    # 4. Transparent background with valid graph content (high variance against white background)
+    p_trans_valid = tmp_path / "transparent_valid.png"
+    im_trans_v = Image.new("RGBA", (100, 100), (0, 0, 0, 0))
+    for i in range(100):
+        im_trans_v.putpixel((i, 50), (0, 0, 0, 255))
+    im_trans_v.save(p_trans_valid)
+    assert is_blank_or_invalid_image(p_trans_valid) is False
 
 
 def test_survey_http_server_temp_dir_refcounting(tmp_path: Path):

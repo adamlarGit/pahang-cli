@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
-from PIL import Image
+from PIL import Image, ImageStat
 
 from src.core.contract import (
     is_swg_compartment_tev_eligible,
@@ -152,6 +152,14 @@ def find_chrome_executable() -> str:
     )
 
 
+def safe_path(p: Path | str) -> str:
+    """Ensure Windows extended-length path compatibility (\\\\?\\)."""
+    s = str(Path(p).resolve())
+    if os.name == "nt" and not s.startswith("\\\\?\\"):
+        return "\\\\?\\" + s
+    return s
+
+
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     """Threaded TCP server handling concurrent asset requests without serial backlog queuing."""
 
@@ -159,58 +167,82 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
 
 
-def is_blank_or_invalid_image(img_path: Path | str | None) -> bool:
-    """Validate whether an image path is missing, 0-byte, corrupt, or a blank/near-zero variance capture.
+def is_blank_or_invalid_image(img: Path | str | InlineImage | Any) -> bool:
+    """Validate whether an image path or InlineImage is missing, 0-byte, corrupt, or a blank/near-zero variance capture.
 
     Returns True if:
-    - Path is None, empty, whitespace-only, non-existent, or zero-byte.
+    - Target is None, empty, whitespace-only, non-existent, or zero-byte.
     - Image cannot be opened/decoded by Pillow.
-    - Pixels are solid white (extrema == ((255, 255), (255, 255), (255, 255))).
-    - Near-zero variance / single color (getcolors(maxcolors=20) is not None and len <= 2).
+    - Pixels are solid pure-white (extrema == ((255, 255), (255, 255), (255, 255))).
+    - Solid uniform color across all channels (min == max for each channel).
+    - Near-zero variance across pixel intensities (all channel standard deviations < 1.0).
     - Image is completely transparent (alpha channel max is 0).
 
     Returns False for valid images containing actual graphical/photographic content.
     """
-    if not img_path:
+    if hasattr(img, "image_descriptor"):
+        img = getattr(img, "image_descriptor", None)
+
+    if img is None:
         return True
-    if isinstance(img_path, str) and not img_path.strip():
+    if isinstance(img, str) and not img.strip():
         return True
+
     try:
-        p = Path(safe_path(img_path))
-        if not p.is_file() or p.stat().st_size == 0:
+        if isinstance(img, (str, Path)):
+            p = Path(safe_path(img))
+            if not p.is_file() or p.stat().st_size == 0:
+                return True
+            image_source: Any = p
+        elif hasattr(img, "read"):
+            if hasattr(img, "seek"):
+                img.seek(0)
+            image_source = img
+        else:
             return True
-        with Image.open(p) as img:
-            if img.width <= 0 or img.height <= 0:
+
+        with Image.open(image_source) as raw_img:
+            if raw_img.width <= 0 or raw_img.height <= 0:
                 return True
             # Handle alpha transparency: if all pixels transparent, it's blank
-            if "A" in img.getbands():
-                alpha_extrema = img.getchannel("A").getextrema()
+            if "A" in raw_img.getbands():
+                alpha_extrema = raw_img.getchannel("A").getextrema()
                 if alpha_extrema[1] == 0:
                     return True
                 # Composite transparent pixels over a white background (as in Word / browser display)
-                bg = Image.new("RGB", img.size, (255, 255, 255))
-                bg.paste(img, mask=img.getchannel("A"))
+                bg = Image.new("RGB", raw_img.size, (255, 255, 255))
+                bg.paste(raw_img, mask=raw_img.getchannel("A"))
                 rgb_img = bg
-            elif img.mode == "P" and "transparency" in img.info:
-                rgba = img.convert("RGBA")
+            elif raw_img.mode == "P" and "transparency" in raw_img.info:
+                rgba = raw_img.convert("RGBA")
                 alpha_extrema = rgba.getchannel("A").getextrema()
                 if alpha_extrema[1] == 0:
                     return True
-                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg = Image.new("RGB", raw_img.size, (255, 255, 255))
                 bg.paste(rgba, mask=rgba.getchannel("A"))
                 rgb_img = bg
             else:
-                rgb_img = img.convert("RGB")
+                rgb_img = raw_img.convert("RGB")
 
             extrema = rgb_img.getextrema()
             if extrema == ((255, 255), (255, 255), (255, 255)):
                 return True
-            colors = rgb_img.getcolors(maxcolors=20)
-            if colors is not None and len(colors) <= 2:
+            if all(low == high for low, high in extrema):
                 return True
+
+            stat = ImageStat.Stat(rgb_img)
+            if all(s < 1.0 for s in stat.stddev):
+                return True
+
         return False
     except Exception:
         return True
+    finally:
+        if hasattr(img, "seek"):
+            try:
+                img.seek(0)
+            except Exception:
+                pass
 
 
 class SurveyHttpServer:
@@ -220,14 +252,14 @@ class SurveyHttpServer:
     _lock = threading.Lock()
 
     @classmethod
-    def register_temp_dir(cls, d: Path | str) -> None:
-        key = str(Path(d).resolve())
+    def register_temp_dir(cls, dir_path: Path | str) -> None:
+        key = str(Path(dir_path).resolve())
         with cls._lock:
             cls._active_temp_dirs[key] = cls._active_temp_dirs.get(key, 0) + 1
 
     @classmethod
-    def unregister_temp_dir(cls, d: Path | str) -> None:
-        key = str(Path(d).resolve())
+    def unregister_temp_dir(cls, dir_path: Path | str) -> None:
+        key = str(Path(dir_path).resolve())
         with cls._lock:
             if key in cls._active_temp_dirs:
                 cls._active_temp_dirs[key] -= 1
@@ -263,8 +295,8 @@ class SurveyHttpServer:
                             return safe_path(candidate)
                     with SurveyHttpServer._lock:
                         temp_dirs = list(SurveyHttpServer._active_temp_dirs.keys())
-                    for td in temp_dirs:
-                        candidate = os.path.join(td, filename)
+                    for temp_dir in temp_dirs:
+                        candidate = os.path.join(temp_dir, filename)
                         if os.path.exists(safe_path(candidate)):
                             return safe_path(candidate)
 
@@ -406,12 +438,6 @@ def render_prpd_option_c_image(
     return None
 
 
-def safe_path(p: Path | str) -> str:
-    """Ensure Windows extended-length path compatibility (\\\\?\\)."""
-    s = str(Path(p).resolve())
-    if os.name == "nt" and not s.startswith("\\\\?\\"):
-        return "\\\\?\\" + s
-    return s
 
 
 def decode_tev_event_data(filepath: Path | str) -> list[dict[str, Any]]:
