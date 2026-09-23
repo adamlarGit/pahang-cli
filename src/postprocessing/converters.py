@@ -278,6 +278,16 @@ class DocumentConverter(ABC):
         """Merge primary and secondary PDFs into `output_pdf`."""
         ...
 
+    @abstractmethod
+    def merge_pdfs_batch(
+        self,
+        pdf_paths: Sequence[Path],
+        output_pdf: Path,
+    ) -> Path:
+        """Merge a sequence of PDFs in order into `output_pdf`."""
+        ...
+
+
 
 class ComDocumentConverter(DocumentConverter):
     """Document converter utilizing Windows COM automation (`win32com.client`)."""
@@ -559,6 +569,42 @@ class ComDocumentConverter(DocumentConverter):
 
         return output_pdf
 
+    def merge_pdfs_batch(
+        self,
+        pdf_paths: Sequence[Path],
+        output_pdf: Path,
+    ) -> Path:
+        """Combine a sequence of PDFs in order into `output_pdf` via PyPDF2 in one pass.
+
+        Supports in-place merge where `output_pdf` is an input path by buffering the
+        merged result before writing to disk.
+        """
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+        writer = PdfWriter()
+        open_streams = []
+        try:
+            for p in pdf_paths:
+                p_resolved = Path(p).resolve()
+                stream = open(p_resolved, "rb")
+                open_streams.append(stream)
+                reader = PdfReader(stream)
+                for page in reader.pages:
+                    writer.add_page(page)
+
+            buffer = io.BytesIO()
+            writer.write(buffer)
+        finally:
+            for stream in open_streams:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+
+        with open(output_pdf, "wb") as f_out:
+            f_out.write(buffer.getvalue())
+
+        return output_pdf
+
 
 class FakeDocumentConverter(DocumentConverter):
     """Fake document converter implementation for testing without COM execution."""
@@ -570,6 +616,7 @@ class FakeDocumentConverter(DocumentConverter):
         self.convert_testsheet_calls: list[tuple[Path, Path, Sequence[str] | None]] = []
         self.convert_docx_calls: list[tuple[Path, Path]] = []
         self.merge_pdfs_calls: list[tuple[Path, Path, Path]] = []
+        self.merge_pdfs_batch_calls: list[tuple[Sequence[Path], Path]] = []
         self.testsheet_calls = self.convert_testsheet_calls
         self.docx_calls = self.convert_docx_calls
         self.merge_calls = self.merge_pdfs_calls
@@ -645,6 +692,45 @@ class FakeDocumentConverter(DocumentConverter):
             writer = PdfWriter()
             writer.add_blank_page(width=612, height=792)
             writer.add_blank_page(width=612, height=792)
+            with open(output_pdf, "wb") as f:
+                writer.write(f)
+
+        return output_pdf
+
+    def merge_pdfs_batch(
+        self,
+        pdf_paths: Sequence[Path],
+        output_pdf: Path,
+    ) -> Path:
+        """Record the call and merge multiple PDFs sequentially via PyPDF2."""
+        self.merge_pdfs_batch_calls.append((tuple(pdf_paths), output_pdf))
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+
+        existing_paths = [Path(p).resolve() for p in pdf_paths if Path(p).exists()]
+        if existing_paths:
+            writer = PdfWriter()
+            open_streams = []
+            try:
+                for p in existing_paths:
+                    stream = open(p, "rb")
+                    open_streams.append(stream)
+                    reader = PdfReader(stream)
+                    for page in reader.pages:
+                        writer.add_page(page)
+                buffer = io.BytesIO()
+                writer.write(buffer)
+            finally:
+                for stream in open_streams:
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+            with open(output_pdf, "wb") as f_out:
+                f_out.write(buffer.getvalue())
+        else:
+            writer = PdfWriter()
+            for _ in range(max(1, len(pdf_paths))):
+                writer.add_blank_page(width=612, height=792)
             with open(output_pdf, "wb") as f:
                 writer.write(f)
 

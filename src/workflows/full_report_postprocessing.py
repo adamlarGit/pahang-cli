@@ -49,6 +49,26 @@ PostProcessingTarget = (
 )
 ProgressSink = Callable[[str], None]
 
+MULTIPART_DOCX_PATTERN = re.compile(
+    r"^(?P<stem>.+)\s+-\s+Part\s+(?P<part>\d+)(?:\s+-\s+.*)?$",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class PostProcessingTargetGroup:
+    """Group of docx files representing a single substation Full Report deliverable."""
+
+    stem: str
+    docx_paths: tuple[Path, ...]
+    is_multipart: bool = False
+
+    @property
+    def primary_docx_path(self) -> Path:
+        """The primary/first docx path (Part 01 or single docx)."""
+        return self.docx_paths[0]
+
+
 
 # ==============================================================================
 # 1. Pre-Flight Testsheet PDF Validation (D43)
@@ -189,10 +209,16 @@ def _find_pdf_in_dirs(pdf_dirs: Sequence[Path], stem: str) -> Path | None:
 def resolve_processed_testsheet_pdf_path(
     docx_path: Path,
     environment: ProjectEnvironment | None = None,
+    *,
+    stem: str | None = None,
 ) -> Path | None:
     """Resolve physical path to the matching testsheet PDF under processed_testsheet/pdf/."""
     doc_p = Path(docx_path).resolve()
-    stem = doc_p.stem
+    if stem is not None:
+        target_stem = stem
+    else:
+        m = MULTIPART_DOCX_PATTERN.match(doc_p.stem)
+        target_stem = m.group("stem").strip() if m else doc_p.stem
 
     # Extract metadata from folder structure: .../<STATION>/<MONTH>/<DATE>/<STEM>.docx
     date_str = doc_p.parent.name
@@ -258,7 +284,7 @@ def resolve_processed_testsheet_pdf_path(
                 candidate_pdf_dirs.append(d)
 
     # 1. Search candidate directories
-    matched = _find_pdf_in_dirs(candidate_pdf_dirs, stem)
+    matched = _find_pdf_in_dirs(candidate_pdf_dirs, target_stem)
     if matched is not None:
         return matched
 
@@ -275,7 +301,7 @@ def resolve_processed_testsheet_pdf_path(
             except Exception:
                 pass
 
-            return _find_pdf_in_dirs(fallback_dirs, stem)
+            return _find_pdf_in_dirs(fallback_dirs, target_stem)
 
     return None
 
@@ -301,6 +327,8 @@ class FullReportPostProcessingTelemetry:
     validation_result: TestsheetPdfValidationResult | None = None
     warnings: tuple[str, ...] = ()
     errors: tuple[str, ...] = ()
+    is_multipart: bool = False
+    part_docx_paths: tuple[Path, ...] = ()
 
     @property
     def pe_number(self) -> int | None:
@@ -429,13 +457,15 @@ class FullReportPostProcessingWorkflow:
                 errors=tuple(errors),
             )
 
+        target_groups = self._group_multipart_targets(docx_files)
+
         telemetries: list[FullReportPostProcessingTelemetry] = []
-        for idx, docx_path in enumerate(docx_files, start=1):
+        for idx, group in enumerate(target_groups, start=1):
             if progress_sink:
                 progress_sink(
-                    f"[{idx}/{len(docx_files)}] Inspecting testsheet PDF for {docx_path.name}..."
+                    f"[{idx}/{len(target_groups)}] Inspecting testsheet PDF for {group.stem}..."
                 )
-            telem = self._inspect_single_report(docx_path, environment)
+            telem = self._inspect_single_report(group, environment)
             telemetries.append(telem)
 
         return FullReportPostProcessingInspection(
@@ -488,23 +518,25 @@ class FullReportPostProcessingWorkflow:
                 duration_seconds=time.time() - start_time,
             )
 
+        target_groups = self._group_multipart_targets(docx_files)
+
         # Step 1: Pre-flight validation across all target documents
         telemetries: list[FullReportPostProcessingTelemetry] = []
-        valid_targets: list[tuple[Path, Path, Path]] = []  # (docx_path, testsheet_pdf, deliverable_pdf)
+        valid_targets: list[FullReportPostProcessingTelemetry] = []
 
-        for docx_path in docx_files:
-            telem = self._inspect_single_report(docx_path, environment, output_dir=output_dir)
+        for group in target_groups:
+            telem = self._inspect_single_report(group, environment, output_dir=output_dir)
             telemetries.append(telem)
 
             if not telem.is_ready:
-                err_msg = telem.errors[0] if telem.errors else f"Validation failed for {docx_path.name}"
+                err_msg = telem.errors[0] if telem.errors else f"Validation failed for {group.stem}"
                 if fail_fast:
                     raise TestsheetPdfNotFoundError(err_msg)
                 errors.append(err_msg)
                 continue
 
             assert telem.testsheet_pdf_path is not None
-            valid_targets.append((docx_path, telem.testsheet_pdf_path, telem.target_pdf_path))
+            valid_targets.append(telem)
 
         # Step 2: Establish shared BatchComSession if ComDocumentConverter is used
         deliverables: list[Path] = []
@@ -516,41 +548,39 @@ class FullReportPostProcessingWorkflow:
                 if word_app is not None:
                     configure_uniform_printer(word_app)
 
-                for idx, (docx_path, ts_pdf, out_pdf) in enumerate(valid_targets, start=1):
+                for idx, telem in enumerate(valid_targets, start=1):
+                    stem = telem.stem
+                    out_pdf = telem.target_pdf_path
+                    ts_pdf = telem.testsheet_pdf_path
+                    assert ts_pdf is not None
+
                     if progress_sink:
                         progress_sink(
-                            f"[{idx}/{len(valid_targets)}] Converting and merging Full Report for {docx_path.name}..."
+                            f"[{idx}/{len(valid_targets)}] Converting and merging Full Report for {stem}..."
                         )
                     try:
-                        out_pdf.parent.mkdir(parents=True, exist_ok=True)
-                        # Temporary PDF for Word conversion before in-place PyPDF2 merge
-                        temp_conv_pdf = out_pdf.parent / f".tmp_conv_{out_pdf.name}"
-
-                        try:
-                            # 1. Word COM conversion
-                            if word_app is not None:
-                                self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, word_app=word_app)
-                            else:
-                                self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, session=session)
-
-                            # 2. PyPDF2 merge: converted Full Report PDF + testsheet PDF -> out_pdf
-                            self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
-                        finally:
-                            if temp_conv_pdf.exists():
-                                try:
-                                    temp_conv_pdf.unlink()
-                                except Exception:
-                                    pass
+                        target_group = PostProcessingTargetGroup(
+                            stem=telem.stem,
+                            docx_paths=telem.part_docx_paths if telem.is_multipart else (telem.docx_path,),
+                            is_multipart=telem.is_multipart,
+                        )
+                        self._compile_deliverable(
+                            group=target_group,
+                            testsheet_pdf_path=ts_pdf,
+                            output_pdf_path=out_pdf,
+                            word_app=word_app,
+                            session=session,
+                        )
 
                         if out_pdf.exists() and out_pdf.stat().st_size > 0:
                             deliverables.append(out_pdf)
                             if progress_sink:
                                 progress_sink(f"Deliverable generated -> {out_pdf.name}")
                         else:
-                            err_msg = f"Merged deliverable for {docx_path.name} is missing or 0 bytes."
+                            err_msg = f"Merged deliverable for {stem} is missing or 0 bytes."
                             errors.append(err_msg)
                     except Exception as exc:
-                        err_msg = f"Failed to post-process {docx_path.name}: {exc}"
+                        err_msg = f"Failed to post-process {stem}: {exc}"
                         errors.append(err_msg)
                         logger.exception(err_msg)
                         if fail_fast:
@@ -565,13 +595,13 @@ class FullReportPostProcessingWorkflow:
         if progress_sink:
             progress_sink(
                 f"Full Report post-processing completed: {len(deliverables)} succeeded, "
-                f"{len(docx_files) - len(deliverables)} failed in {duration:.2f}s."
+                f"{len(target_groups) - len(deliverables)} failed in {duration:.2f}s."
             )
 
         return FullReportPostProcessingResult(
-            total_reports=len(docx_files),
+            total_reports=len(target_groups),
             succeeded_count=len(deliverables),
-            failed_count=len(docx_files) - len(deliverables),
+            failed_count=len(target_groups) - len(deliverables),
             deliverables=tuple(deliverables),
             telemetries=tuple(telemetries),
             warnings=tuple(warnings),
@@ -598,29 +628,102 @@ class FullReportPostProcessingWorkflow:
         if not doc_p.exists():
             raise FileNotFoundError(f"Full Report docx not found: {doc_p}")
 
-        ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment)
-        validate_processed_testsheet_pdf(ts_pdf, stem=doc_p.stem, raise_on_error=True)
+        # Check if doc_p belongs to a multi-part set
+        m = MULTIPART_DOCX_PATTERN.match(doc_p.stem)
+        if m:
+            stem = m.group("stem").strip()
+            sibling_candidates = [
+                p.resolve()
+                for p in doc_p.parent.glob("*.docx")
+                if not p.name.startswith("~$") and not p.name.startswith(".")
+            ]
+            groups = [g for g in self._group_multipart_targets(sibling_candidates) if g.stem == stem]
+            group = groups[0] if groups else self._group_multipart_targets([doc_p])[0]
+        else:
+            group = self._group_multipart_targets([doc_p])[0]
+            stem = group.stem
+
+        ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment, stem=stem)
+        validate_processed_testsheet_pdf(ts_pdf, stem=stem, raise_on_error=True)
         assert ts_pdf is not None
 
-        out_p = Path(output_path).resolve() if output_path else doc_p.with_suffix(".pdf")
-        out_p.parent.mkdir(parents=True, exist_ok=True)
-        temp_conv_pdf = out_p.parent / f".tmp_conv_{out_p.name}"
-
-        try:
-            self._converter.convert_docx_to_pdf(doc_p, temp_conv_pdf, session=session)
-            self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_p)
-        finally:
-            if temp_conv_pdf.exists():
-                try:
-                    temp_conv_pdf.unlink()
-                except Exception:
-                    pass
+        out_p = Path(output_path).resolve() if output_path else doc_p.parent / f"{stem}.pdf"
+        self._compile_deliverable(
+            group=group,
+            testsheet_pdf_path=ts_pdf,
+            output_pdf_path=out_p,
+            session=session,
+        )
 
         return out_p
 
     # --------------------------------------------------------------------------
     # Internal Helpers
     # --------------------------------------------------------------------------
+
+    def _compile_deliverable(
+        self,
+        group: PostProcessingTargetGroup,
+        testsheet_pdf_path: Path,
+        output_pdf_path: Path,
+        *,
+        word_app: Any = None,
+        session: Any = None,
+    ) -> None:
+        """Convert docx to temporary PDF(s) and merge with testsheet PDF into deliverable."""
+        stem = group.stem
+        out_pdf = output_pdf_path
+        ts_pdf = testsheet_pdf_path
+        out_pdf.parent.mkdir(parents=True, exist_ok=True)
+
+        if group.is_multipart:
+            temp_part_pdfs: list[Path] = []
+            temp_master_pdf = out_pdf.parent / f".tmp_conv_{stem}_master.pdf"
+            try:
+                # 1. Word COM conversion for each part document
+                for p_idx, part_docx in enumerate(group.docx_paths, start=1):
+                    temp_part_pdf = out_pdf.parent / f".tmp_conv_{stem}_part_{p_idx:02d}.pdf"
+                    temp_part_pdfs.append(temp_part_pdf)
+                    if word_app is not None:
+                        self._converter.convert_docx_to_pdf(part_docx, temp_part_pdf, word_app=word_app)
+                    else:
+                        self._converter.convert_docx_to_pdf(part_docx, temp_part_pdf, session=session)
+
+                # 2. Sequential batch PDF merge into consolidated full report PDF
+                self._converter.merge_pdfs_batch(temp_part_pdfs, temp_master_pdf)
+
+                # 3. Append signed testsheet PDF from processed_testsheet/pdf/<STEM>.pdf to master PDF
+                self._converter.merge_pdfs(temp_master_pdf, ts_pdf, out_pdf)
+            finally:
+                # 4. Clean up all temporary part PDFs and intermediate master PDF
+                for temp_p in temp_part_pdfs:
+                    if temp_p.exists():
+                        try:
+                            temp_p.unlink()
+                        except Exception:
+                            pass
+                if temp_master_pdf.exists():
+                    try:
+                        temp_master_pdf.unlink()
+                    except Exception:
+                        pass
+        else:
+            # Single-file target
+            docx_path = group.primary_docx_path
+            temp_conv_pdf = out_pdf.parent / f".tmp_conv_{out_pdf.name}"
+            try:
+                if word_app is not None:
+                    self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, word_app=word_app)
+                else:
+                    self._converter.convert_docx_to_pdf(docx_path, temp_conv_pdf, session=session)
+
+                self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
+            finally:
+                if temp_conv_pdf.exists():
+                    try:
+                        temp_conv_pdf.unlink()
+                    except Exception:
+                        pass
 
     def _establish_batch_session(self, explicit_session: Any) -> Any:
         """Establish single BatchComSession context across batch conversions."""
@@ -634,15 +737,82 @@ class FullReportPostProcessingWorkflow:
         # For FakeDocumentConverter or headless testing
         return nullcontext(None)
 
+    def _group_multipart_targets(
+        self, docx_paths: Sequence[Path]
+    ) -> list[PostProcessingTargetGroup]:
+        """Group discovered .docx files into multi-part target groups or standalone targets.
+
+        - For paths matching `<STEM> - Part *.docx`, extracts `<STEM>` and groups paths by stem.
+        - Sorts each group's part files in ascending order by numerical part index (`Part 01`, `Part 02`, ...).
+        - Standalone `<STEM>.docx` files remain single-item targets.
+        - Testsheet PDF matching consumes the group `<STEM>`, not individual part file stems.
+        """
+        groups_order: list[tuple[Path, str, str]] = []
+        multipart_buckets: dict[tuple[Path, str], list[tuple[int, Path]]] = {}
+        standalone_buckets: dict[tuple[Path, str], Path] = {}
+
+        for p in docx_paths:
+            p_res = Path(p).resolve()
+            m = MULTIPART_DOCX_PATTERN.match(p_res.stem)
+            if m:
+                extracted_stem = m.group("stem").strip()
+                part_idx = int(m.group("part"))
+                key = (p_res.parent, extracted_stem)
+                if key not in multipart_buckets:
+                    multipart_buckets[key] = []
+                    groups_order.append((p_res.parent, extracted_stem, "multipart"))
+                multipart_buckets[key].append((part_idx, p_res))
+            else:
+                key = (p_res.parent, p_res.stem)
+                standalone_buckets[key] = p_res
+                groups_order.append((p_res.parent, p_res.stem, "standalone"))
+
+        result: list[PostProcessingTargetGroup] = []
+        seen: set[tuple[Path, str, str]] = set()
+
+        for group_entry in groups_order:
+            if group_entry in seen:
+                continue
+            seen.add(group_entry)
+            parent, stem, kind = group_entry
+            if kind == "multipart":
+                parts_with_idx = multipart_buckets[(parent, stem)]
+                parts_with_idx.sort(key=lambda item: (item[0], item[1].name))
+                sorted_paths = tuple(p for _, p in parts_with_idx)
+                result.append(
+                    PostProcessingTargetGroup(
+                        stem=stem,
+                        docx_paths=sorted_paths,
+                        is_multipart=True,
+                    )
+                )
+            elif kind == "standalone":
+                single_path = standalone_buckets[(parent, stem)]
+                result.append(
+                    PostProcessingTargetGroup(
+                        stem=stem,
+                        docx_paths=(single_path,),
+                        is_multipart=False,
+                    )
+                )
+
+        return result
+
     def _inspect_single_report(
         self,
-        docx_path: Path,
+        target: Path | PostProcessingTargetGroup,
         environment: ProjectEnvironment,
         output_dir: Path | str | None = None,
     ) -> FullReportPostProcessingTelemetry:
         """Evaluate pre-flight testsheet presence and compute dry-run telemetry without disk writes."""
-        doc_p = Path(docx_path).resolve()
-        stem = doc_p.stem
+        if isinstance(target, PostProcessingTargetGroup):
+            group = target
+        else:
+            groups = self._group_multipart_targets([Path(target)])
+            group = groups[0]
+
+        doc_p = group.primary_docx_path
+        stem = group.stem
         date_str = doc_p.parent.name
         month = doc_p.parent.parent.name
         station = doc_p.parent.parent.parent.name
@@ -656,13 +826,13 @@ class FullReportPostProcessingWorkflow:
         clean_sub_name = re.sub(r"^\d+\.\s*", "", stem)
         clean_sub_name = re.sub(r"\s*\(.*?\)$", "", clean_sub_name).strip()
 
-        ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment)
+        ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment, stem=stem)
         val_res = validate_processed_testsheet_pdf(ts_pdf, stem=stem, raise_on_error=False)
 
         if output_dir:
             target_out = Path(output_dir) / f"{stem}.pdf"
         else:
-            target_out = doc_p.with_suffix(".pdf")
+            target_out = doc_p.parent / f"{stem}.pdf"
 
         telem_errors: list[str] = []
         if not val_res.is_valid:
@@ -681,6 +851,8 @@ class FullReportPostProcessingWorkflow:
             is_testsheet_pdf_valid=val_res.is_valid,
             validation_result=val_res,
             errors=tuple(telem_errors),
+            is_multipart=group.is_multipart,
+            part_docx_paths=group.docx_paths,
         )
 
     def _discover_docx_files(

@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PyPDF2 import PdfReader, PdfWriter
 
-from src.postprocessing.converters import FakeDocumentConverter
+from src.postprocessing.converters import ComDocumentConverter, FakeDocumentConverter
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
@@ -443,3 +443,316 @@ class TestFullReportPostProcessingExecution:
 
         workflow.process(docx_path, env, com_session=mock_session)
         mock_printer.assert_called_once_with(mock_word)
+
+
+# ==============================================================================
+# 5. Batch PDF Merge Tests (Ticket #57 / D55.7)
+# ==============================================================================
+
+class TestDocumentConverterBatchMerge:
+    """Tests for merge_pdfs_batch across FakeDocumentConverter and ComDocumentConverter."""
+
+    def test_fake_converter_merge_pdfs_batch_records_calls_and_merges(self, tmp_path: Path) -> None:
+        p1 = _create_mock_pdf(tmp_path / "part_01.pdf", page_count=2)
+        p2 = _create_mock_pdf(tmp_path / "part_02.pdf", page_count=3)
+        p3 = _create_mock_pdf(tmp_path / "part_03.pdf", page_count=1)
+        out_pdf = tmp_path / "merged_output.pdf"
+
+        converter = FakeDocumentConverter()
+        result = converter.merge_pdfs_batch([p1, p2, p3], out_pdf)
+
+        assert result == out_pdf
+        assert out_pdf.exists()
+        assert len(converter.merge_pdfs_batch_calls) == 1
+        recorded_paths, recorded_out = converter.merge_pdfs_batch_calls[0]
+        assert tuple(recorded_paths) == (p1, p2, p3)
+        assert recorded_out == out_pdf
+
+        reader = PdfReader(str(out_pdf))
+        assert len(reader.pages) == 6  # 2 + 3 + 1 = 6
+
+    def test_com_converter_merge_pdfs_batch_merges_multiple_pdfs(self, tmp_path: Path) -> None:
+        p1 = _create_mock_pdf(tmp_path / "part_01.pdf", page_count=1)
+        p2 = _create_mock_pdf(tmp_path / "part_02.pdf", page_count=2)
+        out_pdf = tmp_path / "com_merged_output.pdf"
+
+        converter = ComDocumentConverter()
+        result = converter.merge_pdfs_batch([p1, p2], out_pdf)
+
+        assert result == out_pdf
+        assert out_pdf.exists()
+        reader = PdfReader(str(out_pdf))
+        assert len(reader.pages) == 3  # 1 + 2 = 3
+
+
+# ==============================================================================
+# 6. Multi-Part Discovery and Grouping Tests (Ticket #57 / D55.8)
+# ==============================================================================
+
+class TestMultipartDiscoveryAndGrouping:
+    """Tests for _group_multipart_targets and multi-part telemetry."""
+
+    def test_group_multipart_targets_groups_and_sorts_by_numerical_index(self, tmp_path: Path) -> None:
+        folder = tmp_path / "04-08-2026"
+        folder.mkdir(parents=True, exist_ok=True)
+
+        p2 = _create_mock_docx(folder / "005. TALAPIA (IR+VI) - Part 02 - Panel 1 (INCOMING 1).docx")
+        p1 = _create_mock_docx(folder / "005. TALAPIA (IR+VI) - Part 01 - Summary.docx")
+        p3 = _create_mock_docx(folder / "005. TALAPIA (IR+VI) - Part 03 - TX and Condition.docx")
+        standalone = _create_mock_docx(folder / "006. CHEROH (IR).docx")
+
+        workflow = FullReportPostProcessingWorkflow(converter=FakeDocumentConverter())
+        groups = workflow._group_multipart_targets([p2, standalone, p1, p3])
+
+        assert len(groups) == 2
+
+        # Group 1: 005. TALAPIA (multi-part, sorted Part 01, Part 02, Part 03)
+        g1 = groups[0]
+        assert g1.stem == "005. TALAPIA (IR+VI)"
+        assert g1.is_multipart is True
+        assert g1.docx_paths == (p1.resolve(), p2.resolve(), p3.resolve())
+        assert g1.primary_docx_path == p1.resolve()
+
+        # Group 2: 006. CHEROH (single-file)
+        g2 = groups[1]
+        assert g2.stem == "006. CHEROH (IR)"
+        assert g2.is_multipart is False
+        assert g2.docx_paths == (standalone.resolve(),)
+        assert g2.primary_docx_path == standalone.resolve()
+
+    def test_inspect_multipart_consumes_group_stem_for_testsheet_matching(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        stem = "005. TALAPIA (IR+VI)"
+
+        # Multi-part docx files
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+        p1 = _create_mock_docx(fr_dir / f"{stem} - Part 01 - Summary.docx")
+        p2 = _create_mock_docx(fr_dir / f"{stem} - Part 02 - Panel 1.docx")
+
+        # Testsheet PDF matching consumes group STEM, NOT "Part 01"
+        ts_pdf = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem}.pdf"
+        _create_mock_pdf(ts_pdf)
+
+        workflow = FullReportPostProcessingWorkflow(converter=FakeDocumentConverter())
+        inspection = workflow.inspect(date_str, env)
+
+        assert len(inspection.targets) == 1
+        telem = inspection.targets[0]
+        assert telem.stem == stem
+        assert telem.is_multipart is True
+        assert telem.docx_path == p1.resolve()
+        assert telem.part_docx_paths == (p1.resolve(), p2.resolve())
+        assert telem.testsheet_pdf_path == ts_pdf.resolve()
+        assert telem.target_pdf_path == fr_dir / f"{stem}.pdf"
+        assert telem.is_ready is True
+
+
+# ==============================================================================
+# 7. Multi-Part Post-Processing Execution Tests (Ticket #57 / D55.9)
+# ==============================================================================
+
+class TestMultipartPostProcessingExecution:
+    """Tests for multi-part batch conversion, sequential merge, testsheet appending, and cleanup."""
+
+    def test_process_multipart_sequential_conversion_and_batch_merge(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        stem = "005. TALAPIA (IR+VI)"
+
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+        p1 = _create_mock_docx(fr_dir / f"{stem} - Part 01 - Summary.docx")
+        p2 = _create_mock_docx(fr_dir / f"{stem} - Part 02 - Panel 1 (INCOMING 1).docx")
+        p3 = _create_mock_docx(fr_dir / f"{stem} - Part 03 - TX and Condition.docx")
+
+        ts_pdf = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem}.pdf"
+        _create_mock_pdf(ts_pdf, page_count=2)
+
+        fake_converter = FakeDocumentConverter()
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+
+        result = workflow.process(date_str, env)
+
+        assert result.is_success
+        assert result.total_reports == 1
+        assert result.succeeded_count == 1
+        assert result.failed_count == 0
+        assert len(result.deliverables) == 1
+
+        deliverable = result.deliverables[0]
+        assert deliverable == fr_dir / f"{stem}.pdf"
+        assert deliverable.exists()
+
+        # 1. Converted each part to temporary PDF
+        assert len(fake_converter.convert_docx_calls) == 3
+        assert fake_converter.convert_docx_calls[0][0] == p1.resolve()
+        assert fake_converter.convert_docx_calls[1][0] == p2.resolve()
+        assert fake_converter.convert_docx_calls[2][0] == p3.resolve()
+
+        expected_temp_p1 = fr_dir / f".tmp_conv_{stem}_part_01.pdf"
+        expected_temp_p2 = fr_dir / f".tmp_conv_{stem}_part_02.pdf"
+        expected_temp_p3 = fr_dir / f".tmp_conv_{stem}_part_03.pdf"
+        assert fake_converter.convert_docx_calls[0][1] == expected_temp_p1
+        assert fake_converter.convert_docx_calls[1][1] == expected_temp_p2
+        assert fake_converter.convert_docx_calls[2][1] == expected_temp_p3
+
+        # 2. Batch merged all temporary part PDFs into master PDF
+        assert len(fake_converter.merge_pdfs_batch_calls) == 1
+        batch_inputs, master_pdf = fake_converter.merge_pdfs_batch_calls[0]
+        assert tuple(batch_inputs) == (expected_temp_p1, expected_temp_p2, expected_temp_p3)
+        expected_master = fr_dir / f".tmp_conv_{stem}_master.pdf"
+        assert master_pdf == expected_master
+
+        # 3. Merged master PDF + testsheet PDF -> deliverable
+        assert len(fake_converter.merge_pdfs_calls) == 1
+        merged_primary, merged_sec, merged_out = fake_converter.merge_pdfs_calls[0]
+        assert merged_primary == expected_master
+        assert merged_sec == ts_pdf.resolve()
+        assert merged_out == deliverable
+
+        # 4. Verified deliverable page count: 3 parts (1 page each) + 2 testsheet pages = 5 pages
+        reader = PdfReader(str(deliverable))
+        assert len(reader.pages) == 5
+
+        # 5. Verified intermediate files cleaned up
+        assert not expected_temp_p1.exists()
+        assert not expected_temp_p2.exists()
+        assert not expected_temp_p3.exists()
+        assert not expected_master.exists()
+
+        # 6. Verified original docx part files remain untouched
+        assert p1.exists()
+        assert p2.exists()
+        assert p3.exists()
+
+    def test_process_multipart_missing_testsheet_fails(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        stem = "005. TALAPIA (IR+VI)"
+
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+        _create_mock_docx(fr_dir / f"{stem} - Part 01 - Summary.docx")
+        _create_mock_docx(fr_dir / f"{stem} - Part 02 - Panel 1.docx")
+
+        fake_converter = FakeDocumentConverter()
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+
+        result = workflow.process(date_str, env, fail_fast=False)
+
+        assert not result.is_success
+        assert result.failed_count == 1
+        assert result.succeeded_count == 0
+        assert len(result.deliverables) == 0
+        assert "Pre-existing testsheet PDF missing" in result.errors[0]
+        assert len(fake_converter.convert_docx_calls) == 0
+
+    def test_process_multipart_cleanup_on_conversion_error(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        stem = "005. TALAPIA (IR+VI)"
+
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+        p1 = _create_mock_docx(fr_dir / f"{stem} - Part 01 - Summary.docx")
+        p2 = _create_mock_docx(fr_dir / f"{stem} - Part 02 - Panel 1.docx")
+
+        ts_pdf = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem}.pdf"
+        _create_mock_pdf(ts_pdf)
+
+        fake_converter = FakeDocumentConverter()
+
+        def _exploding_convert(docx: Path, pdf: Path, **kwargs: object) -> Path:
+            pdf.write_bytes(b"temp")
+            if "Part 02" in str(docx):
+                raise RuntimeError("COM conversion crashed on Part 02")
+            return pdf
+
+        fake_converter.convert_docx_to_pdf = _exploding_convert  # type: ignore[method-assign]
+
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+        result = workflow.process(date_str, env, fail_fast=False)
+
+        assert result.failed_count == 1
+        assert "COM conversion crashed on Part 02" in result.errors[0]
+
+        # Cleanup verified
+        temp_p1 = fr_dir / f".tmp_conv_{stem}_part_01.pdf"
+        temp_p2 = fr_dir / f".tmp_conv_{stem}_part_02.pdf"
+        master_pdf = fr_dir / f".tmp_conv_{stem}_master.pdf"
+        assert not temp_p1.exists()
+        assert not temp_p2.exists()
+        assert not master_pdf.exists()
+
+        # Original docx remain
+        assert p1.exists()
+        assert p2.exists()
+
+    def test_process_mixed_batch_multipart_and_standalone(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+
+        # Multi-part station
+        stem1 = "005. TALAPIA (IR+VI)"
+        p1 = _create_mock_docx(fr_dir / f"{stem1} - Part 01 - Summary.docx")
+        p2 = _create_mock_docx(fr_dir / f"{stem1} - Part 02 - Panel 1.docx")
+        ts1 = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem1}.pdf"
+        _create_mock_pdf(ts1, page_count=1)
+
+        # Standalone station
+        stem2 = "006. CHEROH (IR)"
+        s2 = _create_mock_docx(fr_dir / f"{stem2}.docx")
+        ts2 = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem2}.pdf"
+        _create_mock_pdf(ts2, page_count=1)
+
+        fake_converter = FakeDocumentConverter()
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+
+        result = workflow.process(date_str, env)
+
+        assert result.is_success
+        assert result.total_reports == 2
+        assert result.succeeded_count == 2
+        assert result.failed_count == 0
+        assert len(result.deliverables) == 2
+
+        assert (fr_dir / f"{stem1}.pdf") in result.deliverables
+        assert (fr_dir / f"{stem2}.pdf") in result.deliverables
+        assert p1.exists() and p2.exists() and s2.exists()
+
+    def test_process_single_multipart(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+
+        stem = "005. TALAPIA (IR+VI)"
+        p1 = _create_mock_docx(fr_dir / f"{stem} - Part 01 - Summary.docx")
+        p2 = _create_mock_docx(fr_dir / f"{stem} - Part 02 - Panel 1.docx")
+        ts = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem}.pdf"
+        _create_mock_pdf(ts, page_count=2)
+
+        fake_converter = FakeDocumentConverter()
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+
+        deliverable = workflow.process_single(p1, env)
+
+        assert deliverable == fr_dir / f"{stem}.pdf"
+        assert deliverable.exists()
+        assert len(fake_converter.convert_docx_calls) == 2
+        assert len(fake_converter.merge_pdfs_batch_calls) == 1
+        assert len(fake_converter.merge_pdfs_calls) == 1
+        assert p1.exists() and p2.exists()
+
+
+
