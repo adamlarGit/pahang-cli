@@ -7,13 +7,16 @@ import gzip
 import json
 from pathlib import Path
 import struct
+import subprocess
 import docx
 from docxtpl import DocxTemplate
+from PIL import Image
 import pytest
 
 from src.quick_report.prpd import (
     OPTION_C_INJECTION_TEMPLATE,
     SurveyHttpServer,
+    ThreadedTCPServer,
     _discover_substation_assets,
     build_prpd_inline_images,
     decode_tev_event_data,
@@ -28,6 +31,7 @@ from src.quick_report.prpd import (
     generate_prpd_figure,
     generate_prpd_graphs_for_swg_panel,
     generate_prpd_graphs_for_transformer,
+    is_blank_or_invalid_image,
     render_prpd_option_c_image,
 )
 
@@ -773,9 +777,12 @@ def test_render_prpd_option_c_image_isolates_temp_file_in_output_dir(tmp_path: P
         # Verify survey directory has ZERO temp files
         temp_files_survey = list(survey_root.rglob("_temp_render_c_*.html"))
         assert len(temp_files_survey) == 0
-        # Write fake output png
+        # Write valid non-blank output png
         out_png.parent.mkdir(parents=True, exist_ok=True)
-        out_png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+        im = Image.new("RGB", (20, 20), color="white")
+        im.putpixel((0, 0), (255, 0, 0))
+        im.putpixel((0, 1), (0, 255, 0))
+        im.save(out_png, "PNG")
 
     monkeypatch.setattr("subprocess.run", _mock_run)
 
@@ -798,6 +805,238 @@ def test_render_prpd_option_c_image_isolates_temp_file_in_output_dir(tmp_path: P
     # Temp file was cleaned up in finally
     assert len(list(out_dir.glob("_temp_render_c_*.html"))) == 0
     assert len(list(survey_root.rglob("_temp_render_c_*.html"))) == 0
+
+
+def test_is_blank_or_invalid_image_none_and_nonexistent(tmp_path: Path):
+    """Verify is_blank_or_invalid_image returns True for None, empty, and non-existent paths."""
+    assert is_blank_or_invalid_image(None) is True
+    assert is_blank_or_invalid_image("") is True
+    assert is_blank_or_invalid_image(tmp_path / "does_not_exist.png") is True
+
+
+def test_is_blank_or_invalid_image_empty_and_corrupt(tmp_path: Path):
+    """Verify is_blank_or_invalid_image returns True for 0-byte or corrupted files."""
+    empty_file = tmp_path / "zero_bytes.png"
+    empty_file.write_bytes(b"")
+    assert is_blank_or_invalid_image(empty_file) is True
+
+    corrupt_file = tmp_path / "corrupt.png"
+    corrupt_file.write_bytes(b"\x89PNG\r\n\x1a\nnot_a_real_png_stream")
+    assert is_blank_or_invalid_image(corrupt_file) is True
+
+
+def test_is_blank_or_invalid_image_solid_white_and_single_color(tmp_path: Path):
+    """Verify is_blank_or_invalid_image detects pure white, solid colors, and RGBA white."""
+    # Pure white RGB
+    p_white = tmp_path / "white.png"
+    Image.new("RGB", (40, 40), color="white").save(p_white)
+    assert is_blank_or_invalid_image(p_white) is True
+
+    # Solid black
+    p_black = tmp_path / "black.png"
+    Image.new("RGB", (40, 40), color="black").save(p_black)
+    assert is_blank_or_invalid_image(p_black) is True
+
+    # Solid arbitrary color (e.g. green)
+    p_green = tmp_path / "green.png"
+    Image.new("RGB", (40, 40), color=(0, 176, 80)).save(p_green)
+    assert is_blank_or_invalid_image(p_green) is True
+
+    # RGBA solid white
+    p_rgba = tmp_path / "rgba_white.png"
+    Image.new("RGBA", (40, 40), color=(255, 255, 255, 255)).save(p_rgba)
+    assert is_blank_or_invalid_image(p_rgba) is True
+
+
+def test_is_blank_or_invalid_image_near_zero_variance_two_colors(tmp_path: Path):
+    """Verify is_blank_or_invalid_image detects images with only <= 2 unique colors."""
+    two_col = tmp_path / "two_colors.png"
+    im2 = Image.new("RGB", (40, 40), color="white")
+    im2.putpixel((0, 0), (0, 0, 0))
+    im2.save(two_col)
+    assert is_blank_or_invalid_image(two_col) is True
+
+
+def test_is_blank_or_invalid_image_valid_content(tmp_path: Path):
+    """Verify is_blank_or_invalid_image returns False for real non-blank images."""
+    three_col = tmp_path / "three_colors.png"
+    im3 = Image.new("RGB", (40, 40), color="white")
+    im3.putpixel((0, 0), (255, 0, 0))
+    im3.putpixel((0, 1), (0, 255, 0))
+    im3.putpixel((0, 2), (0, 0, 255))
+    im3.save(three_col)
+    assert is_blank_or_invalid_image(three_col) is False
+
+    # Actual Matplotlib generated PRPD figure
+    prpd_png = tmp_path / "matplotlib_prpd.png"
+    generate_prpd_figure([{"phase": 45, "amplitude": 25.0}], tech_type="TEV", output_path=prpd_png)
+    assert is_blank_or_invalid_image(prpd_png) is False
+
+
+def test_threaded_tcp_server_properties_and_concurrent_requests(tmp_path: Path):
+    """Verify ThreadedTCPServer configuration and concurrent request handling."""
+    import socketserver
+    import urllib.request
+    import concurrent.futures
+
+    assert issubclass(ThreadedTCPServer, socketserver.ThreadingMixIn)
+    assert issubclass(ThreadedTCPServer, socketserver.TCPServer)
+    assert ThreadedTCPServer.daemon_threads is True
+    assert ThreadedTCPServer.allow_reuse_address is True
+
+    test_file = tmp_path / "asset.txt"
+    test_file.write_text("concurrent_prpd_test_payload", encoding="utf-8")
+
+    server = SurveyHttpServer(tmp_path)
+    port = server.start()
+    assert isinstance(server._httpd, ThreadedTCPServer)
+
+    url = f"http://127.0.0.1:{port}/asset.txt"
+
+    def fetch_url():
+        with urllib.request.urlopen(url, timeout=3.0) as resp:
+            return resp.read().decode("utf-8")
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(fetch_url) for _ in range(5)]
+            results = [f.result() for f in futures]
+            for content in results:
+                assert content == "concurrent_prpd_test_payload"
+    finally:
+        server.stop()
+
+
+def test_render_prpd_option_c_image_retries_on_blank_and_succeeds(tmp_path: Path, monkeypatch):
+    """Verify render_prpd_option_c_image retries when blank image is captured and succeeds on non-blank."""
+    meas_dir = tmp_path / "SURVEY_RETRY" / "SWG" / "FEEDER_1"
+    meas_dir.mkdir(parents=True)
+    html_file = meas_dir / "TEV.html"
+    html_file.write_text("<html><head></head><body>TEV</body></html>", encoding="utf-8")
+
+    out_png = tmp_path / "out" / "retry_rendered.png"
+
+    attempts = 0
+
+    def _mock_run(cmd, check=True, capture_output=True, timeout=15.0):
+        nonlocal attempts
+        out_png.parent.mkdir(parents=True, exist_ok=True)
+        if attempts == 0:
+            # First attempt produces a solid white blank image
+            blank_im = Image.new("RGB", (30, 30), color="white")
+            blank_im.save(out_png, "PNG")
+        else:
+            # Second attempt produces a valid multi-color image
+            good_im = Image.new("RGB", (30, 30), color="white")
+            good_im.putpixel((0, 0), (255, 0, 0))
+            good_im.putpixel((0, 1), (0, 255, 0))
+            good_im.save(out_png, "PNG")
+        attempts += 1
+
+    monkeypatch.setattr("subprocess.run", _mock_run)
+
+    server = SurveyHttpServer(tmp_path / "SURVEY_RETRY", temp_dir=tmp_path / "out")
+    port = server.start()
+    try:
+        result = render_prpd_option_c_image(
+            html_file=html_file,
+            output_png=out_png,
+            survey_root=tmp_path / "SURVEY_RETRY",
+            http_port=port,
+            chrome_path="fake_chrome.exe",
+        )
+    finally:
+        server.stop()
+
+    assert attempts == 2
+    assert result == out_png
+    assert is_blank_or_invalid_image(out_png) is False
+
+
+def test_render_prpd_option_c_image_exhausts_retries_and_returns_none(tmp_path: Path, monkeypatch):
+    """Verify render_prpd_option_c_image exhausts 2 retries (3 total attempts) on blank images and returns None."""
+    meas_dir = tmp_path / "SURVEY_EXHAUST" / "SWG" / "FEEDER_1"
+    meas_dir.mkdir(parents=True)
+    html_file = meas_dir / "TEV.html"
+    html_file.write_text("<html><head></head><body>TEV</body></html>", encoding="utf-8")
+
+    out_png = tmp_path / "out" / "exhausted.png"
+
+    attempts = 0
+
+    def _mock_run(cmd, check=True, capture_output=True, timeout=15.0):
+        nonlocal attempts
+        out_png.parent.mkdir(parents=True, exist_ok=True)
+        # Always output solid white blank image
+        blank_im = Image.new("RGB", (30, 30), color="white")
+        blank_im.save(out_png, "PNG")
+        attempts += 1
+
+    monkeypatch.setattr("subprocess.run", _mock_run)
+
+    server = SurveyHttpServer(tmp_path / "SURVEY_EXHAUST", temp_dir=tmp_path / "out")
+    port = server.start()
+    try:
+        result = render_prpd_option_c_image(
+            html_file=html_file,
+            output_png=out_png,
+            survey_root=tmp_path / "SURVEY_EXHAUST",
+            http_port=port,
+            chrome_path="fake_chrome.exe",
+        )
+    finally:
+        server.stop()
+
+    # 1 initial attempt + 2 retries = 3 attempts total
+    assert attempts == 3
+    # Returns None without falling back to Option B
+    assert result is None
+    # Blank output image was unlinked
+    assert not out_png.exists()
+
+
+def test_render_prpd_option_c_image_retries_on_process_error(tmp_path: Path, monkeypatch):
+    """Verify render_prpd_option_c_image retries on subprocess errors and returns None."""
+    meas_dir = tmp_path / "SURVEY_ERR" / "SWG" / "FEEDER_1"
+    meas_dir.mkdir(parents=True)
+    html_file = meas_dir / "TEV.html"
+    html_file.write_text("<html><head></head><body>TEV</body></html>", encoding="utf-8")
+
+    out_png = tmp_path / "out" / "error.png"
+
+    attempts = 0
+
+    def _mock_run(cmd, check=True, capture_output=True, timeout=15.0):
+        nonlocal attempts
+        attempts += 1
+        raise subprocess.CalledProcessError(1, cmd, output=b"", stderr=b"crash")
+
+    monkeypatch.setattr("subprocess.run", _mock_run)
+
+    server = SurveyHttpServer(tmp_path / "SURVEY_ERR", temp_dir=tmp_path / "out")
+    port = server.start()
+    try:
+        result = render_prpd_option_c_image(
+            html_file=html_file,
+            output_png=out_png,
+            survey_root=tmp_path / "SURVEY_ERR",
+            http_port=port,
+            chrome_path="fake_chrome.exe",
+        )
+    finally:
+        server.stop()
+
+    assert attempts == 3
+    assert result is None
+
+
+def test_option_c_injection_template_readiness_polling():
+    """Verify OPTION_C_INJECTION_TEMPLATE contains dynamic tryPlot polling loop."""
+    assert "function tryPlot(attemptsLeft)" in OPTION_C_INJECTION_TEMPLATE
+    assert "tryPlot(30)" in OPTION_C_INJECTION_TEMPLATE
+    assert "prpd.sinewave_mode = 0" in OPTION_C_INJECTION_TEMPLATE
+    assert "prpd.Plot()" in OPTION_C_INJECTION_TEMPLATE
+
 
 
 

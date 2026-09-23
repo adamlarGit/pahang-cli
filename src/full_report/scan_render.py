@@ -15,7 +15,8 @@ from typing import Any
 
 from docx.shared import Mm
 from docxtpl import DocxTemplate, InlineImage
-from PIL import Image as PILImage
+
+from src.quick_report.prpd import is_blank_or_invalid_image
 
 from src.quick_report.cbm_render import (
     _build_jinja_env,
@@ -76,20 +77,22 @@ def _bind_inline_images(doc: DocxTemplate, context: dict, image_width_mm: float 
                             obj[k] = ""
                         else:
                             v_path = Path(v)
-                            if v_path.is_file():
+                            if is_blank_or_invalid_image(v_path):
+                                logger.warning(
+                                    "Blank, invalid, or corrupt image at %s; falling back to blank",
+                                    v_path,
+                                )
+                                obj[k] = ""
+                            else:
                                 try:
-                                    with PILImage.open(v_path) as img:
-                                        img.verify()
                                     obj[k] = InlineImage(doc, str(v_path), width=Mm(image_width_mm))
                                 except Exception as exc:
                                     logger.warning(
-                                        "Invalid or corrupt image at %s: %s; falling back to blank",
+                                        "Failed to bind InlineImage at %s: %s; falling back to blank",
                                         v_path,
                                         exc,
                                     )
                                     obj[k] = ""
-                            else:
-                                obj[k] = ""
                     elif isinstance(v, InlineImage):
                         v.tpl = doc
                     elif v is None:

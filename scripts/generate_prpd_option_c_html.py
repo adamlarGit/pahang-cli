@@ -248,12 +248,21 @@ window.addEventListener('load', function() {
         prpdGraph.style.cssText = 'width: 100% !important; height: 100% !important;';
     }
 
-    setTimeout(function() {
-        if (typeof prpd !== 'undefined') {
-            prpd.sinewave_mode = 0;
-            prpd.Plot();
+    function tryPlot(attemptsLeft) {
+        if (typeof prpd !== 'undefined' && typeof prpd.Plot === 'function') {
+            try {
+                prpd.sinewave_mode = 0;
+                prpd.Plot();
+                return;
+            } catch (e) {}
         }
-    }, 150);
+        if (attemptsLeft > 0) {
+            setTimeout(function() {
+                tryPlot(attemptsLeft - 1);
+            }, 50);
+        }
+    }
+    tryPlot(30);
 });
 </script>
 """
