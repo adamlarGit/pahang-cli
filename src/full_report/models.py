@@ -290,32 +290,19 @@ def build_switchgear_scan_spec(
     res_archetype = archetype or getattr(swg, "archetype", None) or board.archetype
     res_voltage = voltage_class or getattr(swg, "voltage_class", None) or board.voltage_class
 
-    if archetype is not None or getattr(swg, "archetype", None) is not None:
-        overview = SwitchgearTopologyEngine.resolve_overview_compartments(res_archetype)
-        panels = tuple(
-            build_switchgear_panel_scan_spec(
-                p,
-                archetype=res_archetype,
-                voltage_class=res_voltage,
-            )
-            for p in swg.panels
-        )
+    if getattr(swg, "overview_compartments", None):
+        overview = tuple(swg.overview_compartments)
     else:
-        if getattr(swg, "overview_compartments", None):
-            overview = tuple(swg.overview_compartments)
-        elif category in (SwitchgearCategory.INDKOM, SwitchgearCategory.VCB):
-            overview = resolve_overview_compartments(category)
-        else:
-            overview = board.overview_compartments
+        overview = SwitchgearTopologyEngine.resolve_overview_compartments(res_archetype, res_voltage)
 
-        panels = tuple(
-            build_switchgear_panel_scan_spec(
-                p,
-                category=category,
-                voltage_class=res_voltage,
-            )
-            for p in swg.panels
+    panels = tuple(
+        build_switchgear_panel_scan_spec(
+            p,
+            archetype=res_archetype,
+            voltage_class=res_voltage,
         )
+        for p in swg.panels
+    )
 
     return SwitchgearScanSpec(
         switchgear_type=swg.switchgear_type,
@@ -371,7 +358,7 @@ def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
         label=lvdb.label,
         source=lvdb.source,
         manufacturer=lvdb.manufacturer,
-        model=lvdb.model,
+        model=getattr(lvdb, "model", ""),
         serial_no=lvdb.serial_no,
         rating=lvdb.rating,
         cable_type=lvdb.cable_type,

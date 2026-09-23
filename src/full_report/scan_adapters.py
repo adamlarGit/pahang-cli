@@ -1202,14 +1202,19 @@ class LVDBScanAdapter:
         ir_img = self.photo_resolver.resolve_ir_photo(ir_num) if self.photo_resolver else ""
         vis_img = self.photo_resolver.resolve_visual_photo(ir_num) if self.photo_resolver else ""
 
-        label_source = self.lvdb.name
+        label_source = (
+            getattr(self.lvdb, "label", None)
+            or getattr(self.lvdb, "source", None)
+            or getattr(self.lvdb, "name", None)
+            or "FP"
+        )
 
         fp_ctx = {
             "substation": sub_ctx,
             "fp": {
                 "labelsource": label_source,
                 "manufacturer": _clean_str(self.lvdb.manufacturer),
-                "model": _clean_str(self.lvdb.model),
+                "model": _clean_str(getattr(self.lvdb, "model", "-")),
                 "rating": _clean_str(self.lvdb.rating),
                 "area": "OVERVIEW",
                 "serialnumber": _clean_str(self.lvdb.serial_no),

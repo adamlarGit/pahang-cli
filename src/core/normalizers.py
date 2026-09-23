@@ -822,6 +822,23 @@ def format_busbar_position(
     return "-"
 
 
+def format_load_amp(val: Any) -> str:
+    """Format load current in Amperes, returning '-' if empty or None.
+
+    Args:
+        val: Raw load current value from testsheet or model.
+
+    Returns:
+        Formatted load current string or '-' if empty/invalid.
+    """
+    if val is None:
+        return "-"
+    s = str(val).strip()
+    if not s or s in ("-", "None", "N/A"):
+        return "-"
+    return s
+
+
 __all__ = [
     "FL_PREFIX_TO_STATION",
     "STATION_NAME_TO_CODE",
@@ -834,6 +851,7 @@ __all__ = [
     "format_heater_amp",
     "format_humidity_str",
     "format_iso8601",
+    "format_load_amp",
     "format_month_folder",
     "format_temperature_float",
     "format_testsheet_time",

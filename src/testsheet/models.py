@@ -141,6 +141,7 @@ class LVDBSpec:
     label: str = "LVDB"
     source: str = "TX1"
     manufacturer: str = ""
+    model: str = ""
     serial_no: str = ""
     rating: str = ""
     cable_type: str = ""
