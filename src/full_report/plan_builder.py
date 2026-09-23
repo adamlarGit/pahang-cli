@@ -26,6 +26,7 @@ from src.core.normalizers import (
     resolve_station_code,
     resolve_station_from_fl,
 )
+from src.core.topology import SwitchgearArchetype
 from src.full_report.census import (
     CensusRowItem,
     ExecutiveSummaryCensusBuilder,
@@ -167,6 +168,240 @@ class PlanPartItem:
         return out_p
 
 
+@dataclass(frozen=True)
+class PlanDocumentChunk:
+    """Represents a planned output Word file in a multi-part Full Report."""
+
+    chunk_index: int
+    label: str
+    output_filename: str
+    destination_path: Path
+    parts: tuple[PlanPartItem, ...] = ()
+
+
+class MultiPartPartitionPolicy:
+    """Partition planned parts into document chunks based on switchgear archetype.
+
+    For VCB_CUBICLE or GIS_CUBICLE archetypes:
+    - Chunk 1 (Part 01 - Summary): Front page, Executive Summary Census, Visual Defect Summary, and Switchgear Overview scan pages.
+    - Chunks 2..N+1 (Part XX - Panel {no} ({name})): Per-panel chamber scan pages (Cable, Breaker, Busbar, Secondary, PT) plus any inline CBM defect pages for that panel.
+    - Chunk N+2 (Part XX - TX and Condition): Transformers, LVDB/FP, Battery Bank, Condition Pages, Visual Defect Pages, Sticker Page.
+
+    For all other archetypes (RMU SF6, Oil, Standard): single chunk with <STEM>.docx.
+    """
+
+    @staticmethod
+    def partition(
+        plan: FullReportStationPlan,
+    ) -> tuple[PlanDocumentChunk, ...]:
+        """Partition plan parts into document chunks."""
+        archetype = MultiPartPartitionPolicy._resolve_archetype(plan)
+        stem = plan.output_filename.removesuffix(".docx")
+        dest_dir = plan.output_dir
+
+        if archetype in (
+            SwitchgearArchetype.VCB_CUBICLE,
+            SwitchgearArchetype.GIS_CUBICLE,
+        ):
+            return MultiPartPartitionPolicy._partition_multipart(plan, stem, dest_dir)
+
+        # Single chunk for RMU and other archetypes
+        return (
+            PlanDocumentChunk(
+                chunk_index=1,
+                label=stem,
+                output_filename=plan.output_filename,
+                destination_path=dest_dir / plan.output_filename,
+                parts=plan.parts,
+            ),
+        )
+
+    @staticmethod
+    def _resolve_archetype(
+        plan: FullReportStationPlan,
+    ) -> SwitchgearArchetype:
+        """Resolve the primary switchgear archetype from the plan's package."""
+        pkg = plan.package
+        swgs = getattr(pkg, "switchgears", ())
+        if swgs:
+            swg = swgs[0]
+            arch = getattr(swg, "archetype", None)
+            if arch is not None:
+                return arch
+            from src.core.topology import SwitchgearTopologyEngine
+
+            board = SwitchgearTopologyEngine.classify_board(
+                switchgear_type=getattr(swg, "switchgear_type", ""),
+                manufacturer=getattr(swg, "manufacturer", ""),
+                model=getattr(swg, "model", ""),
+                rating=getattr(swg, "rating", ""),
+                swg=swg,
+            )
+            return board.archetype
+        swg_single = getattr(pkg, "switchgear", None)
+        if swg_single is not None:
+            arch = getattr(swg_single, "archetype", None)
+            if arch is not None:
+                return arch
+            from src.core.topology import SwitchgearTopologyEngine
+
+            board = SwitchgearTopologyEngine.classify_board(
+                switchgear_type=getattr(swg_single, "switchgear_type", ""),
+                manufacturer=getattr(swg_single, "manufacturer", ""),
+                model=getattr(swg_single, "model", ""),
+                rating=getattr(swg_single, "rating", ""),
+                swg=swg_single,
+            )
+            return board.archetype
+        return SwitchgearArchetype.RMU_STANDARD
+
+    @staticmethod
+    def _partition_multipart(
+        plan: FullReportStationPlan,
+        stem: str,
+        dest_dir: Path,
+    ) -> tuple[PlanDocumentChunk, ...]:
+        """Partition into multi-part chunks for VCB/GIS cubicle archetypes."""
+        parts_list = list(plan.parts)
+        chunks: list[PlanDocumentChunk] = []
+
+        # --- Chunk 1: Summary ---
+        # Front Page, Census, VI Summary (if present), Switchgear Overview pages
+        summary_types = {PlanPartType.FRONT_PAGE, PlanPartType.CENSUS, PlanPartType.VI_SUMMARY}
+        summary_parts: list[PlanPartItem] = []
+        remaining_parts: list[PlanPartItem] = []
+
+        for p in parts_list:
+            if p.part_type in summary_types:
+                summary_parts.append(p)
+            elif (
+                p.part_type == PlanPartType.SCAN_PAGE
+                and p.is_overview
+                and (p.equipment_category or "").lower().startswith("swg")
+            ):
+                summary_parts.append(p)
+            else:
+                remaining_parts.append(p)
+
+        chunk_idx = 1
+        chunks.append(
+            PlanDocumentChunk(
+                chunk_index=chunk_idx,
+                label=f"Part {chunk_idx:02d} - Summary",
+                output_filename=f"{stem} - Part {chunk_idx:02d}.docx",
+                destination_path=dest_dir / f"{stem} - Part {chunk_idx:02d}.docx",
+                parts=tuple(summary_parts),
+            )
+        )
+
+        # --- Chunks 2..N+1: Per-panel ---
+        # Identify panels from the primary switchgear
+        pkg = plan.package
+        swgs = getattr(pkg, "switchgears", ())
+        if swgs:
+            panels = swgs[0].panels
+        elif getattr(pkg, "switchgear", None):
+            panels = getattr(pkg.switchgear, "panels", ())
+        else:
+            panels = ()
+
+        for panel in panels:
+            chunk_idx += 1
+            panel_parts: list[PlanPartItem] = []
+
+            # Collect scan pages and CBM defects belonging to this panel
+            new_remaining: list[PlanPartItem] = []
+            for p in remaining_parts:
+                belongs_to_panel = False
+                if p.part_type in (PlanPartType.SCAN_PAGE, PlanPartType.CBM_DEFECT):
+                    # Match by equipment_category containing panel info
+                    cat = (p.equipment_category or "").lower()
+                    if cat.startswith("swg") or cat.startswith("switchgear"):
+                        # Match by component name or sequence containing panel number
+                        part_panel_no = MultiPartPartitionPolicy._extract_panel_no(p)
+                        if part_panel_no == panel.panel_no:
+                            belongs_to_panel = True
+                if belongs_to_panel:
+                    panel_parts.append(p)
+                else:
+                    new_remaining.append(p)
+            remaining_parts = new_remaining
+
+            panel_name = getattr(panel, "name", "") or f"Panel {panel.panel_no}"
+            label = f"Part {chunk_idx:02d} - Panel {panel.panel_no} ({panel_name})"
+            chunks.append(
+                PlanDocumentChunk(
+                    chunk_index=chunk_idx,
+                    label=label,
+                    output_filename=f"{stem} - Part {chunk_idx:02d}.docx",
+                    destination_path=dest_dir / f"{stem} - Part {chunk_idx:02d}.docx",
+                    parts=tuple(panel_parts),
+                )
+            )
+
+        # --- Chunk N+2: TX and Condition ---
+        # Everything remaining: TX, LVDB, Battery, Condition, VI Defects, Sticker
+        chunk_idx += 1
+        chunks.append(
+            PlanDocumentChunk(
+                chunk_index=chunk_idx,
+                label=f"Part {chunk_idx:02d} - TX and Condition",
+                output_filename=f"{stem} - Part {chunk_idx:02d}.docx",
+                destination_path=dest_dir / f"{stem} - Part {chunk_idx:02d}.docx",
+                parts=tuple(remaining_parts),
+            )
+        )
+
+        return tuple(chunks)
+
+    @staticmethod
+    def _extract_panel_no(part: PlanPartItem) -> int | None:
+        """Extract panel number from a PlanPartItem's scan_item, interleaved_part, or metadata."""
+        # From scan_item
+        scan = part.scan_item
+        if scan is not None:
+            panel_no = getattr(scan, "panel_no", None)
+            if panel_no is not None:
+                return panel_no
+        # From interleaved_part
+        ip = part.interleaved_part
+        if ip is not None:
+            panel_no = getattr(ip, "panel_no", None)
+            if panel_no is not None:
+                return panel_no
+            # Try sequence parsing: e.g. "p01", "p02" -> panel 1, 2
+            seq = getattr(ip, "sequence", "") or ""
+            if seq.startswith("p") and len(seq) >= 3:
+                try:
+                    return int(seq[1:3])
+                except ValueError:
+                    pass
+        # From part.sequence
+        seq = getattr(part, "sequence", "") or ""
+        if seq.startswith("p") and len(seq) >= 3:
+            try:
+                return int(seq[1:3])
+            except ValueError:
+                pass
+        # From defect_metadata
+        meta = getattr(part, "defect_metadata", None)
+        if meta is not None:
+            m_seq = getattr(meta, "sequence", "") or ""
+            if m_seq.startswith("p") and len(m_seq) >= 3:
+                try:
+                    return int(m_seq[1:3])
+                except ValueError:
+                    pass
+        # From component_name
+        comp = part.component_name or ""
+        if comp:
+            import re
+            m = re.search(r'panel[\s_]*(\d+)', comp, re.IGNORECASE)
+            if m:
+                return int(m.group(1))
+        return None
+
+
 @dataclass
 class FullReportStationPlan:
     """Deterministic Bill of Materials (BOM) for compiling a Full Report deliverable."""
@@ -186,6 +421,7 @@ class FullReportStationPlan:
     has_vi_defects: bool = False
     interleaving_result: InterleavingResult | None = None
     census_result: ExecutiveSummaryCensusResult | None = None
+    _chunks: tuple[PlanDocumentChunk, ...] | None = None
 
     def __len__(self) -> int:
         return len(self.parts)
@@ -258,6 +494,19 @@ class FullReportStationPlan:
             paths.append(rendered_path)
 
         return paths
+
+    @property
+    def is_multipart(self) -> bool:
+        """Return True if this plan partitions into multiple output documents."""
+        return len(self.chunks) > 1
+
+    @property
+    def chunks(self) -> tuple[PlanDocumentChunk, ...]:
+        """Return document chunks for this plan, computed lazily via MultiPartPartitionPolicy."""
+        if self._chunks is None:
+            # Use object.__setattr__ since this is a non-frozen dataclass
+            self._chunks = MultiPartPartitionPolicy.partition(self)
+        return self._chunks
 
 
 

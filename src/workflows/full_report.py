@@ -170,6 +170,8 @@ class FullReportStationExecutionResult:
     parts_count: int = 0
     warnings: tuple[str, ...] = ()
     preflight_result: PreFlightValidationResult | None = None
+    chunk_paths: tuple[Path, ...] = ()
+    is_multipart: bool = False
 
     @property
     def pe_number(self) -> int:
@@ -187,6 +189,18 @@ class FullReportBatchResult:
     generated_paths: tuple[Path, ...] = ()
     warnings: tuple[str, ...] = ()
     errors: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.generated_paths and self.station_results:
+            flattened: list[Path] = []
+            for r in self.station_results:
+                if r.is_success:
+                    if r.is_multipart and r.chunk_paths:
+                        flattened.extend(r.chunk_paths)
+                    elif r.output_path:
+                        flattened.append(r.output_path)
+            if flattened:
+                object.__setattr__(self, "generated_paths", tuple(flattened))
 
     @property
     def reports_generated(self) -> int:
@@ -470,35 +484,86 @@ class FullReportWorkflow:
                             )
                         else:
                             # 5. Seam 4: Post-Compilation Deliverable Sanity Check
-                            is_attr_ok, attr_reason = inspect_deliverable_attribution(
-                                out_path,
-                                target_substation=st_name,
-                            )
-                            if not is_attr_ok:
-                                quarantined_path = quarantine_deliverable(out_path)
-                                err_msg = (
-                                    f"Post-compilation attribution sanity check failed for {st_name}: "
-                                    f"{attr_reason}. Deliverable quarantined to '{quarantined_path.name}'."
-                                )
-                                errors.append(err_msg)
-                                ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                                    station=st_name,
-                                    substation_number=pkg.substation_number,
-                                    output_path=None,
-                                    is_success=False,
-                                    error_message=err_msg,
-                                    preflight_result=val_res,
-                                )
+                            if comp_res.is_multipart and comp_res.chunk_paths:
+                                # Verify each chunk path exists and passes attribution
+                                all_attr_ok = True
+                                attr_failures: list[str] = []
+                                for chunk_path in comp_res.chunk_paths:
+                                    if not chunk_path or not chunk_path.exists() or chunk_path.stat().st_size == 0:
+                                        all_attr_ok = False
+                                        attr_failures.append(f"Chunk {chunk_path.name} is missing or 0 bytes.")
+                                        continue
+                                    c_ok, c_reason = inspect_deliverable_attribution(
+                                        chunk_path,
+                                        target_substation=st_name,
+                                    )
+                                    if not c_ok:
+                                        all_attr_ok = False
+                                        attr_failures.append(f"{chunk_path.name}: {c_reason}")
+                                if not all_attr_ok:
+                                    for cp in comp_res.chunk_paths:
+                                        if cp and cp.exists():
+                                            quarantine_deliverable(cp)
+                                    err_msg = (
+                                        f"Post-compilation attribution sanity check failed for {st_name}: "
+                                        f"{'; '.join(attr_failures)}. Deliverables quarantined."
+                                    )
+                                    errors.append(err_msg)
+                                    ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                                        station=st_name,
+                                        substation_number=pkg.substation_number,
+                                        output_path=None,
+                                        is_success=False,
+                                        error_message=err_msg,
+                                        preflight_result=val_res,
+                                    )
+                                else:
+                                    if comp_res.is_multipart and comp_res.chunk_paths:
+                                        generated_paths.extend(comp_res.chunk_paths)
+                                    else:
+                                        generated_paths.append(out_path)
+                                    ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                                        station=st_name,
+                                        substation_number=pkg.substation_number,
+                                        output_path=out_path,
+                                        is_success=True,
+                                        parts_count=comp_res.part_count,
+                                        preflight_result=val_res,
+                                        chunk_paths=comp_res.chunk_paths,
+                                        is_multipart=comp_res.is_multipart,
+                                    )
                             else:
-                                generated_paths.append(out_path)
-                                ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                                    station=st_name,
-                                    substation_number=pkg.substation_number,
-                                    output_path=out_path,
-                                    is_success=True,
-                                    parts_count=comp_res.part_count,
-                                    preflight_result=val_res,
+                                is_attr_ok, attr_reason = inspect_deliverable_attribution(
+                                    out_path,
+                                    target_substation=st_name,
                                 )
+                                if not is_attr_ok:
+                                    quarantined_path = quarantine_deliverable(out_path)
+                                    err_msg = (
+                                        f"Post-compilation attribution sanity check failed for {st_name}: "
+                                        f"{attr_reason}. Deliverable quarantined to '{quarantined_path.name}'."
+                                    )
+                                    errors.append(err_msg)
+                                    ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                                        station=st_name,
+                                        substation_number=pkg.substation_number,
+                                        output_path=None,
+                                        is_success=False,
+                                        error_message=err_msg,
+                                        preflight_result=val_res,
+                                    )
+                                else:
+                                    generated_paths.append(out_path)
+                                    ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                                        station=st_name,
+                                        substation_number=pkg.substation_number,
+                                        output_path=out_path,
+                                        is_success=True,
+                                        parts_count=comp_res.part_count,
+                                        preflight_result=val_res,
+                                        chunk_paths=comp_res.chunk_paths,
+                                        is_multipart=comp_res.is_multipart,
+                                    )
                     except Exception as exc:
                         # SubstationIsolatedBatchResiliencePolicy
                         err_msg = f"Failed to compile Full Report for {st_name}: {exc}"
@@ -527,19 +592,19 @@ class FullReportWorkflow:
                 word_app = None
                 gc.collect()
 
-        if progress_sink:
-            succeeded_cnt = len(generated_paths)
-            failed_cnt = len(packages) - succeeded_cnt
-            progress_sink(
-                f"Full Report batch completed: {succeeded_cnt} succeeded, {failed_cnt} failed."
-            )
-
         final_station_results = tuple(r for r in ordered_results if r is not None)
+        succeeded_stations = sum(1 for r in final_station_results if r.is_success)
+        failed_stations = len(packages) - succeeded_stations
+
+        if progress_sink:
+            progress_sink(
+                f"Full Report batch completed: {succeeded_stations} succeeded, {failed_stations} failed."
+            )
 
         return FullReportBatchResult(
             total_stations=len(packages),
-            succeeded_count=len(generated_paths),
-            failed_count=len(packages) - len(generated_paths),
+            succeeded_count=succeeded_stations,
+            failed_count=failed_stations,
             station_results=final_station_results,
             generated_paths=tuple(generated_paths),
             warnings=tuple(warnings),

@@ -298,3 +298,180 @@ def test_composer_end_to_end_with_plan_builder(tmp_path: Path) -> None:
     # Ensure D14 temp workspace is cleaned up
     temp_dir = get_temp_parts_dir(plan.station, base_dir=tmp_path)
     assert not temp_dir.exists()
+
+
+# ==============================================================================
+# Multi-Part Composer Chunking Tests (Ticket #56)
+# ==============================================================================
+
+from src.full_report.plan_builder import PlanDocumentChunk
+
+
+def _make_vcb_multipart_plan(tmp_path: Path) -> FullReportStationPlan:
+    """Create a VCB plan that will partition into multiple chunks."""
+    swg = SwitchgearSpec(
+        switchgear_type="VCB",
+        manufacturer="SCHNEIDER",
+        model="BLOKSET",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="INCOMING 1", panel_type="VCB", cable_photo=1, breaker_photo=2, busbar_photo=3, secondary_photo=4),
+            SwitchgearPanelSpec(panel_no=2, name="TX 1", panel_type="VCB", cable_photo=5, breaker_photo=6, busbar_photo=7, secondary_photo=8),
+            SwitchgearPanelSpec(panel_no=3, name="OUTGOING 1", panel_type="VCB", cable_photo=9, breaker_photo=10, busbar_photo=11, secondary_photo=12),
+        ),
+    )
+    tx = TransformerSpec(tx_id="Tx 1", manufacturer="ABB", rating_kva="1000")
+    pkg = SubstationEquipmentPackage(switchgears=(swg,), transformers=(tx,))
+
+    sliced = SlicedSections(
+        station="PE TALAPIA",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+    )
+    for f in [sliced.front_page, sliced.condition_pages, sliced.sticker_page]:
+        f.write_bytes(b"PK\x03\x04stub")
+
+    builder = FullReportPlanBuilder()
+    return builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        station="PE TALAPIA",
+        station_code="RAU",
+        date_str="04-08-2026",
+        output_dir=tmp_path / "FULL REPORT" / "RAUB" / "08. AUGUST" / "04-08-2026",
+        output_filename="005. PE TALAPIA.docx",
+    )
+
+
+def test_composer_multipart_compiles_each_chunk_separately(tmp_path: Path) -> None:
+    """Multi-part plan causes multiple compiler.compile() calls."""
+    plan = _make_vcb_multipart_plan(tmp_path)
+    assert plan.is_multipart is True
+    fake_compiler = FakeDocumentCompiler()
+    composer = FullReportComposer(compiler=fake_compiler)
+    result = composer.compose(plan, base_dir=tmp_path)
+    assert result.is_multipart is True
+    assert len(result.chunk_paths) == len(plan.chunks)
+    assert len(fake_compiler.compiled_calls) == len(plan.chunks)
+
+
+def test_composer_multipart_primary_output_is_part_01(tmp_path: Path) -> None:
+    """Multi-part compilation sets output_path to Part 01."""
+    plan = _make_vcb_multipart_plan(tmp_path)
+    fake_compiler = FakeDocumentCompiler()
+    composer = FullReportComposer(compiler=fake_compiler)
+    result = composer.compose(plan, base_dir=tmp_path)
+    assert result.output_path == plan.chunks[0].destination_path
+
+
+def test_composer_multipart_chunk_paths_all_exist(tmp_path: Path) -> None:
+    """All chunk paths exist on disk after multi-part compilation."""
+    plan = _make_vcb_multipart_plan(tmp_path)
+    fake_compiler = FakeDocumentCompiler()
+    composer = FullReportComposer(compiler=fake_compiler)
+    result = composer.compose(plan, base_dir=tmp_path)
+    for cp in result.chunk_paths:
+        assert cp.exists()
+
+
+def test_composer_singlepart_rmu_backward_compatible(tmp_path: Path) -> None:
+    """RMU plan compiles as single document with backward-compatible result."""
+    plan = _make_dummy_plan(tmp_path)
+    fake_compiler = FakeDocumentCompiler()
+    composer = FullReportComposer(compiler=fake_compiler)
+    result = composer.compose(plan, base_dir=tmp_path)
+    assert result.is_multipart is False
+    assert result.chunk_paths == ()
+    assert len(fake_compiler.compiled_calls) == 1
+
+
+def test_composer_purge_existing_parts(tmp_path: Path) -> None:
+    """Pre-purge deletes existing part files matching exact stem."""
+    dest_dir = tmp_path / "output"
+    dest_dir.mkdir(parents=True)
+    stem = "005. PE TALAPIA (IR+VI)"
+    (dest_dir / f"{stem} - Part 01.docx").write_bytes(b"old")
+    (dest_dir / f"{stem} - Part 02.docx").write_bytes(b"old")
+    unrelated = dest_dir / "other_report.docx"
+    unrelated.write_bytes(b"keep")
+    FullReportComposer._purge_existing_parts(dest_dir, stem)
+    assert not (dest_dir / f"{stem} - Part 01.docx").exists()
+    assert not (dest_dir / f"{stem} - Part 02.docx").exists()
+    assert unrelated.exists()
+
+
+def test_composer_multipart_vcb_5_panel_with_defect_pages_compilation(tmp_path: Path) -> None:
+    """VCB with 5 panels, PT, transition bay, and inline defect compiles each chunk via FakeDocumentCompiler."""
+    swg = SwitchgearSpec(
+        switchgear_type="VCB",
+        manufacturer="SCHNEIDER",
+        model="BLOKSET",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="INCOMING 1", panel_type="VCB", cable_photo=1, breaker_photo=2, busbar_photo=3, secondary_photo=4),
+            SwitchgearPanelSpec(panel_no=2, name="TX 1", panel_type="VCB", cable_photo=5, breaker_photo=6, busbar_photo=7, secondary_photo=8, pt_photo=9, has_pt_measurement=True),
+            SwitchgearPanelSpec(panel_no=3, name="BUS COUPLER", panel_type="VCB", cable_photo=10, breaker_photo=11, busbar_photo=12, secondary_photo=13),
+            SwitchgearPanelSpec(panel_no=4, name="OUTGOING 1", panel_type="VCB", cable_photo=14, breaker_photo=15, busbar_photo=16, secondary_photo=17),
+            SwitchgearPanelSpec(panel_no=5, name="TRANSITION PANEL", panel_type="VCB", cable_photo=18, breaker_photo=19, secondary_photo=20),
+        ),
+    )
+    tx = TransformerSpec(tx_id="Tx 1", manufacturer="ABB", rating_kva="1000")
+    pkg = SubstationEquipmentPackage(switchgears=(swg,), transformers=(tx,))
+
+    panel2_defect_docx = tmp_path / "swg1_p02_TX1_CABLE_COMPARTMENT_01.docx"
+    panel2_defect_docx.write_bytes(b"PK\x03\x04fake_swg_defect")
+
+    sliced = SlicedSections(
+        station="PE TALAPIA",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+        cbm_defect_pages=(panel2_defect_docx,),
+    )
+    for f in [sliced.front_page, sliced.condition_pages, sliced.sticker_page]:
+        f.write_bytes(b"PK\x03\x04stub")
+
+    from src.quick_report.defects import CbmDefectRecord
+    cbm_defects = [
+        CbmDefectRecord(
+            equipment="SWITCHGEAR",
+            equipment_id="TX 1",
+            defect_area="CABLE COMPARTMENT",
+            technology="IR",
+        )
+    ]
+
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=cbm_defects,
+        station="PE TALAPIA",
+        station_code="RAU",
+        date_str="04-08-2026",
+        output_dir=tmp_path / "FULL REPORT" / "RAUB" / "08. AUGUST" / "04-08-2026",
+        output_filename="005. PE TALAPIA (IR).docx",
+    )
+
+    assert plan.is_multipart is True
+    assert len(plan.chunks) == 7
+
+    fake_compiler = FakeDocumentCompiler()
+    composer = FullReportComposer(compiler=fake_compiler)
+    result = composer.compose(plan, base_dir=tmp_path)
+
+    assert result.is_multipart is True
+    assert len(result.chunk_paths) == 7
+    assert len(fake_compiler.compiled_calls) == 7
+
+    # Verify primary output is Part 01
+    assert result.output_path == plan.chunks[0].destination_path
+
+    # Verify chunk 3 call contains the defect page
+    chunk3_call_parts = fake_compiler.compiled_calls[2][0]
+    assert any("swg1_p02_tx1_cable_compartment" in p.name.lower() or "cbm_defect" in p.name.lower() for p in chunk3_call_parts)
+
+    # Verify all chunk outputs exist
+    for cp in result.chunk_paths:
+        assert cp.exists()
+
+

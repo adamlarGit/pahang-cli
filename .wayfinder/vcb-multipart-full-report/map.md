@@ -34,7 +34,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 
 ```mermaid
 graph TD
-    T56["#56: feat(full-report): multi-part partition policy & composer chunking"]
+    T56["#56: feat(full-report): multi-part partition policy & composer chunking - Closed"]
     T57["#57: feat(full-report): post-processing multi-part discovery & sequential PDF merge"]
     T58["#58: test(full-report): cli telemetry, benchmark e2e verification & docs"]
 
@@ -47,7 +47,7 @@ graph TD
 ## Tickets
 
 ### #56: feat(full-report): multi-part partition policy & composer chunking
-- **Status**: Ready
+- **Status**: Closed
 - **GitHub Issue**: [#56](https://github.com/adamlarGit/pahang-cli/issues/56)
 - **Blocked by**: None (can start immediately)
 - **Ticket File**: [.wayfinder/vcb-multipart-full-report/tickets/056-multipart-plan-partition-policy-and-composer.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/vcb-multipart-full-report/tickets/056-multipart-plan-partition-policy-and-composer.md)

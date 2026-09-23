@@ -49,6 +49,8 @@ class FullReportCompilationResult:
     parts: tuple[Path, ...] = ()
     keep_temp: bool = False
     temp_dir: Path | None = None
+    chunk_paths: tuple[Path, ...] = ()
+    is_multipart: bool = False
 
 
 @contextmanager
@@ -109,17 +111,10 @@ class FullReportComposer:
         temp_dir: Path | str | None = None,
         base_dir: Path | None = None,
     ) -> FullReportCompilationResult:
-        """Render planned parts and compile deliverable into master Word document.
+        """Render planned parts and compile deliverable into Word document(s).
 
-        Args:
-            plan: Deterministic FullReportStationPlan containing the Bill of Materials.
-            output_path: Optional explicit output file path overriding plan.final_output_path.
-            keep_temp: If True, preserves intermediate rendered docx parts in temp_parts/.
-            temp_dir: Optional custom temporary directory for intermediate parts.
-            base_dir: Optional workspace root directory for resolving .temp/ per D14.
-
-        Returns:
-            FullReportCompilationResult with compilation status and paths.
+        For VCB/GIS archetypes, produces multi-part chunked output documents.
+        For RMU and other archetypes, produces a single master document.
         """
         dest_path = (
             Path(output_path).resolve()
@@ -134,16 +129,65 @@ class FullReportComposer:
             base_dir=base_dir,
             keep_temp=keep_temp,
         ) as active_temp_dir:
-            parts = self._render_parts(plan, active_temp_dir)
-            compiled_path = self.compiler.compile(parts, dest_path)
-            return FullReportCompilationResult(
-                station=plan.station,
-                output_path=compiled_path,
-                part_count=len(parts),
-                parts=tuple(parts),
-                keep_temp=keep_temp,
-                temp_dir=active_temp_dir,
-            )
+            # Single-pass rendering: produce all indexed intermediate docx files
+            all_rendered_parts = self._render_parts(plan, active_temp_dir)
+
+            chunks = plan.chunks
+            is_multipart = plan.is_multipart
+
+            if is_multipart:
+                # Pre-purge: delete existing part files matching exact stem
+                stem = plan.output_filename.removesuffix(".docx")
+                self._purge_existing_parts(dest_path.parent, stem)
+
+                # Partition rendered files by chunk boundaries
+                chunk_paths: list[Path] = []
+                offset = 0
+                for chunk in chunks:
+                    chunk_count = len(chunk.parts)
+                    chunk_rendered = all_rendered_parts[offset:offset + chunk_count]
+                    offset += chunk_count
+
+                    chunk.destination_path.parent.mkdir(parents=True, exist_ok=True)
+                    compiled_path = self.compiler.compile(
+                        chunk_rendered, chunk.destination_path
+                    )
+                    chunk_paths.append(compiled_path)
+
+                primary_output = chunk_paths[0] if chunk_paths else dest_path
+                return FullReportCompilationResult(
+                    station=plan.station,
+                    output_path=primary_output,
+                    part_count=len(all_rendered_parts),
+                    parts=tuple(all_rendered_parts),
+                    keep_temp=keep_temp,
+                    temp_dir=active_temp_dir,
+                    chunk_paths=tuple(chunk_paths),
+                    is_multipart=True,
+                )
+            else:
+                # Single document compilation (existing behavior)
+                compiled_path = self.compiler.compile(all_rendered_parts, dest_path)
+                return FullReportCompilationResult(
+                    station=plan.station,
+                    output_path=compiled_path,
+                    part_count=len(all_rendered_parts),
+                    parts=tuple(all_rendered_parts),
+                    keep_temp=keep_temp,
+                    temp_dir=active_temp_dir,
+                )
+
+    @staticmethod
+    def _purge_existing_parts(directory: Path, exact_stem: str) -> None:
+        """Delete pre-existing part documents matching exact stem pattern."""
+        if not directory.exists():
+            return
+        import fnmatch
+        pattern = f"{exact_stem} - Part *.docx"
+        for f in directory.iterdir():
+            if f.is_file() and fnmatch.fnmatch(f.name, pattern):
+                logger.info("Pre-purging existing part file: %s", f.name)
+                f.unlink()
 
     def load(
         self,

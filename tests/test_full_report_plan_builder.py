@@ -769,6 +769,316 @@ def test_plan_render_all_method(tmp_path: Path) -> None:
         assert f.name.startswith(f"{idx:03d}_")
 
 
+# ==============================================================================
+# Multi-Part Partition Policy Tests (Ticket #56)
+# ==============================================================================
+
+from src.full_report.plan_builder import PlanDocumentChunk, MultiPartPartitionPolicy
+from src.core.topology import SwitchgearArchetype
+
+
+def _make_vcb_5_panel_package() -> SubstationEquipmentPackage:
+    """Create VCB substation with 5 panels including PT and transition bay."""
+    swg = SwitchgearSpec(
+        switchgear_type="VCB",
+        manufacturer="SCHNEIDER",
+        model="BLOKSET",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="INCOMING 1", panel_type="VCB", cable_photo=1, breaker_photo=2, busbar_photo=3, secondary_photo=4),
+            SwitchgearPanelSpec(panel_no=2, name="TX 1", panel_type="VCB", cable_photo=5, breaker_photo=6, busbar_photo=7, secondary_photo=8, pt_photo=9, has_pt_measurement=True),
+            SwitchgearPanelSpec(panel_no=3, name="BUS COUPLER", panel_type="VCB", cable_photo=10, breaker_photo=11, busbar_photo=12, secondary_photo=13),
+            SwitchgearPanelSpec(panel_no=4, name="OUTGOING 1", panel_type="VCB", cable_photo=14, breaker_photo=15, busbar_photo=16, secondary_photo=17),
+            SwitchgearPanelSpec(panel_no=5, name="TRANSITION PANEL", panel_type="VCB", cable_photo=18, breaker_photo=19, secondary_photo=20),
+        ),
+    )
+    tx = TransformerSpec(tx_id="Tx 1", manufacturer="ABB", rating_kva="1000")
+    lvdb = LVDBSpec(name="FP TX1", label="FP")
+    bb = BatteryBankSpec(name="Battery Bank 1", manufacturer="HOPPECKE")
+    return SubstationEquipmentPackage(
+        switchgears=(swg,),
+        transformers=(tx,),
+        lvdb_specs=(lvdb,),
+        battery_banks=(bb,),
+    )
+
+
+def _make_rmu_package() -> SubstationEquipmentPackage:
+    """Create RMU substation (single-chunk expected)."""
+    swg = SwitchgearSpec(
+        switchgear_type="INDKOM",
+        manufacturer="INDKOM",
+        model="JMW12",
+        panels=(
+            SwitchgearPanelSpec(panel_no=1, name="INCOMING", panel_type="LBS"),
+            SwitchgearPanelSpec(panel_no=2, name="TX 1", panel_type="LBS"),
+            SwitchgearPanelSpec(panel_no=3, name="OUTGOING", panel_type="LBS"),
+        ),
+    )
+    tx = TransformerSpec(tx_id="Tx 1", manufacturer="ABB", rating_kva="500")
+    return SubstationEquipmentPackage(switchgears=(swg,), transformers=(tx,))
+
+
+def test_plan_document_chunk_creation() -> None:
+    """PlanDocumentChunk dataclass holds chunk metadata and parts."""
+    chunk = PlanDocumentChunk(
+        chunk_index=1,
+        label="Part 01 - Summary",
+        output_filename="005. PE TALAPIA (IR+VI) - Part 01.docx",
+        destination_path=Path("FULL REPORT/RAUB/08. AUGUST/04-08-2026/005. PE TALAPIA (IR+VI) - Part 01.docx"),
+        parts=(
+            PlanPartItem(part_type=PlanPartType.FRONT_PAGE, part_name="Front Page", is_sliced=True),
+            PlanPartItem(part_type=PlanPartType.CENSUS, part_name="Census", is_sliced=False),
+        ),
+    )
+    assert chunk.chunk_index == 1
+    assert chunk.label == "Part 01 - Summary"
+    assert len(chunk.parts) == 2
+    assert chunk.output_filename.endswith(".docx")
+
+
+def test_multipart_vcb_produces_multiple_chunks(tmp_path: Path) -> None:
+    """VCB substation with 5 panels partitions into 7 chunks (1 summary + 5 panels + 1 TX/Condition)."""
+    pkg = _make_vcb_5_panel_package()
+    sliced = SlicedSections(
+        station="PE TALAPIA",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+    )
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=[],
+        vi_defects=[],
+        station="PE TALAPIA",
+        station_code="RAU",
+        date_str="04-08-2026",
+        output_dir=tmp_path / "FULL REPORT" / "RAUB" / "08. AUGUST" / "04-08-2026",
+        output_filename="005. PE TALAPIA.docx",
+    )
+
+    assert plan.is_multipart is True
+    chunks = plan.chunks
+    # 1 summary + 5 panels + 1 TX/Condition = 7 chunks
+    assert len(chunks) == 7
+
+    # First chunk is summary
+    assert chunks[0].label == "Part 01 - Summary"
+    assert chunks[0].chunk_index == 1
+    assert "Part 01" in chunks[0].output_filename
+
+    # Panel chunks (2-6)
+    for i, panel_chunk in enumerate(chunks[1:6], start=2):
+        assert panel_chunk.chunk_index == i
+        assert f"Part {i:02d}" in panel_chunk.output_filename
+        assert "Panel" in panel_chunk.label
+
+    # Last chunk is TX and Condition
+    assert chunks[6].label == "Part 07 - TX and Condition"
+    assert chunks[6].chunk_index == 7
+
+
+def test_rmu_produces_single_chunk(tmp_path: Path) -> None:
+    """RMU substation produces single chunk (not multipart)."""
+    pkg = _make_rmu_package()
+    sliced = SlicedSections(
+        station="PE CHEROH",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+    )
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=[],
+        vi_defects=[],
+        station="PE CHEROH",
+        station_code="RAU",
+        date_str="04-08-2026",
+        output_dir=tmp_path / "FULL REPORT" / "RAUB" / "08. AUGUST" / "04-08-2026",
+        output_filename="002. PE CHEROH.docx",
+    )
+
+    assert plan.is_multipart is False
+    chunks = plan.chunks
+    assert len(chunks) == 1
+    assert chunks[0].output_filename == "002. PE CHEROH.docx"
+    assert len(chunks[0].parts) == len(plan.parts)
+
+
+def test_multipart_chunk_output_filenames_use_stem(tmp_path: Path) -> None:
+    """Multi-part chunk filenames follow pattern: {stem} - Part {XX}.docx."""
+    pkg = _make_vcb_5_panel_package()
+    sliced = SlicedSections(
+        station="PE TALAPIA",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+    )
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=[],
+        vi_defects=[],
+        station="PE TALAPIA",
+        output_dir=tmp_path / "output",
+        output_filename="005. PE TALAPIA (IR+VI).docx",
+    )
+
+    for chunk in plan.chunks:
+        if plan.is_multipart:
+            assert f"005. PE TALAPIA (IR+VI) - Part {chunk.chunk_index:02d}.docx" == chunk.output_filename
+
+
+def test_multipart_summary_chunk_contains_front_page_and_census(tmp_path: Path) -> None:
+    """Summary chunk (Part 01) contains Front Page, Census, and Overview pages."""
+    pkg = _make_vcb_5_panel_package()
+    sliced = SlicedSections(
+        station="PE TALAPIA",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+    )
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=[],
+        vi_defects=[],
+        station="PE TALAPIA",
+        output_dir=tmp_path / "output",
+        output_filename="005. PE TALAPIA.docx",
+    )
+
+    summary_chunk = plan.chunks[0]
+    summary_types = {p.part_type for p in summary_chunk.parts}
+    assert PlanPartType.FRONT_PAGE in summary_types
+    assert PlanPartType.CENSUS in summary_types
+
+
+def test_multipart_last_chunk_contains_condition_and_sticker(tmp_path: Path) -> None:
+    """Last chunk (TX and Condition) contains Condition, Sticker, and non-SWG equipment."""
+    pkg = _make_vcb_5_panel_package()
+    sliced = SlicedSections(
+        station="PE TALAPIA",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+    )
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=[],
+        vi_defects=[],
+        station="PE TALAPIA",
+        output_dir=tmp_path / "output",
+        output_filename="005. PE TALAPIA.docx",
+    )
+
+    last_chunk = plan.chunks[-1]
+    last_types = {p.part_type for p in last_chunk.parts}
+    assert PlanPartType.CONDITION in last_types
+    assert PlanPartType.STICKER in last_types
+
+
+def test_multipart_all_parts_accounted_for(tmp_path: Path) -> None:
+    """Sum of parts across all chunks equals total parts in plan."""
+    pkg = _make_vcb_5_panel_package()
+    sliced = SlicedSections(
+        station="PE TALAPIA",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+    )
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=[],
+        vi_defects=[],
+        station="PE TALAPIA",
+        output_dir=tmp_path / "output",
+        output_filename="005. PE TALAPIA.docx",
+    )
+
+    total_parts_in_chunks = sum(len(c.parts) for c in plan.chunks)
+    assert total_parts_in_chunks == len(plan.parts)
+
+
+def test_multipart_vcb_with_inline_defect_pages_partitioning(tmp_path: Path) -> None:
+    """VCB with 5 panels, PT, transition bay, and inline defect page partitions correctly."""
+    pkg = _make_vcb_5_panel_package()
+
+    # Sliced CBM defect page for panel 2 (TX 1)
+    panel2_defect_docx = tmp_path / "swg1_p02_TX1_CABLE_COMPARTMENT_01.docx"
+    panel2_defect_docx.write_bytes(b"PK\x03\x04fake_swg_defect")
+
+    sliced = SlicedSections(
+        station="PE TALAPIA",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+        cbm_defect_pages=(panel2_defect_docx,),
+    )
+    for f in [sliced.front_page, sliced.condition_pages, sliced.sticker_page]:
+        f.write_bytes(b"PK\x03\x04stub")
+
+    cbm_defects = [
+        CbmDefectRecord(
+            equipment="SWITCHGEAR",
+            equipment_id="TX 1",
+            defect_area="CABLE COMPARTMENT",
+            technology="IR",
+        )
+    ]
+
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=cbm_defects,
+        station="PE TALAPIA",
+        station_code="RAU",
+        date_str="04-08-2026",
+        output_dir=tmp_path / "output",
+        output_filename="005. PE TALAPIA (IR).docx",
+    )
+
+    assert plan.is_multipart is True
+    chunks = plan.chunks
+    assert len(chunks) == 7
+
+    # Chunk 1: Summary (Front Page, Census, SWG Overview)
+    assert chunks[0].label == "Part 01 - Summary"
+    assert any(p.part_type == PlanPartType.FRONT_PAGE for p in chunks[0].parts)
+    assert any(p.part_type == PlanPartType.CENSUS for p in chunks[0].parts)
+
+    # Chunk 3: Panel 2 (TX 1) contains the inline CBM defect page
+    assert chunks[2].label == "Part 03 - Panel 2 (TX 1)"
+    chunk3_types = [p.part_type for p in chunks[2].parts]
+    assert PlanPartType.CBM_DEFECT in chunk3_types
+    defect_part = next(p for p in chunks[2].parts if p.part_type == PlanPartType.CBM_DEFECT)
+    assert defect_part.source_path == panel2_defect_docx
+
+    # Chunk 6: Panel 5 (TRANSITION PANEL)
+    assert "TRANSITION PANEL" in chunks[5].label
+
+    # Chunk 7: TX and Condition
+    assert chunks[6].label == "Part 07 - TX and Condition"
+    chunk7_types = {p.part_type for p in chunks[6].parts}
+    assert PlanPartType.CONDITION in chunk7_types
+    assert PlanPartType.STICKER in chunk7_types
+
+    # Invariant: all parts accounted for across chunks
+    assert sum(len(c.parts) for c in chunks) == len(plan.parts)
+
+
+
+
 
 
 
