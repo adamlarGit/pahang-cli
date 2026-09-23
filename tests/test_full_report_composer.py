@@ -33,6 +33,7 @@ from src.quick_report.compiler import (
     FakeDocumentCompiler,
     WordComDocumentCompiler,
 )
+from src.quick_report.defects import CbmDefectRecord
 from src.testsheet.models import (
     SubstationEquipmentPackage,
     SwitchgearPanelSpec,
@@ -436,7 +437,6 @@ def test_composer_multipart_vcb_5_panel_with_defect_pages_compilation(tmp_path: 
     for f in [sliced.front_page, sliced.condition_pages, sliced.sticker_page]:
         f.write_bytes(b"PK\x03\x04stub")
 
-    from src.quick_report.defects import CbmDefectRecord
     cbm_defects = [
         CbmDefectRecord(
             equipment="SWITCHGEAR",
@@ -479,5 +479,3 @@ def test_composer_multipart_vcb_5_panel_with_defect_pages_compilation(tmp_path: 
     # Verify all chunk outputs exist
     for cp in result.chunk_paths:
         assert cp.exists()
-
-

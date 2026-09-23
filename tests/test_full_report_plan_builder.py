@@ -12,6 +12,7 @@ Verifies:
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 from src.full_report.plan_builder import (
     FullReportPlanBuilder,
@@ -92,8 +93,6 @@ def test_plan_part_item_is_switchgear() -> None:
 
 def test_plan_part_item_panel_no_resolution() -> None:
     """PlanPartItem.panel_no resolves panel number across all sources."""
-    from unittest.mock import Mock
-
     # 1. Explicit _panel_no
     item = PlanPartItem(
         part_type=PlanPartType.SCAN_PAGE,
@@ -1193,10 +1192,3 @@ def test_multipart_vcb_with_inline_defect_pages_partitioning(tmp_path: Path) -> 
     assert sum(len(c.parts) for c in chunks) == len(plan.parts)
     for c in chunks:
         assert c.output_filename == f"005. PE TALAPIA (IR) - {c.label}.docx"
-
-
-
-
-
-
-

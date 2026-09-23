@@ -502,7 +502,6 @@ class FullReportStationPlan:
     def chunks(self) -> tuple[PlanDocumentChunk, ...]:
         """Return document chunks for this plan, computed lazily via MultiPartPartitionPolicy."""
         if self._chunks is None:
-            # Use object.__setattr__ since this is a non-frozen dataclass
             self._chunks = MultiPartPartitionPolicy.partition(self)
         return self._chunks
 
