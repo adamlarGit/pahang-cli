@@ -5,6 +5,27 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.1] - 2026-09-23
+
+### Fixed
+- **PRPD Content-Aware Image Validation & Option C Stabilization (`src/quick_report/prpd.py`, `src/full_report/scan_render.py`, `src/quick_report/cbm_render.py`, `scripts/generate_prpd_option_c_html.py`)**:
+  - Implemented `is_blank_or_invalid_image()` detecting solid white (`extrema == 255`), transparent unrendered canvases (`alpha == 0` with white compositing), and near-zero luminance variance (`stddev < 1.0`), preventing blank/white PRPD scatter plots from being emitted or embedded into Word documents (closes #54).
+  - Encapsulated `InlineImage` unwrapping and stream cursor lifecycle (`BytesIO` rewinding to 0) directly within `is_blank_or_invalid_image()`, removing feature envy and duplicated checks across full report and quick report template binders.
+  - Added an in-place retry loop in `render_prpd_option_c_image()` (retries up to 2 times on blank capture, unlinks corrupted PNGs, without falling back to Option B to preserve composite layout).
+  - Upgraded `SurveyHttpServer` to `ThreadedTCPServer` (`socketserver.ThreadingMixIn`) with reference-counted temp directory registration (`_active_temp_dirs: dict[str, int]`) to eliminate socket backlog stalls and premature directory deletion in multi-panel batch runs.
+  - Modernized `OPTION_C_INJECTION_TEMPLATE` with dynamic readiness polling loop (`tryPlot(attemptsLeft)`) to eliminate brittle `setTimeout` race conditions.
+
+### Refactored
+- **Legacy Switchgear Category Purge & Archetype Transition (`src/core/topology.py`, `src/full_report/`, `src/testsheet/`)**:
+  - Completely purged legacy `SwitchgearCategory` and procedural category matching in favor of the canonical `SwitchgearArchetype` hybrid topology engine across scan adapters, executive summary census, and testsheet extractors (closes #53).
+
+### Added
+- **Canonical Benchmark Deliverables & Regression Alignment (`tests/`)**:
+  - Aligned full report e2e benchmarks (TALAPIA, CENDERAWASIH, TELEKOM TANAH PUTIH) and testsheet sub-row photo extraction with canonical topology deliverables (closes #52).
+- **33kV Overview, Bay Role Keywords & Load Amp Normalization (`src/core/topology.py`, `src/core/normalizers.py`)**:
+  - Supported 33kV switchgear overview compartment resolutions and expanded bay role keyword recognition (`SEKSYEN`, `BUS TIE`, `SUIS FIUS`).
+  - Standardized `format_load_amp` to whole-number integer strings (stripping 'A' suffixes and quantizing floats like `17.0` to `'17'`).
+
 ## [1.22.0] - 2026-09-23
 
 ### Added
