@@ -12,16 +12,15 @@ Verifies:
 from __future__ import annotations
 
 from pathlib import Path
-import pytest
 
 from src.full_report.plan_builder import (
     FullReportPlanBuilder,
     FullReportStationPlan,
+    PlanDocumentChunk,
     PlanPartItem,
     PlanPartType,
 )
 from src.full_report.slicer import SlicedSections
-from src.full_report.defect_parser import CbmDefectSliceMetadata
 from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
 from src.testsheet.models import (
     BatteryBankSpec,
@@ -58,6 +57,120 @@ def test_plan_part_item_creation() -> None:
     assert item.part_name == "Front Page"
     assert item.is_sliced is True
     assert item.source_path == Path("temp_parts/front_page.docx")
+
+
+def test_plan_part_item_is_switchgear() -> None:
+    """PlanPartItem.is_switchgear detects switchgear category correctly."""
+    item_swg = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="SWG",
+        equipment_category="SWG 11kV",
+    )
+    assert item_swg.is_switchgear is True
+
+    item_switchgear = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="SWG",
+        equipment_category="switchgear",
+    )
+    assert item_switchgear.is_switchgear is True
+
+    item_tx = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="TX",
+        equipment_category="transformer",
+    )
+    assert item_tx.is_switchgear is False
+
+    item_empty = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="Empty",
+        equipment_category="",
+    )
+    assert item_empty.is_switchgear is False
+
+
+def test_plan_part_item_panel_no_resolution() -> None:
+    """PlanPartItem.panel_no resolves panel number across all sources."""
+    from unittest.mock import Mock
+
+    # 1. Explicit _panel_no
+    item = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="Panel 1",
+        _panel_no=1,
+    )
+    assert item.panel_no == 1
+
+    # Setter
+    item.panel_no = 2
+    assert item.panel_no == 2
+
+    # 2. From scan_item.panel_no
+    mock_scan = Mock()
+    mock_scan.panel_no = 3
+    item_scan = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="Scan",
+        scan_item=mock_scan,
+    )
+    assert item_scan.panel_no == 3
+
+    # 3. From interleaved_part.panel_no
+    mock_ip = Mock()
+    mock_ip.panel_no = 4
+    item_ip = PlanPartItem(
+        part_type=PlanPartType.CBM_DEFECT,
+        part_name="Defect",
+        interleaved_part=mock_ip,
+    )
+    assert item_ip.panel_no == 4
+
+    # 4. From sequence parsing (p05 -> 5)
+    item_seq = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="Seq",
+        sequence="p05",
+    )
+    assert item_seq.panel_no == 5
+
+    # 5. From interleaved_part.sequence (p06 -> 6)
+    mock_ip_seq = Mock()
+    mock_ip_seq.panel_no = None
+    mock_ip_seq.sequence = "p06"
+    item_ip_seq = PlanPartItem(
+        part_type=PlanPartType.CBM_DEFECT,
+        part_name="Defect",
+        interleaved_part=mock_ip_seq,
+    )
+    assert item_ip_seq.panel_no == 6
+
+    # 6. From defect_metadata.sequence (p07 -> 7)
+    mock_meta = Mock()
+    mock_meta.sequence = "p07"
+    item_meta = PlanPartItem(
+        part_type=PlanPartType.CBM_DEFECT,
+        part_name="Defect",
+        defect_metadata=mock_meta,
+    )
+    assert item_meta.panel_no == 7
+
+    # 7. From component_name regex
+    item_comp = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="Comp",
+        component_name="Panel 08 Cable Chamber",
+    )
+    assert item_comp.panel_no == 8
+
+    # 8. Unresolved returns None
+    item_none = PlanPartItem(
+        part_type=PlanPartType.SCAN_PAGE,
+        part_name="None",
+        component_name="TX 1 Cable",
+        sequence="tx01",
+    )
+    assert item_none.panel_no is None
 
 
 def test_station_plan_properties() -> None:
@@ -773,8 +886,6 @@ def test_plan_render_all_method(tmp_path: Path) -> None:
 # Multi-Part Partition Policy Tests (Ticket #56)
 # ==============================================================================
 
-from src.full_report.plan_builder import PlanDocumentChunk, MultiPartPartitionPolicy
-from src.core.topology import SwitchgearArchetype
 
 
 def _make_vcb_5_panel_package() -> SubstationEquipmentPackage:

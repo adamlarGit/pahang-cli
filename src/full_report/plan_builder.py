@@ -102,6 +102,66 @@ class PlanPartItem:
     sequence: str = ""
     is_overview: bool = False
     is_defective: bool = False
+    _panel_no: int | None = None
+
+    @property
+    def is_switchgear(self) -> bool:
+        """Return True if equipment category is switchgear."""
+        cat = (self.equipment_category or "").lower()
+        return cat.startswith("swg") or cat.startswith("switchgear")
+
+    @property
+    def panel_no(self) -> int | None:
+        """Resolve panel number for this item."""
+        if self._panel_no is not None:
+            return self._panel_no
+
+        if self.scan_item is not None:
+            panel_no = getattr(self.scan_item, "panel_no", None)
+            if panel_no is not None:
+                return panel_no
+
+        if self.interleaved_part is not None:
+            panel_no = getattr(self.interleaved_part, "panel_no", None)
+            if panel_no is not None:
+                return panel_no
+
+        def parse_panel_seq(seq: str | None) -> int | None:
+            if not seq:
+                return None
+            s = seq.lower()
+            if s.startswith("p") and len(s) >= 3:
+                try:
+                    return int(s[1:3])
+                except ValueError:
+                    return None
+            return None
+
+        parsed = parse_panel_seq(getattr(self, "sequence", ""))
+        if parsed is not None:
+            return parsed
+
+        if self.interleaved_part is not None:
+            parsed = parse_panel_seq(getattr(self.interleaved_part, "sequence", ""))
+            if parsed is not None:
+                return parsed
+
+        if self.defect_metadata is not None:
+            parsed = parse_panel_seq(getattr(self.defect_metadata, "sequence", ""))
+            if parsed is not None:
+                return parsed
+
+        comp = self.component_name or ""
+        if comp:
+            m = re.search(r'panel[\s_]*(\d+)', comp, re.IGNORECASE)
+            if m:
+                return int(m.group(1))
+
+        return None
+
+    @panel_no.setter
+    def panel_no(self, value: int | None) -> None:
+        self._panel_no = value
 
     def get_file_path(self) -> Path | None:
         """Resolve current file path on disk if available."""
@@ -262,7 +322,7 @@ class MultiPartPartitionPolicy:
             elif (
                 p.part_type == PlanPartType.SCAN_PAGE
                 and p.is_overview
-                and (p.equipment_category or "").lower().startswith("swg")
+                and p.is_switchgear
             ):
                 summary_parts.append(p)
             else:
@@ -301,13 +361,8 @@ class MultiPartPartitionPolicy:
             for p in remaining_parts:
                 belongs_to_panel = False
                 if p.part_type in (PlanPartType.SCAN_PAGE, PlanPartType.CBM_DEFECT):
-                    # Match by equipment_category containing panel info
-                    cat = (p.equipment_category or "").lower()
-                    if cat.startswith("swg") or cat.startswith("switchgear"):
-                        # Match by component name or sequence containing panel number
-                        part_panel_no = MultiPartPartitionPolicy._extract_panel_no(p)
-                        if part_panel_no == panel.panel_no:
-                            belongs_to_panel = True
+                    if p.is_switchgear and p.panel_no == panel.panel_no:
+                        belongs_to_panel = True
                 if belongs_to_panel:
                     panel_parts.append(p)
                 else:
@@ -343,53 +398,6 @@ class MultiPartPartitionPolicy:
         )
 
         return tuple(chunks)
-
-    @staticmethod
-    def _extract_panel_no(part: PlanPartItem) -> int | None:
-        """Extract panel number from a PlanPartItem's scan_item, interleaved_part, or metadata."""
-        def parse_panel_seq(seq: str | None) -> int | None:
-            if not seq:
-                return None
-            s = seq.lower()
-            if s.startswith("p") and len(s) >= 3:
-                try:
-                    return int(s[1:3])
-                except ValueError:
-                    return None
-            return None
-
-        # From scan_item
-        scan = part.scan_item
-        if scan is not None:
-            panel_no = getattr(scan, "panel_no", None)
-            if panel_no is not None:
-                return panel_no
-        # From interleaved_part
-        ip = part.interleaved_part
-        if ip is not None:
-            panel_no = getattr(ip, "panel_no", None)
-            if panel_no is not None:
-                return panel_no
-            parsed = parse_panel_seq(getattr(ip, "sequence", ""))
-            if parsed is not None:
-                return parsed
-        # From part.sequence
-        parsed = parse_panel_seq(getattr(part, "sequence", ""))
-        if parsed is not None:
-            return parsed
-        # From defect_metadata
-        meta = getattr(part, "defect_metadata", None)
-        if meta is not None:
-            parsed = parse_panel_seq(getattr(meta, "sequence", ""))
-            if parsed is not None:
-                return parsed
-        # From component_name
-        comp = part.component_name or ""
-        if comp:
-            m = re.search(r'panel[\s_]*(\d+)', comp, re.IGNORECASE)
-            if m:
-                return int(m.group(1))
-        return None
 
 
 @dataclass

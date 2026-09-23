@@ -177,6 +177,13 @@ class FullReportStationExecutionResult:
     def pe_number(self) -> int:
         return self.substation_number
 
+    @property
+    def deliverable_paths(self) -> tuple[Path, ...]:
+        """All deliverable document paths produced for this station."""
+        if self.is_multipart and self.chunk_paths:
+            return self.chunk_paths
+        return (self.output_path,) if self.output_path else ()
+
 
 @dataclass(frozen=True)
 class FullReportBatchResult:
@@ -192,15 +199,15 @@ class FullReportBatchResult:
 
     def __post_init__(self) -> None:
         if not self.generated_paths and self.station_results:
-            flattened: list[Path] = []
-            for r in self.station_results:
-                if r.is_success:
-                    if r.is_multipart and r.chunk_paths:
-                        flattened.extend(r.chunk_paths)
-                    elif r.output_path:
-                        flattened.append(r.output_path)
-            if flattened:
-                object.__setattr__(self, "generated_paths", tuple(flattened))
+            paths = tuple(
+                p
+                for r in self.station_results
+                if r.is_success
+                for p in r.deliverable_paths
+            )
+            object.__setattr__(self, "generated_paths", paths)
+        elif not isinstance(self.generated_paths, tuple):
+            object.__setattr__(self, "generated_paths", tuple(self.generated_paths))
 
     @property
     def reports_generated(self) -> int:

@@ -24,7 +24,6 @@ from src.full_report.composer import (
 from src.full_report.plan_builder import (
     FullReportPlanBuilder,
     FullReportStationPlan,
-    PlanDocumentChunk,
     PlanPartItem,
     PlanPartType,
 )
@@ -178,7 +177,7 @@ def test_composer_cleans_up_temp_parts_by_default(tmp_path: Path) -> None:
     composer = FullReportComposer(compiler=fake_compiler)
 
     temp_dir = get_temp_parts_dir(plan.station, base_dir=tmp_path)
-    result = composer.compose(plan, base_dir=tmp_path, keep_temp=False)
+    composer.compose(plan, base_dir=tmp_path, keep_temp=False)
 
     assert not temp_dir.exists()
 

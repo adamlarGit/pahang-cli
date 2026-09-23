@@ -24,7 +24,7 @@ from src.full_report.slicer import FakeDocumentSlicer
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
-from src.quick_report.compiler import DocumentCompiler, FakeDocumentCompiler, WordComDocumentCompiler
+from src.quick_report.compiler import FakeDocumentCompiler, WordComDocumentCompiler
 from src.testsheet.models import (
     SubstationEquipmentPackage,
     SubstationTestsheetPackage,

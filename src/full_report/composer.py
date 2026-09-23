@@ -19,15 +19,14 @@ import gc
 import logging
 from pathlib import Path
 import shutil
-from typing import Iterator, Sequence
+from typing import Iterator
 
 from src.full_report.census import ExecutiveSummaryCensusBuilder
 from src.full_report.plan_builder import FullReportStationPlan
 from src.full_report.scan_render import FullReportScanPageRendererCore
-from src.full_report.slicer import get_temp_parts_dir, temp_parts_workspace
+from src.full_report.slicer import temp_parts_workspace
 from src.quick_report.compiler import (
     DocumentCompiler,
-    FakeDocumentCompiler,
     WordComDocumentCompiler,
 )
 
