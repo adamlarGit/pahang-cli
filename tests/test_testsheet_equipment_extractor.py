@@ -387,7 +387,7 @@ def test_extract_variant_a_1tx_indoor_pce(variant_a_workbook: Path) -> None:
     assert sg.panels[0].panel_feeder_no == "F01"
     assert sg.panels[0].name == "INCOMING 1"
     assert sg.panels[0].status == "CLOSE"
-    assert sg.panels[0].load_amp == "150A"
+    assert sg.panels[0].load_amp == "150"
     assert sg.panels[0].cable_type == "XLPE 3C 240mm2"
     assert sg.panels[0].heater_amp == "0.5A"
     assert sg.panels[0].serial_no == "SN-P01"
@@ -412,7 +412,7 @@ def test_extract_variant_a_1tx_indoor_pce(variant_a_workbook: Path) -> None:
     # LVDB
     assert eq.lvdb_count == 1
     lvdb = eq.lvdb_specs[0]
-    assert lvdb.name == "LVDB 1"
+    assert lvdb.name == "LVDB TX1"
     assert lvdb.label == "LVDB"
     assert lvdb.source == "TX1"
     assert lvdb.manufacturer == "TAMCO"
@@ -461,9 +461,9 @@ def test_extract_variant_b_2tx_attach_pce_multisheet(variant_b_workbook: Path) -
 
     # 2 LVDBs
     assert eq.lvdb_count == 2
-    assert eq.lvdb_specs[0].name == "LVDB 1"
+    assert eq.lvdb_specs[0].name == "LVDB TX1"
     assert eq.lvdb_specs[0].source == "TX1"
-    assert eq.lvdb_specs[1].name == "LVDB 2"
+    assert eq.lvdb_specs[1].name == "LVDB TX2"
     assert eq.lvdb_specs[1].source == "TX2"
 
     # Fire Extinguisher (Expired)
@@ -519,7 +519,7 @@ def test_extract_variant_d_cs_compact_substation(variant_d_workbook: Path) -> No
     # Feeder Pillar
     assert eq.lvdb_count == 1
     assert eq.lvdb_specs[0].label == "FP"
-    assert eq.lvdb_specs[0].name == "FP 1"
+    assert eq.lvdb_specs[0].name == "FP TX1"
     assert eq.lvdb_specs[0].rating == "800A"
 
 
@@ -804,6 +804,7 @@ def test_extract_lvdb_specs_with_feeders_and_cable_type() -> None:
 
     ws["R48"] = "FP"
     ws["T48"] = "TX1"
+    ws["V48"] = "J-SLOTTED"
     ws["V49"] = "SSE"
     ws["V50"] = "FPPO-1628"
     ws["V51"] = "1600A"
@@ -813,6 +814,7 @@ def test_extract_lvdb_specs_with_feeders_and_cable_type() -> None:
     ws["I47"] = "PILC"
     ws["R52"] = "LVDB"
     ws["T52"] = "TX2"
+    ws["V52"] = "J-SLOTTED"
     ws["V53"] = "TAMCO"
     ws["V54"] = "SN-22"
     ws["V55"] = "800A"
@@ -821,8 +823,9 @@ def test_extract_lvdb_specs_with_feeders_and_cable_type() -> None:
     assert len(specs) == 2
 
     fp1 = specs[0]
-    assert fp1.name == "FP 1"
+    assert fp1.name == "FP TX1"
     assert fp1.label == "FP"
+    assert fp1.model == "J-SLOTTED"
     assert fp1.cable_type == "XLPE"
     assert len(fp1.feeders) == 5
     # Channel checks
@@ -834,7 +837,9 @@ def test_extract_lvdb_specs_with_feeders_and_cable_type() -> None:
     assert fp1.get_feeder_cable("OT4") == "XLPE"  # Fallback to board cable_type
 
     fp2 = specs[1]
-    assert fp2.name == "LVDB 2"
+    assert fp2.name == "LVDB TX2"
+    assert fp2.label == "LVDB"
+    assert fp2.model == "J-SLOTTED"
     assert fp2.cable_type == "PILC"
     assert len(fp2.feeders) == 2
     assert fp2.get_feeder_cable("IN1") == "PILC"

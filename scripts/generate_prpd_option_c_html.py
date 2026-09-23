@@ -1,3 +1,48 @@
+r"""
+========================================================================================
+ ULTRA-TEV PLUS2 PRPD & MEASUREMENT TABLE COMPOSITE GRAPH GENERATOR (OPTION C)
+========================================================================================
+
+Description:
+  Automates the headless rendering and screenshot generation of Option C composite
+  graphs (Measurement Summary Table on the Left + PRPD Phase Plot on the Right)
+  for Ultrasonic (US) and Transient Earth Voltage (TEV) survey data.
+
+----------------------------------------------------------------------------------------
+ INSTRUCTIONS FOR JUNIOR TECHNICIANS: HOW TO RUN THIS SCRIPT
+----------------------------------------------------------------------------------------
+
+1. Open PowerShell or Command Prompt.
+2. Navigate to the project root directory:
+     cd C:\Users\ADAM\Desktop\pahang-cli
+
+3. Run the script using Python and provide the path to your raw measurement folder.
+   (Always wrap paths containing spaces inside double quotes "")
+
+----------------------------------------------------------------------------------------
+ CLI USAGE EXAMPLES:
+----------------------------------------------------------------------------------------
+
+* EXAMPLE 1: Generate PRPD graphs for a SINGLE Switchgear Panel / Feeder
+     python scripts/generate_prpd_option_c_html.py -s "C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\RAW MATERIAL\KUANTAN\02. SEPTEMBER\20-09-2026\316\RAW DATA\US+TEV\SWG\FEEDER_1"
+
+* EXAMPLE 2: Generate PRPD graphs for an ENTIRE Substation Survey folder
+     python scripts/generate_prpd_option_c_html.py -s "C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\RAW MATERIAL\KUANTAN\02. SEPTEMBER\20-09-2026\316\RAW DATA\US+TEV"
+
+* EXAMPLE 3: Specify a CUSTOM Output Directory for generated PNGs
+     python scripts/generate_prpd_option_c_html.py -s "C:\path\to\raw_data" -o "C:\path\to\output_folder"
+
+* EXAMPLE 4: Positional Argument (without -s flag)
+     python scripts/generate_prpd_option_c_html.py "C:\path\to\raw_data\SWG\FEEDER_1"
+
+----------------------------------------------------------------------------------------
+ OUTPUT LOCATION:
+  - By default, all generated .png files are saved to:
+      C:\Users\ADAM\Desktop\pahang-cli\docs\prpd_preview\option_c\
+  - The script prints the FULL ABSOLUTE PATH of every generated PNG in the terminal.
+========================================================================================
+"""
+
 import argparse
 import http.server
 import json
@@ -5,6 +50,7 @@ import os
 from pathlib import Path
 import posixpath
 import re
+import shutil
 import socket
 import socketserver
 import subprocess
@@ -26,11 +72,46 @@ def _sanitize_name(name: str) -> str:
     return re.sub(r"[^\w]+", "_", name.upper()).strip("_")
 
 
+def find_browser_executable() -> str:
+    """Finds Google Chrome or Microsoft Edge executable for headless rendering."""
+    candidates = [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        shutil.which("chrome"),
+        shutil.which("google-chrome"),
+        shutil.which("msedge"),
+    ]
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    raise FileNotFoundError(
+        "Could not find Chrome or Edge executable. Please install Google Chrome or Microsoft Edge."
+    )
+
+
 def find_free_port() -> int:
     """Finds an available TCP port on localhost dynamically."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+def find_survey_root(target_path: Path | str) -> Path:
+    """Find the root survey directory by traversing upwards looking for survey_summary.js or resources."""
+    cur = Path(target_path).resolve()
+    while True:
+        if (
+            (cur / "survey_summary.js").exists()
+            or (cur / "survey_metadata.js").exists()
+            or (cur / "resources").exists()
+        ):
+            return cur
+        if cur.parent == cur:
+            break
+        cur = cur.parent
+    return Path(target_path).resolve()
 
 
 def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, str, str]]:
@@ -40,7 +121,9 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
     Fallback approach scans filesystem dynamically (SWG, VCB, RMU, TX, outdoor equipment).
     Returns list of tuples: (label, relative_subpath, html_filename, tech_type)
     """
-    base_path = Path(safe_path(survey_dir))
+    target_path = Path(survey_dir).resolve()
+    survey_root = find_survey_root(target_path)
+    base_path = survey_root
     items: list[tuple[str, str, str, str]] = []
 
     # 1. Primary approach: parse survey_summary.js manifest
@@ -104,6 +187,11 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
 
                             target_html = base_path / Path(rel_subpath) / html_name
                             if os.path.exists(safe_path(target_html)):
+                                full_meas_path = (survey_root / Path(rel_subpath)).resolve()
+                                # Filter if user specified a sub-directory
+                                if target_path != survey_root and not str(full_meas_path).startswith(str(target_path)):
+                                    continue
+
                                 base_label = f"{clean_asset}_{clean_sub}_{tech}" if clean_sub else f"{clean_asset}_{tech}"
                                 base_label = base_label.replace(" ", "_")
                                 label = base_label
@@ -112,8 +200,9 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
                                     while f"{base_label}_{counter}" in seen_labels:
                                         counter += 1
                                     label = f"{base_label}_{counter}"
+                                pair = (label, rel_subpath, html_name, tech)
                                 seen_labels.add(label)
-                                items.append((label, rel_subpath, html_name, tech))
+                                items.append(pair)
         except Exception:
             items = []
 
@@ -129,9 +218,12 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
             if d.is_dir() and (d.name.upper().startswith(eq_prefixes) or "TRANSFORMER" in d.name.upper())
         ]
     except OSError:
-        return items
+        candidate_eq_dirs = []
 
-    for eq_dir in sorted(candidate_eq_dirs, key=lambda p: p.name):
+    # If target_path is inside base_path, also check target_path directly
+    scan_roots = candidate_eq_dirs if candidate_eq_dirs else ([target_path] if target_path.is_dir() else [])
+
+    for eq_dir in sorted(scan_roots, key=lambda p: p.name):
         eq_name = _sanitize_name(eq_dir.name)
 
         try:
@@ -140,11 +232,12 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
             continue
 
         for child in sorted(children, key=lambda p: p.name):
-            # Check if child is direct measurement directory
             tev_html = child / "TEV.html"
             us_html = child / "Ultrasonic.html"
             if os.path.exists(safe_path(tev_html)):
-                rel_path = child.relative_to(base_path).as_posix()
+                rel_path = child.relative_to(survey_root).as_posix()
+                if target_path != survey_root and not str(child.resolve()).startswith(str(target_path)):
+                    continue
                 base_label = f"{eq_name}_TEV"
                 label = base_label
                 if label in seen_labels:
@@ -156,7 +249,9 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
                 items.append((label, rel_path, "TEV.html", "TEV"))
                 continue
             if os.path.exists(safe_path(us_html)):
-                rel_path = child.relative_to(base_path).as_posix()
+                rel_path = child.relative_to(survey_root).as_posix()
+                if target_path != survey_root and not str(child.resolve()).startswith(str(target_path)):
+                    continue
                 base_label = f"{eq_name}_US"
                 label = base_label
                 if label in seen_labels:
@@ -168,7 +263,6 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
                 items.append((label, rel_path, "Ultrasonic.html", "US"))
                 continue
 
-            # Child is a sub-asset (panel/feeder/transformer)
             sub_name = _sanitize_name(child.name)
             try:
                 meas_dirs = [m for m in child.iterdir() if m.is_dir()]
@@ -179,7 +273,9 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
                 tev_html = meas / "TEV.html"
                 us_html = meas / "Ultrasonic.html"
                 if os.path.exists(safe_path(tev_html)):
-                    rel_path = meas.relative_to(base_path).as_posix()
+                    rel_path = meas.relative_to(survey_root).as_posix()
+                    if target_path != survey_root and not str(meas.resolve()).startswith(str(target_path)):
+                        continue
                     base_label = f"{eq_name}_{sub_name}_TEV"
                     label = base_label
                     if label in seen_labels:
@@ -190,7 +286,9 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
                     seen_labels.add(label)
                     items.append((label, rel_path, "TEV.html", "TEV"))
                 elif os.path.exists(safe_path(us_html)):
-                    rel_path = meas.relative_to(base_path).as_posix()
+                    rel_path = meas.relative_to(survey_root).as_posix()
+                    if target_path != survey_root and not str(meas.resolve()).startswith(str(target_path)):
+                        continue
                     base_label = f"{eq_name}_{sub_name}_US"
                     label = base_label
                     if label in seen_labels:
@@ -202,6 +300,7 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
                     items.append((label, rel_path, "Ultrasonic.html", "US"))
 
     return items
+
 
 
 
@@ -263,18 +362,22 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
     """
     Auto-discovers and generates Option C images for any given UltraTEV survey folder.
     """
-    survey_raw = str(Path(survey_dir).resolve())
+    target_raw = str(Path(survey_dir).resolve())
     out_path = Path(output_dir).resolve()
     out_path.mkdir(parents=True, exist_ok=True)
 
-    items = auto_discover_measurements(survey_raw)
+    items = auto_discover_measurements(target_raw)
     if not items:
-        print(f"[ERROR] No measurements found in survey directory: {survey_raw}")
+        print(f"[ERROR] No measurements found in directory: {target_raw}")
         return []
+
+    survey_root = find_survey_root(target_raw)
+    survey_root_str = str(survey_root)
 
     print("================================================================================")
     print("OPTION C: AUTO-DISCOVERED PRPD + MEASUREMENT TABLE GENERATION")
-    print(f"Source Survey: {survey_raw}")
+    print(f"Target Path: {target_raw}")
+    print(f"Survey Root: {survey_root_str}")
     print(f"Output Directory: {out_path}")
     print(f"Discovered Items: {len(items)}")
     print("================================================================================")
@@ -290,7 +393,7 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
                 path = urllib.parse.unquote(path)
             path = posixpath.normpath(path)
             words = filter(None, path.split("/"))
-            full_path = safe_path(survey_raw)
+            full_path = safe_path(survey_root_str)
             for word in words:
                 full_path = os.path.join(full_path, word)
             if trailing_slash:
@@ -306,15 +409,16 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
     t.start()
     time.sleep(0.3)
 
-    chrome = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    browser_path = find_browser_executable()
     results = []
 
     try:
         for label, rel_subpath, html_name, tech in items:
-            folder = Path(safe_path(Path(survey_raw) / rel_subpath))
+            folder = Path(safe_path(survey_root / rel_subpath))
             html_file = folder / html_name
+
             temp_html_file = folder / "_temp_render_c.html"
-            out_png = out_path / f"{label}.png"
+            out_png = (out_path / f"{label}.png").resolve()
 
             if not os.path.exists(safe_path(html_file)):
                 print(f"[ERROR] HTML file not found: {html_file}")
@@ -333,7 +437,7 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
                 url = f"http://127.0.0.1:{port}/{rel_subpath}/_temp_render_c.html"
 
                 cmd = [
-                    chrome,
+                    browser_path,
                     "--headless=new",
                     "--disable-gpu",
                     "--run-all-compositor-stages-before-draw",
@@ -351,7 +455,7 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
                         pass
 
             out_size = os.path.getsize(safe_path(out_png)) if os.path.exists(safe_path(out_png)) else 0
-            print(f"[{tech:3s}] {label:20s} -> Saved ({out_size:,} bytes) to {out_png.name}")
+            print(f"[{tech:3s}] {label:22s} -> Saved ({out_size:,} bytes) to {out_png}")
             results.append({
                 "label": label,
                 "tech": tech,
@@ -364,22 +468,50 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
 
     print("================================================================================")
     print(f"Successfully generated {len(results)} Option C images!")
+    for res in results:
+        print(f"  - [{res['tech']}] {res['output_file']}")
     print("================================================================================")
     return results
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate Option C PRPD + Measurement Table composite graphs.")
+    epilog_text = """
+----------------------------------------------------------------------------------------
+JUNIOR TECHNICIAN QUICK START EXAMPLES:
+----------------------------------------------------------------------------------------
+1. Render graphs for a SINGLE Switchgear Feeder:
+   python scripts/generate_prpd_option_c_html.py -s "C:\\Users\\ADAM\\Documents\\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\\RAW MATERIAL\\KUANTAN\\02. SEPTEMBER\\20-09-2026\\316\\RAW DATA\\US+TEV\\SWG\\FEEDER_1"
+
+2. Render graphs for an ENTIRE Substation Survey:
+   python scripts/generate_prpd_option_c_html.py -s "C:\\Users\\ADAM\\Documents\\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\\RAW MATERIAL\\KUANTAN\\02. SEPTEMBER\\20-09-2026\\316\\RAW DATA\\US+TEV"
+
+3. Save output graphs directly to a specific folder:
+   python scripts/generate_prpd_option_c_html.py -s "C:\\path\\to\\raw_folder" -o "C:\\path\\to\\my_output_dir"
+"""
+
+    parser = argparse.ArgumentParser(
+        description="Option C PRPD + Measurement Table Composite Graph Generator",
+        epilog=epilog_text,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
-        "--survey-dir", "-s",
-        default=r"C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\RAW MATERIAL\RAUB\02. SEPTEMBER\04-09-2026\228\RAW DATA\US+TEV\20260904T122744_228-SSU-GALI-TENGAH",
-        help="Path to the raw UltraTEV survey folder."
+        "target_path",
+        nargs="?",
+        default=None,
+        help="Path to raw UltraTEV survey folder or specific sub-panel folder (positional argument).",
+    )
+    parser.add_argument(
+        "--survey-dir", "-s", "--input", "-i",
+        dest="survey_dir",
+        default=None,
+        help="Path to raw UltraTEV survey folder or specific sub-panel folder (flag argument).",
     )
     parser.add_argument(
         "--output-dir", "-o",
         default=r"docs\prpd_preview\option_c",
-        help="Destination directory for generated PNG images."
+        help="Destination directory for generated PNG images. (Default: docs\\prpd_preview\\option_c)",
     )
 
     args = parser.parse_args()
-    generate_all_survey_prpd_option_c(args.survey_dir, args.output_dir)
+    selected_dir = args.target_path or args.survey_dir or r"C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD\RAW MATERIAL\RAUB\02. SEPTEMBER\04-09-2026\228\RAW DATA\US+TEV\20260904T122744_228-SSU-GALI-TENGAH"
+    generate_all_survey_prpd_option_c(selected_dir, args.output_dir)

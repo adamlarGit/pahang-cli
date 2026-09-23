@@ -2110,7 +2110,7 @@ def test_swg_render_context_with_testsheet_match():
     assert ctx["panel"]["name"] == "PANEL 1"
     assert ctx["panel"]["linknumber"] == "PANEL 1"
     assert ctx["panel"]["area"] == "Cable Compartment/ Phase R Hotspot"
-    assert ctx["panel"]["loadamp"] == "120A"
+    assert ctx["panel"]["loadamp"] == "120"
     assert ctx["panel"]["heateramp"] == "-"
     assert ctx["panel"]["breakerstatus"] == "CLOSE"
     assert ctx["panel"]["cabletype"] == "XLPE 300mm"
@@ -2307,7 +2307,7 @@ def test_swg_render_context_vcb_heater_and_busbar_rules():
     )
     assert ctx_incoming["swg"]["type"] == "VCB"
     assert ctx_incoming["panel"]["name"] == "INCOMING 1"
-    assert ctx_incoming["panel"]["heateramp"] == "ON:0.6A/OFF:0.0A"
+    assert ctx_incoming["panel"]["heateramp"] == "ON:0.55A/OFF:0.0A"
     assert ctx_incoming["panel"]["busbarposition"] == "MAIN"
     assert ctx_incoming["panel"]["us"]["char"] == "NORMAL"
     assert ctx_incoming["us"]["char"] == "NORMAL"
@@ -2329,7 +2329,7 @@ def test_swg_render_context_vcb_heater_and_busbar_rules():
         pe_info=pe_info,
     )
     assert ctx_trans["panel"]["name"] == "TRANSITION PANEL"
-    assert ctx_trans["panel"]["heateramp"] == "ON:1.0A/OFF:0.0A"
+    assert ctx_trans["panel"]["heateramp"] == "ON:1.00A/OFF:0.0A"
     assert ctx_trans["panel"]["busbarposition"] == "-"
     assert ctx_trans["panel"]["us"]["char"] == "CORONA DISCHARGE"
     assert ctx_trans["us"]["char"] == "CORONA DISCHARGE"

@@ -748,8 +748,8 @@ def format_heater_amp(
     """Format anti-condensation heater current for switchgear panels.
 
     - For VCB switchgear:
-      Parses valid numeric current into 1-decimal float using half-up rounding (stripping trailing 'A'/'a' and whitespace).
-      Renders as 'ON:<amp>A/OFF:0.0A' (e.g. '0.5A' -> 'ON:0.5A/OFF:0.0A', '0.55' -> 'ON:0.6A/OFF:0.0A', '1' -> 'ON:1.0A/OFF:0.0A', '0' -> 'ON:0.0A/OFF:0.0A').
+      Parses valid numeric current into 2-decimal float using half-up rounding (stripping trailing 'A'/'a' and whitespace).
+      Renders as 'ON:<amp>A/OFF:0.0A' (e.g. '0.58A' -> 'ON:0.58A/OFF:0.0A', '0.6' -> 'ON:0.60A/OFF:0.0A', '1' -> 'ON:1.00A/OFF:0.0A', '0' -> 'ON:0.00A/OFF:0.0A').
       Returns '-' if empty, blank, '-', 'N/A', or non-numeric.
     - For Non-VCB switchgear (RMU SF6, RMU OIL, MRMU, OCB, or unspecified non-VCB):
       Always returns '-'.
@@ -772,8 +772,8 @@ def format_heater_amp(
     if isinstance(val, (int, float, Decimal)):
         if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
             return "-"
-        d = Decimal(str(round(float(val), 6))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        return f"ON:{d:.1f}A/OFF:0.0A"
+        d = Decimal(str(round(float(val), 6))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f"ON:{d:.2f}A/OFF:0.0A"
 
     s = str(val).strip()
     if not s or s.lower() in _NULL_SENTINELS:
@@ -788,8 +788,53 @@ def format_heater_amp(
         f_val = float(clean)
         if math.isnan(f_val) or math.isinf(f_val):
             return "-"
-        d = Decimal(str(round(f_val, 6))).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
-        return f"ON:{d:.1f}A/OFF:0.0A"
+        d = Decimal(str(round(f_val, 6))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return f"ON:{d:.2f}A/OFF:0.0A"
+    except (ValueError, InvalidOperation):
+        return "-"
+
+
+def format_load_amp(val: Any) -> str:
+    """Format load current (Ampere) to a whole number string.
+
+    Strips trailing 'A'/'a' and whitespace (e.g. '150A' -> '150').
+    Parses numeric values (handling floats like 17.0, 110.0, 0.0) into integers using ROUND_HALF_UP.
+    Returns '-' for None, empty, '-', or non-numeric sentinels.
+
+    Examples:
+        150 -> "150"
+        17.0 -> "17"
+        "150A" -> "150"
+        "150 a" -> "150"
+        "0.0" -> "0"
+        0 -> "0"
+        None / "" / "-" / "N/A" -> "-"
+    """
+    if _is_null_or_empty(val) or isinstance(val, bool):
+        return "-"
+
+    if isinstance(val, int):
+        return str(val)
+
+    def _quantize_whole(f_num: float) -> str:
+        if math.isnan(f_num) or math.isinf(f_num):
+            return "-"
+        d = Decimal(str(round(f_num, 6))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return str(int(d))
+
+    if isinstance(val, (float, Decimal)):
+        return _quantize_whole(float(val))
+
+    s = str(val).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return "-"
+
+    clean = re.sub(r"[Aa]\s*$", "", s).strip()
+    if not clean or clean.lower() in _NULL_SENTINELS:
+        return "-"
+
+    try:
+        return _quantize_whole(float(clean))
     except (ValueError, InvalidOperation):
         return "-"
 
@@ -944,4 +989,31 @@ def resolve_station_from_fl(fl: str | None) -> str | None:
     s = str(fl).strip().upper().replace("/", "").replace("-", "")
     prefix = s[:4]
     return FL_PREFIX_TO_STATION.get(prefix, None)
+
+
+__all__ = [
+    "extract_background_temperature",
+    "format_busbar_position",
+    "format_cbm_reading",
+    "format_date_cbm",
+    "format_date_front_page",
+    "format_db_int",
+    "format_heater_amp",
+    "format_humidity_str",
+    "format_iso8601",
+    "format_load_amp",
+    "format_month_folder",
+    "format_temperature_float",
+    "format_testsheet_time",
+    "normalize_date_str",
+    "normalize_fl_erms",
+    "normalize_for_csv",
+    "normalize_for_excel",
+    "normalize_for_report",
+    "normalize_us_characteristic",
+    "parse_background_temp",
+    "resolve_station_code",
+    "resolve_station_from_fl",
+]
+
 

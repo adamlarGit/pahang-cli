@@ -56,7 +56,7 @@ def test_switchgear_panel_scan_spec_captures_all_operating_parameters() -> None:
         serial_no="SN-998811",
         status="SERVICE/CLOSE",
         load_amp="120A",
-        heater_amp="ON:0.6A/OFF:0.0A",
+        heater_amp="ON:0.60A/OFF:0.0A",
         cable_type="XLPE 3C 240mm2",
         us_reading="10",
         us_char="MV",
@@ -74,7 +74,7 @@ def test_switchgear_panel_scan_spec_captures_all_operating_parameters() -> None:
     assert spec.serial_no == "SN-998811"
     assert spec.status == "SERVICE/CLOSE"
     assert spec.load_amp == "120A"
-    assert spec.heater_amp == "ON:0.6A/OFF:0.0A"
+    assert spec.heater_amp == "ON:0.60A/OFF:0.0A"
     assert spec.cable_type == "XLPE 3C 240mm2"
     assert spec.us_reading == "10"
     assert spec.us_char == "MV"

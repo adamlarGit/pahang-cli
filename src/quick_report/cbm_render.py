@@ -15,6 +15,7 @@ from src.core.normalizers import (
     format_busbar_position,
     format_db_int,
     format_heater_amp,
+    format_load_amp,
     format_temperature_float,
     normalize_us_characteristic,
 )
@@ -451,6 +452,8 @@ def _build_fp_lvdb_render_context(
         fp_model = "DIN TYPE"
     elif record.model:
         fp_model = _text_or_empty(record.model)
+    elif matched_lv and getattr(matched_lv, "model", ""):
+        fp_model = matched_lv.model
     elif matched_lv and matched_lv.label:
         fp_model = matched_lv.label
     else:
@@ -767,7 +770,7 @@ def _build_swg_render_context(
             "busbarposition": panel_busbarposition,
             "cabletype": _fallback_dash(panel_cabletype),
             "heateramp": panel_heateramp_formatted,
-            "loadamp": _fallback_dash(panel_loadamp),
+            "loadamp": format_load_amp(panel_loadamp),
             "serialnumber": _fallback_dash(panel_serialnumber),
             "analysis": analysis,
             "recommendation": recommendation,

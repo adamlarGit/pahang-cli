@@ -509,10 +509,11 @@ def test_lvdb_adapter_renders_overview_with_operating_parameters(
 ) -> None:
     """LVDB adapter renders overview page with operating parameters."""
     lvdb = LVDBScanSpec(
-        name="LVDB 1",
-        label="LVDB TX1",
+        name="LVDB TX1",
+        label="LVDB",
         source="TX 1",
         manufacturer="ALGEBRA",
+        model="J-SLOTTED",
         serial_no="SN-LVDB-01",
         rating="1600A",
         cable_type="4C 300mm2 PVC",
@@ -534,6 +535,7 @@ def test_lvdb_adapter_renders_overview_with_operating_parameters(
     assert item.sequence == "f00"
     assert item.context["fp"]["labelsource"] == "LVDB TX1"
     assert item.context["fp"]["manufacturer"] == "ALGEBRA"
+    assert item.context["fp"]["model"] == "J-SLOTTED"
     assert item.context["fp"]["rating"] == "1600A"
     assert item.context["fp"]["cabletype"] == "4C 300mm2 PVC"
     assert item.context["banner"]["analysis"] == BANNER_HEALTHY_ANALYSIS

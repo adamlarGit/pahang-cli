@@ -113,17 +113,17 @@ The top-level composite equipment domain entity attached to `TestsheetData.equip
 1. **Environment & Metadata**: `building_type`, `substation_type`.
 2. **Switchgear**: `switchgears: tuple[SwitchgearSpec, ...]` (with `switchgear` property pointing to primary unit for backwards compatibility).
 3. **Transformers**: `transformers: tuple[TransformerSpec, ...]` (`tx_id`, `rating_kva`, `construction_year`, `manufacturer`, `serial_no`, `type`, `hv_cable_type`, `lv_cable_type`, component thermals). Supports 0 TX (SSU), 1 TX, 2 TX, or up to 4 TX.
-4. **LVDB / Feeder Pillar**: `lvdb_specs: tuple[LVDBSpec, ...]` (`name`, `label`, `source`, `manufacturer`, `serial_no`, `rating`, `cable_type`, `feeders: tuple[LVDBFeederSpec, ...]`).
+4. **LVDB / Feeder Pillar**: `lvdb_specs: tuple[LVDBSpec, ...]` (`name`, `label`, `source`, `manufacturer`, `model`, `serial_no`, `rating`, `cable_type`, `feeders: tuple[LVDBFeederSpec, ...]`).
 5. **Auxiliary & Safety**: `battery_banks: tuple[BatteryBankSpec, ...]`, `fire_extinguisher: FireExtinguisherSpec`, `has_battery_charger`, `has_rtu`, `has_sf6`, `has_efi`.
 
 ### LvdbExtractionAndClassificationPolicy
 Classification and naming policy for LVDB / Feeder Pillar:
 - **Detection**: Inspect `R48`/`R52` on `PCE Testsheet`. If prefix is `FP` $\to$ Feeder Pillar (`"FEEDER PILLAR"`). If prefix is `LVDB` $\to$ LVDB (`"LVDB"`).
-- **Active Unit Detection**: Unit is active if an IR photo number is present in `S49`/`S53`, non-empty manufacturer/serial/rating fields exist, or active feeder cables are populated in rows 45/47.
+- **Active Unit Detection**: Unit is active if an IR photo number is present in `S49`/`S53`, non-empty manufacturer/model/serial/rating fields exist, or active feeder cables are populated in rows 45/47.
 - **Feeder Cable Extraction**: Rows 44–45 (Slot 1) and Rows 46–47 (Slot 2) parse all 13 incomer and outgoing feeder ways (`IN1..IN3`, `OT1..OT10`) using `FEEDER_CHANNEL_COLUMNS`. Inactive sentinels (`SPARE`, `N/A`, `-`) are omitted. Board-level `cable_type` is resolved from the most common active feeder cable type.
 - **Naming Rule**:
-  - Single active unit $\to$ `("FEEDER PILLAR", "FEEDER PILLAR NAMEPLATE")` or `("LVDB", "LVDB NAMEPLATE")`.
-  - Multiple active units $\to$ `Label + Source`: e.g. `("LVDB TX1", "LVDB TX1 NAMEPLATE")` or `("FEEDER PILLAR TX1", "FEEDER PILLAR TX1 NAMEPLATE")` (falling back to sequential index if source is blank).
+  - `Label + Source`: Formatted as `f"{label} {source}".strip()` (e.g. `LVDB TX1`, `FP TX1`, `FP1 TX1`, `FP2 TX2`). `label` normalizes index spacing (e.g. `FP 1` $\to$ `FP1`), and `source` falls back to `TX1` (slot 1) or `TX2` (slot 2) if blank.
+  - **Model**: Extracted from cells `V48` (slot 1) and `V52` (slot 2) (e.g. `J-SLOTTED`, `DIN TYPE`) and populated onto `LVDBSpec.model`.
 
 ### TransformerExtractionPolicy
 Extraction and counting policy for transformers from `PCE VI` and `PCE Testsheet`:
@@ -149,8 +149,10 @@ Clear separation between data representation and document presentation:
 ### CbmDefectDetailSwitchgearPolicy
 Domain rendering rules governing switchgear panel CBM defect detail pages (`swg-panel.docx`):
 - **Anti-Condensation Heater (`panel.heateramp`)**:
-  - For `VCB` switchgear: Formatted strictly as `"ON:{amp}A/OFF:0.0A"`, where `{amp}` is normalized to a 1-decimal float using half-up rounding (e.g., `0.5` $\to$ `0.5`, `0.55` $\to$ `0.6`, `1` $\to$ `1.0`, `0` $\to$ `0.0`, stripping any trailing `"A"`/`"a"` or whitespace). If cell H in `PCE Testsheet` is unpopulated, empty, `"-"`, or `"N/A"`, it outputs `"-"`.
+  - For `VCB` switchgear: Formatted strictly as `"ON:{amp}A/OFF:0.0A"`, where `{amp}` is normalized to a 2-decimal float using half-up rounding (e.g., `0.3` $\to$ `0.30`, `0.58` $\to$ `0.58`, `0.65` $\to$ `0.65`, `1` $\to$ `1.00`, `0` $\to$ `0.00`, stripping any trailing `"A"`/`"a"` or whitespace). The `OFF` state strictly remains `OFF:0.0A`. If cell H in `PCE Testsheet` is unpopulated, empty, `"-"`, or `"N/A"`, it outputs `"-"`.
   - For Non-VCB switchgear (`RMU SF6`, `RMU OIL`, `MRMU`, `OCB`): Strictly outputs `"-"` because these switchgear types do not have anti-condensation heaters.
+- **Load Current (`panel.loadamp`)**:
+  - Formatted strictly as an integer (whole number string without trailing decimal points or `"A"` suffix, e.g. `17.0` $\to$ `"17"`, `150A` $\to$ `"150"`, `0.0` $\to$ `"0"`). Returns `"-"` if empty, unpopulated, or non-numeric.
 - **Ultrasound Characteristic Presentation (`us.char` / `panel.us.char`)**:
   - On CBM defect detail pages displaying ultrasound measurements (switchgear panels and transformers), an unspecified characteristic defaults to `"NORMAL"` instead of `"-"`. Standard shorthand defect codes (`C` $\to$ `CORONA DISCHARGE`, `T` $\to$ `TRACKING`, `A` $\to$ `ARCING`, `MV` $\to$ `MECHANICAL VIBRATION`) are preserved and expanded. CBM summary table severity remains untouched (only populated when an active defect characteristic is present).
 - **Busbar Position (`panel.busbarposition`)**:

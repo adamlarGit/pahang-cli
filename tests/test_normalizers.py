@@ -16,6 +16,7 @@ from src.core.normalizers import (
     format_heater_amp,
     format_humidity_str,
     format_iso8601,
+    format_load_amp,
     format_month_folder,
     format_temperature_float,
     format_testsheet_time,
@@ -640,26 +641,29 @@ def test_format_cbm_reading() -> None:
 
 def test_format_heater_amp() -> None:
     """Verify format_heater_amp formats anti-condensation heater current per domain rules."""
-    # 1. Numeric and string formatting with explicit is_vcb=True or VCB switchgear
-    assert format_heater_amp("0.5A", is_vcb=True) == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp("0.5a", is_vcb=True) == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp("0.5 A", is_vcb=True) == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp("0.55", is_vcb=True) == "ON:0.6A/OFF:0.0A"
-    assert format_heater_amp("0.54", is_vcb=True) == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp(0.5, is_vcb=True) == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp(0.55, is_vcb=True) == "ON:0.6A/OFF:0.0A"
-    assert format_heater_amp(1, is_vcb=True) == "ON:1.0A/OFF:0.0A"
-    assert format_heater_amp("1", is_vcb=True) == "ON:1.0A/OFF:0.0A"
-    assert format_heater_amp(0, is_vcb=True) == "ON:0.0A/OFF:0.0A"
-    assert format_heater_amp("0", is_vcb=True) == "ON:0.0A/OFF:0.0A"
-    assert format_heater_amp("0.0A", is_vcb=True) == "ON:0.0A/OFF:0.0A"
-    assert format_heater_amp(Decimal("0.55"), is_vcb=True) == "ON:0.6A/OFF:0.0A"
+    # 1. Numeric and string formatting with explicit is_vcb=True or VCB switchgear (2 decimal places)
+    assert format_heater_amp("0.5A", is_vcb=True) == "ON:0.50A/OFF:0.0A"
+    assert format_heater_amp("0.5a", is_vcb=True) == "ON:0.50A/OFF:0.0A"
+    assert format_heater_amp("0.5 A", is_vcb=True) == "ON:0.50A/OFF:0.0A"
+    assert format_heater_amp("0.55", is_vcb=True) == "ON:0.55A/OFF:0.0A"
+    assert format_heater_amp("0.54", is_vcb=True) == "ON:0.54A/OFF:0.0A"
+    assert format_heater_amp(0.5, is_vcb=True) == "ON:0.50A/OFF:0.0A"
+    assert format_heater_amp(0.55, is_vcb=True) == "ON:0.55A/OFF:0.0A"
+    assert format_heater_amp(1, is_vcb=True) == "ON:1.00A/OFF:0.0A"
+    assert format_heater_amp("1", is_vcb=True) == "ON:1.00A/OFF:0.0A"
+    assert format_heater_amp(0, is_vcb=True) == "ON:0.00A/OFF:0.0A"
+    assert format_heater_amp("0", is_vcb=True) == "ON:0.00A/OFF:0.0A"
+    assert format_heater_amp("0.0A", is_vcb=True) == "ON:0.00A/OFF:0.0A"
+    assert format_heater_amp(Decimal("0.55"), is_vcb=True) == "ON:0.55A/OFF:0.0A"
+    assert format_heater_amp("0.58A", is_vcb=True) == "ON:0.58A/OFF:0.0A"
+    assert format_heater_amp("0.58 a", is_vcb=True) == "ON:0.58A/OFF:0.0A"
+    assert format_heater_amp("0.6", is_vcb=True) == "ON:0.60A/OFF:0.0A"
 
     # Explicit VCB switchgear_type
-    assert format_heater_amp("0.5A", switchgear_type="VCB") == "ON:0.5A/OFF:0.0A"
-    assert format_heater_amp("0.55", switchgear_type="VCB") == "ON:0.6A/OFF:0.0A"
-    assert format_heater_amp("1", switchgear_type="AIS VCB") == "ON:1.0A/OFF:0.0A"
-    assert format_heater_amp("0", switchgear_type="vcb") == "ON:0.0A/OFF:0.0A"
+    assert format_heater_amp("0.5A", switchgear_type="VCB") == "ON:0.50A/OFF:0.0A"
+    assert format_heater_amp("0.55", switchgear_type="VCB") == "ON:0.55A/OFF:0.0A"
+    assert format_heater_amp("1", switchgear_type="AIS VCB") == "ON:1.00A/OFF:0.0A"
+    assert format_heater_amp("0", switchgear_type="vcb") == "ON:0.00A/OFF:0.0A"
 
     # 2. Non-VCB switchgear or unknown/omitted switchgear type always outputs '-'
     assert format_heater_amp("0.5A", switchgear_type="RMU SF6") == "-"
@@ -687,6 +691,46 @@ def test_format_heater_amp() -> None:
     assert format_heater_amp(float("nan"), is_vcb=True) == "-"
     assert format_heater_amp(True, is_vcb=True) == "-"
     assert format_heater_amp(False, is_vcb=True) == "-"
+
+
+def test_format_load_amp() -> None:
+    """Verify format_load_amp converts numeric load currents to whole numbers and cleans unit suffixes."""
+    # 1. Whole numbers and floats
+    assert format_load_amp(150) == "150"
+    assert format_load_amp(17.0) == "17"
+    assert format_load_amp(110.0) == "110"
+    assert format_load_amp(0.0) == "0"
+    assert format_load_amp(0) == "0"
+    assert format_load_amp(Decimal("17.0")) == "17"
+    assert format_load_amp(Decimal("17.4")) == "17"
+    assert format_load_amp(Decimal("17.6")) == "18"
+
+    # 2. String formats with or without 'A'/'a' and whitespace
+    assert format_load_amp("150A") == "150"
+    assert format_load_amp("150a") == "150"
+    assert format_load_amp("150 A") == "150"
+    assert format_load_amp("150 a") == "150"
+    assert format_load_amp("17.0") == "17"
+    assert format_load_amp("17.0A") == "17"
+    assert format_load_amp("17.4") == "17"
+    assert format_load_amp("17.6") == "18"
+    assert format_load_amp("0") == "0"
+    assert format_load_amp("0.0") == "0"
+    assert format_load_amp("0A") == "0"
+
+    # 3. Sentinels, null, empty, non-numeric
+    assert format_load_amp(None) == "-"
+    assert format_load_amp("") == "-"
+    assert format_load_amp("   ") == "-"
+    assert format_load_amp("-") == "-"
+    assert format_load_amp("--") == "-"
+    assert format_load_amp("N/A") == "-"
+    assert format_load_amp("None") == "-"
+    assert format_load_amp("nan") == "-"
+    assert format_load_amp(float("nan")) == "-"
+    assert format_load_amp(True) == "-"
+    assert format_load_amp(False) == "-"
+    assert format_load_amp("abc") == "-"
 
 
 def test_format_busbar_position() -> None:

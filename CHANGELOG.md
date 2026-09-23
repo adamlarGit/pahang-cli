@@ -5,6 +5,21 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0] - 2026-09-23
+
+### Added
+- **Switchgear Topology Engine (`src/core/topology.py`)**: Deep module classifying switchgear boards into canonical archetypes (`VCB_CUBICLE`, `GIS_CUBICLE`, `RMU_STANDARD`, `RMU_FUSE_CANISTER`, `RMU_DUAL_CABLE_ENTRY`) with automatic voltage class determination (`11kV`, `22kV`, `33kV`), bay role classification (`INCOMING`, `OUTGOING`, `BUS_SECTION`, `TRANSITION`, `METERING`), and PT/secondary compartment gate evaluation (closes #49).
+- **Sub-Row Photo Extraction for Switchgear Panels (`src/testsheet/extractor.py`)**: Extracted individual compartment photos from PCE Testsheet sub-rows (breaker, cable, busbar, pt, and secondary) with fallback to primary photo columns (closes #50).
+- **1-to-1 Switchgear Photo Pairing & Strict Zero-Fallback (`src/full_report/scan_adapters.py`)**: Mapped compartment photos directly to their dedicated sub-row numbers with strict zero-fallback (missing photos leave visual/IR blanks instead of falling back to unrelated panel photos), eliminating photo duplication on VCB and RMU scanning pages (closes #51).
+- **LVDB / Feeder Pillar Model Extraction (`src/testsheet/extractor.py`, `src/testsheet/models.py`, `src/full_report/models.py`)**: Added `model: str = ""` to `LVDBSpec` and `LVDBScanSpec`, extracting board models (`J-SLOTTED`, `DIN TYPE`) from PCE Testsheet cells `V48` (slot 1) and `V52` (slot 2) and propagating them into Full Report and Quick Report template contexts.
+
+### Fixed
+- **LVDB / Feeder Pillar Label & Source Extraction (`src/testsheet/extractor.py`, `src/full_report/scan_adapters.py`)**: Resolved naming bug where boards were hardcoded as `"LVDB 1"` or `"FP 1"`. Now constructs composite `f"{label} {source}"` names (e.g. `LVDB TX1`, `FP TX1`, `FP1 TX1`, `FP2 TX2`) with index whitespace normalization (`FP 1` $\to$ `FP1`) and source defaulting (`TX1`/`TX2`).
+- **Anti-Condensation Heater Current 2-Decimal Precision (`src/core/normalizers.py`)**: Updated `format_heater_amp` to round heater currents to 2 decimal places using half-up rounding (`ROUND_HALF_UP` to `Decimal("0.01")`), rendering as `ON:<amp>A/OFF:0.0A` (e.g. `ON:0.65A/OFF:0.0A`, `ON:0.30A/OFF:0.0A`) while strictly maintaining `OFF:0.0A` for 1 decimal.
+- **Switchgear Load Current Integer Normalization (`src/core/normalizers.py`, `src/testsheet/extractor.py`, `src/quick_report/cbm_render.py`)**: Implemented `format_load_amp` to quantize OpenXML floats and suffixed readings (e.g. `17.0`, `110.0`, `150A`) to clean integer strings (`"17"`, `"110"`, `"150"`, `"0"`), returning `"-"` for empty/sentinel values.
+- **Quick Report CBM Render Falsy-Zero Guard (`src/quick_report/cbm_render.py`)**: Removed redundant ternary guard on `format_load_amp` that bypassed numeric `0` / `0.0` to `"-"`.
+- **Full Report Benchmark Sliced QR Overview Assertion (`tests/test_full_report_e2e_benchmarks.py`)**: Supported composite naming (`LVDB TX1` / `FP TX1`) alongside legacy names in TALAPIA sliced overview verification.
+
 ## [1.21.4] - 2026-09-19
 
 ### Fixed

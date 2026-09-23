@@ -12,7 +12,10 @@ REAL_DATASET_ROOT = Path(
     os.getenv("PAHANG_BENCHMARK_ROOT", r"C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD")
 )
 
-from src.core.normalizers import format_month_folder
+from src.core.normalizers import (
+    format_heater_amp,
+    format_month_folder,
+)
 from src.testsheet.extractor import (
     TestsheetExtractor,
     clean_val,
@@ -627,6 +630,75 @@ def test_benchmark_156_ssu_wisma_mpk_subrow_extraction() -> None:
     # Bus Section Panel: secondary_photo == 479
     bs_panel = [p for p in swg.panels if p.name.upper() == "B/S"][0]
     assert bs_panel.secondary_photo == 479
+
+
+@pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
+def test_benchmark_lvdb_and_heater_and_load_amp_real_workbooks() -> None:
+    """Verify LVDB naming, model extraction, and panel load/heater amp formatting across real testsheets."""
+    p251 = (
+        REAL_DATASET_ROOT
+        / "TESTSHEET"
+        / "RAUB"
+        / "02. SEPTEMBER"
+        / "13-09-2026"
+        / "251. PUSAT SERENTI SG RUAN.xlsx"
+    )
+    p259 = (
+        REAL_DATASET_ROOT
+        / "TESTSHEET"
+        / "RAUB"
+        / "02. SEPTEMBER"
+        / "13-09-2026"
+        / "259. SUNGAI RUAN BARU (IR).xlsx"
+    )
+    p157 = (
+        REAL_DATASET_ROOT
+        / "TESTSHEET"
+        / "KUANTAN"
+        / "01. AUGUST"
+        / "25-08-2026"
+        / "157. PERPUSTAKAAN AWAM(VCB).xlsx"
+    )
+
+    extractor = TestsheetExtractor()
+
+    # 1. 251: LVDB name is "LVDB TX1", model is "J-SLOTTED"
+    if p251.is_file():
+        d251 = extractor.extract_testsheet_data(p251)
+        assert len(d251.equipment.lvdb_specs) >= 1
+        lvdb251 = d251.equipment.lvdb_specs[0]
+        assert lvdb251.name == "LVDB TX1"
+        assert lvdb251.model == "J-SLOTTED"
+
+    # 2. 259: LVDB name is "FP TX1", model is "J-SLOTTED"
+    if p259.is_file():
+        d259 = extractor.extract_testsheet_data(p259)
+        assert len(d259.equipment.lvdb_specs) >= 1
+        lvdb259 = d259.equipment.lvdb_specs[0]
+        assert lvdb259.name == "FP TX1"
+        assert lvdb259.model == "J-SLOTTED"
+
+    # 3. 157: Panel load_amp is "17" and "0" (not "17.0" or "0.0"), and heater formats to 2 decimal places
+    if p157.is_file():
+        d157 = extractor.extract_testsheet_data(p157)
+        assert len(d157.equipment.switchgears) >= 1
+        swg157 = d157.equipment.switchgears[0]
+        loads = [p.load_amp for p in swg157.panels]
+        assert "17" in loads
+        assert "0" in loads
+        assert "17.0" not in loads
+        assert "0.0" not in loads
+
+        # Check heater formatting
+        for p in swg157.panels:
+            if p.heater_amp:
+                h_formatted = format_heater_amp(p.heater_amp, is_vcb=True)
+                assert h_formatted.startswith("ON:")
+                assert h_formatted.endswith("A/OFF:0.0A")
+                val_part = h_formatted.split("ON:")[1].split("A/OFF:")[0]
+                assert "." in val_part
+                assert len(val_part.split(".")[1]) == 2
+
 
 
 

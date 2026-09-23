@@ -13,6 +13,7 @@ import openpyxl
 
 from src.core.normalizers import (
     format_humidity_str,
+    format_load_amp,
     format_testsheet_time,
     normalize_us_characteristic,
     parse_background_temp,
@@ -609,7 +610,9 @@ class TestsheetExtractor:
                     continue
 
                 status = clean_val(ws[f"E{r}"].value) or clean_val(ws[f"D{r}"].value) or ""
-                load_amp = clean_val(ws[f"F{r}"].value) or ""
+                load_amp_raw = clean_val(ws[f"F{r}"].value) or ""
+                norm_load = format_load_amp(load_amp_raw)
+                load_amp = "" if norm_load == "-" else norm_load
                 cable_type = clean_val(ws[f"G{r}"].value) or ""
                 heater_amp = clean_val(ws[f"H{r}"].value) or ""
                 panel_type = clean_val(ws[f"J{r}"].value) or ""
@@ -1041,8 +1044,19 @@ class TestsheetExtractor:
                 feeders1.append(LVDBFeederSpec(channel=channel, cable_type=cable))
         cable_type1 = _compute_board_cable_type(feeders1)
 
+        def _normalize_lvdb_label(label_raw: str) -> str:
+            raw_upper = (label_raw or "").upper()
+            if "FP" in raw_upper:
+                m = re.search(r"FP\s*(\d+)", raw_upper)
+                return f"FP{m.group(1)}" if m else "FP"
+            elif "LVDB" in raw_upper:
+                m = re.search(r"LVDB\s*(\d+)", raw_upper)
+                return f"LVDB{m.group(1)}" if m else "LVDB"
+            return "LVDB"
+
         label1_raw = clean_val(ws_pce["R48"].value) or ""
         source1_raw = clean_val(ws_pce["T48"].value) or ""
+        model1 = clean_val(ws_pce["V48"].value) or ""
         photo1 = ws_pce["S49"].value
         photo1_numbers = parse_photo_numbers(photo1)
         mfg1 = clean_val(ws_pce["V49"].value) or clean_val(ws_pce["U49"].value) or ""
@@ -1056,18 +1070,19 @@ class TestsheetExtractor:
             rating1 = clean_val(ws_pce["R51"].value) or ""
 
         photo1_active = bool(photo1_numbers) or (photo1 is not None and str(photo1).strip() not in ("", "-", "None", "nan", "N/A"))
-        slot1_active = bool(photo1_active or mfg1 or sn1 or rating1 or feeders1)
+        slot1_active = bool(photo1_active or mfg1 or sn1 or rating1 or model1 or feeders1)
 
         if slot1_active:
-            label1 = "FP" if "FP" in label1_raw.upper() else "LVDB"
+            label1 = _normalize_lvdb_label(label1_raw)
             source1 = source1_raw if source1_raw else "TX1"
-            name1 = f"{label1} 1"
+            name1 = f"{label1} {source1}".strip()
             lvdb_specs.append(
                 LVDBSpec(
                     name=name1,
                     label=label1,
                     source=source1,
                     manufacturer=mfg1,
+                    model=model1,
                     serial_no=sn1,
                     rating=rating1,
                     cable_type=cable_type1,
@@ -1086,6 +1101,7 @@ class TestsheetExtractor:
 
         label2_raw = clean_val(ws_pce["R52"].value) or ""
         source2_raw = clean_val(ws_pce["T52"].value) or ""
+        model2 = clean_val(ws_pce["V52"].value) or ""
         photo2 = ws_pce["S53"].value
         photo2_numbers = parse_photo_numbers(photo2)
         mfg2 = clean_val(ws_pce["V53"].value) or clean_val(ws_pce["U53"].value) or ""
@@ -1099,18 +1115,19 @@ class TestsheetExtractor:
             rating2 = clean_val(ws_pce["R55"].value) or ""
 
         photo2_active = bool(photo2_numbers) or (photo2 is not None and str(photo2).strip() not in ("", "-", "None", "nan", "N/A"))
-        slot2_active = bool(photo2_active or mfg2 or sn2 or rating2 or feeders2)
+        slot2_active = bool(photo2_active or mfg2 or sn2 or rating2 or model2 or feeders2)
 
         if slot2_active:
-            label2 = "FP" if "FP" in label2_raw.upper() else "LVDB"
+            label2 = _normalize_lvdb_label(label2_raw)
             source2 = source2_raw if source2_raw else "TX2"
-            name2 = f"{label2} 2"
+            name2 = f"{label2} {source2}".strip()
             lvdb_specs.append(
                 LVDBSpec(
                     name=name2,
                     label=label2,
                     source=source2,
                     manufacturer=mfg2,
+                    model=model2,
                     serial_no=sn2,
                     rating=rating2,
                     cable_type=cable_type2,

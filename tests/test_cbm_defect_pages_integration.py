@@ -176,7 +176,7 @@ def test_generate_cbm_defect_pages_swg_with_prpd_and_severity(tmp_path: Path):
 
     # Verify rendered domain values in tables: heateramp, busbarposition, us.char
     full_table_text = " ".join(cell.text for row in t.rows for cell in row.cells)
-    assert "ON:0.5A/OFF:0.0A" in full_table_text
+    assert "ON:0.50A/OFF:0.0A" in full_table_text
     assert "MAIN" in full_table_text
     assert "CORONA DISCHARGE" in full_table_text
 
