@@ -29,6 +29,7 @@ from src.full_report.models import (
     TransformerScanSpec,
 )
 from src.core.topology import SwitchgearArchetype
+from src.testsheet.models import SwitchgearPanelSpec, SwitchgearSpec
 from src.full_report.photo_resolver import PhotoPair, RawPhotoResolver
 from src.full_report.scan_adapters import (
     BatteryBankScanAdapter,
@@ -1268,5 +1269,48 @@ def test_switchgear_adapter_panel_serial_number_in_render_context(mock_substatio
     result = adapter.adapt()
     panel_item = result.items[1]
     assert panel_item.context["panel"]["serialnumber"] == "SN-PANEL-9988"
+
+
+def test_switchgear_adapter_33kv_overview_and_cable_entry_fallback(mock_substation_info: dict[str, str]) -> None:
+    """Verify 33kV switchgear generates dual Front and Rear overviews, and CABLE ENTRY falls back to breaker_photo."""
+    swg_33kv = SwitchgearSpec(
+        switchgear_type="RMU SF6 33kV",
+        rating="33kV",
+        panels=(),
+    )
+    adapter = SwitchgearScanAdapter(
+        swg=swg_33kv,
+        substation_info=mock_substation_info,
+    )
+    result = adapter.adapt()
+    ov_comps = [item.component_name for item in result.items if item.is_overview]
+    assert ov_comps == ["OVERVIEW FRONT", "OVERVIEW REAR"]
+
+    # CABLE ENTRY fallback test
+    panel_cable_entry = SwitchgearPanelSpec(
+        panel_no=1,
+        name="PANEL 1",
+        photo_numbers=(100,),  # only 1 photo in tuple
+        breaker_photo=101,     # fallback photo for entry
+    )
+    swg_dual = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="TAMCO",
+        model="GV3",
+        panels=(panel_cable_entry,),
+    )
+    resolver = FakePhotoResolver({
+        100: ("/photos/IR_100.jpg", "/photos/VIS_100.jpg"),
+        101: ("/photos/IR_101.jpg", "/photos/VIS_101.jpg"),
+    })
+    adapter_dual = SwitchgearScanAdapter(
+        swg=swg_dual,
+        substation_info=mock_substation_info,
+        photo_resolver=resolver,
+    )
+    res_dual = adapter_dual.adapt()
+    cable_entry_items = [it for it in res_dual.items if it.component_name == "CABLE ENTRY"]
+    assert len(cable_entry_items) == 1
+    assert cable_entry_items[0].context["ir"]["image"] == "/photos/IR_101.jpg"
 
 

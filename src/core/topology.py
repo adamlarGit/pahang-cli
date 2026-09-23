@@ -188,7 +188,35 @@ def resolve_overview_compartments(
     archetype: SwitchgearArchetype,
     voltage_class: VoltageClass = VoltageClass.KV_11,
 ) -> tuple[str, ...]:
-    """Resolve overview scanning page compartments for switchgear archetype."""
+    """Resolve overview scanning page compartments for switchgear archetype and voltage class."""
+    if isinstance(archetype, str):
+        try:
+            archetype = SwitchgearArchetype(archetype)
+        except ValueError:
+            try:
+                archetype = SwitchgearArchetype[archetype]
+            except KeyError:
+                archetype = SwitchgearArchetype.RMU_STANDARD
+
+    if isinstance(voltage_class, str):
+        try:
+            voltage_class = VoltageClass(voltage_class)
+        except ValueError:
+            try:
+                voltage_class = VoltageClass[voltage_class]
+            except KeyError:
+                voltage_class = VoltageClass.KV_11
+
+    if archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
+        return ("OVERVIEW FRONT", "OVERVIEW REAR", "OVERVIEW TOP")
+    if archetype == SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY:
+        return ("OVERVIEW", "OVERVIEW BOTTOM")
+    if archetype == SwitchgearArchetype.RMU_FUSE_CANISTER:
+        return ("OVERVIEW", "OVERVIEW TOP")
+    if archetype == SwitchgearArchetype.RMU_OIL:
+        return ("OVERVIEW", "OVERVIEW BOTTOM")
+    if voltage_class == VoltageClass.KV_33:
+        return ("OVERVIEW FRONT", "OVERVIEW REAR")
     return OVERVIEW_COMPARTMENTS_MAP.get(archetype, ("OVERVIEW",))
 
 
@@ -217,15 +245,15 @@ def classify_bay_role(
         return BayRole.TRANSITION
 
     # 2. Bus Section
-    if re.search(r"(?:\bBUS[\s-]*(?:SECTION|SEC)\b|\bSECTION\b|\bSEC\b|\bB/S\b)", combined, re.IGNORECASE):
+    if re.search(r"(?:\bBUS[\s-]*(?:SECTION|SEC|SEKSYEN)\b|\bSECTION\b|\bSEKSYEN\b|\bSEC\b|\bB/S\b|\bB/SEC\b)", combined, re.IGNORECASE):
         return BayRole.BUS_SECTION
 
     # 3. Bus Coupler
-    if re.search(r"(?:\bBUS[\s-]*COUPLER\b|\bCOUPLER\b|\bB/C\b)", combined, re.IGNORECASE):
+    if re.search(r"(?:\bBUS[\s-]*(?:COUPLER|TIE)\b|\bCOUPLER\b|\bBUS[\s-]*TIE\b|\bB/C\b|\bTIE\b)", combined, re.IGNORECASE):
         return BayRole.BUS_COUPLER
 
-    # 4. Transformer (TX, TRANSFORMER, ALATUBAH, TEE-OFF, FUSE, KVA) in name or panel_feeder_no per spec
-    if re.search(r"(?:\bTX\d*\b|\bTRANSFORMER\b|\bALATUBAH\b|\bTEE[\s-]*OFF\b|\b\d*KVA\b|\bKVA\b|\bFUSE\b)", name_feeder, re.IGNORECASE):
+    # 4. Transformer (TX, TRANSFORMER, ALATUBAH, TEE-OFF, FUSE, FIUS, KVA) in name or panel_feeder_no per spec
+    if re.search(r"(?:\bTX\d*\b|\bTRANSFORMER\b|\bALATUBAH\b|\bTEE[\s-]*OFF\b|\b\d*\s*KVA\b|\bKVA\b|\bFUSE\b|\bFIUS\b)", name_feeder, re.IGNORECASE):
         return BayRole.TRANSFORMER
 
     # 5. Default Standard Feeder
@@ -280,6 +308,21 @@ def resolve_panel_compartments(
 
     Pure domain resolution with zero COM or filesystem dependencies.
     """
+    if isinstance(archetype, str):
+        try:
+            archetype = SwitchgearArchetype(archetype)
+        except ValueError:
+            try:
+                archetype = SwitchgearArchetype[archetype]
+            except KeyError:
+                archetype = SwitchgearArchetype.RMU_STANDARD
+
+    if isinstance(bay_role, str):
+        try:
+            bay_role = BayRole(bay_role.strip().upper())
+        except ValueError:
+            pass
+
     if panel is None and bay_role is not None and not isinstance(bay_role, BayRole):
         panel = bay_role
         bay_role = None

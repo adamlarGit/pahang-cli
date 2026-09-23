@@ -16,6 +16,7 @@ from src.core.normalizers import (
     format_heater_amp,
     format_humidity_str,
     format_iso8601,
+    format_load_amp,
     format_month_folder,
     format_temperature_float,
     format_testsheet_time,
@@ -721,6 +722,33 @@ def test_format_busbar_position() -> None:
     assert format_busbar_position("PANEL 1", switchgear_type="") == "-"
     assert format_busbar_position("PANEL 1", switchgear_type=None) == "-"
     assert format_busbar_position("PANEL 1") == "-"
+
+
+def test_format_load_amp() -> None:
+    """Verify format_load_amp formats load current in Amperes with robust sentinel handling."""
+    # Valid values
+    assert format_load_amp("120A") == "120A"
+    assert format_load_amp("65 A") == "65 A"
+    assert format_load_amp("0") == "0"
+    assert format_load_amp(0) == "0"
+    assert format_load_amp(120) == "120"
+    assert format_load_amp(85.5) == "85.5"
+
+    # Sentinels and empty values
+    assert format_load_amp(None) == "-"
+    assert format_load_amp("") == "-"
+    assert format_load_amp("   ") == "-"
+    assert format_load_amp("-") == "-"
+    assert format_load_amp("--") == "-"
+    assert format_load_amp("N/A") == "-"
+    assert format_load_amp("n/a") == "-"
+    assert format_load_amp("NA") == "-"
+    assert format_load_amp("None") == "-"
+    assert format_load_amp("null") == "-"
+    assert format_load_amp(float("nan")) == "-"
+    assert format_load_amp(float("inf")) == "-"
+    assert format_load_amp(True) == "-"
+    assert format_load_amp(False) == "-"
 
 
 

@@ -176,11 +176,14 @@ def test_classify_bay_role() -> None:
     assert classify_bay_role(name="B/S 1") == BayRole.BUS_SECTION
     assert classify_bay_role(name="BUS SEC 2") == BayRole.BUS_SECTION
     assert classify_bay_role(name="SECTION 1") == BayRole.BUS_SECTION
+    assert classify_bay_role(name="SEKSYEN 1") == BayRole.BUS_SECTION
     assert classify_bay_role(name="SEC 1") == BayRole.BUS_SECTION
 
     # 2. Bus Coupler
     assert classify_bay_role(name="BUS COUPLER") == BayRole.BUS_COUPLER
     assert classify_bay_role(name="BUS-COUPLER") == BayRole.BUS_COUPLER
+    assert classify_bay_role(name="BUS TIE") == BayRole.BUS_COUPLER
+    assert classify_bay_role(name="BUS-TIE") == BayRole.BUS_COUPLER
     assert classify_bay_role(panel_feeder_no="B/C") == BayRole.BUS_COUPLER
     assert classify_bay_role(name="COUPLER") == BayRole.BUS_COUPLER
 
@@ -199,6 +202,9 @@ def test_classify_bay_role() -> None:
     assert classify_bay_role(name="TEE-OFF") == BayRole.TRANSFORMER
     assert classify_bay_role(name="TEE OFF") == BayRole.TRANSFORMER
     assert classify_bay_role(name="1000KVA TX") == BayRole.TRANSFORMER
+    assert classify_bay_role(name="TX 500 KVA") == BayRole.TRANSFORMER
+    assert classify_bay_role(name="SUIS FIUS 1") == BayRole.TRANSFORMER
+    assert classify_bay_role(name="FIUS ALATUBAH") == BayRole.TRANSFORMER
 
     # 5. Standard feeders (including SPARE, regular line names)
     assert classify_bay_role(name="FEEDER 1") == BayRole.STANDARD
@@ -390,6 +396,16 @@ def test_resolve_panel_compartments_rmu() -> None:
     assert resolve_panel_compartments(
         SwitchgearArchetype.RMU_STANDARD,
         bay_role=BayRole.TRANSFORMER,
+    ) == ("CABLE COMPARTMENT",)
+
+    # String coercion for archetype and bay_role
+    assert resolve_panel_compartments(
+        "RMU_FUSE_CANISTER",
+        bay_role="TRANSFORMER",
+    ) == ("FUSE COMPARTMENT",)
+    assert resolve_panel_compartments(
+        "RMU_FUSE_CANISTER",
+        bay_role="STANDARD",
     ) == ("CABLE COMPARTMENT",)
 
 

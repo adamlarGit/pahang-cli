@@ -513,7 +513,9 @@ class SwitchgearScanAdapter:
         overview_comps = (
             self.swg.overview_compartments
             if isinstance(self.swg, SwitchgearScanSpec) and self.swg.overview_compartments
-            else SwitchgearTopologyEngine.resolve_overview_compartments(self.archetype)
+            else SwitchgearTopologyEngine.resolve_overview_compartments(
+                self.archetype, voltage_class=self.voltage_class
+            )
         )
 
         # Check for D47 overview substitution
@@ -668,7 +670,11 @@ class SwitchgearScanAdapter:
                     elif comp_name == "FUSE COMPARTMENT":
                         ir_num = panel.cable_photo if panel.cable_photo is not None else (panel.photo_numbers[0] if panel.photo_numbers else None)
                     elif comp_name == "CABLE ENTRY":
-                        ir_num = panel.photo_numbers[1] if (panel.photo_numbers and len(panel.photo_numbers) > 1) else None
+                        ir_num = (
+                            panel.photo_numbers[1]
+                            if (panel.photo_numbers and len(panel.photo_numbers) > 1)
+                            else panel.breaker_photo
+                        )
                     else:
                         ir_num = None
 

@@ -823,7 +823,7 @@ def format_busbar_position(
 
 
 def format_load_amp(val: Any) -> str:
-    """Format load current in Amperes, returning '-' if empty or None.
+    """Format load current in Amperes, returning '-' if empty, None, or sentinel.
 
     Args:
         val: Raw load current value from testsheet or model.
@@ -831,10 +831,12 @@ def format_load_amp(val: Any) -> str:
     Returns:
         Formatted load current string or '-' if empty/invalid.
     """
-    if val is None:
+    if _is_null_or_empty(val) or isinstance(val, bool):
+        return "-"
+    if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
         return "-"
     s = str(val).strip()
-    if not s or s in ("-", "None", "N/A"):
+    if not s or s.lower() in _NULL_SENTINELS:
         return "-"
     return s
 
