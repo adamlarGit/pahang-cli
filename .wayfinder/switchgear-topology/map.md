@@ -35,8 +35,8 @@ graph TD
     T50[#50: Panel Spec Extension & Sub-Row Extraction - Closed]
     T49 --> T51[#51: Scan Adapters & Census Integration - Closed]
     T50 --> T51
-    T51 --> T52[#52: Benchmark Deliverables & Regression Alignment - Planned]
-    T52 --> T53[#53: Legacy Category Purge & Docs Update - Planned]
+    T51 --> T52[#52: Benchmark Deliverables & Regression Alignment - Closed]
+    T52 --> T53[#53: Legacy Category Purge & Docs Update - Closed]
 ```
 
 ---
@@ -91,26 +91,26 @@ graph TD
 ---
 
 ### #52: Benchmark Deliverables & Regression Suite Alignment
-- **Status**: Planned
+- **Status**: Closed
 - **GitHub Issue**: [#52](https://github.com/adamlarGit/pahang-cli/issues/52)
 - **Blocked by**: #51
 - **Ticket File**: [.wayfinder/switchgear-topology/tickets/052-benchmark-deliverables-and-regression-suite-alignment.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/switchgear-topology/tickets/052-benchmark-deliverables-and-regression-suite-alignment.md)
-- [ ] Add and verify PE 179 Cenderawasih NO.1 benchmark test asserting 6 SWG pages and 14 total substation pages.
-- [ ] Add and verify PE 144 Telekom Tanah Putih benchmark test (RMU_FUSE_CANISTER - INDKOM INS24 with `model="INS24"`) asserting 10 SWG pages (with 4 TEV defect interleaving pages) and 19 total substation pages.
-- [ ] Add and verify PE 005 Talapia benchmark test asserting 10 SWG pages and 19 total substation pages.
-- [ ] Add benchmark assertion for PE 157 Perpustakaan Awam asserting 3 VCB overviews, 4-compartment standard bays, 5-compartment PT bay, 24 SWG pages, and 34 total substation pages.
-- [ ] Ensure 100% green pass rate across `pytest tests/test_full_report_*.py` (including `test_full_report_defect_interleaving.py` and `test_full_report_plan_builder.py`).
+- [x] Add and verify PE 179 Cenderawasih NO.1 benchmark test asserting 6 SWG pages and 14 total substation pages.
+- [x] Add and verify PE 144 Telekom Tanah Putih benchmark test (RMU_FUSE_CANISTER - INDKOM INS24 with `model="INS24"`) asserting 10 SWG pages (with 4 TEV defect interleaving pages) and 19 total substation pages.
+- [x] Add and verify PE 005 Talapia benchmark test asserting 10 SWG pages and 19 total substation pages.
+- [x] Add benchmark assertion for PE 157 Perpustakaan Awam asserting 3 VCB overviews, 4-compartment standard bays, 5-compartment PT bay, 24 SWG pages, and 34 total substation pages.
+- [x] Ensure 100% green pass rate across `pytest tests/test_full_report_*.py` (including `test_full_report_defect_interleaving.py` and `test_full_report_plan_builder.py`).
 
 ---
 
 ### #53: Legacy Category Purge & Documentation Update
-- **Status**: Planned
+- **Status**: Closed
 - **GitHub Issue**: [#53](https://github.com/adamlarGit/pahang-cli/issues/53)
 - **Blocked by**: #52
 - **Ticket File**: [.wayfinder/switchgear-topology/tickets/053-legacy-category-purge-and-documentation-update.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/switchgear-topology/tickets/053-legacy-category-purge-and-documentation-update.md)
-- [ ] Completely delete `SwitchgearCategory` enum from `src/full_report/models.py`.
-- [ ] Delete `VCB_STANDARD_COMPARTMENTS`, `VCB_TRANSITION_COMPARTMENTS`, and `OVERVIEW_COMPARTMENTS_MAP` constants from `src/full_report/models.py`.
-- [ ] Remove deprecated procedural helpers (`classify_switchgear`, `resolve_overview_compartments`, `resolve_switchgear_compartments`, `resolve_panel_page_count`, `is_tx_feeder`) from `src/full_report/models.py`.
-- [ ] Remove all remaining references to `TAMCO_LUCY` and `OTHER_RMU` across codebase and tests.
-- [ ] Update `CONTEXT.md` with ubiquitous vocabulary (`SwitchgearArchetype`, `VoltageClass`, `BayRole`, `SwitchgearTopologyEngine`).
-- [ ] Run full test suite (`pytest`) to confirm 100% green pass rate.
+- [x] Completely delete `SwitchgearCategory` enum from `src/full_report/models.py`.
+- [x] Delete `VCB_STANDARD_COMPARTMENTS`, `VCB_TRANSITION_COMPARTMENTS`, and `OVERVIEW_COMPARTMENTS_MAP` constants from `src/full_report/models.py`.
+- [x] Remove deprecated procedural helpers (`classify_switchgear`, `resolve_overview_compartments`, `resolve_switchgear_compartments`, `resolve_panel_page_count`, `is_tx_feeder`) from `src/full_report/models.py`.
+- [x] Remove all remaining references to `TAMCO_LUCY` and `OTHER_RMU` across codebase and tests.
+- [x] Update `CONTEXT.md` with ubiquitous vocabulary (`SwitchgearArchetype`, `VoltageClass`, `BayRole`, `SwitchgearTopologyEngine`).
+- [x] Run full test suite (`pytest`) to confirm 100% green pass rate.

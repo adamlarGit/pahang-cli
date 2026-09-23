@@ -19,33 +19,6 @@ from src.testsheet.models import (
 )
 
 
-class SwitchgearCategory(str, Enum):
-    """Categorization of switchgear equipment driving compartment layout and page counts."""
-
-    INDKOM = "INDKOM"
-    TAMCO_LUCY = "TAMCO_LUCY"
-    OTHER_RMU = "OTHER_RMU"
-    VCB = "VCB"
-
-
-# Standard 5 compartments for VCB switchgear per D26
-VCB_STANDARD_COMPARTMENTS: tuple[str, ...] = (
-    "BREAKER COMPARTMENT",
-    "CABLE COMPARTMENT",
-    "BUSBAR COMPARTMENT",
-    "PT COMPARTMENT",
-    "SECONDARY COMPARTMENT",
-)
-
-# Transition 5 compartments for VCB switchgear transition panels
-VCB_TRANSITION_COMPARTMENTS: tuple[str, ...] = (
-    "FRONT COMPARTMENT",
-    "REAR COMPARTMENT",
-    "BUSBAR COMPARTMENT",
-    "PT COMPARTMENT",
-    "SECONDARY COMPARTMENT",
-)
-
 # Standard 7 components for distribution transformers per D31 / ADR 0004
 TRANSFORMER_STANDARD_COMPONENTS: tuple[str, ...] = (
     "OVERVIEW",
@@ -58,68 +31,6 @@ TRANSFORMER_STANDARD_COMPONENTS: tuple[str, ...] = (
 )
 
 
-def classify_switchgear(
-    switchgear_type: str = "",
-    manufacturer: str = "",
-) -> SwitchgearCategory:
-    """Classify switchgear into one of 4 canonical categories per D26/D29."""
-    combined = f"{switchgear_type or ''} {manufacturer or ''}".upper()
-
-    # VCB check takes highest precedence (even if made by TAMCO/EPE)
-    if "VCB" in combined:
-        return SwitchgearCategory.VCB
-
-    # INDKOM RMU
-    if "INDKOM" in combined:
-        return SwitchgearCategory.INDKOM
-
-    # TAMCO / LUCY / SSE LUCY
-    if any(k in combined for k in ("TAMCO", "LUCY", "SSE LUCY")):
-        return SwitchgearCategory.TAMCO_LUCY
-
-    # Other RMUs (SIEMENS, ABB, generic RMU SF6 / RMU OIL)
-    return SwitchgearCategory.OTHER_RMU
-
-
-def is_tx_feeder(
-    panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | dict | str | None = "",
-) -> bool:
-    """Determine if a switchgear panel/bay is a transformer (TX) feeder."""
-    if panel_or_name is None:
-        return False
-    if isinstance(panel_or_name, str):
-        combined = panel_or_name.upper()
-    elif isinstance(panel_or_name, dict):
-        name = panel_or_name.get("name", "") or ""
-        feeder = panel_or_name.get("panel_feeder_no", "") or panel_or_name.get("feeder_no", "") or ""
-        p_type = panel_or_name.get("panel_type", "") or ""
-        combined = f"{name} {feeder} {p_type}".upper()
-    else:
-        name = getattr(panel_or_name, "name", "") or ""
-        feeder = getattr(panel_or_name, "panel_feeder_no", "") or ""
-        p_type = getattr(panel_or_name, "panel_type", "") or ""
-        combined = f"{name} {feeder} {p_type}".upper()
-
-    if any(
-        k in combined
-        for k in (
-            "TRANSFORMER",
-            "ALATUBAH",
-            "TEE-OFF",
-            "TEE OFF",
-            "FUSE",
-            "100KVA",
-            "300KVA",
-            "500KVA",
-            "750KVA",
-            "1000KVA",
-            "KVA",
-        )
-    ):
-        return True
-    return bool(re.search(r"\bTX\d*\b", combined))
-
-
 def is_transition_panel(
     panel_or_name: SwitchgearPanelSpec | SwitchgearPanelScanSpec | dict | str | None = "",
 ) -> bool:
@@ -127,123 +38,40 @@ def is_transition_panel(
     if panel_or_name is None:
         return False
     if isinstance(panel_or_name, str):
-        combined = panel_or_name.upper()
+        name = panel_or_name
+        feeder = ""
+        p_type = ""
     elif isinstance(panel_or_name, dict):
         name = panel_or_name.get("name", "") or ""
         feeder = panel_or_name.get("panel_feeder_no", "") or panel_or_name.get("feeder_no", "") or ""
         p_type = panel_or_name.get("panel_type", "") or ""
-        combined = f"{name} {feeder} {p_type}".upper()
     else:
         name = getattr(panel_or_name, "name", "") or ""
         feeder = getattr(panel_or_name, "panel_feeder_no", "") or ""
         p_type = getattr(panel_or_name, "panel_type", "") or ""
-        combined = f"{name} {feeder} {p_type}".upper()
 
-    return any(
-        k in combined
-        for k in ("TRANSITION", "PERALIHAN", "TRANSISYEN", "TOOLS", "TOOL")
-    )
-
-
-OVERVIEW_COMPARTMENTS_MAP: dict[SwitchgearCategory, tuple[str, ...]] = {
-    SwitchgearCategory.TAMCO_LUCY: ("OVERVIEW", "OVERVIEW BOTTOM"),
-    SwitchgearCategory.VCB: ("OVERVIEW",),
-    SwitchgearCategory.INDKOM: ("OVERVIEW",),
-    SwitchgearCategory.OTHER_RMU: ("OVERVIEW",),
-}
-
-
-def resolve_overview_compartments(category: SwitchgearCategory) -> tuple[str, ...]:
-    """Resolve overview scanning page compartments for switchgear category per D26."""
-    return OVERVIEW_COMPARTMENTS_MAP.get(category, ("OVERVIEW",))
-
-
-def resolve_switchgear_compartments(
-    category: SwitchgearCategory,
-    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec | str | None = None,
-) -> tuple[str, ...]:
-    """Resolve switchgear panel scanning compartments per D26.
-
-    Panel scanning strictly covers panel-level compartments:
-    - TAMCO / LUCY: ("CABLE COMPARTMENT", "CABLE ENTRY")
-    - INDKOM: ("FUSE COMPARTMENT",) for TX feeder bays, ("CABLE COMPARTMENT",) for other bays
-      (or ("FUSE COMPARTMENT", "CABLE COMPARTMENT") when panel is omitted)
-    - VCB: 5 standard compartments (or 5 transition compartments for transition panels)
-    - OTHER_RMU: ("CABLE COMPARTMENT",)
-
-    Board-level overview scanning ('OVERVIEW', 'OVERVIEW BOTTOM' via swg-overview.docx) is cleanly
-    decoupled from panel scanning and resolved via resolve_overview_compartments().
-    """
-    if category == SwitchgearCategory.TAMCO_LUCY:
-        return ("CABLE COMPARTMENT", "CABLE ENTRY")
-
-    if category == SwitchgearCategory.VCB:
-        if panel is not None and is_transition_panel(panel):
-            return VCB_TRANSITION_COMPARTMENTS
-        return VCB_STANDARD_COMPARTMENTS
-
-    if category == SwitchgearCategory.INDKOM:
-        if panel is None:
-            return ("FUSE COMPARTMENT", "CABLE COMPARTMENT")
-        if is_tx_feeder(panel):
-            return ("FUSE COMPARTMENT",)
-        return ("CABLE COMPARTMENT",)
-
-    # OTHER_RMU
-    return ("CABLE COMPARTMENT",)
-
-
-def resolve_panel_page_count(
-    category: SwitchgearCategory,
-    panel: SwitchgearPanelSpec | SwitchgearPanelScanSpec,
-    active_compartments: Sequence[str] | None = None,
-) -> int:
-    """Resolve number of scanning pages for a panel per D29."""
-    if active_compartments is not None and len(active_compartments) > 0:
-        return len(active_compartments)
-    return len(resolve_switchgear_compartments(category, panel))
+    from src.core.topology import BayRole, classify_bay_role
+    return classify_bay_role(name=name, panel_feeder_no=feeder, panel_type=p_type) == BayRole.TRANSITION
 
 
 def build_switchgear_panel_scan_spec(
     panel: SwitchgearPanelSpec,
-    category: SwitchgearCategory | SwitchgearArchetype | None = None,
+    archetype: SwitchgearArchetype = SwitchgearArchetype.RMU_STANDARD,
     active_compartments: Sequence[str] | None = None,
-    archetype: SwitchgearArchetype | None = None,
     voltage_class: VoltageClass = VoltageClass.KV_11,
 ) -> SwitchgearPanelScanSpec:
     """Construct strongly-typed SwitchgearPanelScanSpec applying topology engine compartments."""
-    resolved_category = category if isinstance(category, SwitchgearCategory) else None
-    resolved_archetype = archetype
-    if resolved_archetype is None and isinstance(category, SwitchgearArchetype):
-        resolved_archetype = category
+    resolved_archetype = archetype or getattr(panel, "archetype", None) or SwitchgearArchetype.RMU_STANDARD
 
     if active_compartments is not None and len(active_compartments) > 0:
         compartments = tuple(active_compartments)
     elif getattr(panel, "compartments", None):
         compartments = tuple(panel.compartments)
-    elif resolved_archetype is not None:
-        compartments = SwitchgearTopologyEngine.resolve_panel_compartments(
-            archetype=resolved_archetype,
-            panel=panel,
-        )
-    elif resolved_category is not None:
-        compartments = resolve_switchgear_compartments(resolved_category, panel)
     else:
-        resolved_archetype = SwitchgearArchetype.RMU_STANDARD
         compartments = SwitchgearTopologyEngine.resolve_panel_compartments(
             archetype=resolved_archetype,
             panel=panel,
         )
-
-    if resolved_archetype is None:
-        if resolved_category == SwitchgearCategory.VCB:
-            resolved_archetype = SwitchgearArchetype.VCB_CUBICLE
-        elif resolved_category == SwitchgearCategory.TAMCO_LUCY:
-            resolved_archetype = SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY
-        elif resolved_category == SwitchgearCategory.INDKOM:
-            resolved_archetype = SwitchgearArchetype.RMU_STANDARD
-        else:
-            resolved_archetype = SwitchgearArchetype.RMU_STANDARD
 
     return SwitchgearPanelScanSpec(
         panel_no=panel.panel_no,
@@ -286,36 +114,22 @@ def build_switchgear_scan_spec(
         rating=swg.rating,
         swg=swg,
     )
-    category = classify_switchgear(swg.switchgear_type, swg.manufacturer)
     res_archetype = archetype or getattr(swg, "archetype", None) or board.archetype
     res_voltage = voltage_class or getattr(swg, "voltage_class", None) or board.voltage_class
 
-    if archetype is not None or getattr(swg, "archetype", None) is not None:
-        overview = SwitchgearTopologyEngine.resolve_overview_compartments(res_archetype)
-        panels = tuple(
-            build_switchgear_panel_scan_spec(
-                p,
-                archetype=res_archetype,
-                voltage_class=res_voltage,
-            )
-            for p in swg.panels
-        )
+    if getattr(swg, "overview_compartments", None):
+        overview = tuple(swg.overview_compartments)
     else:
-        if getattr(swg, "overview_compartments", None):
-            overview = tuple(swg.overview_compartments)
-        elif category in (SwitchgearCategory.INDKOM, SwitchgearCategory.VCB):
-            overview = resolve_overview_compartments(category)
-        else:
-            overview = board.overview_compartments
+        overview = SwitchgearTopologyEngine.resolve_overview_compartments(res_archetype, res_voltage)
 
-        panels = tuple(
-            build_switchgear_panel_scan_spec(
-                p,
-                category=category,
-                voltage_class=res_voltage,
-            )
-            for p in swg.panels
+    panels = tuple(
+        build_switchgear_panel_scan_spec(
+            p,
+            archetype=res_archetype,
+            voltage_class=res_voltage,
         )
+        for p in swg.panels
+    )
 
     return SwitchgearScanSpec(
         switchgear_type=swg.switchgear_type,
@@ -324,7 +138,6 @@ def build_switchgear_scan_spec(
         manufactured_year=swg.manufactured_year,
         rating=swg.rating,
         serial_no=swg.serial_no,
-        category=category,
         archetype=res_archetype,
         voltage_class=res_voltage,
         overview_compartments=overview,
@@ -371,7 +184,7 @@ def build_lvdb_scan_spec(lvdb: LVDBSpec) -> LVDBScanSpec:
         label=lvdb.label,
         source=lvdb.source,
         manufacturer=lvdb.manufacturer,
-        model=lvdb.model,
+        model=getattr(lvdb, "model", ""),
         serial_no=lvdb.serial_no,
         rating=lvdb.rating,
         cable_type=lvdb.cable_type,
@@ -459,7 +272,8 @@ class SwitchgearPanelScanSpec:
     @property
     def is_tx_feeder(self) -> bool:
         """Return True if this panel is a transformer (TX) feeder."""
-        return is_tx_feeder(self)
+        from src.core.topology import BayRole, classify_bay_role
+        return classify_bay_role(name=self.name, panel_feeder_no=self.panel_feeder_no, panel_type=self.panel_type) == BayRole.TRANSFORMER
 
     @property
     def is_transition_panel(self) -> bool:
@@ -477,7 +291,6 @@ class SwitchgearScanSpec:
     manufactured_year: str = ""
     rating: str = ""
     serial_no: str = ""
-    category: SwitchgearCategory = SwitchgearCategory.OTHER_RMU
     archetype: SwitchgearArchetype = SwitchgearArchetype.RMU_STANDARD
     voltage_class: VoltageClass = VoltageClass.KV_11
     overview_compartments: tuple[str, ...] = ()

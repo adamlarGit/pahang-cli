@@ -34,6 +34,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
 
+from PIL import Image, ImageStat
+
 from src.core.contract import (
     is_swg_compartment_tev_eligible,
     is_swg_compartment_us_eligible,
@@ -83,12 +85,21 @@ window.addEventListener('load', function() {
         prpdGraph.style.cssText = 'width: 100% !important; height: 100% !important;';
     }
 
-    setTimeout(function() {
-        if (typeof prpd !== 'undefined') {
-            prpd.sinewave_mode = 0;
-            prpd.Plot();
+    function tryPlot(attemptsLeft) {
+        if (typeof prpd !== 'undefined' && typeof prpd.Plot === 'function') {
+            try {
+                prpd.sinewave_mode = 0;
+                prpd.Plot();
+                return;
+            } catch (e) {}
         }
-    }, 150);
+        if (attemptsLeft > 0) {
+            setTimeout(function() {
+                tryPlot(attemptsLeft - 1);
+            }, 50);
+        }
+    }
+    tryPlot(30);
 });
 </script>
 """
@@ -141,24 +152,134 @@ def find_chrome_executable() -> str:
     )
 
 
+def safe_path(p: Path | str) -> str:
+    """Ensure Windows extended-length path compatibility (\\\\?\\)."""
+    s = str(Path(p).resolve())
+    if os.name == "nt" and not s.startswith("\\\\?\\"):
+        if s.startswith("\\\\"):
+            return "\\\\?\\UNC\\" + s.lstrip("\\")
+        return "\\\\?\\" + s
+    return s
+
+
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    """Threaded TCP server handling concurrent asset requests without serial backlog queuing."""
+
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def is_blank_or_invalid_image(img: Path | str | InlineImage | Any) -> bool:
+    """Validate whether an image path, stream, InlineImage, or PIL Image is missing, 0-byte, corrupt, or a blank/near-zero variance capture.
+
+    Returns True if:
+    - Target is None, empty, whitespace-only, non-existent, or zero-byte.
+    - Image cannot be opened/decoded by Pillow.
+    - Pixels are solid pure-white (extrema == ((255, 255), (255, 255), (255, 255))).
+    - Solid uniform color across all channels (min == max for each channel).
+    - Near-zero variance across pixel intensities (all channel standard deviations < 1.0).
+    - Image is completely transparent (alpha channel max is 0).
+
+    Returns False for valid images containing actual graphical/photographic content.
+    """
+    while hasattr(img, "image_descriptor"):
+        img = getattr(img, "image_descriptor", None)
+
+    if img is None:
+        return True
+    if isinstance(img, str) and not img.strip():
+        return True
+
+    try:
+        raw_img = None
+        should_close = False
+
+        if isinstance(img, Image.Image):
+            raw_img = img
+        elif isinstance(img, (str, Path)):
+            p = Path(safe_path(img))
+            if not p.is_file() or p.stat().st_size == 0:
+                return True
+            raw_img = Image.open(p)
+            should_close = True
+        elif hasattr(img, "read"):
+            if hasattr(img, "seek"):
+                img.seek(0)
+            raw_img = Image.open(img)
+            should_close = False
+        else:
+            return True
+
+        try:
+            if raw_img.width <= 0 or raw_img.height <= 0:
+                return True
+
+            # Handle alpha transparency: if all pixels transparent, it's blank
+            if "transparency" in raw_img.info or "A" in raw_img.getbands():
+                rgba = raw_img.convert("RGBA")
+                alpha_extrema = rgba.getchannel("A").getextrema()
+                if alpha_extrema[1] == 0:
+                    return True
+                # Composite transparent pixels over a white background (as in Word / browser display)
+                bg = Image.new("RGB", raw_img.size, (255, 255, 255))
+                bg.paste(rgba, mask=rgba.getchannel("A"))
+                rgb_img = bg
+            else:
+                rgb_img = raw_img.convert("RGB")
+
+            extrema = rgb_img.getextrema()
+            if extrema == ((255, 255), (255, 255), (255, 255)):
+                return True
+            if all(low == high for low, high in extrema):
+                return True
+
+            stat = ImageStat.Stat(rgb_img)
+            if all(s < 1.0 for s in stat.stddev):
+                return True
+
+            return False
+        finally:
+            if should_close and raw_img is not None:
+                try:
+                    raw_img.close()
+                except Exception:
+                    pass
+    except Exception:
+        return True
+    finally:
+        if hasattr(img, "seek"):
+            try:
+                img.seek(0)
+            except Exception:
+                pass
+
+
 class SurveyHttpServer:
     """Lightweight localhost HTTP server for serving survey directory assets to Headless Chrome."""
 
-    _active_temp_dirs: set[str] = set()
+    _active_temp_dirs: dict[str, int] = {}
+    _lock = threading.Lock()
 
     @classmethod
-    def register_temp_dir(cls, d: Path | str) -> None:
-        cls._active_temp_dirs.add(str(Path(d).resolve()))
+    def register_temp_dir(cls, dir_path: Path | str) -> None:
+        key = str(Path(dir_path).resolve())
+        with cls._lock:
+            cls._active_temp_dirs[key] = cls._active_temp_dirs.get(key, 0) + 1
 
     @classmethod
-    def unregister_temp_dir(cls, d: Path | str) -> None:
-        cls._active_temp_dirs.discard(str(Path(d).resolve()))
+    def unregister_temp_dir(cls, dir_path: Path | str) -> None:
+        key = str(Path(dir_path).resolve())
+        with cls._lock:
+            if key in cls._active_temp_dirs:
+                cls._active_temp_dirs[key] -= 1
+                if cls._active_temp_dirs[key] <= 0:
+                    del cls._active_temp_dirs[key]
 
     def __init__(self, survey_dir: Path | str, temp_dir: Path | str | None = None) -> None:
         self.survey_dir = str(Path(survey_dir).resolve())
         self.temp_dir = str(Path(temp_dir).resolve()) if temp_dir else None
         self.port = find_free_port()
-        self._httpd: socketserver.TCPServer | None = None
+        self._httpd: ThreadedTCPServer | None = None
         self._thread: threading.Thread | None = None
 
     def start(self) -> int:
@@ -181,8 +302,10 @@ class SurveyHttpServer:
                         candidate = os.path.join(server_temp_dir, filename)
                         if os.path.exists(safe_path(candidate)):
                             return safe_path(candidate)
-                    for td in list(SurveyHttpServer._active_temp_dirs):
-                        candidate = os.path.join(td, filename)
+                    with SurveyHttpServer._lock:
+                        temp_dirs = list(SurveyHttpServer._active_temp_dirs.keys())
+                    for temp_dir in temp_dirs:
+                        candidate = os.path.join(temp_dir, filename)
                         if os.path.exists(safe_path(candidate)):
                             return safe_path(candidate)
 
@@ -197,7 +320,7 @@ class SurveyHttpServer:
             def log_message(self, format: str, *args: Any) -> None:
                 pass
 
-        self._httpd = socketserver.TCPServer(("127.0.0.1", self.port), CustomHandler)
+        self._httpd = ThreadedTCPServer(("127.0.0.1", self.port), CustomHandler)
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
         time.sleep(0.1)
@@ -211,6 +334,12 @@ class SurveyHttpServer:
             except Exception:
                 pass
             self._httpd = None
+        if self._thread and self._thread.is_alive():
+            try:
+                self._thread.join(timeout=2.0)
+            except Exception:
+                pass
+            self._thread = None
 
     def __enter__(self) -> int:
         return self.start()
@@ -227,7 +356,12 @@ def render_prpd_option_c_image(
     chrome_path: str | None = None,
     timeout_seconds: float = 15.0,
 ) -> Path | None:
-    """Render an UltraTEV HTML measurement page to a composite PNG via Headless Chrome."""
+    """Render an UltraTEV HTML measurement page to a composite PNG via Headless Chrome.
+
+    Validates that the rendered image is non-blank and non-corrupt. If blank or invalid,
+    retries rendering up to 2 times (3 attempts total) with a 0.15s backoff before giving up.
+    Does NOT fall back to native Option B.
+    """
     html_path = Path(safe_path(html_file))
     if not html_path.exists():
         return None
@@ -237,7 +371,11 @@ def render_prpd_option_c_image(
     output_dir = out_png_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    chrome = chrome_path or find_chrome_executable()
+    try:
+        chrome = chrome_path or find_chrome_executable()
+    except FileNotFoundError as exc:
+        logging.warning("Option C rendering skipped: %s", exc)
+        return None
 
     try:
         rel_subpath = html_path.parent.relative_to(survey_root_path).as_posix()
@@ -253,53 +391,62 @@ def render_prpd_option_c_image(
     else:
         mod_content = OPTION_C_INJECTION_TEMPLATE + mod_content
 
-    temp_html_name = f"_temp_render_c_{os.getpid()}_{time.time_ns()}.html"
-    temp_html_file = output_dir / temp_html_name
-    SurveyHttpServer.register_temp_dir(output_dir)
+    max_retries = 2
+    for attempt in range(1 + max_retries):
+        temp_html_name = f"_temp_render_c_{os.getpid()}_{time.time_ns()}.html"
+        temp_html_file = output_dir / temp_html_name
+        SurveyHttpServer.register_temp_dir(output_dir)
 
-    try:
-        with open(safe_path(temp_html_file), "w", encoding="utf-8") as fh:
-            fh.write(mod_content)
-
-        url = f"http://127.0.0.1:{http_port}/{rel_subpath}/{temp_html_name}"
-
-        cmd = [
-            chrome,
-            "--headless=new",
-            "--disable-gpu",
-            "--run-all-compositor-stages-before-draw",
-            "--virtual-time-budget=5000",
-            f"--screenshot={str(out_png_path)}",
-            "--window-size=1200,380",
-            url,
-        ]
-        subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_seconds)
-    except Exception as exc:
-        logging.warning("Option C headless render failed for %s: %s", html_file, exc)
-        return None
-    finally:
         try:
-            if temp_html_file.exists():
-                temp_html_file.unlink()
+            with open(safe_path(temp_html_file), "w", encoding="utf-8") as fh:
+                fh.write(mod_content)
+
+            url = f"http://127.0.0.1:{http_port}/{rel_subpath}/{temp_html_name}"
+
+            cmd = [
+                chrome,
+                "--headless=new",
+                "--disable-gpu",
+                "--run-all-compositor-stages-before-draw",
+                "--virtual-time-budget=5000",
+                f"--screenshot={str(out_png_path)}",
+                "--window-size=1200,380",
+                url,
+            ]
+            subprocess.run(cmd, check=True, capture_output=True, timeout=timeout_seconds)
+        except Exception as exc:
+            logging.warning(
+                "Option C headless render attempt %d/%d failed for %s: %s",
+                attempt + 1,
+                1 + max_retries,
+                html_file,
+                exc,
+            )
+        finally:
+            try:
+                if temp_html_file.exists():
+                    temp_html_file.unlink()
+            except Exception:
+                pass
+            SurveyHttpServer.unregister_temp_dir(output_dir)
+
+        if not is_blank_or_invalid_image(out_png_path):
+            return out_png_path
+
+        # If output was produced but is blank or invalid, unlink before retry
+        try:
+            if out_png_path.exists():
+                out_png_path.unlink()
         except Exception:
             pass
-        SurveyHttpServer.unregister_temp_dir(output_dir)
 
-    if os.path.exists(safe_path(out_png_path)) and os.path.getsize(safe_path(out_png_path)) > 0:
-        return out_png_path
-    return None
+        if attempt < max_retries:
+            time.sleep(0.15)
 
-    if os.path.exists(safe_path(out_png_path)) and os.path.getsize(safe_path(out_png_path)) > 0:
-        return out_png_path
+    logging.warning("Option C headless render exhausted retries (blank or invalid image) for %s", html_file)
     return None
 
 
-def safe_path(p: Path | str) -> str:
-    """Ensure Windows extended-length path compatibility (\\\\?\\)."""
-    s = str(Path(p).resolve())
-    if os.name == "nt" and not s.startswith("\\\\?\\"):
-        return "\\\\?\\" + s
-    return s
 
 
 def decode_tev_event_data(filepath: Path | str) -> list[dict[str, Any]]:
@@ -822,7 +969,7 @@ def generate_prpd_graphs_for_swg_panel(
         if http_port is not None:
             us_png, tev_png = _do_render(http_port, resolved_chrome)
         else:
-            with SurveyHttpServer(survey_root) as port:
+            with SurveyHttpServer(survey_root, temp_dir=output_dir) as port:
                 us_png, tev_png = _do_render(port, resolved_chrome)
 
     return us_png, tev_png
@@ -917,7 +1064,7 @@ def generate_prpd_graphs_for_transformer(
         if http_port is not None:
             us_png, tev_png = _do_render(http_port, resolved_chrome)
         else:
-            with SurveyHttpServer(survey_root) as port:
+            with SurveyHttpServer(survey_root, temp_dir=output_dir) as port:
                 us_png, tev_png = _do_render(port, resolved_chrome)
 
     return us_png, tev_png
@@ -1200,10 +1347,10 @@ def build_prpd_inline_images(
     us_inline: InlineImage | str = ""
     tev_inline: InlineImage | str = ""
 
-    if us_png and Path(us_png).exists():
+    if us_png and not is_blank_or_invalid_image(us_png):
         us_inline = InlineImage(doc_tpl, str(us_png), width=Mm(width_mm))
 
-    if tev_png and Path(tev_png).exists():
+    if tev_png and not is_blank_or_invalid_image(tev_png):
         tev_inline = InlineImage(doc_tpl, str(tev_png), width=Mm(width_mm))
 
     return us_inline, tev_inline
@@ -1212,6 +1359,7 @@ def build_prpd_inline_images(
 __all__ = [
     "OPTION_C_INJECTION_TEMPLATE",
     "SurveyHttpServer",
+    "ThreadedTCPServer",
     "_discover_substation_assets",
     "build_prpd_inline_images",
     "decode_tev_event_data",
@@ -1226,6 +1374,7 @@ __all__ = [
     "generate_prpd_figure",
     "generate_prpd_graphs_for_swg_panel",
     "generate_prpd_graphs_for_transformer",
+    "is_blank_or_invalid_image",
     "render_prpd_option_c_image",
     "safe_path",
 ]

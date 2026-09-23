@@ -26,7 +26,7 @@ from src.full_report.scan_adapters import ScanRenderItem
 from src.quick_report.defects import CbmDefectRecord
 
 
-def _make_mock_swg_items() -> list[ScanRenderItem]:
+def _make_mock_swg_items(two_overviews: bool = False) -> list[ScanRenderItem]:
     """Helper creating 4-panel INDKOM switchgear scan items (Cenderawasih topology)."""
     items = [
         ScanRenderItem(
@@ -38,6 +38,20 @@ def _make_mock_swg_items() -> list[ScanRenderItem]:
             is_overview=True,
             equipment_id="swg1",
         ),
+    ]
+    if two_overviews:
+        items.append(
+            ScanRenderItem(
+                page_name="swg_overview_top",
+                template_name="swg-overview.docx",
+                equipment_category="swg",
+                component_name="OVERVIEW TOP",
+                sequence="p00_01",
+                is_overview=True,
+                equipment_id="swg1",
+            )
+        )
+    items.extend([
         ScanRenderItem(
             page_name="swg_panel_1",
             template_name="swg-panel.docx",
@@ -78,7 +92,7 @@ def _make_mock_swg_items() -> list[ScanRenderItem]:
             panel_no=4,
             context={"panel": {"feeder_no": "CKN01309", "name": "PANEL CKN01309 TX"}},
         ),
-    ]
+    ])
     return items
 
 
@@ -518,8 +532,8 @@ def test_canonical_benchmark_talapia_interleaving() -> None:
 
 
 def test_canonical_benchmark_cenderawasih_interleaving() -> None:
-    """Benchmark CENDERAWASIH NO.1: INDKOM RMU (5 pages with panel 4 replaced), 1 TX (7 pages), FP (1 page) = 13 pages."""
-    swg_items = _make_mock_swg_items()  # 5 pages: 1 overview + 4 panels
+    """Benchmark CENDERAWASIH NO.1: INDKOM RMU (6 pages with panel 4 replaced), 1 TX (7 pages), FP (1 page) = 14 pages."""
+    swg_items = _make_mock_swg_items(two_overviews=True)  # 6 pages: 2 overviews + 4 panels
     tx_items = _make_mock_tx_items("Tx 1")  # 7 pages
     fp_item = ScanRenderItem(
         page_name="fp_overview",
@@ -532,7 +546,7 @@ def test_canonical_benchmark_cenderawasih_interleaving() -> None:
     )
 
     all_scan_items = swg_items + tx_items + [fp_item]
-    assert len(all_scan_items) == 13
+    assert len(all_scan_items) == 14
 
     # Defect: RMU Panel 4 CKN01309 TX fuse compartment IR defect
     swg_defect = CbmDefectSliceMetadata(
@@ -560,21 +574,21 @@ def test_canonical_benchmark_cenderawasih_interleaving() -> None:
         cbm_records=[qr_record],
     )
 
-    # 5 SWG (with panel 4 replaced) + 7 TX + 1 FP = 13 pages
-    assert len(result.parts) == 13
+    # 6 SWG (with panel 4 replaced) + 7 TX + 1 FP = 14 pages
+    assert len(result.parts) == 14
     assert len(result.replaced_items) == 1
     assert result.replaced_items[0].panel_no == 4
 
-    # Part 4 is the replaced panel 4 defect page
-    assert result.parts[4].sequence == "p04"
-    assert result.parts[4].is_defect is True
-    assert result.parts[4].action_type == InterleavingActionType.REPLACE
-    assert result.parts[4].part_name == "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx"
+    # Part 5 is the replaced panel 4 defect page (0, 1: overviews; 2, 3, 4: panels 1-3; 5: panel 4 defect)
+    assert result.parts[5].sequence == "p04"
+    assert result.parts[5].is_defect is True
+    assert result.parts[5].action_type == InterleavingActionType.REPLACE
+    assert result.parts[5].part_name == "swg1_p04_CKN01309_FUSE_COMPARTMENT_01.docx"
 
 
 def test_canonical_benchmark_telekom_tanah_putih_interleaving() -> None:
-    """Benchmark TELEKOM TANAH PUTIH: INDKOM RMU (5 pages + 4 TEV appends = 9 pages), 1 TX (7 pages), LVDB (1 page), Battery (1 page) = 18 pages."""
-    swg_items = _make_mock_swg_items()  # 5 pages: 1 overview + 4 panels
+    """Benchmark TELEKOM TANAH PUTIH: INDKOM RMU (6 pages + 4 TEV appends = 10 pages), 1 TX (7 pages), LVDB (1 page), Battery (1 page) = 19 pages."""
+    swg_items = _make_mock_swg_items(two_overviews=True)  # 6 pages: 2 overviews + 4 panels
     tx_items = _make_mock_tx_items("Tx 1")  # 7 pages
     lvdb_item = ScanRenderItem(
         page_name="lvdb_overview",
@@ -596,7 +610,7 @@ def test_canonical_benchmark_telekom_tanah_putih_interleaving() -> None:
     )
 
     all_scan_items = swg_items + tx_items + [lvdb_item, batt_item]
-    assert len(all_scan_items) == 14
+    assert len(all_scan_items) == 15
 
     # 4 TEV defects across panels 1 to 4
     tev_defects = [
@@ -630,8 +644,8 @@ def test_canonical_benchmark_telekom_tanah_putih_interleaving() -> None:
         cbm_records=cbm_records,
     )
 
-    # 9 SWG (1 ov + 4*(panel+defect)) + 7 TX + 1 LVDB + 1 Battery = 18 pages
-    assert len(result.parts) == 18
+    # 10 SWG (2 ov + 4 panel + 4 defect) + 7 TX + 1 LVDB + 1 Battery = 19 pages
+    assert len(result.parts) == 19
     assert len(result.replaced_items) == 0
     assert len(result.actions) == 4
     for a in result.actions:
@@ -944,8 +958,13 @@ def test_foreign_defect_slices_discarded_with_foreign_discard_action() -> None:
 
 def test_vcb_standard_5_compartment_defect_matching() -> None:
     """Verify that in standard 5-compartment VCB panel, specific compartment defects match only their target compartment."""
-    from src.full_report.models import VCB_STANDARD_COMPARTMENTS
-
+    vcb_standard_compartments = (
+        "BREAKER COMPARTMENT",
+        "CABLE COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
     items = [
         ScanRenderItem(
             page_name=f"Panel 1 (VCB 1) - {comp}",
@@ -957,7 +976,7 @@ def test_vcb_standard_5_compartment_defect_matching() -> None:
             panel_no=1,
             context={"panel": {"feeder_no": "CKN01", "name": "VCB 1"}},
         )
-        for comp in VCB_STANDARD_COMPARTMENTS
+        for comp in vcb_standard_compartments
     ]
 
     # Defect on Busbar Compartment
@@ -986,8 +1005,13 @@ def test_vcb_standard_5_compartment_defect_matching() -> None:
 
 def test_vcb_transition_panel_defect_matching_and_rear_normalization() -> None:
     """Verify transition panel defect interleaving matches FRONT and BACK/REAR compartments correctly."""
-    from src.full_report.models import VCB_TRANSITION_COMPARTMENTS
-
+    vcb_transition_compartments = (
+        "FRONT COMPARTMENT",
+        "REAR COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
     items = [
         ScanRenderItem(
             page_name=f"Panel 2 (TRANSITION) - {comp}",
@@ -999,7 +1023,7 @@ def test_vcb_transition_panel_defect_matching_and_rear_normalization() -> None:
             panel_no=2,
             context={"panel": {"feeder_no": "CKN02", "name": "TRANSITION PANEL"}},
         )
-        for comp in VCB_TRANSITION_COMPARTMENTS
+        for comp in vcb_transition_compartments
     ]
 
     # Defect named BACK_COMPARTMENT should match REAR COMPARTMENT

@@ -879,6 +879,7 @@ __all__ = [
     "format_heater_amp",
     "format_humidity_str",
     "format_iso8601",
+    "format_load_amp",
     "format_month_folder",
     "format_temperature_float",
     "format_testsheet_time",

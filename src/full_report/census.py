@@ -16,17 +16,18 @@ from docxtpl import DocxTemplate
 
 from src.core.contract import normalize_swg_compartment
 from src.core.normalizers import normalize_tx_id
-from src.core.topology import SwitchgearArchetype, SwitchgearTopologyEngine, VoltageClass
+from src.core.topology import (
+    BayRole,
+    SwitchgearArchetype,
+    SwitchgearTopologyEngine,
+    VoltageClass,
+    classify_bay_role,
+)
 from src.full_report.models import (
     FullReportScanPackage,
-    SwitchgearCategory,
     SwitchgearScanSpec,
     TRANSFORMER_STANDARD_COMPONENTS,
-    classify_switchgear,
     has_hv_cable_split,
-    is_tx_feeder,
-    resolve_overview_compartments,
-    resolve_switchgear_compartments,
 )
 from src.quick_report.cbm_render import _build_jinja_env
 from src.quick_report.cbm_summary import (
@@ -756,7 +757,11 @@ class ExecutiveSummaryCensusBuilder:
                 else:
                     mfg_upper = (getattr(swg, "manufacturer", "") or "").strip().upper()
                     model_str = (getattr(swg, "model", "") or "").strip()
-                    if mfg_upper == "INDKOM" and not model_str and not getattr(swg, "archetype", None) and is_tx_feeder(panel):
+                    bay_role = classify_bay_role(
+                        name=getattr(panel, "name", ""),
+                        panel_feeder_no=getattr(panel, "panel_feeder_no", ""),
+                    )
+                    if mfg_upper == "INDKOM" and not model_str and not getattr(swg, "archetype", None) and bay_role == BayRole.TRANSFORMER:
                         compartments = ("FUSE COMPARTMENT",)
                     else:
                         compartments = SwitchgearTopologyEngine.resolve_panel_compartments(

@@ -24,14 +24,12 @@ from src.full_report.models import (
     FullReportScanPackage,
     LVDBFeederScanSpec,
     LVDBScanSpec,
-    SwitchgearCategory,
     SwitchgearPanelScanSpec,
     SwitchgearScanSpec,
     TransformerScanSpec,
-    VCB_STANDARD_COMPARTMENTS,
-    VCB_TRANSITION_COMPARTMENTS,
 )
 from src.core.topology import SwitchgearArchetype
+from src.testsheet.models import SwitchgearPanelSpec, SwitchgearSpec
 from src.full_report.photo_resolver import PhotoPair, RawPhotoResolver
 from src.full_report.scan_adapters import (
     BatteryBankScanAdapter,
@@ -149,7 +147,7 @@ def test_switchgear_adapter_tamco_lucy_compartment_matrix(mock_substation_info: 
         model="AIR",
         rating="12kV",
         serial_no="SWG-100",
-        category=SwitchgearCategory.TAMCO_LUCY,
+        archetype=SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY,
         overview_compartments=("OVERVIEW", "OVERVIEW BOTTOM"),
         panels=(
             SwitchgearPanelScanSpec(panel_no=1, name="INCOMING 1", compartments=("CABLE COMPARTMENT", "CABLE ENTRY")),
@@ -207,7 +205,7 @@ def test_switchgear_adapter_indkom_compartment_matrix(mock_substation_info: dict
     swg = SwitchgearScanSpec(
         switchgear_type="RMU SF6",
         manufacturer="INDKOM",
-        category=SwitchgearCategory.INDKOM,
+        archetype=SwitchgearArchetype.RMU_FUSE_CANISTER,
         overview_compartments=("OVERVIEW",),
         panels=(
             SwitchgearPanelScanSpec(panel_no=1, name="INCOMING 1", compartments=("CABLE COMPARTMENT",)),
@@ -228,16 +226,23 @@ def test_switchgear_adapter_indkom_compartment_matrix(mock_substation_info: dict
 
 def test_switchgear_adapter_vcb_standard_5_compartments(mock_substation_info: dict[str, str]) -> None:
     """VCB generates 1 overview and 5 standard compartments per standard panel per D26."""
+    vcb_std_comps = (
+        "BREAKER COMPARTMENT",
+        "CABLE COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
     swg = SwitchgearScanSpec(
         switchgear_type="VCB 11kV",
         manufacturer="TAMCO",
-        category=SwitchgearCategory.VCB,
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
         overview_compartments=("OVERVIEW",),
         panels=(
             SwitchgearPanelScanSpec(
                 panel_no=1,
                 name="INCOMING 1",
-                compartments=VCB_STANDARD_COMPARTMENTS,
+                compartments=vcb_std_comps,
             ),
         ),
         photo_numbers=(30,),
@@ -250,21 +255,28 @@ def test_switchgear_adapter_vcb_standard_5_compartments(mock_substation_info: di
     assert result.page_count == 6
     assert result.items[0].component_name == "OVERVIEW"
     panel_compartments = [item.component_name for item in result.items[1:]]
-    assert tuple(panel_compartments) == VCB_STANDARD_COMPARTMENTS
+    assert tuple(panel_compartments) == vcb_std_comps
 
 
 def test_switchgear_adapter_vcb_transition_5_compartments(mock_substation_info: dict[str, str]) -> None:
     """VCB generates 1 overview and 5 transition compartments for a transition panel per D26."""
+    vcb_trans_comps = (
+        "FRONT COMPARTMENT",
+        "REAR COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
     swg = SwitchgearScanSpec(
         switchgear_type="VCB 11kV",
         manufacturer="TAMCO",
-        category=SwitchgearCategory.VCB,
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
         overview_compartments=("OVERVIEW",),
         panels=(
             SwitchgearPanelScanSpec(
                 panel_no=1,
                 name="TRANSITION PANEL",
-                compartments=VCB_TRANSITION_COMPARTMENTS,
+                compartments=vcb_trans_comps,
             ),
         ),
         photo_numbers=(30,),
@@ -277,7 +289,7 @@ def test_switchgear_adapter_vcb_transition_5_compartments(mock_substation_info: 
     assert result.page_count == 6
     assert result.items[0].component_name == "OVERVIEW"
     panel_compartments = [item.component_name for item in result.items[1:]]
-    assert tuple(panel_compartments) == VCB_TRANSITION_COMPARTMENTS
+    assert tuple(panel_compartments) == vcb_trans_comps
     assert tuple(panel_compartments) == (
         "FRONT COMPARTMENT",
         "REAR COMPARTMENT",
@@ -296,7 +308,7 @@ def test_switchgear_adapter_prpd_integration_and_clean_fallback(
     swg = SwitchgearScanSpec(
         switchgear_type="RMU SF6",
         manufacturer="TAMCO",
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(
             SwitchgearPanelScanSpec(panel_no=1, name="PANEL 1", compartments=("CABLE COMPARTMENT",)),
@@ -337,7 +349,7 @@ def test_switchgear_adapter_d47_overview_substitution(
     swg = SwitchgearScanSpec(
         switchgear_type="RMU SF6",
         manufacturer="TAMCO",
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(
             SwitchgearPanelScanSpec(panel_no=1, name="INCOMING 1", compartments=("CABLE COMPARTMENT",)),
@@ -372,7 +384,7 @@ def test_switchgear_adapter_defect_forwarding_when_no_slice(
     swg = SwitchgearScanSpec(
         switchgear_type="RMU SF6",
         manufacturer="TAMCO",
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(
             SwitchgearPanelScanSpec(panel_no=1, name="INCOMING 1", compartments=("CABLE COMPARTMENT",)),
@@ -596,7 +608,7 @@ def test_battery_bank_adapter_renders_overview(mock_substation_info: dict[str, s
 def test_adapt_equipment_package_full_station(mock_substation_info: dict[str, str]) -> None:
     """Composite package adapter aggregates all equipment families correctly."""
     swg = SwitchgearScanSpec(
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(SwitchgearPanelScanSpec(panel_no=1, compartments=("CABLE COMPARTMENT",)),),
     )
@@ -633,7 +645,7 @@ def test_scan_render_item_renders_document_with_shading(
     swg = SwitchgearScanSpec(
         switchgear_type="RMU SF6",
         manufacturer="TAMCO",
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(SwitchgearPanelScanSpec(panel_no=1, compartments=("CABLE COMPARTMENT",)),),
     )
@@ -660,7 +672,7 @@ def test_scan_adapter_result_render_all(
     """ScanAdapterResult.render_all renders all items in batch."""
     swg = SwitchgearScanSpec(
         switchgear_type="RMU SF6",
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(
             SwitchgearPanelScanSpec(panel_no=1, compartments=("CABLE COMPARTMENT",)),
@@ -768,7 +780,7 @@ def test_scan_page_context_dataclass() -> None:
 def test_cbm_defects_list_triggers_active_defect(mock_substation_info: dict[str, str]) -> None:
     """Passing cbm_defects triggers defect state on matching equipment."""
     swg = SwitchgearScanSpec(
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(SwitchgearPanelScanSpec(panel_no=1, compartments=("CABLE COMPARTMENT",)),),
     )
@@ -865,7 +877,7 @@ def test_dynamic_prpd_generation_with_tempfile_no_crash(
     survey_dir.mkdir()
 
     swg = SwitchgearScanSpec(
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(SwitchgearPanelScanSpec(panel_no=1, compartments=("CABLE COMPARTMENT",)),),
     )
@@ -884,7 +896,7 @@ def test_dynamic_prpd_generation_with_tempfile_no_crash(
 def test_scan_render_item_to_page_context(mock_substation_info: dict[str, str]) -> None:
     """ScanRenderItem converts cleanly to ScanPageContext."""
     swg = SwitchgearScanSpec(
-        category=SwitchgearCategory.OTHER_RMU,
+        archetype=SwitchgearArchetype.RMU_STANDARD,
         overview_compartments=("OVERVIEW",),
         panels=(SwitchgearPanelScanSpec(panel_no=1, compartments=("CABLE COMPARTMENT",)),),
     )
@@ -1259,5 +1271,48 @@ def test_switchgear_adapter_panel_serial_number_in_render_context(mock_substatio
     result = adapter.adapt()
     panel_item = result.items[1]
     assert panel_item.context["panel"]["serialnumber"] == "SN-PANEL-9988"
+
+
+def test_switchgear_adapter_33kv_overview_and_cable_entry_fallback(mock_substation_info: dict[str, str]) -> None:
+    """Verify 33kV switchgear generates dual Front and Rear overviews, and CABLE ENTRY falls back to breaker_photo."""
+    swg_33kv = SwitchgearSpec(
+        switchgear_type="RMU SF6 33kV",
+        rating="33kV",
+        panels=(),
+    )
+    adapter = SwitchgearScanAdapter(
+        swg=swg_33kv,
+        substation_info=mock_substation_info,
+    )
+    result = adapter.adapt()
+    ov_comps = [item.component_name for item in result.items if item.is_overview]
+    assert ov_comps == ["OVERVIEW FRONT", "OVERVIEW REAR"]
+
+    # CABLE ENTRY fallback test
+    panel_cable_entry = SwitchgearPanelSpec(
+        panel_no=1,
+        name="PANEL 1",
+        photo_numbers=(100,),  # only 1 photo in tuple
+        breaker_photo=101,     # fallback photo for entry
+    )
+    swg_dual = SwitchgearSpec(
+        switchgear_type="RMU SF6",
+        manufacturer="TAMCO",
+        model="GV3",
+        panels=(panel_cable_entry,),
+    )
+    resolver = FakePhotoResolver({
+        100: ("/photos/IR_100.jpg", "/photos/VIS_100.jpg"),
+        101: ("/photos/IR_101.jpg", "/photos/VIS_101.jpg"),
+    })
+    adapter_dual = SwitchgearScanAdapter(
+        swg=swg_dual,
+        substation_info=mock_substation_info,
+        photo_resolver=resolver,
+    )
+    res_dual = adapter_dual.adapt()
+    cable_entry_items = [it for it in res_dual.items if it.component_name == "CABLE ENTRY"]
+    assert len(cable_entry_items) == 1
+    assert cable_entry_items[0].context["ir"]["image"] == "/photos/IR_101.jpg"
 
 

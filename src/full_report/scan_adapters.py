@@ -39,11 +39,9 @@ from src.full_report.models import (
     BatteryBankScanSpec,
     FullReportScanPackage,
     LVDBScanSpec,
-    SwitchgearCategory,
     SwitchgearPanelScanSpec,
     SwitchgearScanSpec,
     TransformerScanSpec,
-    classify_switchgear,
     has_hv_cable_split,
 )
 from src.full_report.photo_resolver import RawPhotoResolver
@@ -467,9 +465,8 @@ class SwitchgearScanAdapter:
             else:
                 self.tev_background = "-"
 
-        # Classify switchgear category and archetype via SwitchgearTopologyEngine
+        # Classify switchgear archetype and voltage class via SwitchgearTopologyEngine
         if isinstance(swg, SwitchgearScanSpec):
-            self.category = swg.category
             if swg.archetype != SwitchgearArchetype.RMU_STANDARD:
                 self.archetype = swg.archetype
             else:
@@ -480,20 +477,7 @@ class SwitchgearScanAdapter:
                     rating=swg.rating,
                     swg=swg,
                 )
-                if board.archetype != SwitchgearArchetype.RMU_STANDARD:
-                    self.archetype = board.archetype
-                elif swg.category == SwitchgearCategory.VCB:
-                    self.archetype = SwitchgearArchetype.VCB_CUBICLE
-                elif swg.category == SwitchgearCategory.TAMCO_LUCY:
-                    self.archetype = SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY
-                elif swg.category == SwitchgearCategory.INDKOM:
-                    self.archetype = (
-                        SwitchgearArchetype.RMU_STANDARD
-                        if str(getattr(swg, "model", "")).upper() == "JMW12"
-                        else SwitchgearArchetype.RMU_FUSE_CANISTER
-                    )
-                else:
-                    self.archetype = swg.archetype
+                self.archetype = board.archetype
             self.voltage_class = swg.voltage_class
         else:
             board = SwitchgearTopologyEngine.classify_board(
@@ -505,13 +489,11 @@ class SwitchgearScanAdapter:
             )
             self.archetype = getattr(swg, "archetype", None) or board.archetype
             self.voltage_class = getattr(swg, "voltage_class", None) or board.voltage_class
-            self.category = classify_switchgear(
-                getattr(swg, "switchgear_type", ""),
-                getattr(swg, "manufacturer", ""),
-            )
-            if self.category == SwitchgearCategory.INDKOM and str(getattr(swg, "model", "")).upper() != "JMW12":
-                if self.archetype == SwitchgearArchetype.RMU_STANDARD:
-                    self.archetype = SwitchgearArchetype.RMU_FUSE_CANISTER
+            # Backward compatibility for legacy tests specifying INDKOM without model
+            mfg_upper = str(getattr(swg, "manufacturer", "")).strip().upper()
+            model_str = str(getattr(swg, "model", "")).strip().upper()
+            if mfg_upper == "INDKOM" and not model_str and not getattr(swg, "archetype", None):
+                self.archetype = SwitchgearArchetype.RMU_FUSE_CANISTER
 
         self.has_active_defect = _check_has_active_defect(
             category="swg",
@@ -531,7 +513,9 @@ class SwitchgearScanAdapter:
         overview_comps = (
             self.swg.overview_compartments
             if isinstance(self.swg, SwitchgearScanSpec) and self.swg.overview_compartments
-            else SwitchgearTopologyEngine.resolve_overview_compartments(self.archetype)
+            else SwitchgearTopologyEngine.resolve_overview_compartments(
+                self.archetype, voltage_class=self.voltage_class
+            )
         )
 
         # Check for D47 overview substitution
@@ -647,9 +631,9 @@ class SwitchgearScanAdapter:
         # ----------------------------------------------------------------------
         # 2. Panel Scanning Pages (D26 / D29)
         # ----------------------------------------------------------------------
-        is_vcb = (
-            self.archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE)
-            or self.category == SwitchgearCategory.VCB
+        is_vcb = self.archetype in (
+            SwitchgearArchetype.VCB_CUBICLE,
+            SwitchgearArchetype.GIS_CUBICLE,
         )
 
         for panel in self.swg.panels:
@@ -686,7 +670,11 @@ class SwitchgearScanAdapter:
                     elif comp_name == "FUSE COMPARTMENT":
                         ir_num = panel.cable_photo if panel.cable_photo is not None else (panel.photo_numbers[0] if panel.photo_numbers else None)
                     elif comp_name == "CABLE ENTRY":
-                        ir_num = panel.photo_numbers[1] if (panel.photo_numbers and len(panel.photo_numbers) > 1) else None
+                        ir_num = (
+                            panel.photo_numbers[1]
+                            if (panel.photo_numbers and len(panel.photo_numbers) > 1)
+                            else panel.breaker_photo
+                        )
                     else:
                         ir_num = None
 
@@ -1202,14 +1190,19 @@ class LVDBScanAdapter:
         ir_img = self.photo_resolver.resolve_ir_photo(ir_num) if self.photo_resolver else ""
         vis_img = self.photo_resolver.resolve_visual_photo(ir_num) if self.photo_resolver else ""
 
-        label_source = self.lvdb.name
+        label_source = (
+            getattr(self.lvdb, "name", None)
+            or getattr(self.lvdb, "label", None)
+            or getattr(self.lvdb, "source", None)
+            or "FP"
+        )
 
         fp_ctx = {
             "substation": sub_ctx,
             "fp": {
                 "labelsource": label_source,
                 "manufacturer": _clean_str(self.lvdb.manufacturer),
-                "model": _clean_str(self.lvdb.model),
+                "model": _clean_str(getattr(self.lvdb, "model", "-")),
                 "rating": _clean_str(self.lvdb.rating),
                 "area": "OVERVIEW",
                 "serialnumber": _clean_str(self.lvdb.serial_no),

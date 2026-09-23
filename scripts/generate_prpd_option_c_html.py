@@ -50,52 +50,24 @@ import os
 from pathlib import Path
 import posixpath
 import re
-import shutil
-import socket
-import socketserver
 import subprocess
 import threading
 import time
 import urllib.parse
 
-
-def safe_path(p: Path | str) -> str:
-    """Ensure Windows extended-length path compatibility (\\\\?\\)."""
-    s = str(Path(p).resolve())
-    if os.name == "nt" and not s.startswith("\\\\?\\"):
-        return "\\\\?\\" + s
-    return s
+from src.quick_report.prpd import (
+    OPTION_C_INJECTION_TEMPLATE,
+    ThreadedTCPServer,
+    find_chrome_executable,
+    find_free_port,
+    is_blank_or_invalid_image,
+    safe_path,
+)
 
 
 def _sanitize_name(name: str) -> str:
     """Sanitize asset or sub-asset names into filesystem-safe uppercase tokens."""
     return re.sub(r"[^\w]+", "_", name.upper()).strip("_")
-
-
-def find_browser_executable() -> str:
-    """Finds Google Chrome or Microsoft Edge executable for headless rendering."""
-    candidates = [
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        shutil.which("chrome"),
-        shutil.which("google-chrome"),
-        shutil.which("msedge"),
-    ]
-    for c in candidates:
-        if c and os.path.exists(c):
-            return c
-    raise FileNotFoundError(
-        "Could not find Chrome or Edge executable. Please install Google Chrome or Microsoft Edge."
-    )
-
-
-def find_free_port() -> int:
-    """Finds an available TCP port on localhost dynamically."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def find_survey_root(target_path: Path | str) -> Path:
@@ -112,6 +84,7 @@ def find_survey_root(target_path: Path | str) -> Path:
             break
         cur = cur.parent
     return Path(target_path).resolve()
+
 
 
 def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, str, str]]:
@@ -303,59 +276,9 @@ def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, s
 
 
 
+# Reused from src.quick_report.prpd
+INJECTION_TEMPLATE = OPTION_C_INJECTION_TEMPLATE
 
-# Non-overlapping Flexbox Layout: 320px Left Measurement Table + 840px Right PRPD Graph
-INJECTION_TEMPLATE = """
-<style>
-header, ul.nav, #graphcontroltab, #maximise_prpd, #zoom_help, #tf_wfm_section, .navbar-fixed-bottom { display: none !important; }
-#survey-container .panel:nth-child(1), #survey-container .panel:nth-child(2) { display: none !important; }
-#survey-container .panel:nth-child(3) { display: block !important; margin: 0 !important; border: 1px solid #bce8f1 !important; }
-#survey-container .panel-heading { font-weight: bold !important; font-size: 13px !important; padding: 6px 12px !important; }
-#survey-container table { font-size: 11px !important; margin-bottom: 0 !important; width: 100% !important; }
-#survey-container table td { padding: 4px 8px !important; }
-</style>
-<script>
-window.addEventListener('load', function() {
-    document.body.style.cssText = 'display: flex !important; flex-direction: row !important; align-items: stretch !important; justify-content: flex-start !important; width: 1200px !important; height: 380px !important; margin: 0 !important; padding: 10px !important; box-sizing: border-box !important; background: white !important; overflow: hidden !important;';
-
-    var surveyEl = document.querySelector('.survey');
-    if (surveyEl) {
-        surveyEl.className = 'survey';
-        surveyEl.style.cssText = 'width: 320px !important; min-width: 320px !important; max-width: 320px !important; flex: 0 0 320px !important; margin: 0 15px 0 0 !important; padding: 0 !important; float: none !important;';
-        var surveyTab = surveyEl.querySelector('.tab-content');
-        if (surveyTab) surveyTab.style.cssText = 'width: 100% !important; padding: 0 !important; margin: 0 !important;';
-    }
-
-    var allTabContents = document.querySelectorAll('.tab-content');
-    var graphTabContent = allTabContents[allTabContents.length - 1];
-    if (graphTabContent) {
-        graphTabContent.style.cssText = 'flex: 1 1 840px !important; width: 840px !important; height: 360px !important; margin: 0 !important; padding: 0 !important; float: none !important; overflow: hidden !important;';
-    }
-
-    var phaseTab = document.getElementById('phase_tab');
-    if (phaseTab) {
-        phaseTab.style.cssText = 'width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; float: none !important; display: block !important;';
-    }
-
-    var prpdSection = document.getElementById('prpd_section');
-    if (prpdSection) {
-        prpdSection.style.cssText = 'width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; float: none !important; position: relative !important;';
-    }
-
-    var prpdGraph = document.getElementById('prpd_graph');
-    if (prpdGraph) {
-        prpdGraph.style.cssText = 'width: 100% !important; height: 100% !important;';
-    }
-
-    setTimeout(function() {
-        if (typeof prpd !== 'undefined') {
-            prpd.sinewave_mode = 0;
-            prpd.Plot();
-        }
-    }, 150);
-});
-</script>
-"""
 
 
 def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path | str) -> list[dict]:
@@ -404,12 +327,12 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
             pass  # Suppress HTTP access logging for clean CLI output
 
     port = find_free_port()
-    httpd = socketserver.TCPServer(("127.0.0.1", port), CustomHandler)
+    httpd = ThreadedTCPServer(("127.0.0.1", port), CustomHandler)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
     time.sleep(0.3)
 
-    browser_path = find_browser_executable()
+    browser_path = find_chrome_executable()
     results = []
 
     try:
@@ -454,17 +377,29 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
                     except Exception:
                         pass
 
-            out_size = os.path.getsize(safe_path(out_png)) if os.path.exists(safe_path(out_png)) else 0
-            print(f"[{tech:3s}] {label:22s} -> Saved ({out_size:,} bytes) to {out_png}")
+            is_valid = os.path.exists(safe_path(out_png)) and not is_blank_or_invalid_image(out_png)
+            if not is_valid and os.path.exists(safe_path(out_png)):
+                try:
+                    os.remove(safe_path(out_png))
+                except Exception:
+                    pass
+            out_size = os.path.getsize(safe_path(out_png)) if is_valid else 0
+            print(f"[{tech:3s}] {label:20s} -> {'Saved' if is_valid else 'BLANK/INVALID'} ({out_size:,} bytes) to {out_png.name}")
             results.append({
                 "label": label,
                 "tech": tech,
                 "output_file": str(out_png),
                 "file_size": out_size,
-                "status": "SUCCESS" if out_size > 0 else "FAILED",
+                "status": "SUCCESS" if is_valid else "FAILED",
             })
     finally:
-        httpd.shutdown()
+        try:
+            httpd.shutdown()
+            httpd.server_close()
+        except Exception:
+            pass
+        if t.is_alive():
+            t.join(timeout=2.0)
 
     print("================================================================================")
     print(f"Successfully generated {len(results)} Option C images!")

@@ -22,12 +22,9 @@ from PIL import Image
 import pytest
 
 from src.full_report.scan_render import (
-    BANNER_DEFECT_FORWARDING,
     BANNER_HEALTHY_ANALYSIS,
-    BANNER_HEALTHY_RECOMMENDATION,
     COLOR_DEFECT,
     COLOR_HEALTHY,
-    COLOR_NORMAL,
     FullReportScanPageRendererCore,
     SEVERITY_MARKER_IR,
     SEVERITY_MARKER_TEV,
@@ -62,9 +59,12 @@ def _read_document_xml(docx_path: Path) -> str:
 
 @pytest.fixture(scope="module")
 def dummy_image_file() -> Path:
-    """Create a temporary test image file for image binding."""
+    """Create a temporary test image file with non-uniform pixels for image binding."""
     tmp = Path(tempfile.gettempdir()) / "test_scan_render_dummy.png"
     img = Image.new("RGB", (60, 45), color=(0, 176, 80))
+    for x in range(10):
+        img.putpixel((x, 0), (255, 0, 0))
+        img.putpixel((x, 1), (0, 0, 255))
     img.save(tmp)
     return tmp
 
@@ -1177,6 +1177,74 @@ def test_cleanup_dash_measurement_units_and_tev_background(tmp_path: Path):
     table = rendered_doc.tables[0]
     tev_bg_cell = table.rows[28].cells[17]
     assert tev_bg_cell.text.strip() == "-", f"Expected '-' for TEV background but found {tev_bg_cell.text!r}"
+
+
+def test_bind_inline_images_rejects_blank_and_invalid_images(tmp_path: Path):
+    """Verify _bind_inline_images replaces blank/white/corrupt image paths with ''."""
+    from src.full_report.scan_render import _bind_inline_images
+
+    # 1. Solid white image
+    white_img = tmp_path / "solid_white.png"
+    Image.new("RGB", (100, 100), color="white").save(white_img)
+
+    # 2. Solid color image (zero variance)
+    green_img = tmp_path / "solid_green.png"
+    Image.new("RGB", (100, 100), color=(0, 176, 80)).save(green_img)
+
+    # 3. Near-zero variance canvas (subtle noise stddev < 1.0)
+    near_zero = tmp_path / "near_zero_noise.png"
+    im_nz = Image.new("RGB", (100, 100), color=(255, 255, 255))
+    im_nz.putpixel((0, 0), (254, 254, 254))
+    im_nz.save(near_zero)
+
+    # 4. Corrupt/empty file
+    empty_file = tmp_path / "empty.png"
+    empty_file.write_bytes(b"")
+
+    # 5. Non-existent file
+    missing_file = tmp_path / "missing.png"
+
+    # 6. Valid multi-color image
+    valid_img = tmp_path / "valid.png"
+    v_im = Image.new("RGB", (50, 50), color="white")
+    v_im.putpixel((0, 0), (255, 0, 0))
+    v_im.putpixel((0, 1), (0, 255, 0))
+    v_im.putpixel((0, 2), (0, 0, 255))
+    v_im.save(valid_img)
+
+    # 7. Valid 2-color monochrome graph (should NOT be blanked)
+    mono_img = tmp_path / "two_color_mono.png"
+    im_m = Image.new("RGB", (100, 100), color="white")
+    for i in range(100):
+        im_m.putpixel((i, 50), (0, 0, 0))
+    im_m.save(mono_img)
+
+    doc = DocxTemplate(TEMPLATES_DIR / "swg-panel.docx")
+    context = {
+        "ir": {"image": str(white_img)},
+        "visual": {"image": green_img},
+        "us": {"prpd": str(near_zero)},
+        "tev": {"prpd": empty_file},
+        "missing": {"prpd": str(missing_file)},
+        "good": {"prpd": str(valid_img)},
+        "mono": {"prpd": str(mono_img)},
+        "prebound_blank": {"image": InlineImage(doc, str(white_img))},
+        "prebound_valid": {"image": InlineImage(doc, str(valid_img))},
+    }
+
+    _bind_inline_images(doc, context)
+
+    assert context["ir"]["image"] == ""
+    assert context["visual"]["image"] == ""
+    assert context["us"]["prpd"] == ""
+    assert context["tev"]["prpd"] == ""
+    assert context["missing"]["prpd"] == ""
+    assert isinstance(context["good"]["prpd"], InlineImage)
+    assert isinstance(context["mono"]["prpd"], InlineImage)
+    assert context["prebound_blank"]["image"] == ""
+    assert isinstance(context["prebound_valid"]["image"], InlineImage)
+    assert context["prebound_valid"]["image"].tpl == doc
+
 
 
 
