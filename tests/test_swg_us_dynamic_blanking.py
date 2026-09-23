@@ -42,12 +42,10 @@ from src.core.shading import (
     is_us_contract_awarded,
     normalize_swg_compartment,
 )
+from src.core.topology import SwitchgearArchetype
 from src.full_report.models import (
-    SwitchgearCategory,
     SwitchgearPanelScanSpec,
     SwitchgearScanSpec,
-    VCB_STANDARD_COMPARTMENTS,
-    VCB_TRANSITION_COMPARTMENTS,
 )
 from src.full_report.scan_adapters import SwitchgearScanAdapter
 from src.full_report.scan_render import FullReportScanPageRendererCore
@@ -567,7 +565,7 @@ class TestFullReportScanAdapterUsBlanking:
             model="GV3",
             rating="11kV 630A",
             serial_no="SN-BOARD-01",
-            category=SwitchgearCategory.TAMCO_LUCY,
+            archetype=SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY,
             panels=[panel],
         )
 
@@ -658,7 +656,13 @@ class TestFullReportScanAdapterUsBlanking:
             serial_no="SN-01",
             us_reading="14",
             tev_reading="18",
-            compartments=VCB_STANDARD_COMPARTMENTS,
+            compartments=(
+                "BREAKER COMPARTMENT",
+                "CABLE COMPARTMENT",
+                "BUSBAR COMPARTMENT",
+                "PT COMPARTMENT",
+                "SECONDARY COMPARTMENT",
+            ),
         )
         swg = SwitchgearScanSpec(
             switchgear_type="VCB",
@@ -666,7 +670,7 @@ class TestFullReportScanAdapterUsBlanking:
             model="GV3",
             rating="11kV 630A",
             serial_no="SN-BOARD-01",
-            category=SwitchgearCategory.VCB,
+            archetype=SwitchgearArchetype.VCB_CUBICLE,
             panels=[panel],
         )
         adapter = SwitchgearScanAdapter(
@@ -707,7 +711,13 @@ class TestFullReportScanAdapterUsBlanking:
             serial_no="SN-TRANS-01",
             us_reading="14",
             tev_reading="18",
-            compartments=VCB_TRANSITION_COMPARTMENTS,
+            compartments=(
+                "FRONT COMPARTMENT",
+                "REAR COMPARTMENT",
+                "BUSBAR COMPARTMENT",
+                "PT COMPARTMENT",
+                "SECONDARY COMPARTMENT",
+            ),
         )
         swg = SwitchgearScanSpec(
             switchgear_type="VCB",
@@ -715,7 +725,7 @@ class TestFullReportScanAdapterUsBlanking:
             model="GV3",
             rating="11kV 630A",
             serial_no="SN-BOARD-01",
-            category=SwitchgearCategory.VCB,
+            archetype=SwitchgearArchetype.VCB_CUBICLE,
             panels=[panel],
         )
         adapter = SwitchgearScanAdapter(

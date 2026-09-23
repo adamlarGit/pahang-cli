@@ -224,8 +224,8 @@ def classify_bay_role(
     if re.search(r"(?:\bBUS[\s-]*COUPLER\b|\bCOUPLER\b|\bB/C\b)", combined, re.IGNORECASE):
         return BayRole.BUS_COUPLER
 
-    # 4. Transformer (TX, TRANSFORMER, ALATUBAH, TEE-OFF) in name or panel_feeder_no per spec
-    if re.search(r"(?:\bTX\d*\b|\bTRANSFORMER\b|\bALATUBAH\b|\bTEE[\s-]*OFF\b|\b\d*KVA\b)", name_feeder, re.IGNORECASE):
+    # 4. Transformer (TX, TRANSFORMER, ALATUBAH, TEE-OFF, FUSE, KVA) in name or panel_feeder_no per spec
+    if re.search(r"(?:\bTX\d*\b|\bTRANSFORMER\b|\bALATUBAH\b|\bTEE[\s-]*OFF\b|\b\d*KVA\b|\bKVA\b|\bFUSE\b)", name_feeder, re.IGNORECASE):
         return BayRole.TRANSFORMER
 
     # 5. Default Standard Feeder
@@ -280,6 +280,10 @@ def resolve_panel_compartments(
 
     Pure domain resolution with zero COM or filesystem dependencies.
     """
+    if panel is None and bay_role is not None and not isinstance(bay_role, BayRole):
+        panel = bay_role
+        bay_role = None
+
     # Fall back to panel object attributes if provided
     if panel is not None:
         name = name or _get_attr_or_key(panel, "name", "") or ""

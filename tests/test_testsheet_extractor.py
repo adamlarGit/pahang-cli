@@ -340,7 +340,8 @@ def test_switchgear_panel_spec_subrow_attributes() -> None:
 
 def test_build_switchgear_panel_scan_spec_propagation() -> None:
     """Verify build_switchgear_panel_scan_spec propagates all 6 sub-row attributes."""
-    from src.full_report.models import SwitchgearCategory, build_switchgear_panel_scan_spec
+    from src.core.topology import SwitchgearArchetype
+    from src.full_report.models import build_switchgear_panel_scan_spec
 
     panel = SwitchgearPanelSpec(
         panel_no=1,
@@ -352,7 +353,7 @@ def test_build_switchgear_panel_scan_spec_propagation() -> None:
         pt_photo=526,
         has_pt_measurement=True,
     )
-    scan_spec = build_switchgear_panel_scan_spec(panel, SwitchgearCategory.VCB)
+    scan_spec = build_switchgear_panel_scan_spec(panel, SwitchgearArchetype.VCB_CUBICLE)
     assert scan_spec.cable_photo == 498
     assert scan_spec.breaker_photo == 493
     assert scan_spec.secondary_photo == 520

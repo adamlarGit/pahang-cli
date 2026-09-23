@@ -36,8 +36,8 @@ from src.core.shading import (
     is_tev_contract_awarded,
     normalize_swg_compartment,
 )
+from src.core.topology import SwitchgearArchetype
 from src.full_report.models import (
-    SwitchgearCategory,
     SwitchgearPanelScanSpec,
     SwitchgearScanSpec,
 )
@@ -500,7 +500,7 @@ class TestFullReportScanAdapterTevBlanking:
             model="GV3",
             rating="11kV 630A",
             serial_no="SN-BOARD-01",
-            category=SwitchgearCategory.TAMCO_LUCY,
+            archetype=SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY,
             panels=[panel],
         )
 
@@ -582,7 +582,6 @@ class TestFullReportScanAdapterTevBlanking:
 
     def test_vcb_5_standard_compartments_tev_matrix(self):
         """Verify VCB standard 5 compartments: Breaker, Cable, PT active; Busbar, Secondary blanked."""
-        from src.full_report.models import VCB_STANDARD_COMPARTMENTS
         panel = SwitchgearPanelScanSpec(
             panel_no=1,
             name="VCB 1",
@@ -592,7 +591,13 @@ class TestFullReportScanAdapterTevBlanking:
             heater_amp="0.8",
             serial_no="SN-01",
             tev_reading="18",
-            compartments=VCB_STANDARD_COMPARTMENTS,
+            compartments=(
+                "BREAKER COMPARTMENT",
+                "CABLE COMPARTMENT",
+                "BUSBAR COMPARTMENT",
+                "PT COMPARTMENT",
+                "SECONDARY COMPARTMENT",
+            ),
         )
         swg = SwitchgearScanSpec(
             switchgear_type="VCB",
@@ -600,7 +605,7 @@ class TestFullReportScanAdapterTevBlanking:
             model="GV3",
             rating="11kV 630A",
             serial_no="SN-BOARD-01",
-            category=SwitchgearCategory.VCB,
+            archetype=SwitchgearArchetype.VCB_CUBICLE,
             panels=[panel],
         )
         adapter = SwitchgearScanAdapter(
@@ -626,7 +631,6 @@ class TestFullReportScanAdapterTevBlanking:
 
     def test_vcb_5_transition_compartments_tev_matrix(self):
         """Verify VCB transition 5 compartments: PT active; Front, Rear, Busbar, Secondary blanked."""
-        from src.full_report.models import VCB_TRANSITION_COMPARTMENTS
         panel = SwitchgearPanelScanSpec(
             panel_no=1,
             name="TRANSITION PANEL",
@@ -636,7 +640,13 @@ class TestFullReportScanAdapterTevBlanking:
             heater_amp="0.8",
             serial_no="SN-TRANS-01",
             tev_reading="18",
-            compartments=VCB_TRANSITION_COMPARTMENTS,
+            compartments=(
+                "FRONT COMPARTMENT",
+                "REAR COMPARTMENT",
+                "BUSBAR COMPARTMENT",
+                "PT COMPARTMENT",
+                "SECONDARY COMPARTMENT",
+            ),
         )
         swg = SwitchgearScanSpec(
             switchgear_type="VCB",
@@ -644,7 +654,7 @@ class TestFullReportScanAdapterTevBlanking:
             model="GV3",
             rating="11kV 630A",
             serial_no="SN-BOARD-01",
-            category=SwitchgearCategory.VCB,
+            archetype=SwitchgearArchetype.VCB_CUBICLE,
             panels=[panel],
         )
         adapter = SwitchgearScanAdapter(

@@ -958,8 +958,13 @@ def test_foreign_defect_slices_discarded_with_foreign_discard_action() -> None:
 
 def test_vcb_standard_5_compartment_defect_matching() -> None:
     """Verify that in standard 5-compartment VCB panel, specific compartment defects match only their target compartment."""
-    from src.full_report.models import VCB_STANDARD_COMPARTMENTS
-
+    vcb_standard_compartments = (
+        "BREAKER COMPARTMENT",
+        "CABLE COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
     items = [
         ScanRenderItem(
             page_name=f"Panel 1 (VCB 1) - {comp}",
@@ -971,7 +976,7 @@ def test_vcb_standard_5_compartment_defect_matching() -> None:
             panel_no=1,
             context={"panel": {"feeder_no": "CKN01", "name": "VCB 1"}},
         )
-        for comp in VCB_STANDARD_COMPARTMENTS
+        for comp in vcb_standard_compartments
     ]
 
     # Defect on Busbar Compartment
@@ -1000,8 +1005,13 @@ def test_vcb_standard_5_compartment_defect_matching() -> None:
 
 def test_vcb_transition_panel_defect_matching_and_rear_normalization() -> None:
     """Verify transition panel defect interleaving matches FRONT and BACK/REAR compartments correctly."""
-    from src.full_report.models import VCB_TRANSITION_COMPARTMENTS
-
+    vcb_transition_compartments = (
+        "FRONT COMPARTMENT",
+        "REAR COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
     items = [
         ScanRenderItem(
             page_name=f"Panel 2 (TRANSITION) - {comp}",
@@ -1013,7 +1023,7 @@ def test_vcb_transition_panel_defect_matching_and_rear_normalization() -> None:
             panel_no=2,
             context={"panel": {"feeder_no": "CKN02", "name": "TRANSITION PANEL"}},
         )
-        for comp in VCB_TRANSITION_COMPARTMENTS
+        for comp in vcb_transition_compartments
     ]
 
     # Defect named BACK_COMPARTMENT should match REAR COMPARTMENT

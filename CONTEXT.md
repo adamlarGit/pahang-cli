@@ -246,6 +246,42 @@ The ground-truth benchmark deliverables and source data sets used for determinis
 3. `144. TELEKOM TANAH PUTIH (TEV+VI)`: PE 144 (`CKTN/PCE/J00040`), Kuantan Week 35 (24-Aug-2026), severe internal TEV partial discharge across all 4 switchgear panels with PRPD scatter plot waveforms.
 Both the manual reference deliverables (`FULL REPORT/...`) and their corresponding finalized Quick Reports (`QUICK REPORT/...`), testsheets (`TESTSHEET/...`), and raw data reside in the active project base path `PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD`.
 
+### SwitchgearArchetype
+The 6 canonical hardware archetypes (`src/core/topology.py`) modeling physical switchgear chamber configurations and dynamic scanning requirements:
+1. `VCB_CUBICLE`: Vacuum Circuit Breaker modular cubicles (e.g., Schneider Blokset, Tamco HV, ABB Uniswitch) with 4-5 chambers per bay (Breaker, Cable, Busbar, Secondary, and conditional PT).
+2. `GIS_CUBICLE`: Gas-Insulated Switchgear cubicles (e.g., Siemens 8DA/8DB) sharing the multi-chamber cubicle topology.
+3. `RMU_DUAL_CABLE_ENTRY`: Compact Ring Main Units with dual cable terminations per panel (e.g., Tamco Ringmaster/GR1, Lucy VRN2a SF6/Sabre), provisioning both `CABLE COMPARTMENT` and `CABLE ENTRY`.
+4. `RMU_FUSE_CANISTER`: Ring Main Units featuring fuse canisters for transformer protection (e.g., Indkom INS24), provisioning `CABLE COMPARTMENT` for outgoing feeders and `FUSE COMPARTMENT` for transformer bays.
+5. `RMU_OIL`: Legacy oil-insulated Ring Main Units (e.g., Lucy VRN2a Oil, OCB).
+6. `RMU_STANDARD`: Generic Ring Main Units (e.g., Indkom JMW12, MRMU, standard SF6 RMUs) provisioning single `CABLE COMPARTMENT` per panel.
+
+### VoltageClass
+The normalized electrical voltage seam (`src/core/topology.py`) classifying board operating voltages into standard categories:
+- `11kV` (`KV_11`): Distribution standard, typically requiring single Overview page.
+- `33kV` (`KV_33`): Sub-transmission standard, requiring dual Overview pages (Front + Rear).
+- `22kV` (`KV_22`): Intermediate distribution voltage.
+- `6.6kV` (`KV_6_6`): Industrial / legacy distribution voltage.
+- `LV` (`LV`): Low voltage switchgear.
+
+### BayRole
+The functional panel operational role classifier (`src/core/topology.py`) determining bay-level chamber layout:
+- `STANDARD`: Outgoing lines, incomers, spares, and regular feeder panels.
+- `TRANSFORMER`: Bays connected to local transformers (`TX`, `TRANSFORMER`, `ALATUBAH`, `TEE-OFF`, `FUSE`, `KVA`).
+- `TRANSITION`: Bus transition and tool chambers (`TRANSITION`, `PERALIHAN`, `TRANSISYEN`, `TOOLS`). Transition bays never provision PT compartments.
+- `BUS_SECTION`: Busbar sectioning bays (`BUS SECTION`, `BUS SEC`, `B/S`, `SECTION`).
+- `BUS_COUPLER`: Bus coupling bays (`BUS COUPLER`, `COUPLER`, `B/C`).
+
+### SwitchgearTopologyEngine
+The two-phase resolution engine (`src/core/topology.py`) providing pure, COM-free deterministic compartment and layout resolution:
+- **Phase 1 (Board Macro Classification)**: Evaluates switchgear type, manufacturer, model, and rating to classify the lineup into its `SwitchgearArchetype`, `VoltageClass`, and board-level `overview_compartments` (`OVERVIEW`, `OVERVIEW TOP`, `OVERVIEW BOTTOM`).
+- **Phase 2 (Bay Dynamic Resolution & Presence Gates)**: Evaluates individual panel role (`classify_bay_role`) and empirical evidence gates:
+  - `eval_pt_gate`: Enables `PT COMPARTMENT` only when sub-row r+3 contains valid photo evidence (`pt_photo`) or non-empty measurement data (`has_pt_measurement`).
+  - `eval_secondary_gate`: Pure photo presence gate for transition bays checking Column P (`secondary_photo`), completely independent of heater current.
+
+### StrictZeroFallbackPolicy
+The data integrity and evidence preservation invariant governing Full Report photo pairing. Enforces strict 1-to-1 matching between thermal/visual inspection photos and scanning page placeholders. Prohibits artificial duplication or placeholder cloning across compartments when empirical evidence was not captured on-site, ensuring zero photo duplication across report deliverables.
+
+
 
 
 

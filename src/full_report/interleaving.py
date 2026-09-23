@@ -30,7 +30,7 @@ from src.full_report.defect_parser import (
     normalize_equipment_id,
     parse_d37_filename,
 )
-from src.full_report.models import is_tx_feeder
+from src.core.topology import BayRole, classify_bay_role
 from src.full_report.scan_adapters import ScanAdapterResult, ScanRenderItem
 from src.quick_report.defects import CbmDefectRecord
 
@@ -803,7 +803,13 @@ class DefectInterleavingPolicy:
                 or ""
             )
         )
-        panel_is_tx = is_tx_feeder(f"{panel_ctx.get('name', '')} {item_feeder_no}")
+        panel_is_tx = (
+            classify_bay_role(
+                name=str(panel_ctx.get("name", "")),
+                panel_feeder_no=item_feeder_no,
+            )
+            == BayRole.TRANSFORMER
+        )
 
         for d in defects:
             if d.filename in consumed_defects:

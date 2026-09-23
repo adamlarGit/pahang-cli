@@ -69,14 +69,14 @@ class SwitchgearPanelSpec:
     @property
     def is_tx_feeder(self) -> bool:
         """Return True if this panel is a transformer (TX) feeder."""
-        from src.full_report.models import is_tx_feeder
-        return is_tx_feeder(self)
+        from src.core.topology import BayRole, classify_bay_role
+        return classify_bay_role(name=self.name, panel_feeder_no=self.panel_feeder_no, panel_type=self.panel_type) == BayRole.TRANSFORMER
 
     @property
     def is_transition_panel(self) -> bool:
         """Return True if this panel is a transition panel."""
-        from src.full_report.models import is_transition_panel
-        return is_transition_panel(self)
+        from src.core.topology import BayRole, classify_bay_role
+        return classify_bay_role(name=self.name, panel_feeder_no=self.panel_feeder_no, panel_type=self.panel_type) == BayRole.TRANSITION
 
 
 @dataclass(frozen=True)
