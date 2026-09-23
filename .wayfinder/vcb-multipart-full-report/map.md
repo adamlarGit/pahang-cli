@@ -35,7 +35,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 ```mermaid
 graph TD
     T56["#56: feat(full-report): multi-part partition policy & composer chunking - Closed"]
-    T57["#57: feat(full-report): post-processing multi-part discovery & sequential PDF merge"]
+    T57["#57: feat(full-report): post-processing multi-part discovery & sequential PDF merge - Closed"]
     T58["#58: test(full-report): cli telemetry, benchmark e2e verification & docs"]
 
     T56 --> T57
@@ -54,7 +54,7 @@ graph TD
 - **Delivers**: Domain partitioning of planned parts into individual panel chunks for VCB/GIS, archetype access via `plan.package.switchgears[0].archetype`, single-pass rendering with chunked compilation in `FullReportComposer`, backward-compatible `chunk_paths` on execution results, and safe exact-stem pre-purge.
 
 ### #57: feat(full-report): post-processing multi-part discovery & sequential PDF merge
-- **Status**: Planned
+- **Status**: Closed
 - **GitHub Issue**: [#57](https://github.com/adamlarGit/pahang-cli/issues/57)
 - **Blocked by**: #56
 - **Ticket File**: [.wayfinder/vcb-multipart-full-report/tickets/057-postprocessing-multipart-discovery-and-pdf-stitching.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/vcb-multipart-full-report/tickets/057-postprocessing-multipart-discovery-and-pdf-stitching.md)
