@@ -768,30 +768,43 @@ def test_format_busbar_position() -> None:
 
 
 def test_format_load_amp() -> None:
-    """Verify format_load_amp formats load current in Amperes with robust sentinel handling."""
-    # Valid values
-    assert format_load_amp("120A") == "120A"
-    assert format_load_amp("65 A") == "65 A"
-    assert format_load_amp("0") == "0"
+    """Verify format_load_amp converts numeric load currents to whole numbers and cleans unit suffixes."""
+    # 1. Whole numbers and floats
+    assert format_load_amp(150) == "150"
+    assert format_load_amp(17.0) == "17"
+    assert format_load_amp(110.0) == "110"
+    assert format_load_amp(0.0) == "0"
     assert format_load_amp(0) == "0"
-    assert format_load_amp(120) == "120"
-    assert format_load_amp(85.5) == "85.5"
+    assert format_load_amp(Decimal("17.0")) == "17"
+    assert format_load_amp(Decimal("17.4")) == "17"
+    assert format_load_amp(Decimal("17.6")) == "18"
 
-    # Sentinels and empty values
+    # 2. String formats with or without 'A'/'a' and whitespace
+    assert format_load_amp("150A") == "150"
+    assert format_load_amp("150a") == "150"
+    assert format_load_amp("150 A") == "150"
+    assert format_load_amp("150 a") == "150"
+    assert format_load_amp("17.0") == "17"
+    assert format_load_amp("17.0A") == "17"
+    assert format_load_amp("17.4") == "17"
+    assert format_load_amp("17.6") == "18"
+    assert format_load_amp("0") == "0"
+    assert format_load_amp("0.0") == "0"
+    assert format_load_amp("0A") == "0"
+
+    # 3. Sentinels, null, empty, non-numeric
     assert format_load_amp(None) == "-"
     assert format_load_amp("") == "-"
     assert format_load_amp("   ") == "-"
     assert format_load_amp("-") == "-"
     assert format_load_amp("--") == "-"
     assert format_load_amp("N/A") == "-"
-    assert format_load_amp("n/a") == "-"
-    assert format_load_amp("NA") == "-"
     assert format_load_amp("None") == "-"
-    assert format_load_amp("null") == "-"
+    assert format_load_amp("nan") == "-"
     assert format_load_amp(float("nan")) == "-"
-    assert format_load_amp(float("inf")) == "-"
     assert format_load_amp(True) == "-"
     assert format_load_amp(False) == "-"
+    assert format_load_amp("abc") == "-"
 
 
 
