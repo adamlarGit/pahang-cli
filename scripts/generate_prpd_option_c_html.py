@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import posixpath
 import re
-import socket
 import subprocess
 import threading
 import time
@@ -14,28 +13,16 @@ import urllib.parse
 from src.quick_report.prpd import (
     OPTION_C_INJECTION_TEMPLATE,
     ThreadedTCPServer,
+    find_chrome_executable,
+    find_free_port,
     is_blank_or_invalid_image,
+    safe_path,
 )
-
-
-def safe_path(p: Path | str) -> str:
-    """Ensure Windows extended-length path compatibility (\\\\?\\)."""
-    s = str(Path(p).resolve())
-    if os.name == "nt" and not s.startswith("\\\\?\\"):
-        return "\\\\?\\" + s
-    return s
 
 
 def _sanitize_name(name: str) -> str:
     """Sanitize asset or sub-asset names into filesystem-safe uppercase tokens."""
     return re.sub(r"[^\w]+", "_", name.upper()).strip("_")
-
-
-def find_free_port() -> int:
-    """Finds an available TCP port on localhost dynamically."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
 
 
 def auto_discover_measurements(survey_dir: Path | str) -> list[tuple[str, str, str, str]]:
@@ -262,7 +249,7 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
     t.start()
     time.sleep(0.3)
 
-    chrome = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    chrome = find_chrome_executable()
     results = []
 
     try:

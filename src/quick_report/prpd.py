@@ -156,6 +156,8 @@ def safe_path(p: Path | str) -> str:
     """Ensure Windows extended-length path compatibility (\\\\?\\)."""
     s = str(Path(p).resolve())
     if os.name == "nt" and not s.startswith("\\\\?\\"):
+        if s.startswith("\\\\"):
+            return "\\\\?\\UNC\\" + s.lstrip("\\")
         return "\\\\?\\" + s
     return s
 
@@ -168,7 +170,7 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 
 def is_blank_or_invalid_image(img: Path | str | InlineImage | Any) -> bool:
-    """Validate whether an image path or InlineImage is missing, 0-byte, corrupt, or a blank/near-zero variance capture.
+    """Validate whether an image path, stream, InlineImage, or PIL Image is missing, 0-byte, corrupt, or a blank/near-zero variance capture.
 
     Returns True if:
     - Target is None, empty, whitespace-only, non-existent, or zero-byte.
@@ -180,7 +182,7 @@ def is_blank_or_invalid_image(img: Path | str | InlineImage | Any) -> bool:
 
     Returns False for valid images containing actual graphical/photographic content.
     """
-    if hasattr(img, "image_descriptor"):
+    while hasattr(img, "image_descriptor"):
         img = getattr(img, "image_descriptor", None)
 
     if img is None:
@@ -189,35 +191,36 @@ def is_blank_or_invalid_image(img: Path | str | InlineImage | Any) -> bool:
         return True
 
     try:
-        if isinstance(img, (str, Path)):
+        raw_img = None
+        should_close = False
+
+        if isinstance(img, Image.Image):
+            raw_img = img
+        elif isinstance(img, (str, Path)):
             p = Path(safe_path(img))
             if not p.is_file() or p.stat().st_size == 0:
                 return True
-            image_source: Any = p
+            raw_img = Image.open(p)
+            should_close = True
         elif hasattr(img, "read"):
             if hasattr(img, "seek"):
                 img.seek(0)
-            image_source = img
+            raw_img = Image.open(img)
+            should_close = False
         else:
             return True
 
-        with Image.open(image_source) as raw_img:
+        try:
             if raw_img.width <= 0 or raw_img.height <= 0:
                 return True
+
             # Handle alpha transparency: if all pixels transparent, it's blank
-            if "A" in raw_img.getbands():
-                alpha_extrema = raw_img.getchannel("A").getextrema()
-                if alpha_extrema[1] == 0:
-                    return True
-                # Composite transparent pixels over a white background (as in Word / browser display)
-                bg = Image.new("RGB", raw_img.size, (255, 255, 255))
-                bg.paste(raw_img, mask=raw_img.getchannel("A"))
-                rgb_img = bg
-            elif raw_img.mode == "P" and "transparency" in raw_img.info:
+            if "transparency" in raw_img.info or "A" in raw_img.getbands():
                 rgba = raw_img.convert("RGBA")
                 alpha_extrema = rgba.getchannel("A").getextrema()
                 if alpha_extrema[1] == 0:
                     return True
+                # Composite transparent pixels over a white background (as in Word / browser display)
                 bg = Image.new("RGB", raw_img.size, (255, 255, 255))
                 bg.paste(rgba, mask=rgba.getchannel("A"))
                 rgb_img = bg
@@ -234,7 +237,13 @@ def is_blank_or_invalid_image(img: Path | str | InlineImage | Any) -> bool:
             if all(s < 1.0 for s in stat.stddev):
                 return True
 
-        return False
+            return False
+        finally:
+            if should_close and raw_img is not None:
+                try:
+                    raw_img.close()
+                except Exception:
+                    pass
     except Exception:
         return True
     finally:

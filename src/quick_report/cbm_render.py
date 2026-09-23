@@ -131,6 +131,8 @@ def _process_inline_images(doc: DocxTemplate, context: dict) -> None:
                 if isinstance(v, InlineImage):
                     if is_blank_or_invalid_image(v):
                         obj[k] = ""
+                    else:
+                        v.tpl = doc
                     continue
                 k_str = str(k).lower()
                 if (
@@ -158,6 +160,8 @@ def _process_inline_images(doc: DocxTemplate, context: dict) -> None:
                 if isinstance(item, InlineImage):
                     if is_blank_or_invalid_image(item):
                         obj[idx] = ""
+                    else:
+                        item.tpl = doc
                 else:
                     _convert(item)
 

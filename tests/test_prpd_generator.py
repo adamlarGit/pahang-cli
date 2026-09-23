@@ -33,6 +33,7 @@ from src.quick_report.prpd import (
     generate_prpd_graphs_for_transformer,
     is_blank_or_invalid_image,
     render_prpd_option_c_image,
+    safe_path,
 )
 
 
@@ -893,6 +894,81 @@ def test_is_blank_or_invalid_image_inline_image_support(tmp_path: Path):
     assert is_blank_or_invalid_image(MockInlineImage()) is True
 
 
+def test_is_blank_or_invalid_image_pil_image_support():
+    """Verify is_blank_or_invalid_image directly accepts and inspects PIL.Image.Image instances."""
+    # 1. Valid high-variance PIL Image
+    im_valid = Image.new("RGB", (100, 100), color=(255, 0, 0))
+    for i in range(100):
+        im_valid.putpixel((i, 50), (0, 255, 0))
+    assert is_blank_or_invalid_image(im_valid) is False
+
+    # 2. Solid pure-white PIL Image
+    im_white = Image.new("RGB", (50, 50), color="white")
+    assert is_blank_or_invalid_image(im_white) is True
+
+    # 3. Solid color PIL Image
+    im_green = Image.new("RGB", (50, 50), color=(0, 176, 80))
+    assert is_blank_or_invalid_image(im_green) is True
+
+    # 4. Near-zero variance noise PIL Image
+    im_nz = Image.new("RGB", (100, 100), color=(255, 255, 255))
+    im_nz.putpixel((0, 0), (254, 254, 254))
+    assert is_blank_or_invalid_image(im_nz) is True
+
+    # 5. Legitimate 2-color monochrome PIL Image
+    im_mono = Image.new("RGB", (100, 100), color="white")
+    for i in range(100):
+        im_mono.putpixel((i, 50), (0, 0, 0))
+    assert is_blank_or_invalid_image(im_mono) is False
+
+
+def test_is_blank_or_invalid_image_bytesio_stream_support(tmp_path: Path):
+    """Verify is_blank_or_invalid_image works with BytesIO streams and rewinds position."""
+    import io
+
+    # 1. Valid image in BytesIO, stream positioned at EOF
+    valid_buf = io.BytesIO()
+    im_v = Image.new("RGB", (60, 60), color="white")
+    for i in range(60):
+        im_v.putpixel((i, 30), (0, 0, 0))
+    im_v.save(valid_buf, format="PNG")
+    # Leave cursor at EOF
+    assert valid_buf.tell() > 0
+    assert is_blank_or_invalid_image(valid_buf) is False
+    # Verify stream position rewound to 0 for subsequent consumers
+    assert valid_buf.tell() == 0
+
+    # 2. Blank image in BytesIO wrapped in InlineImage
+    blank_buf = io.BytesIO()
+    Image.new("RGB", (40, 40), color="white").save(blank_buf, format="PNG")
+    doc = DocxTemplate("templates/FULL REPORT/NORMAL IR US TEV/swg-panel.docx")
+    inline_stream = InlineImage(doc, blank_buf)
+    assert is_blank_or_invalid_image(inline_stream) is True
+    assert blank_buf.tell() == 0
+
+    # 3. Valid image wrapped in InlineImage with stream at EOF
+    inline_valid_stream = InlineImage(doc, valid_buf)
+    valid_buf.seek(valid_buf.getbuffer().nbytes)  # position at EOF
+    assert is_blank_or_invalid_image(inline_valid_stream) is False
+    assert valid_buf.tell() == 0
+
+
+def test_safe_path_unc_and_extended_paths():
+    """Verify safe_path correctly formats local extended paths and UNC network paths on Windows."""
+    import os
+    # Local path
+    local = safe_path("C:/reports/test.png")
+    if os.name == "nt":
+        assert local.startswith("\\\\?\\C:\\")
+        # Idempotence
+        assert safe_path(local) == local
+
+        # UNC path
+        unc = safe_path(r"\\server\share\data\test.png")
+        assert unc.startswith("\\\\?\\UNC\\server\\share\\data\\test.png")
+        assert safe_path(unc) == unc
+
+
 def test_is_blank_or_invalid_image_valid_content(tmp_path: Path):
     """Verify is_blank_or_invalid_image returns False for real non-blank images."""
     three_col = tmp_path / "three_colors.png"
@@ -1171,17 +1247,29 @@ def test_cbm_render_process_inline_images_rejects_blank_and_invalid_images(tmp_p
     im_v.save(valid_img)
 
     doc = DocxTemplate("templates/FULL REPORT/NORMAL IR US TEV/swg-panel.docx")
+    dummy_doc = DocxTemplate("templates/FULL REPORT/NORMAL IR US TEV/swg-panel.docx")
     context = {
         "prpd": str(white_img),
         "visual_image": str(valid_img),
         "prebound_blank": InlineImage(doc, str(white_img)),
+        "prebound_valid": InlineImage(dummy_doc, str(valid_img)),
+        "image_list": [
+            InlineImage(dummy_doc, str(white_img)),
+            InlineImage(dummy_doc, str(valid_img)),
+        ],
     }
 
     _process_inline_images(doc, context)
 
     assert context["prpd"] == ""
     assert isinstance(context["visual_image"], InlineImage)
+    assert context["visual_image"].tpl == doc
     assert context["prebound_blank"] == ""
+    assert isinstance(context["prebound_valid"], InlineImage)
+    assert context["prebound_valid"].tpl == doc
+    assert context["image_list"][0] == ""
+    assert isinstance(context["image_list"][1], InlineImage)
+    assert context["image_list"][1].tpl == doc
 
 
 
