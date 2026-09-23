@@ -25,6 +25,7 @@ from src.quick_report.prpd import (
     discover_ultratev_survey_dir,
     generate_prpd_graphs_for_swg_panel,
     generate_prpd_graphs_for_transformer,
+    is_blank_or_invalid_image,
 )
 from src.core.contract import ContractScope
 from src.core.shading import (
@@ -127,23 +128,52 @@ def _process_inline_images(doc: DocxTemplate, context: dict) -> None:
     def _convert(obj: Any) -> None:
         if isinstance(obj, dict):
             for k, v in list(obj.items()):
-                k_str = str(k)
-                if k_str == "prpd" or k_str.endswith("_image") or k_str.endswith(".image"):
+                k_str = str(k).lower()
+                if (
+                    k_str in ("prpd", "image")
+                    or k_str.endswith("_image")
+                    or k_str.endswith(".image")
+                    or k_str.endswith(".prpd")
+                    or k_str.endswith("_prpd")
+                ):
                     if isinstance(v, (str, Path)) and str(v).strip() and str(v) != "-":
                         v_path = Path(v)
-                        if v_path.is_file():
-                            obj[k] = InlineImage(doc, str(v_path), width=Mm(80))
-                        else:
+                        if is_blank_or_invalid_image(v_path):
                             obj[k] = ""
+                        else:
+                            try:
+                                obj[k] = InlineImage(doc, str(v_path), width=Mm(80))
+                            except Exception:
+                                obj[k] = ""
                     elif isinstance(v, InlineImage):
-                        pass
-                    else:
+                        if (
+                            hasattr(v, "image_descriptor")
+                            and isinstance(v.image_descriptor, (str, Path))
+                            and is_blank_or_invalid_image(v.image_descriptor)
+                        ):
+                            obj[k] = ""
+                    elif v is None:
+                        obj[k] = ""
+                elif isinstance(v, InlineImage):
+                    if (
+                        hasattr(v, "image_descriptor")
+                        and isinstance(v.image_descriptor, (str, Path))
+                        and is_blank_or_invalid_image(v.image_descriptor)
+                    ):
                         obj[k] = ""
                 else:
                     _convert(v)
         elif isinstance(obj, list):
-            for item in obj:
-                _convert(item)
+            for idx, item in enumerate(obj):
+                if isinstance(item, InlineImage):
+                    if (
+                        hasattr(item, "image_descriptor")
+                        and isinstance(item.image_descriptor, (str, Path))
+                        and is_blank_or_invalid_image(item.image_descriptor)
+                    ):
+                        obj[idx] = ""
+                else:
+                    _convert(item)
 
     _convert(context)
 

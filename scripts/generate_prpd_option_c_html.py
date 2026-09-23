@@ -6,11 +6,12 @@ from pathlib import Path
 import posixpath
 import re
 import socket
-import socketserver
 import subprocess
 import threading
 import time
 import urllib.parse
+
+from src.quick_report.prpd import ThreadedTCPServer, is_blank_or_invalid_image
 
 
 def safe_path(p: Path | str) -> str:
@@ -310,7 +311,7 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
             pass  # Suppress HTTP access logging for clean CLI output
 
     port = find_free_port()
-    httpd = socketserver.TCPServer(("127.0.0.1", port), CustomHandler)
+    httpd = ThreadedTCPServer(("127.0.0.1", port), CustomHandler)
     t = threading.Thread(target=httpd.serve_forever, daemon=True)
     t.start()
     time.sleep(0.3)
@@ -359,17 +360,29 @@ def generate_all_survey_prpd_option_c(survey_dir: Path | str, output_dir: Path |
                     except Exception:
                         pass
 
-            out_size = os.path.getsize(safe_path(out_png)) if os.path.exists(safe_path(out_png)) else 0
-            print(f"[{tech:3s}] {label:20s} -> Saved ({out_size:,} bytes) to {out_png.name}")
+            is_valid = os.path.exists(safe_path(out_png)) and not is_blank_or_invalid_image(out_png)
+            if not is_valid and os.path.exists(safe_path(out_png)):
+                try:
+                    os.remove(safe_path(out_png))
+                except Exception:
+                    pass
+            out_size = os.path.getsize(safe_path(out_png)) if is_valid else 0
+            print(f"[{tech:3s}] {label:20s} -> {'Saved' if is_valid else 'BLANK/INVALID'} ({out_size:,} bytes) to {out_png.name}")
             results.append({
                 "label": label,
                 "tech": tech,
                 "output_file": str(out_png),
                 "file_size": out_size,
-                "status": "SUCCESS" if out_size > 0 else "FAILED",
+                "status": "SUCCESS" if is_valid else "FAILED",
             })
     finally:
-        httpd.shutdown()
+        try:
+            httpd.shutdown()
+            httpd.server_close()
+        except Exception:
+            pass
+        if t.is_alive():
+            t.join(timeout=2.0)
 
     print("================================================================================")
     print(f"Successfully generated {len(results)} Option C images!")

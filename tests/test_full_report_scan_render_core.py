@@ -22,12 +22,9 @@ from PIL import Image
 import pytest
 
 from src.full_report.scan_render import (
-    BANNER_DEFECT_FORWARDING,
     BANNER_HEALTHY_ANALYSIS,
-    BANNER_HEALTHY_RECOMMENDATION,
     COLOR_DEFECT,
     COLOR_HEALTHY,
-    COLOR_NORMAL,
     FullReportScanPageRendererCore,
     SEVERITY_MARKER_IR,
     SEVERITY_MARKER_TEV,
@@ -1223,6 +1220,7 @@ def test_bind_inline_images_rejects_blank_and_invalid_images(tmp_path: Path):
         "tev": {"prpd": empty_file},
         "missing": {"prpd": str(missing_file)},
         "good": {"prpd": str(valid_img)},
+        "prebound_blank": {"image": InlineImage(doc, str(white_img))},
     }
 
     _bind_inline_images(doc, context)
@@ -1233,6 +1231,7 @@ def test_bind_inline_images_rejects_blank_and_invalid_images(tmp_path: Path):
     assert context["tev"]["prpd"] == ""
     assert context["missing"]["prpd"] == ""
     assert isinstance(context["good"]["prpd"], InlineImage)
+    assert context["prebound_blank"]["image"] == ""
 
 
 

@@ -1038,6 +1038,109 @@ def test_option_c_injection_template_readiness_polling():
     assert "prpd.Plot()" in OPTION_C_INJECTION_TEMPLATE
 
 
+def test_is_blank_or_invalid_image_transparency_and_whitespace(tmp_path: Path):
+    """Verify is_blank_or_invalid_image detects transparent alpha=0 images and whitespace strings."""
+    # 1. Whitespace string
+    assert is_blank_or_invalid_image("   ") is True
+    assert is_blank_or_invalid_image("\t\n") is True
+
+    # 2. Fully transparent RGBA image (alpha=0 for all pixels, non-uniform RGB buffer)
+    p_alpha0 = tmp_path / "alpha0.png"
+    im_alpha0 = Image.new("RGBA", (20, 20))
+    for x in range(20):
+        for y in range(20):
+            im_alpha0.putpixel((x, y), (x * 10, y * 10, (x + y) * 5, 0))
+    im_alpha0.save(p_alpha0)
+    assert is_blank_or_invalid_image(p_alpha0) is True
+
+    # 3. Transparent background with single colored pixel (<= 2 colors against white background)
+    p_single = tmp_path / "single_dot_transparent.png"
+    im_single = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
+    im_single.putpixel((5, 5), (255, 0, 0, 255))
+    im_single.save(p_single)
+    assert is_blank_or_invalid_image(p_single) is True
+
+
+def test_survey_http_server_temp_dir_refcounting(tmp_path: Path):
+    """Verify SurveyHttpServer temp dir registration uses reference counting and handles nested registrations."""
+    dir_a = tmp_path / "temp_a"
+    dir_a.mkdir()
+    key_a = str(dir_a.resolve())
+
+    # Outer registration
+    SurveyHttpServer.register_temp_dir(dir_a)
+    assert key_a in SurveyHttpServer._active_temp_dirs
+    assert SurveyHttpServer._active_temp_dirs[key_a] == 1
+
+    # Nested inner registration (e.g. within render_prpd_option_c_image)
+    SurveyHttpServer.register_temp_dir(dir_a)
+    assert SurveyHttpServer._active_temp_dirs[key_a] == 2
+
+    # Inner unregister must NOT evict key_a for the outer scope
+    SurveyHttpServer.unregister_temp_dir(dir_a)
+    assert key_a in SurveyHttpServer._active_temp_dirs
+    assert SurveyHttpServer._active_temp_dirs[key_a] == 1
+
+    # Outer final unregister cleans up
+    SurveyHttpServer.unregister_temp_dir(dir_a)
+    assert key_a not in SurveyHttpServer._active_temp_dirs
+
+
+def test_render_prpd_option_c_image_handles_missing_chrome(tmp_path: Path, monkeypatch):
+    """Verify render_prpd_option_c_image gracefully returns None when Chrome is not installed."""
+    meas_dir = tmp_path / "SURVEY_NO_CHROME" / "SWG" / "FEEDER_1"
+    meas_dir.mkdir(parents=True)
+    html_file = meas_dir / "TEV.html"
+    html_file.write_text("<html><head></head><body>TEV</body></html>", encoding="utf-8")
+    out_png = tmp_path / "out" / "no_chrome.png"
+
+    def _raise_not_found():
+        raise FileNotFoundError("No Chrome executable found")
+
+    monkeypatch.setattr("src.quick_report.prpd.find_chrome_executable", _raise_not_found)
+
+    res = render_prpd_option_c_image(
+        html_file=html_file,
+        output_png=out_png,
+        survey_root=tmp_path / "SURVEY_NO_CHROME",
+        http_port=12345,
+        chrome_path=None,
+    )
+    assert res is None
+
+
+def test_cbm_render_process_inline_images_rejects_blank_and_invalid_images(tmp_path: Path):
+    """Verify _process_inline_images in cbm_render cleans blank image paths and blank InlineImages."""
+    from docxtpl import DocxTemplate, InlineImage
+    from src.quick_report.cbm_render import _process_inline_images
+
+    # 1. Blank solid white image
+    white_img = tmp_path / "cbm_white.png"
+    Image.new("RGB", (30, 30), color="white").save(white_img)
+
+    # 2. Valid multi-color image
+    valid_img = tmp_path / "cbm_valid.png"
+    im_v = Image.new("RGB", (30, 30), color="white")
+    im_v.putpixel((0, 0), (255, 0, 0))
+    im_v.putpixel((0, 1), (0, 255, 0))
+    im_v.putpixel((0, 2), (0, 0, 255))
+    im_v.save(valid_img)
+
+    doc = DocxTemplate("templates/FULL REPORT/NORMAL IR US TEV/swg-panel.docx")
+    context = {
+        "prpd": str(white_img),
+        "visual_image": str(valid_img),
+        "prebound_blank": InlineImage(doc, str(white_img)),
+    }
+
+    _process_inline_images(doc, context)
+
+    assert context["prpd"] == ""
+    assert isinstance(context["visual_image"], InlineImage)
+    assert context["prebound_blank"] == ""
+
+
+
 
 
 

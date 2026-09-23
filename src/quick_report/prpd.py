@@ -163,21 +163,45 @@ def is_blank_or_invalid_image(img_path: Path | str | None) -> bool:
     """Validate whether an image path is missing, 0-byte, corrupt, or a blank/near-zero variance capture.
 
     Returns True if:
-    - Path is None, empty, non-existent, or zero-byte.
+    - Path is None, empty, whitespace-only, non-existent, or zero-byte.
     - Image cannot be opened/decoded by Pillow.
     - Pixels are solid white (extrema == ((255, 255), (255, 255), (255, 255))).
     - Near-zero variance / single color (getcolors(maxcolors=20) is not None and len <= 2).
+    - Image is completely transparent (alpha channel max is 0).
 
     Returns False for valid images containing actual graphical/photographic content.
     """
     if not img_path:
         return True
+    if isinstance(img_path, str) and not img_path.strip():
+        return True
     try:
-        p = Path(img_path)
+        p = Path(safe_path(img_path))
         if not p.is_file() or p.stat().st_size == 0:
             return True
         with Image.open(p) as img:
-            rgb_img = img.convert("RGB")
+            if img.width <= 0 or img.height <= 0:
+                return True
+            # Handle alpha transparency: if all pixels transparent, it's blank
+            if "A" in img.getbands():
+                alpha_extrema = img.getchannel("A").getextrema()
+                if alpha_extrema[1] == 0:
+                    return True
+                # Composite transparent pixels over a white background (as in Word / browser display)
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.getchannel("A"))
+                rgb_img = bg
+            elif img.mode == "P" and "transparency" in img.info:
+                rgba = img.convert("RGBA")
+                alpha_extrema = rgba.getchannel("A").getextrema()
+                if alpha_extrema[1] == 0:
+                    return True
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg.paste(rgba, mask=rgba.getchannel("A"))
+                rgb_img = bg
+            else:
+                rgb_img = img.convert("RGB")
+
             extrema = rgb_img.getextrema()
             if extrema == ((255, 255), (255, 255), (255, 255)):
                 return True
@@ -192,15 +216,23 @@ def is_blank_or_invalid_image(img_path: Path | str | None) -> bool:
 class SurveyHttpServer:
     """Lightweight localhost HTTP server for serving survey directory assets to Headless Chrome."""
 
-    _active_temp_dirs: set[str] = set()
+    _active_temp_dirs: dict[str, int] = {}
+    _lock = threading.Lock()
 
     @classmethod
     def register_temp_dir(cls, d: Path | str) -> None:
-        cls._active_temp_dirs.add(str(Path(d).resolve()))
+        key = str(Path(d).resolve())
+        with cls._lock:
+            cls._active_temp_dirs[key] = cls._active_temp_dirs.get(key, 0) + 1
 
     @classmethod
     def unregister_temp_dir(cls, d: Path | str) -> None:
-        cls._active_temp_dirs.discard(str(Path(d).resolve()))
+        key = str(Path(d).resolve())
+        with cls._lock:
+            if key in cls._active_temp_dirs:
+                cls._active_temp_dirs[key] -= 1
+                if cls._active_temp_dirs[key] <= 0:
+                    del cls._active_temp_dirs[key]
 
     def __init__(self, survey_dir: Path | str, temp_dir: Path | str | None = None) -> None:
         self.survey_dir = str(Path(survey_dir).resolve())
@@ -229,7 +261,9 @@ class SurveyHttpServer:
                         candidate = os.path.join(server_temp_dir, filename)
                         if os.path.exists(safe_path(candidate)):
                             return safe_path(candidate)
-                    for td in list(SurveyHttpServer._active_temp_dirs):
+                    with SurveyHttpServer._lock:
+                        temp_dirs = list(SurveyHttpServer._active_temp_dirs.keys())
+                    for td in temp_dirs:
                         candidate = os.path.join(td, filename)
                         if os.path.exists(safe_path(candidate)):
                             return safe_path(candidate)
@@ -259,6 +293,12 @@ class SurveyHttpServer:
             except Exception:
                 pass
             self._httpd = None
+        if self._thread and self._thread.is_alive():
+            try:
+                self._thread.join(timeout=2.0)
+            except Exception:
+                pass
+            self._thread = None
 
     def __enter__(self) -> int:
         return self.start()
@@ -290,7 +330,11 @@ def render_prpd_option_c_image(
     output_dir = out_png_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    chrome = chrome_path or find_chrome_executable()
+    try:
+        chrome = chrome_path or find_chrome_executable()
+    except FileNotFoundError as exc:
+        logging.warning("Option C rendering skipped: %s", exc)
+        return None
 
     try:
         rel_subpath = html_path.parent.relative_to(survey_root_path).as_posix()
@@ -890,7 +934,7 @@ def generate_prpd_graphs_for_swg_panel(
         if http_port is not None:
             us_png, tev_png = _do_render(http_port, resolved_chrome)
         else:
-            with SurveyHttpServer(survey_root) as port:
+            with SurveyHttpServer(survey_root, temp_dir=output_dir) as port:
                 us_png, tev_png = _do_render(port, resolved_chrome)
 
     return us_png, tev_png
@@ -985,7 +1029,7 @@ def generate_prpd_graphs_for_transformer(
         if http_port is not None:
             us_png, tev_png = _do_render(http_port, resolved_chrome)
         else:
-            with SurveyHttpServer(survey_root) as port:
+            with SurveyHttpServer(survey_root, temp_dir=output_dir) as port:
                 us_png, tev_png = _do_render(port, resolved_chrome)
 
     return us_png, tev_png

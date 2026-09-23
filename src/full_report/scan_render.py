@@ -94,17 +94,38 @@ def _bind_inline_images(doc: DocxTemplate, context: dict, image_width_mm: float 
                                     )
                                     obj[k] = ""
                     elif isinstance(v, InlineImage):
-                        v.tpl = doc
+                        if (
+                            hasattr(v, "image_descriptor")
+                            and isinstance(v.image_descriptor, (str, Path))
+                            and is_blank_or_invalid_image(v.image_descriptor)
+                        ):
+                            obj[k] = ""
+                        else:
+                            v.tpl = doc
                     elif v is None:
                         obj[k] = ""
                 elif isinstance(v, InlineImage):
-                    v.tpl = doc
+                    if (
+                        hasattr(v, "image_descriptor")
+                        and isinstance(v.image_descriptor, (str, Path))
+                        and is_blank_or_invalid_image(v.image_descriptor)
+                    ):
+                        obj[k] = ""
+                    else:
+                        v.tpl = doc
                 else:
                     _convert(v)
         elif isinstance(obj, list):
-            for item in obj:
+            for idx, item in enumerate(obj):
                 if isinstance(item, InlineImage):
-                    item.tpl = doc
+                    if (
+                        hasattr(item, "image_descriptor")
+                        and isinstance(item.image_descriptor, (str, Path))
+                        and is_blank_or_invalid_image(item.image_descriptor)
+                    ):
+                        obj[idx] = ""
+                    else:
+                        item.tpl = doc
                 else:
                     _convert(item)
 
