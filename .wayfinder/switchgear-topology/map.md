@@ -35,7 +35,7 @@ graph TD
     T50[#50: Panel Spec Extension & Sub-Row Extraction - Closed]
     T49 --> T51[#51: Scan Adapters & Census Integration - Closed]
     T50 --> T51
-    T51 --> T52[#52: Benchmark Deliverables & Regression Alignment - Planned]
+    T51 --> T52[#52: Benchmark Deliverables & Regression Alignment - Closed]
     T52 --> T53[#53: Legacy Category Purge & Docs Update - Planned]
 ```
 
@@ -91,15 +91,15 @@ graph TD
 ---
 
 ### #52: Benchmark Deliverables & Regression Suite Alignment
-- **Status**: Planned
+- **Status**: Closed
 - **GitHub Issue**: [#52](https://github.com/adamlarGit/pahang-cli/issues/52)
 - **Blocked by**: #51
 - **Ticket File**: [.wayfinder/switchgear-topology/tickets/052-benchmark-deliverables-and-regression-suite-alignment.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/switchgear-topology/tickets/052-benchmark-deliverables-and-regression-suite-alignment.md)
-- [ ] Add and verify PE 179 Cenderawasih NO.1 benchmark test asserting 6 SWG pages and 14 total substation pages.
-- [ ] Add and verify PE 144 Telekom Tanah Putih benchmark test (RMU_FUSE_CANISTER - INDKOM INS24 with `model="INS24"`) asserting 10 SWG pages (with 4 TEV defect interleaving pages) and 19 total substation pages.
-- [ ] Add and verify PE 005 Talapia benchmark test asserting 10 SWG pages and 19 total substation pages.
-- [ ] Add benchmark assertion for PE 157 Perpustakaan Awam asserting 3 VCB overviews, 4-compartment standard bays, 5-compartment PT bay, 24 SWG pages, and 34 total substation pages.
-- [ ] Ensure 100% green pass rate across `pytest tests/test_full_report_*.py` (including `test_full_report_defect_interleaving.py` and `test_full_report_plan_builder.py`).
+- [x] Add and verify PE 179 Cenderawasih NO.1 benchmark test asserting 6 SWG pages and 14 total substation pages.
+- [x] Add and verify PE 144 Telekom Tanah Putih benchmark test (RMU_FUSE_CANISTER - INDKOM INS24 with `model="INS24"`) asserting 10 SWG pages (with 4 TEV defect interleaving pages) and 19 total substation pages.
+- [x] Add and verify PE 005 Talapia benchmark test asserting 10 SWG pages and 19 total substation pages.
+- [x] Add benchmark assertion for PE 157 Perpustakaan Awam asserting 3 VCB overviews, 4-compartment standard bays, 5-compartment PT bay, 24 SWG pages, and 34 total substation pages.
+- [x] Ensure 100% green pass rate across `pytest tests/test_full_report_*.py` (including `test_full_report_defect_interleaving.py` and `test_full_report_plan_builder.py`).
 
 ---
 
