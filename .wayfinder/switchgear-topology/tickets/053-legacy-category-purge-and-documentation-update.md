@@ -36,11 +36,11 @@ Perform complete removal of deprecated switchgear category enums and procedural 
 
 **Blocked by:** #52
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Completely delete `SwitchgearCategory` enum from `src/full_report/models.py`.
-- [ ] Delete `VCB_STANDARD_COMPARTMENTS`, `VCB_TRANSITION_COMPARTMENTS`, and `OVERVIEW_COMPARTMENTS_MAP` constants from `src/full_report/models.py`.
-- [ ] Remove deprecated procedural helpers (`classify_switchgear`, `resolve_overview_compartments`, `resolve_switchgear_compartments`, `resolve_panel_page_count`, `is_tx_feeder`) from `src/full_report/models.py`.
-- [ ] Remove all remaining references to `TAMCO_LUCY` and `OTHER_RMU` across codebase and tests.
-- [ ] Update `CONTEXT.md` with ubiquitous vocabulary (`SwitchgearArchetype`, `VoltageClass`, `BayRole`, `SwitchgearTopologyEngine`).
-- [ ] Run full test suite (`pytest`) to confirm 100% green pass rate.
+- [x] Completely delete `SwitchgearCategory` enum from `src/full_report/models.py`.
+- [x] Delete `VCB_STANDARD_COMPARTMENTS`, `VCB_TRANSITION_COMPARTMENTS`, and `OVERVIEW_COMPARTMENTS_MAP` constants from `src/full_report/models.py`.
+- [x] Remove deprecated procedural helpers (`classify_switchgear`, `resolve_overview_compartments`, `resolve_switchgear_compartments`, `resolve_panel_page_count`, `is_tx_feeder`) from `src/full_report/models.py`.
+- [x] Remove all remaining references to `TAMCO_LUCY` and `OTHER_RMU` across codebase and tests.
+- [x] Update `CONTEXT.md` with ubiquitous vocabulary (`SwitchgearArchetype`, `VoltageClass`, `BayRole`, `SwitchgearTopologyEngine`).
+- [x] Run full test suite (`pytest`) to confirm 100% green pass rate.

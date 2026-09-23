@@ -36,7 +36,7 @@ graph TD
     T49 --> T51[#51: Scan Adapters & Census Integration - Closed]
     T50 --> T51
     T51 --> T52[#52: Benchmark Deliverables & Regression Alignment - Closed]
-    T52 --> T53[#53: Legacy Category Purge & Docs Update - Planned]
+    T52 --> T53[#53: Legacy Category Purge & Docs Update - Closed]
 ```
 
 ---
@@ -104,13 +104,13 @@ graph TD
 ---
 
 ### #53: Legacy Category Purge & Documentation Update
-- **Status**: Planned
+- **Status**: Closed
 - **GitHub Issue**: [#53](https://github.com/adamlarGit/pahang-cli/issues/53)
 - **Blocked by**: #52
 - **Ticket File**: [.wayfinder/switchgear-topology/tickets/053-legacy-category-purge-and-documentation-update.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/switchgear-topology/tickets/053-legacy-category-purge-and-documentation-update.md)
-- [ ] Completely delete `SwitchgearCategory` enum from `src/full_report/models.py`.
-- [ ] Delete `VCB_STANDARD_COMPARTMENTS`, `VCB_TRANSITION_COMPARTMENTS`, and `OVERVIEW_COMPARTMENTS_MAP` constants from `src/full_report/models.py`.
-- [ ] Remove deprecated procedural helpers (`classify_switchgear`, `resolve_overview_compartments`, `resolve_switchgear_compartments`, `resolve_panel_page_count`, `is_tx_feeder`) from `src/full_report/models.py`.
-- [ ] Remove all remaining references to `TAMCO_LUCY` and `OTHER_RMU` across codebase and tests.
-- [ ] Update `CONTEXT.md` with ubiquitous vocabulary (`SwitchgearArchetype`, `VoltageClass`, `BayRole`, `SwitchgearTopologyEngine`).
-- [ ] Run full test suite (`pytest`) to confirm 100% green pass rate.
+- [x] Completely delete `SwitchgearCategory` enum from `src/full_report/models.py`.
+- [x] Delete `VCB_STANDARD_COMPARTMENTS`, `VCB_TRANSITION_COMPARTMENTS`, and `OVERVIEW_COMPARTMENTS_MAP` constants from `src/full_report/models.py`.
+- [x] Remove deprecated procedural helpers (`classify_switchgear`, `resolve_overview_compartments`, `resolve_switchgear_compartments`, `resolve_panel_page_count`, `is_tx_feeder`) from `src/full_report/models.py`.
+- [x] Remove all remaining references to `TAMCO_LUCY` and `OTHER_RMU` across codebase and tests.
+- [x] Update `CONTEXT.md` with ubiquitous vocabulary (`SwitchgearArchetype`, `VoltageClass`, `BayRole`, `SwitchgearTopologyEngine`).
+- [x] Run full test suite (`pytest`) to confirm 100% green pass rate.
