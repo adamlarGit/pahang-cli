@@ -36,7 +36,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 graph TD
     T67["#67: feat(cli): multi-date interactive checklist & range-aware text selectors - Closed"]
     T68["#68: feat(quick-report): multi-date selection & date-aware progress telemetry - Closed"]
-    T69["#69: feat(full-report): multi-date selection with date-prefixed substation checklist"]
+    T69["#69: feat(full-report): multi-date selection with date-prefixed substation checklist - Closed"]
     T70["#70: docs(context): document MultiDateSelectionPolicy & verify e2e multi-date generation"]
 
     T67 --> T68
@@ -64,7 +64,7 @@ graph TD
 - **Delivers**: `QuickReportAction` multi-date menu integration (`Browse Date Folders` and `Enter Target Date(s)`), automated batch discovery across chosen dates, and date-tagged progress sink messages (`[1/N] [DD-MM-YYYY] Generating ...`).
 
 ### #69: feat(full-report): multi-date selection with date-prefixed substation checklist
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#69](https://github.com/adamlarGit/pahang-cli/issues/69)
 - **Blocked by**: #67
 - **Ticket File**: [.wayfinder/multi-date-report-generation/tickets/069-full-report-multi-date-substation-checklist.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/multi-date-report-generation/tickets/069-full-report-multi-date-substation-checklist.md)

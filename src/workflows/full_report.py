@@ -546,9 +546,11 @@ class FullReportWorkflow:
     ) -> None:
         st_name = self._resolve_substation_display_name(pkg)
         if ctx.progress_sink:
-            ctx.progress_sink(
-                f"[{pkg_idx + 1}/{ctx.total_packages}] Generating Full Report for {st_name}..."
-            )
+            pkg_date = getattr(pkg, 'date_str', '')
+            if pkg_date:
+                ctx.progress_sink(f"[{pkg_idx + 1}/{ctx.total_packages}] [{pkg_date}] Generating Full Report for {st_name}...")
+            else:
+                ctx.progress_sink(f"[{pkg_idx + 1}/{ctx.total_packages}] Generating Full Report for {st_name}...")
 
         # 1. Pre-flight validation
         qr_path = self._resolve_quick_report_path(ctx.environment, pkg)

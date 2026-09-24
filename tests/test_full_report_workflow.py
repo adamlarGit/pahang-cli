@@ -627,3 +627,71 @@ def test_generate_immediate_workspace_cleanup(tmp_path: Path) -> None:
 
 
 
+
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+from src.workflows.full_report import FullReportWorkflow
+from src.testsheet.models import SubstationTestsheetPackage
+
+def test_full_report_workflow_generate_multi_dates_telemetry(tmp_path: Path):
+    env = MagicMock()
+    env.get_full_report_dir.return_value = tmp_path / "FULL REPORT"
+    env.get_testsheet_dir.return_value = tmp_path / "TESTSHEET"
+    
+    pkg1 = MagicMock(spec=SubstationTestsheetPackage)
+    pkg1.date_str = "01-09-2026"
+    pkg1.station = "ROMPIN"
+    pkg1.month = "09. SEPTEMBER"
+    pkg1.substation_number = 1
+    pkg1.data = MagicMock(station_name="ROMPIN", substation_name_erms="PE 1", fl_erms="FL1", date_str="01-09-2026")
+    
+    pkg2 = MagicMock(spec=SubstationTestsheetPackage)
+    pkg2.date_str = "02-09-2026"
+    pkg2.station = "ROMPIN"
+    pkg2.month = "09. SEPTEMBER"
+    pkg2.substation_number = 2
+    pkg2.data = MagicMock(station_name="ROMPIN", substation_name_erms="PE 2", fl_erms="FL2", date_str="02-09-2026")
+
+    workflow = FullReportWorkflow(compiler=MagicMock(), extractor=MagicMock(), transformer=MagicMock(), composer=MagicMock())
+    
+    # Mocking extractor
+    workflow._extractor.extract.return_value = [pkg1, pkg2]
+    workflow._extractor.extract_defects.return_value = ([], [])
+    
+    # Mocking transformer
+    plan1 = MagicMock()
+    plan1.package = pkg1
+    plan1.output_filename = "001. PE 1.docx"
+    plan1.final_output_path = tmp_path / "FULL REPORT" / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026" / "001. PE 1.docx"
+    plan1.cbm_defects = []
+    plan1.vi_defects = []
+    plan1.condition_pairs = []
+    plan1.suffix = ""
+    
+    plan2 = MagicMock()
+    plan2.package = pkg2
+    plan2.output_filename = "002. PE 2.docx"
+    plan2.final_output_path = tmp_path / "FULL REPORT" / "ROMPIN" / "09. SEPTEMBER" / "02-09-2026" / "002. PE 2.docx"
+    plan2.cbm_defects = []
+    plan2.vi_defects = []
+    plan2.condition_pairs = []
+    plan2.suffix = ""
+    
+    workflow._transformer.transform.side_effect = [plan1, plan2]
+    
+    # Mocking composer
+    workflow._composer.load.side_effect = [plan1.final_output_path, plan2.final_output_path]
+    
+    # Create fake files to pass the generated paths check
+    plan1.final_output_path.parent.mkdir(parents=True, exist_ok=True)
+    plan2.final_output_path.parent.mkdir(parents=True, exist_ok=True)
+    plan1.final_output_path.write_text("dummy")
+    plan2.final_output_path.write_text("dummy")
+    
+    progress_messages = []
+    
+    result = workflow.generate(["01-09-2026", "02-09-2026"], env, progress_sink=progress_messages.append)
+    
+    assert result.succeeded_count == 2
+    assert any("[01-09-2026]" in m for m in progress_messages)
+    assert any("[02-09-2026]" in m for m in progress_messages)

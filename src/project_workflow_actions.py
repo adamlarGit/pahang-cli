@@ -796,7 +796,8 @@ def generate_full_reports_action(
     if target is None:
         options = [
             cli_selectors.SelectOption("Manual FL Input", "manual"),
-            cli_selectors.SelectOption("Select Testsheet Folder", "folder"),
+            cli_selectors.SelectOption("Browse Date Folders (Interactive Checklist)", "browse_dates"),
+            cli_selectors.SelectOption("Enter Target Date(s) (Text Input / Range)", "enter_dates"),
             cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"),
         ]
         mode_str = cli_selectors.select_one("Full Report - Selection Mode", options)
@@ -812,9 +813,15 @@ def generate_full_reports_action(
                 print("No functional locations provided.")
                 return None
             selected_target = fl_numbers
+        elif mode_str == "browse_dates":
+            selected_path = cli_selectors.select_pahang_inspection_dates_interactive(environment)
+            if not selected_path:
+                print("Processing cancelled.")
+                return None
+            selected_target = selected_path
         else:
-            selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
-            if selected_path is None:
+            selected_path = cli_selectors.prompt_target_inspection_dates_with_ranges(environment)
+            if not selected_path:
                 print("Processing cancelled.")
                 return None
             selected_target = selected_path
@@ -853,10 +860,17 @@ def generate_full_reports_action(
         print("No substations discovered to process.")
         return None
 
+    def _format_substation_title(item) -> str:
+        st_name = getattr(item, "substation_name", str(item))
+        ready_str = "READY" if getattr(item, "is_ready", True) else "NOT READY"
+        date_tag = getattr(item, "date_str", "")
+        prefix = f"[{date_tag}] " if date_tag else ""
+        return f"{prefix}{st_name} [{ready_str}]"
+        
     chosen_targets = cli_selectors.select_substations_interactive(
         inspection.targets,
         title="Select substations to generate Full Report",
-        get_title=lambda item: f"{getattr(item, 'substation_name', str(item))} [{'READY' if getattr(item, 'is_ready', True) else 'NOT READY'}]",
+        get_title=_format_substation_title,
         get_value=lambda item: item,
         is_checked=lambda item: getattr(item, "is_ready", True),
     )
