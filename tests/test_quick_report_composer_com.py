@@ -734,3 +734,56 @@ def test_compile_pre_copy_clipboard_zeroing_and_retry(tmp_path: Path):
         assert mock_part_doc.Content.Copy.call_count == 2
 
 
+def test_compile_handles_rpc_e_disconnected_post_saveas2(tmp_path: Path):
+    """Verify WordComDocumentCompiler handles RPC_E_DISCONNECTED on Close(False) post-SaveAs2."""
+    p1 = tmp_path / "part1.docx"
+    p1.touch()
+    out = tmp_path / "final_report.docx"
+
+    mock_word = MagicMock()
+    mock_main_doc = MagicMock()
+    mock_part_doc = MagicMock()
+
+    mock_word.Documents.Add.return_value = mock_main_doc
+    mock_word.Documents.Open.return_value = mock_part_doc
+    mock_main_doc.Tables.Count = 0
+
+    content_mock = MagicMock()
+    content_mock.Information.return_value = False
+    mock_main_doc.Content = content_mock
+
+    # Simulate pywintypes.com_error: (-2147417848, 'The object invoked has disconnected from its clients.')
+    class MockComError(Exception):
+        pass
+
+    disconnection_error = MockComError(-2147417848, "The object invoked has disconnected from its clients.", None, None)
+    mock_main_doc.Close.side_effect = disconnection_error
+
+    # Documents collection in Word with Item getter
+    mock_fallback_doc = MagicMock()
+    mock_word.Documents.Item.return_value = mock_fallback_doc
+    mock_word.Documents.Count = 1
+
+    compiler = WordComDocumentCompiler(word_app=mock_word)
+    res = compiler.compile([p1], out)
+
+    assert res == out.resolve()
+    mock_main_doc.SaveAs2.assert_called_once_with(str(out.resolve()))
+    mock_main_doc.Close.assert_called_once_with(False)
+    # Verify fallback closure via word_app.Documents.Item
+    mock_word.Documents.Item.assert_called_with("final_report.docx")
+    mock_fallback_doc.Close.assert_called_once_with(False)
+
+
+def test_safe_close_document_reraises_non_disconnection_errors():
+    """Verify _safe_close_document re-raises non-disconnection exceptions."""
+    from src.quick_report.compiler import _safe_close_document
+
+    mock_doc = MagicMock()
+    mock_doc.Close.side_effect = PermissionError("Access denied")
+
+    with pytest.raises(PermissionError):
+        _safe_close_document(mock_doc)
+
+
+

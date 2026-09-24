@@ -93,6 +93,59 @@ def _paste_with_retry(rng: Any, max_attempts: int = 5, delay: float = 0.15) -> N
             time.sleep(delay)
 
 
+# Windows COM HRESULT for RPC_E_DISCONNECTED (0x80010108 / -2147417848)
+RPC_E_DISCONNECTED: int = -2147417848
+RPC_E_DISCONNECTED_UNSIGNED: int = 0x80010108
+
+
+def _is_rpc_disconnected_error(exc: BaseException) -> bool:
+    """Check if exception represents RPC_E_DISCONNECTED (0x80010108 / -2147417848)."""
+    hresult = getattr(exc, "hresult", None)
+    if hresult in (RPC_E_DISCONNECTED, RPC_E_DISCONNECTED_UNSIGNED):
+        return True
+    if hasattr(exc, "args") and exc.args and isinstance(exc.args[0], int):
+        if exc.args[0] in (RPC_E_DISCONNECTED, RPC_E_DISCONNECTED_UNSIGNED):
+            return True
+    return False
+
+
+def _safe_close_document(
+    doc: Any, word_app: Any = None, expected_name: str | None = None
+) -> None:
+    """Safely close a COM document, handling RPC_E_DISCONNECTED post-SaveAs2 gracefully."""
+    if doc is not None:
+        try:
+            doc.Close(False)
+            return
+        except Exception as exc:
+            if not _is_rpc_disconnected_error(exc):
+                raise
+
+    if word_app is not None and expected_name:
+        try:
+            docs = getattr(word_app, "Documents", None)
+            if docs is not None and getattr(docs, "Count", 0) > 0:
+                try:
+                    item_getter = getattr(docs, "Item", None)
+                    if callable(item_getter):
+                        item_getter(expected_name).Close(False)
+                    else:
+                        docs(expected_name).Close(False)
+                    return
+                except Exception:
+                    pass
+                for i in range(docs.Count, 0, -1):
+                    try:
+                        open_doc = docs.Item(i) if hasattr(docs, "Item") else docs(i)
+                        if getattr(open_doc, "Name", "") == expected_name:
+                            open_doc.Close(False)
+                            break
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+
 def _terminate_word_process(pid: int | None, timeout_ms: int = 500) -> None:
     """Safely terminate Word COM process if still running in background after Quit."""
     if not pid:
@@ -295,14 +348,18 @@ class WordComDocumentCompiler:
                         part_doc = None
 
             main_doc.SaveAs2(str(output_path))
-            main_doc.Close(False)
+            _safe_close_document(main_doc, word_app=word_app, expected_name=output_path.name)
             main_doc = None
             return output_path
         finally:
             _clear_clipboard()
             if main_doc is not None:
                 try:
-                    main_doc.Close(False)
+                    _safe_close_document(
+                        main_doc,
+                        word_app=word_app,
+                        expected_name=output_path.name,
+                    )
                 except Exception:
                     pass
                 main_doc = None

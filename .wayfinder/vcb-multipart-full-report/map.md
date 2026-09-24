@@ -37,9 +37,11 @@ graph TD
     T56["#56: feat(full-report): multi-part partition policy & composer chunking - Closed"]
     T57["#57: feat(full-report): post-processing multi-part discovery & sequential PDF merge - Closed"]
     T58["#58: test(full-report): cli telemetry, benchmark e2e verification & docs - Closed"]
+    T59["#59: fix(compiler): handle Word COM proxy invalidation on SaveAs2 in WordComDocumentCompiler - Closed"]
 
     T56 --> T57
     T57 --> T58
+    T58 --> T59
 ```
 
 ---
@@ -66,6 +68,13 @@ graph TD
 - **Blocked by**: #57
 - **Ticket File**: [.wayfinder/vcb-multipart-full-report/tickets/058-cli-telemetry-benchmark-e2e-and-docs.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/vcb-multipart-full-report/tickets/058-cli-telemetry-benchmark-e2e-and-docs.md)
 - **Delivers**: Synthetic VCB benchmark fixture in `tests/benchmarks/` for PE 157, dry-run CLI telemetry multi-part indicators, full end-to-end regression tests across VCB and RMU benchmarks, and updated domain documentation in `CONTEXT.md` and domain analysis docs.
+
+### #59: fix(compiler): handle Word COM proxy invalidation on SaveAs2 in WordComDocumentCompiler
+- **Status**: Closed
+- **GitHub Issue**: [#59](https://github.com/adamlarGit/pahang-cli/issues/59)
+- **Blocked by**: None (can start immediately)
+- **Ticket File**: [.wayfinder/vcb-multipart-full-report/tickets/059-compiler-word-com-proxy-disconnection-fix.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/vcb-multipart-full-report/tickets/059-compiler-word-com-proxy-disconnection-fix.md)
+- **Delivers**: In `WordComDocumentCompiler.compile()`, safely handle Word COM proxy invalidation / disconnection (`RPC_E_DISCONNECTED`) occurring on `main_doc.Close(False)` after successful `main_doc.SaveAs2()`, ensuring document cleanup via active collection and returning output path without false failures.
 
 ---
 
