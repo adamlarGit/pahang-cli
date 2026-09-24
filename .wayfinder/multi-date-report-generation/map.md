@@ -35,7 +35,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 ```mermaid
 graph TD
     T67["#67: feat(cli): multi-date interactive checklist & range-aware text selectors - Closed"]
-    T68["#68: feat(quick-report): multi-date selection & date-aware progress telemetry"]
+    T68["#68: feat(quick-report): multi-date selection & date-aware progress telemetry - Closed"]
     T69["#69: feat(full-report): multi-date selection with date-prefixed substation checklist"]
     T70["#70: docs(context): document MultiDateSelectionPolicy & verify e2e multi-date generation"]
 
@@ -57,7 +57,7 @@ graph TD
 - **Delivers**: `expand_date_range_syntax` helper, `select_multiple` unchecked defaults and toggle-all shortcuts, `select_pahang_inspection_dates_interactive` with zero-selection loop-back, and `prompt_target_inspection_dates_with_ranges` with visual syntax guide and tolerant confirmation.
 
 ### #68: feat(quick-report): multi-date selection & date-aware progress telemetry
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#68](https://github.com/adamlarGit/pahang-cli/issues/68)
 - **Blocked by**: #67
 - **Ticket File**: [.wayfinder/multi-date-report-generation/tickets/068-quick-report-multi-date-integration.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/multi-date-report-generation/tickets/068-quick-report-multi-date-integration.md)

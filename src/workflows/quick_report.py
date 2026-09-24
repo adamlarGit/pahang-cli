@@ -127,9 +127,11 @@ class QuickReportWorkflow:
         def _execute_plan(idx: int, p: QuickReportPlan) -> None:
             station_name = self._resolve_substation_display_name(p.package)
             if progress_sink:
-                progress_sink(
-                    f"[{idx}/{len(plans)}] Generating quick report for {station_name}..."
-                )
+                pkg_date = getattr(p.package, 'date_str', '')
+                if pkg_date:
+                    progress_sink(f"[{idx}/{len(plans)}] [{pkg_date}] Generating quick report for {station_name}...")
+                else:
+                    progress_sink(f"[{idx}/{len(plans)}] Generating quick report for {station_name}...")
             try:
                 out_p = self._composer.load(p)
                 if out_p:

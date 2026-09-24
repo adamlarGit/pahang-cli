@@ -972,3 +972,43 @@ test_substation_testsheet_package_fl_and_substation_name_properties = (
 
 
 
+
+def test_generate_multi_date_folder_paths_and_telemetry(tmp_path: Path):
+    """Verify passing multiple date folder paths generates reports into each date's output dir and captures date tags."""
+    env = _setup_mock_environment(tmp_path)
+    
+    pkg1 = _make_mock_package(station="ROMPIN", substation_number=1, substation_name="PE 1", fl="FL1", date_str="01-09-2026")
+    pkg2 = _make_mock_package(station="ROMPIN", substation_number=2, substation_name="PE 2", fl="FL2", date_str="02-09-2026")
+    
+    target1 = tmp_path / "TESTSHEET" / "ROMPIN" / "09. SEPTEMBER" / "01-09-2026"
+    target2 = tmp_path / "TESTSHEET" / "ROMPIN" / "09. SEPTEMBER" / "02-09-2026"
+    target1.mkdir(parents=True, exist_ok=True)
+    target2.mkdir(parents=True, exist_ok=True)
+
+    compiler = FakeDocumentCompiler()
+    workflow = QuickReportWorkflow(compiler=compiler)
+
+    def mock_discover(folder_path):
+        f_str = str(folder_path)
+        if "01-09-2026" in f_str:
+            return [pkg1]
+        if "02-09-2026" in f_str:
+            return [pkg2]
+        return []
+
+    progress_messages = []
+
+    with patch("src.testsheet.repository.SubstationTestsheetRepository.discover_packages", side_effect=mock_discover), \
+         patch("src.quick_report.extractor.QuickReportExtractor.extract_defects", return_value=([], [])):
+         
+        result = workflow.generate([target1, target2], env, progress_sink=progress_messages.append)
+        
+    assert result.reports_generated == 2
+    
+    assert any("[01-09-2026]" in m for m in progress_messages)
+    assert any("[02-09-2026]" in m for m in progress_messages)
+    
+    # Check if they are generated into corresponding dirs
+    paths = [str(p) for p in result.generated_paths]
+    assert any("01-09-2026" in p for p in paths)
+    assert any("02-09-2026" in p for p in paths)

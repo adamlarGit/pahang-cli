@@ -238,7 +238,8 @@ class QuickReportAction(ProjectWorkflowAction):
     def execute(self, environment: ProjectEnvironment) -> object:
         options = [
             cli_selectors.SelectOption("Manual FL Input", "manual"),
-            cli_selectors.SelectOption("Select Testsheet Folder", "folder"),
+            cli_selectors.SelectOption("Browse Date Folders (Interactive Checklist)", "browse_dates"),
+            cli_selectors.SelectOption("Enter Target Date(s) (Text Input / Range)", "enter_dates"),
             cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"),
         ]
         mode_str = cli_selectors.select_one("Quick Report - Selection Mode", options)
@@ -263,13 +264,17 @@ class QuickReportAction(ProjectWorkflowAction):
             _print_quick_report_batch_summary(result)
             return result
         else:
-            selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
-            if selected_path is None:
+            if mode_str == "browse_dates":
+                selected_targets = cli_selectors.select_pahang_inspection_dates_interactive(environment)
+            else:
+                selected_targets = cli_selectors.prompt_target_inspection_dates_with_ranges(environment)
+
+            if not selected_targets:
                 print("Processing cancelled.")
                 return None
 
-            date_str = selected_path.name
-            inspection = workflow.inspect(date_str, environment)
+            inspection = workflow.inspect(selected_targets, environment)
+            
             if inspection.missing_templates:
                 print(f"Cannot generate Quick Report: {len(inspection.missing_templates)} required template(s) missing:")
                 for tpl in inspection.missing_templates:
@@ -293,14 +298,14 @@ class QuickReportAction(ProjectWorkflowAction):
                     print("Processing cancelled.")
                     return None
                 result = workflow.generate(
-                    date_str,
+                    selected_targets,
                     environment,
                     station=chosen_stations,
                     progress_sink=_cli_progress_sink,
                 )
             else:
                 result = workflow.generate(
-                    date_str,
+                    selected_targets,
                     environment,
                     progress_sink=_cli_progress_sink,
                 )
