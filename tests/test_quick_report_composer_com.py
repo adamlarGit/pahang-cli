@@ -764,6 +764,11 @@ def test_compile_handles_rpc_e_disconnected_post_saveas2(tmp_path: Path):
     mock_word.Documents.Item.return_value = mock_fallback_doc
     mock_word.Documents.Count = 1
 
+    def _fallback_close(*_args, **_kwargs):
+        mock_word.Documents.Count = 0
+
+    mock_fallback_doc.Close.side_effect = _fallback_close
+
     compiler = WordComDocumentCompiler(word_app=mock_word)
     res = compiler.compile([p1], out)
 
@@ -773,6 +778,7 @@ def test_compile_handles_rpc_e_disconnected_post_saveas2(tmp_path: Path):
     # Verify fallback closure via word_app.Documents.Item
     mock_word.Documents.Item.assert_called_with("final_report.docx")
     mock_fallback_doc.Close.assert_called_once_with(False)
+    assert mock_word.Documents.Count == 0
 
 
 def test_safe_close_document_reraises_non_disconnection_errors():
@@ -784,6 +790,54 @@ def test_safe_close_document_reraises_non_disconnection_errors():
 
     with pytest.raises(PermissionError):
         _safe_close_document(mock_doc)
+
+
+def test_safe_close_document_logs_debug_on_rpc_disconnected(caplog):
+    """Verify _safe_close_document logs debug when RPC_E_DISCONNECTED occurs and falls back."""
+    import logging
+    from src.quick_report.compiler import _safe_close_document
+
+    class MockComError(Exception):
+        pass
+
+    disconnection_error = MockComError(-2147417848, "The object invoked has disconnected from its clients.")
+    mock_doc = MagicMock()
+    mock_doc.Close.side_effect = disconnection_error
+
+    mock_word = MagicMock()
+    mock_fallback = MagicMock()
+    mock_word.Documents.Count = 1
+    mock_word.Documents.Item.return_value = mock_fallback
+
+    with caplog.at_level(logging.DEBUG):
+        _safe_close_document(mock_doc, word_app=mock_word, expected_name="out.docx")
+
+    mock_fallback.Close.assert_called_once_with(False)
+    assert any("RPC_E_DISCONNECTED" in record.message for record in caplog.records)
+
+
+def test_safe_close_document_logs_warning_on_fallback_failure(caplog):
+    """Verify _safe_close_document logs warning when fallback document close fails unexpectedly."""
+    import logging
+    from src.quick_report.compiler import _safe_close_document
+
+    class MockComError(Exception):
+        pass
+
+    disconnection_error = MockComError(-2147417848, "The object invoked has disconnected from its clients.")
+    mock_doc = MagicMock()
+    mock_doc.Close.side_effect = disconnection_error
+
+    mock_word = MagicMock()
+    mock_fallback = MagicMock()
+    mock_word.Documents.Count = 1
+    mock_fallback.Close.side_effect = RuntimeError("COM channel broken")
+    mock_word.Documents.Item.return_value = mock_fallback
+
+    with caplog.at_level(logging.WARNING):
+        _safe_close_document(mock_doc, word_app=mock_word, expected_name="out.docx")
+
+    assert any("Failed to close fallback document" in record.message for record in caplog.records)
 
 
 

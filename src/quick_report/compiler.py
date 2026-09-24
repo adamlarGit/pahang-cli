@@ -120,30 +120,21 @@ def _safe_close_document(
         except Exception as exc:
             if not _is_rpc_disconnected_error(exc):
                 raise
+            logger.debug(
+                "Document close encountered RPC_E_DISCONNECTED (%s); falling back to word_app.Documents lookup for %s",
+                exc,
+                expected_name,
+            )
 
     if word_app is not None and expected_name:
         try:
             docs = getattr(word_app, "Documents", None)
             if docs is not None and getattr(docs, "Count", 0) > 0:
-                try:
-                    item_getter = getattr(docs, "Item", None)
-                    if callable(item_getter):
-                        item_getter(expected_name).Close(False)
-                    else:
-                        docs(expected_name).Close(False)
-                    return
-                except Exception:
-                    pass
-                for i in range(docs.Count, 0, -1):
-                    try:
-                        open_doc = docs.Item(i) if hasattr(docs, "Item") else docs(i)
-                        if getattr(open_doc, "Name", "") == expected_name:
-                            open_doc.Close(False)
-                            break
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                item_getter = getattr(docs, "Item", None)
+                target_doc = item_getter(expected_name) if callable(item_getter) else docs(expected_name)
+                target_doc.Close(False)
+        except Exception as exc:
+            logger.warning("Failed to close fallback document '%s': %s", expected_name, exc)
 
 
 def _terminate_word_process(pid: int | None, timeout_ms: int = 500) -> None:
@@ -348,8 +339,6 @@ class WordComDocumentCompiler:
                         part_doc = None
 
             main_doc.SaveAs2(str(output_path))
-            _safe_close_document(main_doc, word_app=word_app, expected_name=output_path.name)
-            main_doc = None
             return output_path
         finally:
             _clear_clipboard()
@@ -360,6 +349,5 @@ class WordComDocumentCompiler:
                         word_app=word_app,
                         expected_name=output_path.name,
                     )
-                except Exception:
-                    pass
-                main_doc = None
+                finally:
+                    main_doc = None
