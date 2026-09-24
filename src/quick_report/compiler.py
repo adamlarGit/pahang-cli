@@ -28,11 +28,17 @@ __all__ = [
     "DocumentCompiler",
     "FakeDocumentCompiler",
     "WordComDocumentCompiler",
+    "clear_windows_clipboard",
 ]
 
 
-def _clear_clipboard() -> None:
+def clear_windows_clipboard() -> None:
     """Clear Windows clipboard to eliminate Word COM OLE serialization stall on document close."""
+    _clear_clipboard()
+
+
+def _clear_clipboard() -> None:
+    """Internal implementation of Windows clipboard zeroing."""
     for _ in range(3):
         try:
             if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "user32"):
@@ -43,6 +49,7 @@ def _clear_clipboard() -> None:
         except Exception:
             pass
         time.sleep(0.01)
+
 
 
 def _collapse_and_escape_table(main_doc: Any) -> Any:
@@ -88,7 +95,7 @@ def _paste_with_retry(rng: Any, max_attempts: int = 5, delay: float = 0.15) -> N
                 return
         except exceptions as exc:
             if attempt == max_attempts:
-                logger.error("rng paste failed after %d attempts: %s", max_attempts, exc)
+                logger.debug("rng paste failed after %d attempts: %s", max_attempts, exc)
                 raise
             time.sleep(delay)
 
@@ -303,8 +310,9 @@ class WordComDocumentCompiler:
 
                     # Atomic copy-paste handshake with pre-copy zeroing and range expansion assertion (Ticket #44 / Seam 3)
                     for attempt in range(1, 4):
-                        _clear_clipboard()
+                        clear_windows_clipboard()
                         part_doc.Content.Copy()
+                        time.sleep(0.05)
 
                         rng = _collapse_and_escape_table(main_doc)
                         if idx > 0 and attempt == 1:
@@ -312,7 +320,21 @@ class WordComDocumentCompiler:
                             rng = _collapse_and_escape_table(main_doc)
 
                         end_before = getattr(getattr(main_doc, "Content", None), "End", None)
-                        _paste_with_retry(rng)
+                        try:
+                            _paste_with_retry(rng)
+                        except Exception as exc:
+                            if attempt == 3:
+                                raise
+                            logger.warning(
+                                "Compilation paste failed on attempt %d/3 for %s: %s; retrying with re-copy...",
+                                attempt,
+                                part_path,
+                                exc,
+                            )
+                            time.sleep(0.25)
+                            clear_windows_clipboard()
+                            continue
+
                         end_after = getattr(getattr(main_doc, "Content", None), "End", None)
 
                         if isinstance(end_before, (int, float)) and isinstance(end_after, (int, float)):

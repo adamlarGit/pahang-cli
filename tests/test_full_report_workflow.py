@@ -332,8 +332,8 @@ def test_generate_single_station_success(tmp_path: Path) -> None:
     assert any("PE TALAPIA" in msg for msg in progress_messages)
 
 
-def test_generate_establishes_single_batch_com_session(tmp_path: Path) -> None:
-    """generate() establishes a single BatchComSession context across all batch substations."""
+def test_generate_recycles_batch_com_session_per_substation(tmp_path: Path) -> None:
+    """generate() recycles BatchComSession per substation when com_session=None, and reuses when explicit."""
     env = _make_mock_env(tmp_path)
     pkg1 = _make_sample_pkg(pe_number=1, station_name="PE TALAPIA", station="RAUB")
     pkg2 = _make_sample_pkg(pe_number=2, station_name="PE CENDERAWASIH", station="RAUB")
@@ -352,10 +352,17 @@ def test_generate_establishes_single_batch_com_session(tmp_path: Path) -> None:
         result = wf.generate(target=[pkg1, pkg2], environment=env)
 
         assert result.succeeded_count == 2
-        # Crucial: BatchComSession instantiated exactly ONCE for the entire batch
-        assert mock_session_cls.call_count == 1
-        mock_cm.__enter__.assert_called_once()
-        mock_cm.__exit__.assert_called_once()
+        # Ticket #65: BatchComSession is recycled per substation (2 stations -> 2 sessions)
+        assert mock_session_cls.call_count == 2
+        assert mock_cm.__enter__.call_count == 2
+        assert mock_cm.__exit__.call_count == 2
+
+    # Preserves explicit com_session across all packages if passed
+    explicit_session = MagicMock()
+    result_explicit = wf.generate(target=[pkg1, pkg2], environment=env, com_session=explicit_session)
+    assert result_explicit.succeeded_count == 2
+    explicit_session.__enter__.assert_called_once()
+    explicit_session.__exit__.assert_called_once()
 
 
 # ==============================================================================

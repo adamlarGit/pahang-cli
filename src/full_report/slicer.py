@@ -51,10 +51,13 @@ from src.full_report.attribution import (
     verify_vi_summary_structure,
 )
 from src.quick_report.compiler import (
-    _clear_clipboard,
     _paste_with_retry,
     _terminate_word_process,
+    clear_windows_clipboard,
 )
+
+# Backward-compatible internal alias
+_clear_clipboard = clear_windows_clipboard
 
 __all__ = [
     "DocumentSlicer",
@@ -389,12 +392,26 @@ def _slice_range_to_doc(
 
         # Atomic copy-paste handshake with pre-copy zeroing and range expansion assertion (Seam 3)
         for attempt in range(1, max_copy_paste_attempts + 1):
-            _clear_clipboard()
+            clear_windows_clipboard()
             rng = source_doc.Range(start_pos, end_pos)
             rng.Copy()
+            time.sleep(0.05)
 
             dest_rng = new_doc.Range(0, 0)
-            _paste_with_retry(dest_rng)
+            try:
+                _paste_with_retry(dest_rng)
+            except Exception as exc:
+                if attempt == max_copy_paste_attempts:
+                    raise
+                logger.warning(
+                    "Word COM slice paste failed on attempt %d/%d: %s; retrying with re-copy...",
+                    attempt,
+                    max_copy_paste_attempts,
+                    exc,
+                )
+                time.sleep(0.25)
+                clear_windows_clipboard()
+                continue
 
             doc_end = getattr(getattr(new_doc, "Content", None), "End", None)
             if isinstance(doc_end, (int, float)):

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Atomic COM Copy-Paste Handshake & Re-Copy Resilience (`src/quick_report/compiler.py`, `src/full_report/slicer.py`)**:
+  - Wrapped `_paste_with_retry` in an outer exception handler catching Word COM Error 4605 (`wdErrClipboardEmptyOrInvalid`) across report compilation and slicing; applies a 50ms post-copy settling delay, 0.25s backoff, clipboard zeroing via `clear_windows_clipboard()`, and re-executes source range copy on retry attempts (closes #63).
+  - Demoted transient internal paste retry error logging to debug level.
+- **Panel Name Path Sanitization in Multi-Part Partitioning (`src/full_report/plan_builder.py`)**:
+  - Sanitized panel names using `sanitize_filename` and path-separator normalization (`/`, `\`, `:`) in `MultiPartPartitionPolicy._partition_vcb_gis`, preventing slash-containing panels (e.g. `B/S`) from generating nested subdirectories in chunk destination paths (closes #64).
+
+### Performance
+- **Per-Substation Word COM Process Recycling (`src/workflows/full_report.py`, `src/workflows/quick_report.py`, `CONTEXT.md`)**:
+  - Updated `FullReportWorkflow` and `QuickReportWorkflow` to allocate a fresh `BatchComSession` context per substation when `com_session` is not injected, completely quitting and restarting the background Win32 Word COM process to eliminate memory leakage, GDI handle bloat, and COM server fatigue during long batch runs (closes #65).
+
+### Refactored
+- **Full Report Substation Execution Context (`src/workflows/full_report.py`)**:
+  - Bundled substation orchestration parameters into `_SubstationExecutionContext` dataclass, eliminating 12-parameter data clumps in `_execute_substation`.
+- **Public Clipboard Zeroing Interface (`src/quick_report/compiler.py`, `src/workflows/full_report.py`, `src/full_report/slicer.py`)**:
+  - Promoted `_clear_clipboard()` to public `clear_windows_clipboard()`, maintaining backward-compatible function shim for test mock compatibility.
+
 ## [1.23.2] - 2026-09-24
 
 ### Refactored

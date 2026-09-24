@@ -77,6 +77,7 @@ class QuickReportWorkflow:
         station: str | Sequence[str] | None = None,
         condition_template: Path | None = None,
         progress_sink: ProgressSink | None = None,
+        com_session: Any | None = None,
     ) -> QuickReportResult:
         """End-to-end: discover -> filter -> transform -> compile."""
         if environment is None:
@@ -123,27 +124,42 @@ class QuickReportWorkflow:
         warnings: list[str] = list(inspection.warnings)
         errors: list[str] = list(inspection.errors)
 
-        session_fn = getattr(self._compiler, "session", None)
-        session_cm = session_fn() if callable(session_fn) else nullcontext()
-        if not hasattr(session_cm, "__enter__"):
-            session_cm = nullcontext()
+        def _execute_plan(idx: int, p: QuickReportPlan) -> None:
+            station_name = self._resolve_substation_display_name(p.package)
+            if progress_sink:
+                progress_sink(
+                    f"[{idx}/{len(plans)}] Generating quick report for {station_name}..."
+                )
+            try:
+                out_p = self._composer.load(p)
+                if out_p:
+                    generated_paths.append(out_p)
+            except Exception as e:
+                # SubstationIsolatedBatchResiliencePolicy
+                errors.append(f"Failed to process {station_name}: {e}")
+                logger.exception(f"Failed to process {station_name}")
 
-        with session_cm:
-            for i, plan in enumerate(plans, start=1):
-                station_name = self._resolve_substation_display_name(plan.package)
-                if progress_sink:
-                    progress_sink(
-                        f"[{i}/{len(plans)}] Generating quick report for {station_name}..."
-                    )
-
+        if com_session is not None:
+            with com_session as session:
+                word_app = getattr(session, "word_app", None) or getattr(com_session, "word_app", None)
+                orig_word_app = getattr(self._compiler, "_word_app", None)
+                if word_app is not None and hasattr(self._compiler, "_word_app"):
+                    self._compiler._word_app = word_app
                 try:
-                    out_path = self._composer.load(plan)
-                    if out_path:
-                        generated_paths.append(out_path)
-                except Exception as e:
-                    # SubstationIsolatedBatchResiliencePolicy
-                    errors.append(f"Failed to process {station_name}: {e}")
-                    logger.exception(f"Failed to process {station_name}")
+                    for i, plan in enumerate(plans, start=1):
+                        _execute_plan(i, plan)
+                finally:
+                    if hasattr(self._compiler, "_word_app"):
+                        self._compiler._word_app = orig_word_app
+        else:
+            for i, plan in enumerate(plans, start=1):
+                session_fn = getattr(self._compiler, "session", None)
+                session_cm = session_fn() if callable(session_fn) else nullcontext()
+                if not hasattr(session_cm, "__enter__"):
+                    session_cm = nullcontext()
+
+                with session_cm:
+                    _execute_plan(i, plan)
 
         return self._audit_and_build_result(generated_paths, warnings, errors)
 

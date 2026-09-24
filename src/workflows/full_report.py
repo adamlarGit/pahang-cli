@@ -231,6 +231,21 @@ class FullReportBatchResult:
         return self.is_success
 
 
+@dataclass
+class _SubstationExecutionContext:
+    """Encapsulates batch execution context and accumulators across substation runs."""
+
+    environment: ProjectEnvironment
+    output_dir: Path | None
+    base_temp_root: Path
+    keep_temp: bool
+    progress_sink: ProgressSink | None
+    total_packages: int
+    ordered_results: list[FullReportStationExecutionResult | None]
+    generated_paths: list[Path]
+    errors: list[str]
+
+
 # ==============================================================================
 # 2. Deep Module: FullReportWorkflow
 # ==============================================================================
@@ -402,177 +417,84 @@ class FullReportWorkflow:
             else (Path(environment.base_path).resolve() / ".temp" / "full_report")
         )
 
-        # Single shared BatchComSession context across ALL phases (slicing & compilation)
-        session_cm = self._establish_batch_session(com_session)
+        ctx = _SubstationExecutionContext(
+            environment=environment,
+            output_dir=output_dir,
+            base_temp_root=base_temp_root,
+            keep_temp=keep_temp,
+            progress_sink=progress_sink,
+            total_packages=len(packages),
+            ordered_results=ordered_results,
+            generated_paths=generated_paths,
+            errors=errors,
+        )
 
-        with session_cm as session:
-            word_app = getattr(session, "word_app", None)
-            orig_word_app = getattr(self._compiler, "_word_app", None)
-            orig_slicer_word_app = getattr(self._slicer, "_word_app", None)
-            if word_app is not None:
+        if com_session is not None:
+            # Caller provided an explicit session: preserve it across all packages (preserving test mocking)
+            session_cm = self._establish_batch_session(com_session)
+            with session_cm as session:
+                word_app = getattr(session, "word_app", None)
+                orig_word_app = getattr(self._compiler, "_word_app", None)
+                orig_slicer_word_app = getattr(self._slicer, "_word_app", None)
+                if word_app is not None:
+                    try:
+                        word_app.ScreenUpdating = False
+                        word_app.DisplayAlerts = 0
+                    except Exception:
+                        pass
+                    if hasattr(self._compiler, "_word_app"):
+                        self._compiler._word_app = word_app
+                    if hasattr(self._slicer, "_word_app"):
+                        self._slicer._word_app = word_app
+
                 try:
-                    word_app.ScreenUpdating = False
-                    word_app.DisplayAlerts = 0
-                except Exception:
-                    pass
-                if hasattr(self._compiler, "_word_app"):
-                    self._compiler._word_app = word_app
-                if hasattr(self._slicer, "_word_app"):
-                    self._slicer._word_app = word_app
-
-            try:
-                # Unified single-phase lifecycle per substation:
-                # [Preflight -> Slice -> Render -> Compile -> Sanity Check -> Success]
-                for pkg_idx, pkg in enumerate(packages):
-                    st_name = self._resolve_substation_display_name(pkg)
-                    if progress_sink:
-                        progress_sink(
-                            f"[{pkg_idx + 1}/{len(packages)}] Generating Full Report for {st_name}..."
+                    for pkg_idx, pkg in enumerate(packages):
+                        self._execute_substation(
+                            pkg_idx=pkg_idx,
+                            pkg=pkg,
+                            word_app=word_app,
+                            ctx=ctx,
                         )
-
-                    # 1. Pre-flight validation
-                    qr_path = self._resolve_quick_report_path(environment, pkg)
-                    val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
-                    if not val_res.is_valid:
-                        # SubstationIsolatedBatchResiliencePolicy: record upfront validation failure
-                        err_msg = f"Pre-flight validation failed for {st_name}: {val_res.error_message}"
-                        errors.append(err_msg)
-                        ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                            station=st_name,
-                            substation_number=pkg.substation_number,
-                            output_path=None,
-                            is_success=False,
-                            error_message=val_res.error_message,
-                            preflight_result=val_res,
-                        )
-                        continue
-
-                    # 2. Workspace allocation
-                    sub_num = pkg.substation_number or (pkg.data.pe_number if getattr(pkg, "data", None) else 0) or 0
-                    date_str = pkg.date_str or (pkg.data.date if getattr(pkg, "data", None) else "") or "01-01-2026"
-                    clean_name = sanitize_filename(st_name)
-                    clean_date = sanitize_filename(date_str).replace(" ", "_")
-                    substation_key = f"{sub_num:03d}_{clean_name}_{clean_date}"
-                    station_temp_dir = base_temp_root / substation_key
-
-                    # Pre-purge on allocation: guarantee completely clean slate for this substation
-                    if station_temp_dir.exists():
-                        shutil.rmtree(station_temp_dir, ignore_errors=True)
-                    (station_temp_dir / "sliced").mkdir(parents=True, exist_ok=True)
-                    (station_temp_dir / "rendered").mkdir(parents=True, exist_ok=True)
-                    (station_temp_dir / "prpd").mkdir(parents=True, exist_ok=True)
+                finally:
+                    if hasattr(self._compiler, "_word_app"):
+                        self._compiler._word_app = orig_word_app
+                    if hasattr(self._slicer, "_word_app"):
+                        self._slicer._word_app = orig_slicer_word_app
+                    word_app = None
+                    gc.collect()
+        else:
+            # Ticket #65: Recycle Word COM process per substation across batch report workflows
+            for pkg_idx, pkg in enumerate(packages):
+                session_cm = self._establish_batch_session(None)
+                with session_cm as session:
+                    word_app = getattr(session, "word_app", None)
+                    orig_word_app = getattr(self._compiler, "_word_app", None)
+                    orig_slicer_word_app = getattr(self._slicer, "_word_app", None)
+                    if word_app is not None:
+                        try:
+                            word_app.ScreenUpdating = False
+                            word_app.DisplayAlerts = 0
+                        except Exception:
+                            pass
+                        if hasattr(self._compiler, "_word_app"):
+                            self._compiler._word_app = word_app
+                        if hasattr(self._slicer, "_word_app"):
+                            self._slicer._word_app = word_app
 
                     try:
-                        # 3. Slicing & Plan building
-                        plan = self._build_station_plan(
-                            pkg,
-                            environment,
-                            quick_report_path=qr_path,
-                            output_dir=output_dir,
-                            station_temp_dir=station_temp_dir,
-                        )
-
-                        # 4. Rendering & Compilation
-                        rendered_dir = station_temp_dir / "rendered"
-                        rendered_dir.mkdir(parents=True, exist_ok=True)
-
-                        comp_res = self._composer.compose(
-                            plan,
-                            keep_temp=keep_temp,
-                            temp_dir=rendered_dir,
-                            base_dir=environment.base_path,
-                        )
-
-                        out_path = comp_res.output_path
-                        if not out_path or not out_path.exists() or out_path.stat().st_size == 0:
-                            err_msg = f"Generated report for {st_name} is missing or 0 bytes."
-                            errors.append(err_msg)
-                            ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                                station=st_name,
-                                substation_number=pkg.substation_number,
-                                output_path=out_path,
-                                is_success=False,
-                                error_message=err_msg,
-                                preflight_result=val_res,
-                            )
-                        else:
-                            # 5. Seam 4: Post-Compilation Deliverable Sanity Check
-                            paths_to_verify = (
-                                comp_res.chunk_paths
-                                if (comp_res.is_multipart and comp_res.chunk_paths)
-                                else ((out_path,) if out_path else ())
-                            )
-                            all_attr_ok = True
-                            attr_failures: list[str] = []
-                            for p in paths_to_verify:
-                                if not p or not p.exists() or p.stat().st_size == 0:
-                                    all_attr_ok = False
-                                    attr_failures.append(f"{p.name if p else 'File'} is missing or 0 bytes.")
-                                    continue
-                                c_ok, c_reason = inspect_deliverable_attribution(
-                                    p,
-                                    target_substation=st_name,
-                                )
-                                if not c_ok:
-                                    all_attr_ok = False
-                                    attr_failures.append(f"{p.name}: {c_reason}")
-
-                            if not all_attr_ok:
-                                for p in paths_to_verify:
-                                    if p and p.exists():
-                                        quarantine_deliverable(p)
-                                err_msg = (
-                                    f"Post-compilation attribution sanity check failed for {st_name}: "
-                                    f"{'; '.join(attr_failures)}. Deliverables quarantined."
-                                )
-                                errors.append(err_msg)
-                                ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                                    station=st_name,
-                                    substation_number=pkg.substation_number,
-                                    output_path=None,
-                                    is_success=False,
-                                    error_message=err_msg,
-                                    preflight_result=val_res,
-                                )
-                            else:
-                                generated_paths.extend(paths_to_verify)
-                                ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                                    station=st_name,
-                                    substation_number=pkg.substation_number,
-                                    output_path=out_path,
-                                    is_success=True,
-                                    parts_count=comp_res.part_count,
-                                    preflight_result=val_res,
-                                    chunk_paths=comp_res.chunk_paths,
-                                    is_multipart=comp_res.is_multipart,
-                                )
-                    except Exception as exc:
-                        # SubstationIsolatedBatchResiliencePolicy
-                        err_msg = f"Failed to compile Full Report for {st_name}: {exc}"
-                        errors.append(err_msg)
-                        logger.exception(err_msg)
-                        ordered_results[pkg_idx] = FullReportStationExecutionResult(
-                            station=st_name,
-                            substation_number=pkg.substation_number,
-                            output_path=None,
-                            is_success=False,
-                            error_message=str(exc),
-                            preflight_result=val_res,
+                        self._execute_substation(
+                            pkg_idx=pkg_idx,
+                            pkg=pkg,
+                            word_app=word_app,
+                            ctx=ctx,
                         )
                     finally:
-                        # Immediate workspace cleanup (Seam 5)
-                        if not keep_temp and station_temp_dir.exists():
-                            shutil.rmtree(station_temp_dir, ignore_errors=True)
-
-                        # In-process COM handle flush (Seam 5)
-                        self._flush_substation_com_handles(word_app, st_name)
-            finally:
-                if hasattr(self._compiler, "_word_app"):
-                    self._compiler._word_app = orig_word_app
-                if hasattr(self._slicer, "_word_app"):
-                    self._slicer._word_app = orig_slicer_word_app
-                word_app = None
-                gc.collect()
+                        if hasattr(self._compiler, "_word_app"):
+                            self._compiler._word_app = orig_word_app
+                        if hasattr(self._slicer, "_word_app"):
+                            self._slicer._word_app = orig_slicer_word_app
+                        word_app = None
+                        gc.collect()
 
         final_station_results = tuple(r for r in ordered_results if r is not None)
         succeeded_stations = sum(1 for r in final_station_results if r.is_success)
@@ -615,6 +537,156 @@ class FullReportWorkflow:
 
         return self._composer.session()
 
+    def _execute_substation(
+        self,
+        pkg_idx: int,
+        pkg: Any,
+        word_app: Any,
+        ctx: _SubstationExecutionContext,
+    ) -> None:
+        st_name = self._resolve_substation_display_name(pkg)
+        if ctx.progress_sink:
+            ctx.progress_sink(
+                f"[{pkg_idx + 1}/{ctx.total_packages}] Generating Full Report for {st_name}..."
+            )
+
+        # 1. Pre-flight validation
+        qr_path = self._resolve_quick_report_path(ctx.environment, pkg)
+        val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
+        if not val_res.is_valid:
+            # SubstationIsolatedBatchResiliencePolicy: record upfront validation failure
+            err_msg = f"Pre-flight validation failed for {st_name}: {val_res.error_message}"
+            ctx.errors.append(err_msg)
+            ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                station=st_name,
+                substation_number=pkg.substation_number,
+                output_path=None,
+                is_success=False,
+                error_message=val_res.error_message,
+                preflight_result=val_res,
+            )
+            return
+
+        # 2. Workspace allocation
+        sub_num = pkg.substation_number or (pkg.data.pe_number if getattr(pkg, "data", None) else 0) or 0
+        date_str = pkg.date_str or (pkg.data.date if getattr(pkg, "data", None) else "") or "01-01-2026"
+        clean_name = sanitize_filename(st_name)
+        clean_date = sanitize_filename(date_str).replace(" ", "_")
+        substation_key = f"{sub_num:03d}_{clean_name}_{clean_date}"
+        station_temp_dir = ctx.base_temp_root / substation_key
+
+        # Pre-purge on allocation: guarantee completely clean slate for this substation
+        if station_temp_dir.exists():
+            shutil.rmtree(station_temp_dir, ignore_errors=True)
+        (station_temp_dir / "sliced").mkdir(parents=True, exist_ok=True)
+        (station_temp_dir / "rendered").mkdir(parents=True, exist_ok=True)
+        (station_temp_dir / "prpd").mkdir(parents=True, exist_ok=True)
+
+        try:
+            # 3. Slicing & Plan building
+            plan = self._build_station_plan(
+                pkg,
+                ctx.environment,
+                quick_report_path=qr_path,
+                output_dir=ctx.output_dir,
+                station_temp_dir=station_temp_dir,
+            )
+
+            # 4. Rendering & Compilation
+            rendered_dir = station_temp_dir / "rendered"
+            rendered_dir.mkdir(parents=True, exist_ok=True)
+
+            comp_res = self._composer.compose(
+                plan,
+                keep_temp=ctx.keep_temp,
+                temp_dir=rendered_dir,
+                base_dir=ctx.environment.base_path,
+            )
+
+            out_path = comp_res.output_path
+            if not out_path or not out_path.exists() or out_path.stat().st_size == 0:
+                err_msg = f"Generated report for {st_name} is missing or 0 bytes."
+                ctx.errors.append(err_msg)
+                ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                    station=st_name,
+                    substation_number=pkg.substation_number,
+                    output_path=out_path,
+                    is_success=False,
+                    error_message=err_msg,
+                    preflight_result=val_res,
+                )
+            else:
+                # 5. Seam 4: Post-Compilation Deliverable Sanity Check
+                paths_to_verify = (
+                    comp_res.chunk_paths
+                    if (comp_res.is_multipart and comp_res.chunk_paths)
+                    else ((out_path,) if out_path else ())
+                )
+                all_attr_ok = True
+                attr_failures: list[str] = []
+                for p in paths_to_verify:
+                    if not p or not p.exists() or p.stat().st_size == 0:
+                        all_attr_ok = False
+                        attr_failures.append(f"{p.name if p else 'File'} is missing or 0 bytes.")
+                        continue
+                    c_ok, c_reason = inspect_deliverable_attribution(
+                        p,
+                        target_substation=st_name,
+                    )
+                    if not c_ok:
+                        all_attr_ok = False
+                        attr_failures.append(f"{p.name}: {c_reason}")
+
+                if not all_attr_ok:
+                    for p in paths_to_verify:
+                        if p and p.exists():
+                            quarantine_deliverable(p)
+                    err_msg = (
+                        f"Post-compilation attribution sanity check failed for {st_name}: "
+                        f"{'; '.join(attr_failures)}. Deliverables quarantined."
+                    )
+                    ctx.errors.append(err_msg)
+                    ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                        station=st_name,
+                        substation_number=pkg.substation_number,
+                        output_path=None,
+                        is_success=False,
+                        error_message=err_msg,
+                        preflight_result=val_res,
+                    )
+                else:
+                    ctx.generated_paths.extend(paths_to_verify)
+                    ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                        station=st_name,
+                        substation_number=pkg.substation_number,
+                        output_path=out_path,
+                        is_success=True,
+                        parts_count=comp_res.part_count,
+                        preflight_result=val_res,
+                        chunk_paths=comp_res.chunk_paths,
+                        is_multipart=comp_res.is_multipart,
+                    )
+        except Exception as exc:
+            # SubstationIsolatedBatchResiliencePolicy
+            err_msg = f"Failed to compile Full Report for {st_name}: {exc}"
+            ctx.errors.append(err_msg)
+            logger.exception(err_msg)
+            ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
+                station=st_name,
+                substation_number=pkg.substation_number,
+                output_path=None,
+                is_success=False,
+                error_message=str(exc),
+                preflight_result=val_res,
+            )
+        finally:
+            # Immediate workspace cleanup (Seam 5)
+            if not ctx.keep_temp and station_temp_dir.exists():
+                shutil.rmtree(station_temp_dir, ignore_errors=True)
+
+            # In-process COM handle flush (Seam 5)
+            self._flush_substation_com_handles(word_app, st_name)
+
     def _flush_substation_com_handles(self, word_app: Any, st_name: str) -> None:
         """In-process COM handle flush per substation: close open docs, clear clipboard, gc, assert count == 0."""
         if word_app is None:
@@ -638,8 +710,8 @@ class FullReportWorkflow:
 
         # 2. Purge Windows clipboard
         try:
-            from src.quick_report.compiler import _clear_clipboard
-            _clear_clipboard()
+            from src.quick_report.compiler import clear_windows_clipboard
+            clear_windows_clipboard()
         except Exception:
             pass
 

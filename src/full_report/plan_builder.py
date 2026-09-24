@@ -397,8 +397,13 @@ class MultiPartPartitionPolicy:
                     new_remaining.append(p)
             remaining_parts = new_remaining
 
-            panel_name = getattr(panel, "name", "") or f"Panel {panel.panel_no}"
-            label = f"Part {chunk_idx:02d} - Panel {panel.panel_no} ({panel_name})"
+            raw_panel_name = getattr(panel, "name", "") or f"Panel {panel.panel_no}"
+            clean_panel_name = sanitize_filename(
+                raw_panel_name.replace("/", "-").replace("\\", "-").replace(":", "-")
+            ).strip()
+            if not clean_panel_name:
+                clean_panel_name = f"Panel {panel.panel_no}"
+            label = f"Part {chunk_idx:02d} - Panel {panel.panel_no} ({clean_panel_name})"
             output_filename = f"{stem} - {label}.docx"
             chunks.append(
                 PlanDocumentChunk(
