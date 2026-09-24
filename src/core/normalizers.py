@@ -960,7 +960,6 @@ def _clean_batt_sentinel(val: str) -> str:
 def _clean_mfg_str(val: str) -> str:
     s = val.strip(" \t\r\n,;/")
     s = _CHARGER_PREFIX_RE.sub("", s).strip(" \t\r\n,;/")
-    s = _CHARGER_PREFIX_RE.sub("", s).strip(" \t\r\n,;/")
     if s.lower() in _BATTERY_SENTINELS:
         return ""
     return s
@@ -1056,35 +1055,6 @@ def parse_battery_details(raw_text: str | None) -> tuple[str, str, str]:
             model = ""
             serial_no = ""
         return (mfg, model, serial_no)
-
-
-__all__ = [
-    "FL_PREFIX_TO_STATION",
-    "STATION_NAME_TO_CODE",
-    "extract_background_temperature",
-    "format_busbar_position",
-    "format_cbm_reading",
-    "format_date_cbm",
-    "format_date_front_page",
-    "format_db_int",
-    "format_heater_amp",
-    "format_humidity_str",
-    "format_iso8601",
-    "format_load_amp",
-    "format_month_folder",
-    "format_temperature_float",
-    "format_testsheet_time",
-    "normalize_date_str",
-    "normalize_fl_erms",
-    "normalize_for_csv",
-    "normalize_for_excel",
-    "normalize_for_report",
-    "normalize_us_characteristic",
-    "parse_background_temp",
-    "parse_battery_details",
-    "resolve_station_code",
-    "resolve_station_from_fl",
-]
 
 
 FL_PREFIX_TO_STATION: dict[str, str] = {

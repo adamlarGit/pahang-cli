@@ -1162,13 +1162,13 @@ class TestsheetExtractor:
                 photo_numbers = parse_photo_numbers(ws_pce[f"H{r}"].value)
 
                 if mfg:
-                    p_mfg, p_model, p_sn = parse_battery_details(raw_j)
-                    if p_mfg:
-                        mfg = p_mfg
-                    if p_model:
-                        model = p_model
-                    if p_sn:
-                        sn = p_sn
+                    parsed_mfg, parsed_model, parsed_sn = parse_battery_details(raw_j)
+                    if parsed_mfg:
+                        mfg = parsed_mfg
+                    if parsed_model:
+                        model = parsed_model
+                    if parsed_sn:
+                        sn = parsed_sn
 
                 if mfg or model or sn or clean_val(ws_pce[f"C{r}"].value) or clean_val(ws_pce[f"E{r}"].value) or clean_val(ws_pce[f"F{r}"].value) or photo_numbers:
                     battery_banks.append(
