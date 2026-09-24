@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
  
+## [1.23.1] - 2026-09-24
+
+### Fixed
+- **Composite Battery Details Extraction & Battery Number Normalization (`src/core/normalizers.py`, `src/testsheet/extractor.py`, `src/full_report/scan_adapters.py`, `CONTEXT.md`)**:
+  - Implemented `parse_battery_details(raw_text: str | None) -> tuple[str, str, str]` in `src/core/normalizers.py` extracting clean manufacturer, model, and serial number from Column J composite tokens (`BC<n>: <MFG>, M: <MODEL>, SN: <SN>`), untagged strings, slash formats, and bare manufacturers while cleanly stripping charger prefixes and normalizing sentinels (`"-"`, `"N/A"`) to empty strings (closes #62).
+  - Wired `parse_battery_details` into `TestsheetExtractor._extract_battery_banks()` unpacking composite battery details from PCE Testsheet rows 59–65.
+  - Normalized `batt_block["number"]` in `BatteryBankScanAdapter` to integer index strings (`"1"`, `"2"`), ensuring `battery-overview.docx` renders `Battery No. | 1` and `Battery No. | 2`.
+  - Added `BatteryExtractionPolicy` to `CONTEXT.md`.
+- **Transformer Model Name Expansion & 8 pt Typography (`src/core/normalizers.py`, `src/testsheet/extractor.py`, `src/full_report/scan_adapters.py`, `src/quick_report/cbm_render.py`)**:
+  - Implemented `normalize_tx_model` expanding transformer abbreviations `H/S` and `C/T` to `HERMETICALLY SEAL` and `CONSERVATOR TANK`, and set `{{ tx.model }}` font size to 8 pt across all 12 templates (closes #60).
+
 ## [1.23.0] - 2026-09-24
 
 ### Added
