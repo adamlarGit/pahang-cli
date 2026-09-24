@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from src.core.normalizers import normalize_tx_model
+
 
 @dataclass(frozen=True)
 class PhotoRange:
@@ -121,6 +123,7 @@ class TransformerSpec:
     manufacturer: str = ""
     serial_no: str = ""
     type: str = ""
+    model: str = ""
     us_reading: str = ""
     us_char: str = ""
     hv_cable_type: str = ""
@@ -131,6 +134,11 @@ class TransformerSpec:
     lv_bushing_thermal: ThermalReadingSpec = ThermalReadingSpec()
     body_thermal: ThermalReadingSpec = ThermalReadingSpec()
     photo_numbers: tuple[int, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.model and self.type:
+            object.__setattr__(self, "model", normalize_tx_model(self.type))
+
 
 
 @dataclass(frozen=True)

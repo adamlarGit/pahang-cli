@@ -868,6 +868,33 @@ def test_transformer_component_photo_index_alignment(
     assert result.items[6].context["ir"]["image"] == "/path/FLIR0104.jpg"
 
 
+def test_transformer_scan_adapter_model_context(mock_substation_info: dict[str, str]) -> None:
+    """Verify TransformerScanAdapter populates tx.model in page context with normalize_tx_model."""
+    from src.full_report.scan_adapters import TransformerScanAdapter
+    from src.testsheet.models import TransformerSpec
+
+    # 1. H/S abbreviation expanded
+    tx1 = TransformerSpec(tx_id="Tx 1", type="H/S")
+    adapter1 = TransformerScanAdapter(tx=tx1, substation_info=mock_substation_info)
+    res1 = adapter1.adapt()
+    for item in res1.items:
+        assert item.context["tx"]["model"] == "HERMETICALLY SEAL"
+
+    # 2. C/T abbreviation expanded
+    tx2 = TransformerSpec(tx_id="Tx 2", type="C/T")
+    adapter2 = TransformerScanAdapter(tx=tx2, substation_info=mock_substation_info)
+    res2 = adapter2.adapt()
+    for item in res2.items:
+        assert item.context["tx"]["model"] == "CONSERVATOR TANK"
+
+    # 3. Blank fallback to '-'
+    tx3 = TransformerSpec(tx_id="Tx 1", type="")
+    adapter3 = TransformerScanAdapter(tx=tx3, substation_info=mock_substation_info)
+    res3 = adapter3.adapt()
+    for item in res3.items:
+        assert item.context["tx"]["model"] == "-"
+
+
 def test_dynamic_prpd_generation_with_tempfile_no_crash(
     mock_substation_info: dict[str, str],
     tmp_path: Path,

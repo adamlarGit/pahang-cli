@@ -15,6 +15,7 @@ from src.core.normalizers import (
     format_humidity_str,
     format_load_amp,
     format_testsheet_time,
+    normalize_tx_model,
     normalize_us_characteristic,
     parse_background_temp,
 )
@@ -1005,6 +1006,7 @@ class TestsheetExtractor:
                     manufacturer=mfg,
                     serial_no=serial_no,
                     type=tx_type,
+                    model=normalize_tx_model(tx_type),
                     us_reading=tx_us_reading,
                     us_char=tx_us_char,
                     hv_cable_type=hv_cable_type,

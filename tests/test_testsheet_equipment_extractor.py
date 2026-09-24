@@ -770,6 +770,27 @@ def test_extract_transformer_specs_with_cables_and_thermal() -> None:
     assert tx2.hv_cable_thermal.delta_t == "1.0"
 
 
+def test_extract_transformer_specs_model_normalization() -> None:
+    """Verify _extract_transformer_specs parses H/S and C/T into normalized model while preserving raw type."""
+    extractor = TestsheetExtractor()
+    wb_vi = openpyxl.Workbook()
+    ws_vi = wb_vi.active
+    ws_vi["C17"] = 2
+    ws_vi["D18"] = "H/S"
+    ws_vi["F18"] = "1000kVA"
+    ws_vi["D19"] = "C/T"
+    ws_vi["F19"] = "500kVA"
+
+    specs = extractor._extract_transformer_specs(ws_vi)
+    assert len(specs) == 2
+    assert specs[0].tx_id == "Tx 1"
+    assert specs[0].type == "H/S"
+    assert specs[0].model == "HERMETICALLY SEAL"
+    assert specs[1].tx_id == "Tx 2"
+    assert specs[1].type == "C/T"
+    assert specs[1].model == "CONSERVATOR TANK"
+
+
 def test_lvdb_specs_empty_template_ignored() -> None:
     """Verify _extract_lvdb_specs returns empty tuple when no photo or fields are filled."""
     extractor = TestsheetExtractor()

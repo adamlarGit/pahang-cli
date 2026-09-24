@@ -33,6 +33,7 @@ from src.core.normalizers import (
     format_load_amp,
     format_testsheet_time,
     normalize_tx_id,
+    normalize_tx_model,
     normalize_us_characteristic,
 )
 from src.full_report.models import (
@@ -982,7 +983,7 @@ class TransformerScanAdapter:
 
             tx_block = {
                 "manufacturer": _clean_str(self.tx.manufacturer),
-                "model": _clean_str(getattr(self.tx, "model", None) or getattr(self.tx, "type", "-")),
+                "model": normalize_tx_model(getattr(self.tx, "model", None) or getattr(self.tx, "type", None)),
                 "rating": tx_rating,
                 "number": self.tx_id_str,
                 "panel": self.tx_id_str,

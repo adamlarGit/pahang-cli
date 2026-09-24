@@ -2735,5 +2735,42 @@ def test_utils_normalize_functional_location_input():
     assert normalize_functional_location_input(12345) == "12345"
 
 
+def test_quick_report_transformer_model_normalization_render_context():
+    """Verify Quick Report transformer defect context expands H/S and C/T model abbreviations."""
+    from src.quick_report.cbm_family import QUICK_REPORT_FAMILY_SPECS_BY_ID
+    from src.quick_report.cbm_render import _build_family_render_context
+    from src.quick_report.defects import CbmDefectRecord
+    from src.testsheet.models import SubstationEquipmentPackage, TransformerSpec
+
+    spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["tx"]
+
+    # 1. From matched TransformerSpec with H/S
+    tx1 = TransformerSpec(tx_id="Tx 1", type="H/S")
+    pkg1 = SubstationEquipmentPackage(transformers=(tx1,))
+    rec1 = CbmDefectRecord(equipment="TRANSFORMER", equipment_id="TX 1", defect_area="HV BUSHING", technology="IR")
+    ctx1 = _build_family_render_context(spec, rec1, overview=False, item_key="TX 1", pe_info={"equipment_specs": pkg1})
+    assert ctx1["tx"]["model"] == "HERMETICALLY SEAL"
+
+    # 2. From matched TransformerSpec with C/T
+    tx2 = TransformerSpec(tx_id="Tx 1", type="C/T")
+    pkg2 = SubstationEquipmentPackage(transformers=(tx2,))
+    ctx2 = _build_family_render_context(spec, rec1, overview=False, item_key="TX 1", pe_info={"equipment_specs": pkg2})
+    assert ctx2["tx"]["model"] == "CONSERVATOR TANK"
+
+    # 3. Fallback from defect record model if no matched tx
+    rec_hs = CbmDefectRecord(equipment="TRANSFORMER", equipment_id="TX 1", model="H/S", defect_area="HV BUSHING", technology="IR")
+    ctx3 = _build_family_render_context(spec, rec_hs, overview=False, item_key="TX 1", pe_info={})
+    assert ctx3["tx"]["model"] == "HERMETICALLY SEAL"
+
+    rec_ct = CbmDefectRecord(equipment="TRANSFORMER", equipment_id="TX 1", model="C/T", defect_area="HV BUSHING", technology="IR")
+    ctx4 = _build_family_render_context(spec, rec_ct, overview=False, item_key="TX 1", pe_info={})
+    assert ctx4["tx"]["model"] == "CONSERVATOR TANK"
+
+    # 4. Unknown model preserved
+    rec_custom = CbmDefectRecord(equipment="TRANSFORMER", equipment_id="TX 1", model="CAST RESIN", defect_area="HV BUSHING", technology="IR")
+    ctx5 = _build_family_render_context(spec, rec_custom, overview=False, item_key="TX 1", pe_info={})
+    assert ctx5["tx"]["model"] == "CAST RESIN"
+
+
 
 

@@ -136,6 +136,7 @@ def test_transformer_spec_defaults_and_immutability():
     assert tx.manufacturer == ""
     assert tx.serial_no == ""
     assert tx.type == ""
+    assert tx.model == ""
     assert tx.hv_cable_type == ""
     assert tx.lv_cable_type == ""
     assert tx.hv_cable_thermal == ThermalReadingSpec()
@@ -167,10 +168,31 @@ def test_transformer_spec_defaults_and_immutability():
     assert custom_tx.manufacturer == "MALONEY"
     assert custom_tx.serial_no == "TX9988"
     assert custom_tx.type == "HERMETICALLY SEALED"
+    assert custom_tx.model == "HERMETICALLY SEAL"
     assert custom_tx.hv_cable_type == "XLPE"
     assert custom_tx.lv_cable_type == "PILC"
     assert custom_tx.hv_cable_thermal == th1
     assert custom_tx.photo_numbers == (3, 4, 5)
+
+
+def test_transformer_spec_model_auto_defaulting_and_override():
+    """Verify TransformerSpec model auto-defaults from type via normalize_tx_model while preserving raw type."""
+    tx_hs = TransformerSpec(type="H/S")
+    assert tx_hs.type == "H/S"
+    assert tx_hs.model == "HERMETICALLY SEAL"
+
+    tx_ct = TransformerSpec(type="C/T")
+    assert tx_ct.type == "C/T"
+    assert tx_ct.model == "CONSERVATOR TANK"
+
+    tx_custom = TransformerSpec(type="H/S", model="CUSTOM MODEL")
+    assert tx_custom.type == "H/S"
+    assert tx_custom.model == "CUSTOM MODEL"
+
+    tx_empty = TransformerSpec(type="")
+    assert tx_empty.type == ""
+    assert tx_empty.model == ""
+
 
 
 def test_lvdb_spec_defaults_and_immutability():

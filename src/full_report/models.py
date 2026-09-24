@@ -7,6 +7,7 @@ from enum import Enum
 import re
 from typing import Sequence
 
+from src.core.normalizers import normalize_tx_model
 from src.core.topology import SwitchgearArchetype, SwitchgearTopologyEngine, VoltageClass
 from src.testsheet.models import (
     BatteryBankSpec,
@@ -168,6 +169,7 @@ def build_transformer_scan_spec(tx: TransformerSpec) -> TransformerScanSpec:
         manufacturer=tx.manufacturer,
         serial_no=tx.serial_no,
         type=tx.type,
+        model=getattr(tx, "model", "") or normalize_tx_model(getattr(tx, "type", "")),
         us_reading=tx.us_reading,
         us_char=tx.us_char,
         hv_cable_type=tx.hv_cable_type,
@@ -320,6 +322,7 @@ class TransformerScanSpec:
     manufacturer: str = ""
     serial_no: str = ""
     type: str = ""
+    model: str = ""
     us_reading: str = ""
     us_char: str = ""
     hv_cable_type: str = ""

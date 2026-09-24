@@ -17,6 +17,7 @@ from src.core.normalizers import (
     format_heater_amp,
     format_load_amp,
     format_temperature_float,
+    normalize_tx_model,
     normalize_us_characteristic,
 )
 from src.quick_report.cbm_family import QuickReportFamilySpec
@@ -844,11 +845,10 @@ def _build_tx_render_context(
 
     tx_mfg = (matched_tx.manufacturer if matched_tx and matched_tx.manufacturer else "") or _text_or_empty(record.brand)
     
-    raw_model = (matched_tx.type if matched_tx and matched_tx.type else "") or _text_or_empty(record.model)
-    if raw_model.upper() in ("H/S", "HERMETICALLY SEALED", "HERMETICALLY SEAL"):
-        tx_model = "HERMETICALLY SEAL"
-    else:
-        tx_model = raw_model
+    tx_model = normalize_tx_model(
+        (matched_tx.model if matched_tx and matched_tx.model else (matched_tx.type if matched_tx and matched_tx.type else ""))
+        or _text_or_empty(record.model)
+    )
 
     tx_rating = (matched_tx.rating_kva if matched_tx and matched_tx.rating_kva else "") or _text_or_empty(record.rating)
     tx_serial = matched_tx.serial_no if matched_tx else ""

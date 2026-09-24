@@ -624,6 +624,51 @@ def normalize_tx_id(tx_id: str | int | None, default_idx: int = 1) -> str:
     return f"TX{s.upper()}"
 
 
+TX_MODEL_MAP: dict[str, str] = {
+    "H/S": "HERMETICALLY SEAL",
+    "HS": "HERMETICALLY SEAL",
+    "H.S.": "HERMETICALLY SEAL",
+    "H.S": "HERMETICALLY SEAL",
+    "HERMETICALLY": "HERMETICALLY SEAL",
+    "HERMETICALLY SEAL": "HERMETICALLY SEAL",
+    "HERMETICALLY SEALED": "HERMETICALLY SEAL",
+    "C/T": "CONSERVATOR TANK",
+    "CT": "CONSERVATOR TANK",
+    "C.T.": "CONSERVATOR TANK",
+    "C.T": "CONSERVATOR TANK",
+    "CONSERVATOR": "CONSERVATOR TANK",
+    "CONSERVATOR TANK": "CONSERVATOR TANK",
+}
+
+
+def normalize_tx_model(val: str | None) -> str:
+    """Normalize transformer model abbreviations and designations to canonical full terms.
+
+    Mapping:
+        - 'H/S', 'HS', 'H.S.', 'H.S', 'HERMETICALLY', 'HERMETICALLY SEAL', 'HERMETICALLY SEALED'
+          -> 'HERMETICALLY SEAL'
+        - 'C/T', 'CT', 'C.T.', 'C.T', 'CONSERVATOR', 'CONSERVATOR TANK'
+          -> 'CONSERVATOR TANK'
+        - Blank / sentinels ('', '-', 'N/A', 'NONE', 'NAN', None) -> '-'
+        - Any other non-empty string -> preserved as-is.
+
+    Args:
+        val: Transformer model string or abbreviation, or None.
+
+    Returns:
+        Expanded canonical transformer model string, '-' if missing/sentinel, or original string trimmed.
+    """
+    if _is_null_or_empty(val):
+        return "-"
+    s = str(val).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return "-"
+    s_upper = s.upper()
+    if s_upper in TX_MODEL_MAP:
+        return TX_MODEL_MAP[s_upper]
+    return s
+
+
 def format_db_int(val: Any) -> str:
     """Format ultrasound (US) and TEV measurement or background dB values as integer strings (0 decimal places).
 
@@ -1011,6 +1056,7 @@ __all__ = [
     "normalize_for_csv",
     "normalize_for_excel",
     "normalize_for_report",
+    "normalize_tx_model",
     "normalize_us_characteristic",
     "parse_background_temp",
     "resolve_station_code",

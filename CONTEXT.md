@@ -140,6 +140,16 @@ Extraction and counting policy for transformers from `PCE VI` and `PCE Testsheet
   - HV / LV Cable Types: Parsed from `C33`/`C35` (Tx 1), `C38`/`C40` (Tx 2), `O33`/`O35` (Tx 3), `O38`/`O40` (Tx 4).
   - 5-Point Component Thermal Readings: Parsed across `HT CABLE`, `HT BUSHING`, `LV CABLE`, `LV BUSHING`, `BODY` (Columns F–I for Tx 1/2, Columns R–U / Q–T for Tx 3/4).
 - **Accessibility / False-Positive Guard**: If a Tx row or `C17` indicates `NOT ACCESSIBLE`, it is excluded from active testable transformers to prevent false positives in Quick Report condition pages and downstream workflows.
+- **Model Normalization & Aliases (`normalize_tx_model`)**:
+  - Raw transformer type/model text is mapped to canonical expanded designations:
+    - `"H/S"`, `"HS"`, `"H.S."`, `"H.S"`, `"HERMETICALLY"`, `"HERMETICALLY SEAL"`, `"HERMETICALLY SEALED"` $\to$ `"HERMETICALLY SEAL"`
+    - `"C/T"`, `"CT"`, `"C.T."`, `"C.T"`, `"CONSERVATOR"`, `"CONSERVATOR TANK"` $\to$ `"CONSERVATOR TANK"`
+  - Blank / sentinel values (`""`, `"-"`, `"N/A"`, `"NONE"`, `"NAN"`, `None`) fall back to `"-"`.
+  - Unknown non-empty values pass through as-is (e.g. `"CAST RESIN"`, custom manufacturer model).
+  - Populated onto `TransformerSpec.model` (auto-defaulting in `__post_init__` from `TransformerSpec.type`) and `TransformerScanSpec.model`.
+- **Template Presentation Convention (8 pt Typography)**:
+  - In all 12 transformer docx templates across Full Report and Quick Report (`tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`), the table cell for `{{ tx.model }}` specifies 8 pt font size (`w:sz w:val="16"` and `w:szCs w:val="16"`) across paragraph and run properties to ensure expanded designations fit cleanly without cell overflow.
+
 
 ### MissingValuePresentationPolicy
 Clear separation between data representation and document presentation:

@@ -342,3 +342,55 @@ def test_render_smoke_test_all_seven_templates(filename: str, tmp_path: Path, du
 
     objects = rendered_doc._body._element.xpath(".//w:object")
     assert len(objects) == 1, f"{filename} missing ActiveX <w:object> after smoke render"
+
+
+ALL_12_TRANSFORMER_TEMPLATES: tuple[Path, ...] = (
+    Path("templates/FULL REPORT/NORMAL IR US TEV/tx-overview.docx"),
+    Path("templates/FULL REPORT/NORMAL IR US TEV/tx-hv-sides.docx"),
+    Path("templates/FULL REPORT/NORMAL IR US TEV/tx-lv-sides.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR/tx-overview.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR/tx-hv-sides.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR/tx-lv-sides.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR US/tx-overview.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR US/tx-hv-sides.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR US/tx-lv-sides.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR US TEV/tx-overview.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR US TEV/tx-hv-sides.docx"),
+    Path("templates/QUICK REPORT/DEFECT IR US TEV/tx-lv-sides.docx"),
+)
+
+
+@pytest.mark.parametrize("template_path", ALL_12_TRANSFORMER_TEMPLATES)
+def test_transformer_template_model_cell_8pt_font(template_path: Path):
+    """Verify that in all 12 transformer templates the {{ tx.model }} cell strictly specifies 8 pt font (w:val='16')."""
+    import re
+
+    assert template_path.is_file(), f"Template file not found: {template_path}"
+    with zipfile.ZipFile(template_path, "r") as z:
+        content = z.read("word/document.xml").decode("utf-8")
+
+    assert "{{ tx.model }}" in content, f"Clean {{ tx.model }} tag missing in {template_path}"
+
+    tc_matches = [tc for tc in re.findall(r"<w:tc\b.*?</w:tc>", content, flags=re.DOTALL) if "{{ tx.model }}" in tc]
+    assert len(tc_matches) == 1, f"Expected exactly 1 table cell with {{ tx.model }} in {template_path}, got {len(tc_matches)}"
+    tc = tc_matches[0]
+
+    # Assert no proofErr tags in cell
+    assert "<w:proofErr" not in tc, f"Fragmented proofErr found in {template_path}"
+
+    # Assert 8 pt font (w:val="16") on paragraph properties
+    pPr_match = re.search(r"<w:pPr>.*?</w:pPr>", tc, flags=re.DOTALL)
+    assert pPr_match is not None, f"Missing w:pPr in {template_path}"
+    assert '<w:sz w:val="16"/>' in pPr_match.group(0), f"Missing 8pt font (<w:sz w:val='16'/>) in w:pPr for {template_path}"
+    assert '<w:szCs w:val="16"/>' in pPr_match.group(0), f"Missing 8pt font (<w:szCs w:val='16'/>) in w:pPr for {template_path}"
+
+    # Assert 8 pt font (w:val="16") on run properties
+    r_match = re.search(r"<w:r\b.*?</w:r>", tc, flags=re.DOTALL)
+    assert r_match is not None, f"Missing w:r in {template_path}"
+    assert '<w:sz w:val="16"/>' in r_match.group(0), f"Missing 8pt font (<w:sz w:val='16'/>) in w:r for {template_path}"
+    assert '<w:szCs w:val="16"/>' in r_match.group(0), f"Missing 8pt font (<w:szCs w:val='16'/>) in w:r for {template_path}"
+
+    # Assert surrounding labels are intact
+    assert ">Model</w:t>" in content, f"Model header missing in {template_path}"
+    assert ">Rating</w:t>" in content, f"Rating header missing in {template_path}"
+

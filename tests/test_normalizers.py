@@ -25,6 +25,7 @@ from src.core.normalizers import (
     normalize_for_csv,
     normalize_for_excel,
     normalize_for_report,
+    normalize_tx_model,
     normalize_us_characteristic,
     parse_background_temp,
 )
@@ -805,6 +806,72 @@ def test_format_load_amp() -> None:
     assert format_load_amp(True) == "-"
     assert format_load_amp(False) == "-"
     assert format_load_amp("abc") == "-"
+
+
+def test_normalize_tx_model() -> None:
+    # 1. Hermetically sealed aliases (case-insensitive, with/without punctuation/spacing)
+    for alias in (
+        "H/S",
+        "HS",
+        "H.S.",
+        "H.S",
+        "HERMETICALLY",
+        "HERMETICALLY SEAL",
+        "HERMETICALLY SEALED",
+        "h/s",
+        "hs",
+        "h.s.",
+        "h.s",
+        "hermetically",
+        "Hermetically Seal",
+        "hermetically sealed",
+        "  H/S  ",
+        "  hermetically sealed  ",
+    ):
+        assert normalize_tx_model(alias) == "HERMETICALLY SEAL"
+
+    # 2. Conservator tank aliases (case-insensitive, with/without punctuation/spacing)
+    for alias in (
+        "C/T",
+        "CT",
+        "C.T.",
+        "C.T",
+        "CONSERVATOR",
+        "CONSERVATOR TANK",
+        "c/t",
+        "ct",
+        "c.t.",
+        "c.t",
+        "conservator",
+        "Conservator Tank",
+        "  C/T  ",
+        "  conservator tank  ",
+    ):
+        assert normalize_tx_model(alias) == "CONSERVATOR TANK"
+
+    # 3. Sentinels / empty / None fallback to '-'
+    for sentinel in (
+        None,
+        "",
+        "   ",
+        "-",
+        "--",
+        "---",
+        "N/A",
+        "n/a",
+        "NONE",
+        "none",
+        "NAN",
+        "nan",
+        float("nan"),
+    ):
+        assert normalize_tx_model(sentinel) == "-"
+
+    # 4. Unknown non-empty values preserved as-is
+    assert normalize_tx_model("CAST RESIN") == "CAST RESIN"
+    assert normalize_tx_model("Cast Resin") == "Cast Resin"
+    assert normalize_tx_model("Dry Type") == "Dry Type"
+    assert normalize_tx_model("  Custom Model ABC  ") == "Custom Model ABC"
 
 
 
