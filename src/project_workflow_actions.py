@@ -720,6 +720,7 @@ def _print_full_report_dry_run_telemetry(inspection: FullReportInspection) -> No
         print("\n    📋 SUBSTATIONS:")
         for t in inspection.targets:
             pe_str = f"PE {t.substation_number} - " if t.substation_number else ""
+            multipart_indicator = f" [Multi-part: {t.part_count} files]" if getattr(t, "is_multipart", False) else ""
             if t.is_ready:
                 status_str = "✓ READY"
                 detail = f"QR: OK | Defects: {t.cbm_defect_count} CBM, {t.vi_defect_count} VI"
@@ -727,7 +728,7 @@ def _print_full_report_dry_run_telemetry(inspection: FullReportInspection) -> No
                 status_str = "✗ UNREADY"
                 err_msg = t.errors[0] if t.errors else "Pre-flight validation failed"
                 detail = f"Error: {err_msg}"
-            print(f"      [{status_str}] {pe_str}{t.substation_name} ({detail})")
+            print(f"      [{status_str}] {pe_str}{t.substation_name}{multipart_indicator} ({detail})")
 
     if inspection.warnings:
         print("\n    ⚠️ WARNINGS:")
@@ -914,6 +915,7 @@ def _print_full_report_postprocessing_dry_run_telemetry(
     if inspection.targets:
         print("\n    📋 FULL REPORT DOCUMENTS:")
         for t in inspection.targets:
+            multipart_indicator = f" [{len(t.part_docx_paths)} docx parts -> 1 pdf deliverable]" if t.is_multipart else ""
             if t.is_ready:
                 status_str = "✓ READY"
                 size = t.validation_result.size_bytes if t.validation_result else 0
@@ -922,7 +924,8 @@ def _print_full_report_postprocessing_dry_run_telemetry(
                 status_str = "✗ UNREADY"
                 err_msg = t.errors[0] if t.errors else "Testsheet PDF missing"
                 detail = f"Error: {err_msg}"
-            print(f"      [{status_str}] {t.docx_path.name} ({detail})")
+            display_name = t.stem if t.is_multipart else t.docx_path.name
+            print(f"      [{status_str}] {display_name}{multipart_indicator} ({detail})")
 
     if inspection.warnings:
         print("\n    ⚠️ WARNINGS:")

@@ -28,7 +28,11 @@ from src.full_report.attribution import (
 )
 from src.full_report.composer import FullReportComposer
 from src.full_report.photo_resolver import RawPhotoResolver
-from src.full_report.plan_builder import FullReportPlanBuilder, FullReportStationPlan
+from src.full_report.plan_builder import (
+    FullReportPlanBuilder,
+    FullReportStationPlan,
+    MultiPartPartitionPolicy,
+)
 from src.full_report.preflight import (
     PreFlightValidationResult,
     resolve_quick_report_path,
@@ -103,6 +107,8 @@ class FullReportSubstationTelemetry:
     equipment_count: int = 0
     warnings: tuple[str, ...] = ()
     errors: tuple[str, ...] = ()
+    is_multipart: bool = False
+    part_count: int = 1
 
     @property
     def pe_number(self) -> int:
@@ -709,6 +715,9 @@ class FullReportWorkflow:
             + len(getattr(eq_pkg, "lvdb_specs", ()))
         )
 
+        # Check switchgear archetype for multi-part partitioning
+        is_multipart, part_count = MultiPartPartitionPolicy.evaluate_package(eq_pkg)
+
         return FullReportSubstationTelemetry(
             substation_number=sub_num,
             substation_name=st_name,
@@ -726,6 +735,8 @@ class FullReportWorkflow:
             vi_defect_count=len(vi_defects),
             equipment_count=eq_count,
             errors=tuple(telem_errors),
+            is_multipart=is_multipart,
+            part_count=part_count,
         )
 
     def _build_station_plan(

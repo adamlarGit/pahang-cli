@@ -283,6 +283,24 @@ The two-phase resolution engine (`src/core/topology.py`) providing pure, COM-fre
 ### StrictZeroFallbackPolicy
 The data integrity and evidence preservation invariant governing Full Report photo pairing. Enforces strict 1-to-1 matching between thermal/visual inspection photos and scanning page placeholders. Prohibits artificial duplication or placeholder cloning across compartments when empirical evidence was not captured on-site, ensuring zero photo duplication across report deliverables.
 
+### PlanDocumentChunk
+The immutable planned document fragment model (`src/full_report/plan_builder.py`) representing an individual Word output deliverable in a multi-part Full Report compilation plan. Encapsulates `chunk_index` (1-based sequence), `label` (human-readable chunk description such as `Part 01 - Summary`, `Part 02 - Panel 1 (INCOMING 1)`, `Part 07 - TX and Condition`), `output_filename` (zero-padded filename `<STEM> - Part {XX} - {label}.docx`), `destination_path` (resolved absolute output path in the date folder), and `parts: tuple[PlanPartItem, ...]` (ordered sequence of template slices and rendered pages belonging to this chunk).
+
+### MultiPartPartitionPolicy
+The domain partitioning rule (`src/full_report/plan_builder.py`) governing multi-part Full Report Word document splitting based on switchgear hardware archetype:
+- **`VCB_CUBICLE` & `GIS_CUBICLE`**: Automatically partitions the planned Bill of Materials into modular, lightweight Word documents:
+  - **Chunk 1 (`Part 01 - Summary`)**: Front Page, Executive Summary Census, Visual Defect Summary, and Switchgear Overview pages.
+  - **Chunks 2..N+1 (`Part {XX} - Panel {no} ({name})`)**: Individual bay files containing per-panel chamber scan pages (Breaker, Cable, Busbar, Secondary, PT) and any inline CBM defect pages (such as TEV PRPD scatter plots or IR hotspots) attached directly behind their parent panel.
+  - **Chunk N+2 (`Part {N+2:02d} - TX and Condition`)**: Balance of plant assets including Transformers, LVDB / Feeder Pillar, Battery Bank, Substation Condition photo grid, Visual Defect detail pages, and Sticker page.
+- **Standard RMU Switchgear** (`RMU_STANDARD`, `RMU_DUAL_CABLE_ENTRY`, `RMU_FUSE_CANISTER`, `RMU_OIL`): Emits exactly one chunk containing all planned parts with default `<STEM>.docx` destination filename, preventing unnecessary partitioning on low-page-volume RMU reports.
+
+### MultiPartDocumentDeliveryPolicy
+The architectural deliverable policy established in ADR 0005 separating intermediate field inspection Word documents from final client deliverable files. For VCB and GIS switchgear, intermediate Word files are retained permanently in the substation date folder (`FULL REPORT/<STATION>/<MONTH>/<DATE>/`) as modular panel documents so field inspectors and report reviewers can safely open, review, and adjust FLIR Tools+ ActiveX thermal images without triggering Microsoft Word application freezes or memory bloat. The final deliverable presented to TNB is strictly a single, consolidated PDF per substation.
+
+### MultiPartPdfStitchingPolicy
+The post-processing assembly policy (`src/workflows/full_report_postprocessing.py`) governing the consolidation of multi-part Full Reports into client deliverable PDFs. Discovers matching `<STEM> - Part *.docx` files, groups them by substation stem (`_group_multipart_targets`), converts each part document sequentially to a temporary PDF, stitches the parts in strict numerical order using `merge_pdfs_batch()` on `DocumentConverter`, matches and appends the pre-existing signed testsheet PDF from `processed_testsheet/pdf/<STEM>.pdf`, and writes the final unified `<STEM>.pdf` deliverable to the date folder before cleaning up intermediate temporary PDFs.
+
+
 
 
 

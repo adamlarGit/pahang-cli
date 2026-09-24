@@ -5,6 +5,24 @@ All notable changes to Pahang CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Synthetic VCB Benchmark Fixture (`tests/benchmarks/pe157_perpustakaan_awam/`)**:
+  - Provisioned self-contained synthetic benchmark fixture for PE 157 PERPUSTAKAAN AWAM (5-panel TAMCO VCB 11kV with transition bay, PT on panel 4, transformer, feeder pillar, inline CBM defect page, minimal testsheet Excel and PDF).
+- **CLI Multi-Part Dry-Run Telemetry (`src/project_workflow_actions.py`)**:
+  - Implemented `[Multi-part: X files]` indicator in `_print_full_report_dry_run_telemetry` for substations planned for partitioning.
+  - Implemented `[X docx parts -> 1 pdf deliverable]` indicator in `_print_full_report_postprocessing_dry_run_telemetry` for grouped multi-part document targets.
+- **Multi-Part End-to-End & Regression Verification Suite (`tests/test_full_report_multipart_e2e.py`)**:
+  - Added end-to-end integration tests validating full lifecycle execution (Stage 1 multi-part generation + Stage 2 post-processing sequential PDF stitching) and regression tests validating standard RMU single-document invariants.
+- **Architectural Policy & Domain Glossary Updates (`docs/adr/0005-vcb-gis-multipart-full-report-pipeline.md`, `CONTEXT.md`, `docs/full_report_domain_analysis.md`)**:
+  - Formulated ADR 0005 establishing VCB/GIS multi-part Word generation and post-processing sequential PDF stitching architecture.
+  - Documented `PlanDocumentChunk`, `MultiPartPartitionPolicy`, `MultiPartDocumentDeliveryPolicy`, and `MultiPartPdfStitchingPolicy` in `CONTEXT.md` and domain analysis.
+
+### Refactored
+- **Multi-Part Archetype & Part Count Evaluation (`src/full_report/plan_builder.py`, `src/workflows/full_report.py`)**:
+  - Encapsulated switchgear archetype resolution and package part count arithmetic into `MultiPartPartitionPolicy.resolve_archetype` and `MultiPartPartitionPolicy.evaluate_package`.
+
 ## [1.22.1] - 2026-09-23
 
 ### Fixed

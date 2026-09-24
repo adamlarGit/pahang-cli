@@ -277,12 +277,13 @@ class MultiPartPartitionPolicy:
             ),
         )
 
-    @staticmethod
-    def _resolve_archetype(
-        plan: FullReportStationPlan,
+    @classmethod
+    def resolve_archetype(
+        cls,
+        target: FullReportStationPlan | SubstationEquipmentPackage,
     ) -> SwitchgearArchetype:
-        """Resolve the primary switchgear archetype from the plan's package."""
-        pkg = plan.package
+        """Resolve the primary switchgear archetype from a plan or equipment package."""
+        pkg = target.package if isinstance(target, FullReportStationPlan) else target
         swgs = getattr(pkg, "switchgears", ())
         swg = swgs[0] if swgs else getattr(pkg, "switchgear", None)
         if swg is not None:
@@ -299,6 +300,33 @@ class MultiPartPartitionPolicy:
             )
             return board.archetype
         return SwitchgearArchetype.RMU_STANDARD
+
+    @classmethod
+    def evaluate_package(
+        cls,
+        pkg: SubstationEquipmentPackage,
+    ) -> tuple[bool, int]:
+        """Evaluate if an equipment package requires multi-part partitioning and compute part count.
+
+        Returns:
+            (is_multipart, part_count)
+        """
+        arch = cls.resolve_archetype(pkg)
+        if arch in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
+            swgs = getattr(pkg, "switchgears", ())
+            swg = swgs[0] if swgs else getattr(pkg, "switchgear", None)
+            panels = getattr(swg, "panels", ()) if swg else ()
+            # Part 01 (Summary) + N bay files + Part N+2 (TX and Condition)
+            return True, len(panels) + 2
+        return False, 1
+
+    @classmethod
+    def _resolve_archetype(
+        cls,
+        plan: FullReportStationPlan,
+    ) -> SwitchgearArchetype:
+        return cls.resolve_archetype(plan)
+
 
     @staticmethod
     def _partition_multipart(

@@ -167,13 +167,23 @@ A complete Full Report deliverable consists of a single portrait Microsoft Word 
 
 - **Workspace Root Directory**: `FULL REPORT/` (sibling to `QUICK REPORT/`, `TESTSHEET/`, `RAW MATERIAL/`, `WHATSAPP/`).
 - **Path Hierarchy**: `FULL REPORT/<STATION>/<MONTH>/<DD-MM-YYYY>/` (or `<STATION>/<WEEK>/`).
-- **Filename Convention**: `<PE_NUM_3DIGITS>. <SUBSTATION_NAME> (<DEFECT_SUFFIX>).docx` and `.pdf`
+
+### Standard RMU Deliverables
+- **Single Word Deliverable**: `<PE_NUM_3DIGITS>. <SUBSTATION_NAME> (<DEFECT_SUFFIX>).docx`
+- **Single PDF Deliverable**: `<PE_NUM_3DIGITS>. <SUBSTATION_NAME> (<DEFECT_SUFFIX>).pdf`
   - Exactly matches `PahangRenamedSubstationStem`.
   - Examples:
     - `144. TELEKOM TANAH PUTIH (TEV+VI).docx`
     - `149. TAMAN BUKIT BEIRUT PERMAI (IR+VI).docx`
     - `001. KG RPS ASLI BILUT (VI).docx`
     - `005. KUALA SEMANTAN.docx` (if no defects exist)
+
+### VCB and GIS Multi-Part Deliverables
+For high-page-volume Vacuum Circuit Breaker (`VCB_CUBICLE`) and Gas-Insulated Switchgear (`GIS_CUBICLE`) lineups, reports partition into modular Word files to prevent FLIR ActiveX memory bloat and Microsoft Word crashes:
+- **Part 01 - Summary**: `<STEM> - Part 01 - Summary.docx` (Front Page, Executive Summary Census, Visual Defect Summary, Switchgear Overview pages)
+- **Parts 02 to (N+1) - Bay Files**: `<STEM> - Part {XX:02d} - Panel {no} ({name}).docx` (One Word file per individual switchgear bay, containing all chamber scan pages and any inline CBM defect detail pages)
+- **Part (N+2) - Balance of Plant**: `<STEM> - Part {N+2:02d} - TX and Condition.docx` (Transformers, Feeder Pillar / LVDB, Battery Bank, Substation Condition photos, Visual Defect detail pages, Sticker page)
+- **Consolidated Client PDF Deliverable**: `<STEM>.pdf` (Single unified deliverable produced during Stage 2 post-processing by converting all Word parts in numerical order, concatenating via `merge_pdfs_batch()`, and appending the signed testsheet PDF from `processed_testsheet/pdf/<STEM>.pdf`). Intermediate Word parts remain permanently in the date folder for field inspector reference and re-editing.
 
 ---
 
@@ -199,4 +209,11 @@ When designing the Full Report workflow in the dedicated wayfinder session, the 
 6. **Dedicated Template Directory Decoupling**:
    - `templates/FULL REPORT/NORMAL IR US TEV/`: Houses baseline component scanning templates (`swg-overview.docx`, `swg-panel.docx`, `tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`, `fp-overview.docx`, `battery-overview.docx`). Initialized as identical copies of Quick Report's `DEFECT IR US TEV/` templates, this dedicated hierarchy decouples Full Report healthy scanning layouts and allows independent formatting or styling divergence without risk of breaking Quick Report deliverables.
    - `templates/FULL REPORT/`: Will house the modular `executive_summary_census.docx` template.
+7. **`PlanDocumentChunk` & `MultiPartPartitionPolicy`**:
+   Domain chunking models (`src/full_report/plan_builder.py`) controlling the partitioning of planned bill of materials into discrete Word chunk deliverables based on switchgear hardware archetype (`VCB_CUBICLE`, `GIS_CUBICLE` vs. standard RMU).
+8. **`MultiPartDocumentDeliveryPolicy`**:
+   Architectural deliverable policy (ADR 0005) maintaining modular intermediate Word files for field inspectors while emitting a single, consolidated client PDF deliverable for TNB.
+9. **`MultiPartPdfStitchingPolicy`**:
+   Post-processing discovery, batch conversion, sequential PDF merging via `merge_pdfs_batch()`, and signed testsheet appending pipeline in `src/workflows/full_report_postprocessing.py`.
+
 
