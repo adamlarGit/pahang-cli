@@ -72,7 +72,8 @@ def test_generate_full_reports_action_multi_date_prefix():
          
          mock_workflow.inspect.return_value = mock_inspection
          
-         with patch("src.project_workflow_actions.cli_selectors.select_substations_interactive", return_value=[item1, item2]) as mock_select:
+         with patch("src.project_workflow_actions.cli_selectors.select_substations_interactive", return_value=[item1, item2]) as mock_select, \
+              patch("src.project_workflow_actions.cli_selectors.confirm", return_value=True):
              generate_full_reports_action(env, workflow=mock_workflow)
              
          mock_select.assert_called_once()
