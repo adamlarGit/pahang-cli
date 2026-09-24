@@ -6,10 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+ 
+## [1.23.0] - 2026-09-24
 
 ### Added
+- **Multi-Part Word Partitioning for VCB and GIS Switchgear (`src/full_report/plan_builder.py`, `src/full_report/composer.py`, `src/workflows/full_report.py`)**:
+  - Implemented `MultiPartPartitionPolicy` automatically partitioning high-page-volume VCB and GIS switchgear into manageable individual Word documents (`Part 01 - Summary`, bay documents `Part 02 - Panel 1 (INCOMING 1)`, ..., and `Part N+2 - TX and Condition`), while keeping standard RMU switchgear as a single Word document (closes #55, closes #56).
+  - Implemented `FullReportComposer` chunked compilation: renders all document parts in a single unified planning pass and compiles chunks to disk with idempotent exact-stem pre-purging.
+  - Exposed backward-compatible `chunk_paths: tuple[Path, ...]` and `is_multipart` on `FullReportStationExecutionResult`.
+- **Multi-Part Discovery & Sequential PDF Stitching Pipeline (`src/postprocessing/converters.py`, `src/workflows/full_report_postprocessing.py`)**:
+  - Implemented `merge_pdfs_batch()` on `DocumentConverter` and `PyPdfDocumentConverter` for efficient single-pass concatenation of multiple PDF files (closes #57).
+  - Implemented `_group_multipart_targets()` grouping multi-part `.docx` chunks by root stem while preserving discovery sorting order.
+  - Implemented sequential PDF conversion and stitching: converts each chunk to a temporary PDF, concatenates all chunks in order, appends the processed testsheet PDF, and writes the consolidated deliverable to `<STEM>.pdf`.
 - **Synthetic VCB Benchmark Fixture (`tests/benchmarks/pe157_perpustakaan_awam/`)**:
-  - Provisioned self-contained synthetic benchmark fixture for PE 157 PERPUSTAKAAN AWAM (5-panel TAMCO VCB 11kV with transition bay, PT on panel 4, transformer, feeder pillar, inline CBM defect page, minimal testsheet Excel and PDF).
+  - Provisioned self-contained synthetic benchmark fixture for PE 157 PERPUSTAKAAN AWAM (5-panel TAMCO VCB 11kV with transition bay, PT on panel 4, transformer, feeder pillar, inline CBM defect page, minimal testsheet Excel and PDF) (closes #58).
 - **CLI Multi-Part Dry-Run Telemetry (`src/project_workflow_actions.py`)**:
   - Implemented `[Multi-part: X files]` indicator in `_print_full_report_dry_run_telemetry` for substations planned for partitioning.
   - Implemented `[X docx parts -> 1 pdf deliverable]` indicator in `_print_full_report_postprocessing_dry_run_telemetry` for grouped multi-part document targets.
@@ -19,9 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Formulated ADR 0005 establishing VCB/GIS multi-part Word generation and post-processing sequential PDF stitching architecture.
   - Documented `PlanDocumentChunk`, `MultiPartPartitionPolicy`, `MultiPartDocumentDeliveryPolicy`, and `MultiPartPdfStitchingPolicy` in `CONTEXT.md` and domain analysis.
 
+### Fixed
+- **Word COM Proxy Disconnection Post-SaveAs2 Resilience (`src/quick_report/compiler.py`, `tests/test_quick_report_composer_com.py`)**:
+  - Implemented `_safe_close_document` in `WordComDocumentCompiler` catching and handling `RPC_E_DISCONNECTED` (`-2147417848` / `0x80010108`), which occurs when Word invalidates COM proxy pointers upon converting in-memory document monikers to disk-backed files during `SaveAs2` (closes #59).
+  - Streamlined fallback cleanup via direct `word_app.Documents.Item(expected_name).Close(False)` lookup with structured debug and warning logging.
+  - Centralized document closure within the compiler's `finally` block to eliminate code duplication and ensure lingering document handles are cleanly disposed with `word_app.Documents.Count == 0`.
+
 ### Refactored
 - **Multi-Part Archetype & Part Count Evaluation (`src/full_report/plan_builder.py`, `src/workflows/full_report.py`)**:
   - Encapsulated switchgear archetype resolution and package part count arithmetic into `MultiPartPartitionPolicy.resolve_archetype` and `MultiPartPartitionPolicy.evaluate_package`.
+- **Encapsulated Panel Ordering (`src/full_report/models.py`)**:
+  - Added `panel_no` property to `PlanPartItem` and cleaned up baseline code smells across full report models.
 
 ## [1.22.1] - 2026-09-23
 
