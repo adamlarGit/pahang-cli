@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #67
 
-**Status:** Open
+**Status:** Closed
 
 - [x] Update `generate_full_reports_action` in `src/project_workflow_actions.py`:
   - When `target is None`, present updated selection options:

@@ -634,4 +634,43 @@ from src.workflows.full_report import FullReportWorkflow
 from src.testsheet.models import SubstationTestsheetPackage
 
 def test_full_report_workflow_generate_multi_dates_telemetry(tmp_path: Path):
-    pass
+    mock_env = _make_mock_env(tmp_path)
+
+    date1 = tmp_path / "workspace" / "TESTSHEET" / "RAUB" / "05. MAY" / "01-05-2026"
+    date2 = tmp_path / "workspace" / "TESTSHEET" / "RAUB" / "05. MAY" / "02-05-2026"
+    date1.mkdir(parents=True, exist_ok=True)
+    date2.mkdir(parents=True, exist_ok=True)
+
+    pkg1 = _make_sample_pkg(pe_number=1, station_name="PE TALAPIA", station="RAUB", date_str="01-05-2026", month="05. MAY")
+    pkg2 = _make_sample_pkg(pe_number=2, station_name="PE CENDERAWASIH", station="RAUB", date_str="02-05-2026", month="05. MAY")
+
+    qr_dir1 = mock_env.get_quick_report_dir() / "RAUB" / "05. MAY" / "01-05-2026"
+    qr_dir2 = mock_env.get_quick_report_dir() / "RAUB" / "05. MAY" / "02-05-2026"
+    _create_mock_qr_docx(qr_dir1 / "001. PE TALAPIA (IR).docx", media_count=8, target_size_bytes=1_200_000)
+    _create_mock_qr_docx(qr_dir2 / "002. PE CENDERAWASIH (IR).docx", media_count=8, target_size_bytes=1_200_000)
+
+    workflow = FullReportWorkflow(compiler=FakeDocumentCompiler(), slicer=FakeDocumentSlicer())
+
+    def mock_extract(environment, folders=None, fls=None):
+        pkgs = []
+        if folders:
+            for f in folders:
+                if "01-05-2026" in str(f):
+                    pkgs.append(pkg1)
+                elif "02-05-2026" in str(f):
+                    pkgs.append(pkg2)
+        return pkgs
+
+    progress_messages: list[str] = []
+
+    with patch.object(workflow._extractor, "extract", side_effect=mock_extract):
+        result = workflow.generate(
+            (date1, date2),
+            mock_env,
+            progress_sink=progress_messages.append,
+            keep_temp=False,
+        )
+
+    assert result.succeeded_count == 2
+    assert any("[01-05-2026]" in msg for msg in progress_messages)
+    assert any("[02-05-2026]" in msg for msg in progress_messages)

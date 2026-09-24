@@ -790,7 +790,7 @@ def expand_date_range_syntax(raw_str: str) -> tuple[str, ...]:
     parts = [p.strip() for p in raw_str.split(",")]
     expanded_dates: set[datetime] = set()
     
-    range_pattern = re.compile(r"^(.*?)(?:\.\.|\s+to\s+|\s+TO\s+|\s+-\s+)(.*?)$")
+    range_pattern = re.compile(r"^(.*?)(?:\.\.|\s+to\s+|\s+-\s+)(.*?)$", re.IGNORECASE)
     
     for part in parts:
         if not part:
@@ -803,10 +803,13 @@ def expand_date_range_syntax(raw_str: str) -> tuple[str, ...]:
             end_norm = normalize_date_str(end_str.strip())
             
             if not start_norm or not end_norm:
-                continue
+                raise ValueError(f"Invalid date in range: '{part}'")
                 
-            start_dt = datetime.strptime(start_norm, "%d-%m-%Y")
-            end_dt = datetime.strptime(end_norm, "%d-%m-%Y")
+            try:
+                start_dt = datetime.strptime(start_norm, "%d-%m-%Y")
+                end_dt = datetime.strptime(end_norm, "%d-%m-%Y")
+            except ValueError:
+                raise ValueError(f"Invalid date in range: '{part}'")
             
             if start_dt > end_dt:
                 raise ValueError(f"Invalid date range: start date {start_norm} is after end date {end_norm}")
@@ -915,8 +918,10 @@ Enter target date(s). Supported formats:
             print("No matching date folders found for specified dates.")
             continue
             
+        found_paths.sort(key=lambda p: datetime.strptime(p.name, "%d-%m-%Y"))
+        found_date_names = {p.name for p in found_paths}
         if missing_dates:
-            print(f"\n✓ Found {len(found_paths)} date folder(s).")
+            print(f"✓ Found {len(found_paths)} date folder(s): {', '.join(sorted(found_date_names))}")
             print(f"⚠️ Missing {len(missing_dates)} date folder(s): {', '.join(missing_dates)}")
             if not confirm(f"Proceed with the {len(found_paths)} found dates?", default=True):
                 continue

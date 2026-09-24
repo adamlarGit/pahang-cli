@@ -814,17 +814,17 @@ def generate_full_reports_action(
                 return None
             selected_target = fl_numbers
         elif mode_str == "browse_dates":
-            selected_path = cli_selectors.select_pahang_inspection_dates_interactive(environment)
-            if not selected_path:
+            selected_paths = cli_selectors.select_pahang_inspection_dates_interactive(environment)
+            if not selected_paths:
                 print("Processing cancelled.")
                 return None
-            selected_target = selected_path
+            selected_target = selected_paths
         else:
-            selected_path = cli_selectors.prompt_target_inspection_dates_with_ranges(environment)
-            if not selected_path:
+            selected_paths = cli_selectors.prompt_target_inspection_dates_with_ranges(environment)
+            if not selected_paths:
                 print("Processing cancelled.")
                 return None
-            selected_target = selected_path
+            selected_target = selected_paths
     else:
         if isinstance(target, (list, tuple)):
             selected_target = target

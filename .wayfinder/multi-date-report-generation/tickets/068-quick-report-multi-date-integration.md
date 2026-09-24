@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #67
 
-**Status:** Open
+**Status:** Closed
 
 - [x] Update `QuickReportAction.execute` in `src/project_workflow_actions.py`:
   - Update selection mode prompt options:

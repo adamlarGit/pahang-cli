@@ -218,3 +218,40 @@ def test_prompt_target_inspection_dates_with_ranges_partial(tmp_path):
          
          result = prompt_target_inspection_dates_with_ranges(env)
          assert result == (d1,)
+
+
+def test_expand_date_range_syntax_case_insensitive_to():
+    assert expand_date_range_syntax("01-05-2026 To 03-05-2026") == ("01-05-2026", "02-05-2026", "03-05-2026")
+    assert expand_date_range_syntax("01-05-2026 tO 02-05-2026") == ("01-05-2026", "02-05-2026")
+
+
+def test_expand_date_range_syntax_malformed_endpoint():
+    with pytest.raises(ValueError, match="Invalid date in range"):
+        expand_date_range_syntax("01-05-2026..invalid")
+    with pytest.raises(ValueError, match="Invalid date in range"):
+        expand_date_range_syntax("invalid to 05-05-2026")
+
+
+def test_prompt_target_inspection_dates_with_ranges_sorted_and_enumerates(tmp_path, capsys):
+    env = MagicMock(spec=ProjectEnvironment)
+    storage = MagicMock()
+    env.storage = storage
+    storage.get_testsheet_dir.return_value = tmp_path
+
+    # Create matching folders in non-chronological order
+    st_dir = tmp_path / "RAUB" / "05. MAY"
+    st_dir.mkdir(parents=True)
+    d2 = st_dir / "05-05-2026"
+    d1 = st_dir / "02-05-2026"
+    d2.mkdir()
+    d1.mkdir()
+
+    with patch("builtins.input", side_effect=["05-05-2026, 02-05-2026, 09-05-2026"]),          patch("src.cli_selectors.confirm", return_value=True):
+
+        result = prompt_target_inspection_dates_with_ranges(env)
+        # Verify chronological sorting
+        assert result == (d1, d2)
+
+    captured = capsys.readouterr().out
+    assert "✓ Found 2 date folder(s): 02-05-2026, 05-05-2026" in captured
+    assert "⚠️ Missing 1 date folder(s): 09-05-2026" in captured

@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** None (can start immediately).
 
-**Status:** Open
+**Status:** Closed
 
 - [x] Implement `expand_date_range_syntax(raw_str: str) -> tuple[str, ...]` in `src/cli_selectors.py`:
   - Tokenizes input on commas (`,`).

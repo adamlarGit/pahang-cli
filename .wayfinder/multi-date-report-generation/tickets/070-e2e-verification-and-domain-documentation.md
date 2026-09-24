@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #68, #69
 
-**Status:** Open
+**Status:** Closed
 
 - [x] Update `CONTEXT.md`:
   - Add `MultiDateSelectionPolicy` under Concepts:
