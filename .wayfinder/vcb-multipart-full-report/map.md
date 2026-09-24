@@ -36,7 +36,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 graph TD
     T56["#56: feat(full-report): multi-part partition policy & composer chunking - Closed"]
     T57["#57: feat(full-report): post-processing multi-part discovery & sequential PDF merge - Closed"]
-    T58["#58: test(full-report): cli telemetry, benchmark e2e verification & docs"]
+    T58["#58: test(full-report): cli telemetry, benchmark e2e verification & docs - Closed"]
 
     T56 --> T57
     T57 --> T58
@@ -61,7 +61,7 @@ graph TD
 - **Delivers**: `merge_pdfs_batch()` on `DocumentConverter`, multi-part target grouping via `_group_multipart_targets()`, testsheet matching by group stem, ordered batch PDF conversion and stitching into `<STEM>.pdf`, and telemetry backward compatibility.
 
 ### #58: test(full-report): cli telemetry, benchmark e2e verification & docs
-- **Status**: Planned
+- **Status**: Closed
 - **GitHub Issue**: [#58](https://github.com/adamlarGit/pahang-cli/issues/58)
 - **Blocked by**: #57
 - **Ticket File**: [.wayfinder/vcb-multipart-full-report/tickets/058-cli-telemetry-benchmark-e2e-and-docs.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/vcb-multipart-full-report/tickets/058-cli-telemetry-benchmark-e2e-and-docs.md)
