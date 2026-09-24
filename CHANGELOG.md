@@ -6,8 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
- 
-## [1.23.1] - 2026-09-24
+
+## [1.23.2] - 2026-09-24
+
+### Refactored
+- **Transformer Model Normalization & MissingValuePresentationPolicy Alignment (`src/core/normalizers.py`, `src/testsheet/models.py`, `src/full_report/models.py`, `src/full_report/scan_adapters.py`, `src/quick_report/cbm_render.py`, `CONTEXT.md`)**:
+  - Aligned `normalize_tx_model` with `MissingValuePresentationPolicy`: returns empty string `""` on null, empty, or sentinel inputs while returning canonical uppercase designations (`HERMETICALLY SEAL`, `CONSERVATOR TANK`) and custom non-empty strings (closes #61).
+  - Ensured `TransformerSpec.model` uniformly defaults to `""` in Stage 2 domain representations when `type` is missing or sentinel.
+  - Replaced dynamic `getattr()` calls with typed attribute access (`tx.model or tx.type`) across full report models and adapters.
+  - Confirmed document presentation layers explicitly apply `"-"` fallback for template Jinja contexts.
+  - Synchronized `TransformerExtractionPolicy` in `CONTEXT.md` with `MissingValuePresentationPolicy`.
 
 ### Fixed
 - **Composite Battery Details Extraction & Battery Number Normalization (`src/core/normalizers.py`, `src/testsheet/extractor.py`, `src/full_report/scan_adapters.py`, `CONTEXT.md`)**:
