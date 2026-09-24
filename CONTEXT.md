@@ -150,6 +150,19 @@ Extraction and counting policy for transformers from `PCE VI` and `PCE Testsheet
 - **Template Presentation Convention (8 pt Typography)**:
   - In all 12 transformer docx templates across Full Report and Quick Report (`tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`), the table cell for `{{ tx.model }}` specifies 8 pt font size (`w:sz w:val="16"` and `w:szCs w:val="16"`) across paragraph and run properties to ensure expanded designations fit cleanly without cell overflow.
 
+### BatteryExtractionPolicy
+Extraction and normalization policy for DC battery banks and charger systems from `PCE Testsheet` rows 59–65 and scanning page presentation:
+- **Composite Detail Extraction (`parse_battery_details`)**:
+  - Cell J often consolidates charger prefixes, manufacturer, model, and serial number into a single composite string (e.g. `BC1: BERKAT INSAF, M: SEB100-30-10UL, SN: B3619`).
+  - Strips case-insensitive charger prefixes (`BC:`, `BC1:`, `BC2:`, `BC3:`, `B/C:`, `CHARGER:`) from manufacturer tokens.
+  - Extracts model tags (`M:`, `MOD:`, `MODEL:`, `M/N:`) and serial number tags (`SN:`, `Sn:`, `S/N:`, `SERIAL NO:`, `SERIAL NUMBER:`).
+  - Handles untagged comma- and slash-delimited triplets (`CHLORIDE / EXIDE / -`), untagged models before tagged serials (`BC: BERKAT INSAF, SEB100-30-10UL, SN: B19233`), and bare manufacturer tokens (`SAFT`).
+  - Converts sentinel values (`-`, `N/A`, `NONE`, `TBA`, `None`) into empty strings `""`.
+  - In `TestsheetExtractor._extract_battery_banks()`, when reading rows 59–65: if cell J contains composite tokens or if `model` and `sn` are empty while `mfg` is non-empty, unpacks `(mfg, model, sn)` via `parse_battery_details`. If columns K or L were explicitly provided, respects them unless overwritten by unpacked details.
+- **Battery Number Normalization (`BatteryBankScanAdapter`)**:
+  - Normalizes `batt_block["number"]` to a clean integer index (e.g. `"BATTERY BANK 1"` $\to$ `"1"`, `"BATTERY BANK 2"` $\to$ `"2"` via `re.search(r"\d+", name)` defaulting to `"1"`).
+  - Ensures Word template `battery-overview.docx` renders `Battery No. | {{ batt.number }}` cleanly as `1` or `2` rather than raw composite tokens or full names.
+
 
 ### MissingValuePresentationPolicy
 Clear separation between data representation and document presentation:

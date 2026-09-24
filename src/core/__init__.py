@@ -22,6 +22,7 @@ from src.core.normalizers import (
     normalize_for_report,
     normalize_us_characteristic,
     parse_background_temp,
+    parse_battery_details,
 )
 from src.core.topology import (
     BayRole,
@@ -72,6 +73,7 @@ __all__ = [
     "normalize_for_report",
     "normalize_us_characteristic",
     "parse_background_temp",
+    "parse_battery_details",
     "resolve_overview_compartments",
     "resolve_panel_compartments",
     "resolve_switchgear_archetype",

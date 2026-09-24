@@ -1109,6 +1109,72 @@ def test_extract_transformer_with_not_accessible_nameplate_when_scanned(tmp_path
     assert tx.us_reading == "12"
 
 
+def test_extract_battery_banks_composite_details(tmp_path: Path) -> None:
+    """Verify TestsheetExtractor extracts composite battery details from row 59-65."""
+    p = tmp_path / "test_battery_composite.xlsx"
+    wb = openpyxl.Workbook()
+    ws_pce = wb.active
+    ws_pce.title = "PCE Testsheet"
+
+    # Panel
+    ws_pce["B10"] = "F01"
+    ws_pce["C10"] = "INCOMING"
+
+    # Battery 1: Tagged composite in cell J
+    ws_pce["B59"] = "Battery Bank 1"
+    ws_pce["J59"] = "BC1: BERKAT INSAF, M: SEB100-30-10UL, SN: B3619"
+    ws_pce["H59"] = 508
+
+    # Battery 2: Tagged with sentinel serial in cell J
+    ws_pce["B60"] = "Battery Bank 2"
+    ws_pce["J60"] = "BC2: BERKAT INSAF, M: SEB100-30-10UL, SN: -"
+    ws_pce["H60"] = 509
+
+    # Battery 3: Slash-separated triplet in cell J
+    ws_pce["B61"] = "Battery Bank 3"
+    ws_pce["J61"] = "CHLORIDE / EXIDE / -"
+
+    # Battery 4: Stripped prefix in cell J, explicit K and L
+    ws_pce["B62"] = "Battery Bank 4"
+    ws_pce["J62"] = "BC: SAFT"
+    ws_pce["K62"] = "NIFE-110"
+    ws_pce["L62"] = "SN-999"
+
+    wb.save(p)
+
+    extractor = TestsheetExtractor()
+    data = extractor.extract_testsheet_data(p)
+    banks = data.equipment.battery_banks
+    assert len(banks) == 4
+
+    # Bank 1
+    assert banks[0].name == "BATTERY BANK 1"
+    assert banks[0].manufacturer == "BERKAT INSAF"
+    assert banks[0].model == "SEB100-30-10UL"
+    assert banks[0].serial_no == "B3619"
+    assert banks[0].photo_numbers == (508,)
+
+    # Bank 2
+    assert banks[1].name == "BATTERY BANK 2"
+    assert banks[1].manufacturer == "BERKAT INSAF"
+    assert banks[1].model == "SEB100-30-10UL"
+    assert banks[1].serial_no == ""
+    assert banks[1].photo_numbers == (509,)
+
+    # Bank 3
+    assert banks[2].name == "BATTERY BANK 3"
+    assert banks[2].manufacturer == "CHLORIDE"
+    assert banks[2].model == "EXIDE"
+    assert banks[2].serial_no == ""
+
+    # Bank 4
+    assert banks[3].name == "BATTERY BANK 4"
+    assert banks[3].manufacturer == "SAFT"
+    assert banks[3].model == "NIFE-110"
+    assert banks[3].serial_no == "SN-999"
+
+
+
 
 
 

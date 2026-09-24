@@ -28,6 +28,7 @@ from src.core.normalizers import (
     normalize_tx_model,
     normalize_us_characteristic,
     parse_background_temp,
+    parse_battery_details,
 )
 
 
@@ -872,6 +873,103 @@ def test_normalize_tx_model() -> None:
     assert normalize_tx_model("Cast Resin") == "Cast Resin"
     assert normalize_tx_model("Dry Type") == "Dry Type"
     assert normalize_tx_model("  Custom Model ABC  ") == "Custom Model ABC"
+
+
+def test_parse_battery_details() -> None:
+    """Verify parse_battery_details extracts composite battery details accurately."""
+    # 1. Standard tagged composite strings
+    assert parse_battery_details("BC1: BERKAT INSAF, M: SEB100-30-10UL, SN: B3619") == (
+        "BERKAT INSAF",
+        "SEB100-30-10UL",
+        "B3619",
+    )
+
+    # 2. Tagged with sentinel serial number
+    assert parse_battery_details("BC2: BERKAT INSAF, M: SEB100-30-10UL, SN: -") == (
+        "BERKAT INSAF",
+        "SEB100-30-10UL",
+        "",
+    )
+    assert parse_battery_details("BC2: BERKAT INSAF, M: SEB100-30-10UL, SN: N/A") == (
+        "BERKAT INSAF",
+        "SEB100-30-10UL",
+        "",
+    )
+    assert parse_battery_details("BC2: BERKAT INSAF, M: SEB100-30-10UL, SN: NONE") == (
+        "BERKAT INSAF",
+        "SEB100-30-10UL",
+        "",
+    )
+    assert parse_battery_details("BC2: BERKAT INSAF, M: SEB100-30-10UL, SN: TBA") == (
+        "BERKAT INSAF",
+        "SEB100-30-10UL",
+        "",
+    )
+
+    # 3. Untagged model before tagged serial number
+    assert parse_battery_details("BC: BERKAT INSAF, SEB100-30-10UL, SN: B19233") == (
+        "BERKAT INSAF",
+        "SEB100-30-10UL",
+        "B19233",
+    )
+    assert parse_battery_details("BC: BERKAT INSAF / SEB100-30-10UL / SN: B19233") == (
+        "BERKAT INSAF",
+        "SEB100-30-10UL",
+        "B19233",
+    )
+
+    # 4. Tagged without commas and Sn abbreviation
+    assert parse_battery_details("BC1: SUNPOWER M: SPS 24-10 Sn:11298-0546") == (
+        "SUNPOWER",
+        "SPS 24-10",
+        "11298-0546",
+    )
+    assert parse_battery_details("BC1: SUNPOWER M: SPS 24-10 SN: 11298-0546") == (
+        "SUNPOWER",
+        "SPS 24-10",
+        "11298-0546",
+    )
+
+    # 5. Slash-separated triplets without tags
+    assert parse_battery_details("CHLORIDE / EXIDE / -") == ("CHLORIDE", "EXIDE", "")
+    assert parse_battery_details("CHLORIDE / EXIDE / 12345") == ("CHLORIDE", "EXIDE", "12345")
+    assert parse_battery_details("CHLORIDE, EXIDE, -") == ("CHLORIDE", "EXIDE", "")
+
+    # 6. Bare manufacturer
+    assert parse_battery_details("SAFT") == ("SAFT", "", "")
+    assert parse_battery_details("BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("BC1: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("BC: SAFT") == ("SAFT", "", "")
+
+    # 7. Charger prefix variations
+    assert parse_battery_details("BC1: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("BC2: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("BC3: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("BC: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("B/C: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("CHARGER: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("Charger: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("bc1 : BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("B / C: BERKAT INSAF") == ("BERKAT INSAF", "", "")
+    assert parse_battery_details("B/C: CHLORIDE / EXIDE / -") == ("CHLORIDE", "EXIDE", "")
+
+    # 8. Model tag variations
+    assert parse_battery_details("BC1: TAMCO MODEL: M100 S/N: S100") == ("TAMCO", "M100", "S100")
+    assert parse_battery_details("BC1: TAMCO MOD: M100 SERIAL: S100") == ("TAMCO", "M100", "S100")
+    assert parse_battery_details("BC1: TAMCO MODEL NO: M100 SERIAL NO: S100") == ("TAMCO", "M100", "S100")
+
+    # 9. Empty and sentinel strings
+    assert parse_battery_details("") == ("", "", "")
+    assert parse_battery_details("   ") == ("", "", "")
+    assert parse_battery_details(None) == ("", "", "")
+    assert parse_battery_details("-") == ("", "", "")
+    assert parse_battery_details("--") == ("", "", "")
+    assert parse_battery_details("N/A") == ("", "", "")
+    assert parse_battery_details("n/a") == ("", "", "")
+    assert parse_battery_details("NONE") == ("", "", "")
+    assert parse_battery_details("none") == ("", "", "")
+    assert parse_battery_details("TBA") == ("", "", "")
+
 
 
 

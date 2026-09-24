@@ -1331,8 +1331,11 @@ class BatteryBankScanAdapter:
         ir_img = self.photo_resolver.resolve_ir_photo(ir_num) if self.photo_resolver else ""
         vis_img = self.photo_resolver.resolve_visual_photo(ir_num) if self.photo_resolver else ""
 
+        num_match = re.search(r"\d+", self.name_str)
+        batt_num = num_match.group(0) if num_match else "1"
+
         batt_block = {
-            "number": self.name_str,
+            "number": batt_num,
             "manufacturer": _clean_str(self.bb.manufacturer),
             "model": _clean_str(self.bb.model),
             "serialnumber": _clean_str(self.bb.serial_no),

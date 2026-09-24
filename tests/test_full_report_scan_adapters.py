@@ -598,7 +598,32 @@ def test_battery_bank_adapter_renders_overview(mock_substation_info: dict[str, s
     # Satisfies both battery and batt namespaces
     assert item.context["battery"]["manufacturer"] == "SUNPOWER"
     assert item.context["batt"]["manufacturer"] == "SUNPOWER"
+    assert item.context["battery"]["number"] == "1"
+    assert item.context["batt"]["number"] == "1"
     assert item.context["banner"]["analysis"] == BANNER_HEALTHY_ANALYSIS
+
+
+def test_battery_bank_adapter_number_normalization(mock_substation_info: dict[str, str]) -> None:
+    """BatteryBank adapter normalizes batt['number'] to integer string index."""
+    # 1. "BATTERY BANK 1" -> "1"
+    bb1 = BatteryBankScanSpec(name="BATTERY BANK 1")
+    ad1 = BatteryBankScanAdapter(bb=bb1, substation_info=mock_substation_info).adapt()
+    assert ad1.items[0].context["batt"]["number"] == "1"
+
+    # 2. "BATTERY BANK 2" -> "2"
+    bb2 = BatteryBankScanSpec(name="BATTERY BANK 2")
+    ad2 = BatteryBankScanAdapter(bb=bb2, substation_info=mock_substation_info).adapt()
+    assert ad2.items[0].context["batt"]["number"] == "2"
+
+    # 3. "BATTERY" (no digit) -> defaults to "1"
+    bb_nodigit = BatteryBankScanSpec(name="BATTERY")
+    ad_nodigit = BatteryBankScanAdapter(bb=bb_nodigit, substation_info=mock_substation_info).adapt()
+    assert ad_nodigit.items[0].context["batt"]["number"] == "1"
+
+    # 4. "BATTERY 3" -> "3"
+    bb3 = BatteryBankScanSpec(name="BATTERY 3")
+    ad3 = BatteryBankScanAdapter(bb=bb3, substation_info=mock_substation_info).adapt()
+    assert ad3.items[0].context["batt"]["number"] == "3"
 
 
 # ==============================================================================

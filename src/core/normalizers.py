@@ -912,6 +912,152 @@ def format_busbar_position(
     return "-"
 
 
+_CHARGER_PREFIX_RE = re.compile(
+    r"^(?:B\s*/\s*C(?:\s*\d+)?|BC\s*\d*|CHARGER)\s*[:\-]\s*|^(?:BC\s*\d+)\s+",
+    re.IGNORECASE,
+)
+
+_MODEL_TAG_RE = re.compile(
+    r"(?:^|[\s,;/])(?:MOD(?:EL)?(?:\s*NO\.?)?|M/?N|M)\s*[:#]\s*",
+    re.IGNORECASE,
+)
+
+_SN_TAG_RE = re.compile(
+    r"(?:^|[\s,;/])(?:S/?N|SERIAL(?:\s*NO\.?|\s*NUMBER)?)\s*[:#]\s*",
+    re.IGNORECASE,
+)
+
+_BATTERY_SENTINELS = frozenset({
+    "",
+    "-",
+    "--",
+    "---",
+    "none",
+    "null",
+    "nan",
+    "nat",
+    "n/a",
+    "na",
+    "tba",
+    "nil",
+    "none.",
+    "#ref!",
+    "#value!",
+    "#n/a",
+    "#name?",
+    "#num!",
+    "#div/0!",
+})
+
+
+def _clean_batt_sentinel(val: str) -> str:
+    s = val.strip(" \t\r\n,;/")
+    if s.lower() in _BATTERY_SENTINELS:
+        return ""
+    return s
+
+
+def _clean_mfg_str(val: str) -> str:
+    s = val.strip(" \t\r\n,;/")
+    s = _CHARGER_PREFIX_RE.sub("", s).strip(" \t\r\n,;/")
+    s = _CHARGER_PREFIX_RE.sub("", s).strip(" \t\r\n,;/")
+    if s.lower() in _BATTERY_SENTINELS:
+        return ""
+    return s
+
+
+def parse_battery_details(raw_text: str | None) -> tuple[str, str, str]:
+    """Parse composite battery charger/bank details into (manufacturer, model, serial_no).
+
+    Strips charger prefixes (e.g. 'BC:', 'BC1:', 'BC2:', 'BC3:', 'B/C:', 'CHARGER:')
+    from manufacturer tokens (case-insensitive, optional spaces).
+    Extracts tagged or untagged model tokens ('M:', 'MODEL:', etc.) and serial number
+    tokens ('SN:', 'Sn:', 'S/N:', etc.). Converts sentinel values ('-', 'N/A', 'NONE',
+    'TBA', 'None') into empty strings.
+
+    Args:
+        raw_text: Raw composite string from testsheet or inspector notes.
+
+    Returns:
+        tuple of (manufacturer, model, serial_no) with sentinel values cleaned to "".
+    """
+    if raw_text is None:
+        return ("", "", "")
+    s = str(raw_text).strip()
+    if not s or s.lower() in _BATTERY_SENTINELS:
+        return ("", "", "")
+
+    m_match = _MODEL_TAG_RE.search(s)
+    sn_match = _SN_TAG_RE.search(s)
+
+    if m_match and sn_match:
+        if m_match.start() < sn_match.start():
+            raw_mfg = s[:m_match.start()]
+            raw_model = s[m_match.end():sn_match.start()]
+            raw_sn = s[sn_match.end():]
+        else:
+            raw_mfg = s[:sn_match.start()]
+            raw_sn = s[sn_match.end():m_match.start()]
+            raw_model = s[m_match.end():]
+        mfg = _clean_mfg_str(raw_mfg)
+        model = _clean_batt_sentinel(raw_model)
+        serial_no = _clean_batt_sentinel(raw_sn)
+        return (mfg, model, serial_no)
+
+    elif sn_match:
+        raw_sn = s[sn_match.end():]
+        prefix = s[:sn_match.start()].strip(" \t\r\n,;/")
+        serial_no = _clean_batt_sentinel(raw_sn)
+        tokens = [t.strip() for t in re.split(r"[,/]", prefix) if t.strip()]
+        if len(tokens) >= 2:
+            mfg = _clean_mfg_str(tokens[0])
+            model = _clean_batt_sentinel(tokens[1])
+        elif len(tokens) == 1:
+            mfg = _clean_mfg_str(tokens[0])
+            model = ""
+        else:
+            mfg = ""
+            model = ""
+        return (mfg, model, serial_no)
+
+    elif m_match:
+        raw_mfg = s[:m_match.start()]
+        remainder = s[m_match.end():].strip(" \t\r\n,;/")
+        mfg = _clean_mfg_str(raw_mfg)
+        tokens = [t.strip() for t in re.split(r"[,/]", remainder) if t.strip()]
+        if len(tokens) >= 2:
+            model = _clean_batt_sentinel(tokens[0])
+            serial_no = _clean_batt_sentinel(tokens[1])
+        elif len(tokens) == 1:
+            model = _clean_batt_sentinel(tokens[0])
+            serial_no = ""
+        else:
+            model = ""
+            serial_no = ""
+        return (mfg, model, serial_no)
+
+    else:
+        cleaned = _clean_mfg_str(s)
+        tokens = [t.strip() for t in re.split(r"[,/]", cleaned) if t.strip()]
+        if len(tokens) >= 3:
+            mfg = _clean_mfg_str(tokens[0])
+            model = _clean_batt_sentinel(tokens[1])
+            serial_no = _clean_batt_sentinel(tokens[2])
+        elif len(tokens) == 2:
+            mfg = _clean_mfg_str(tokens[0])
+            model = _clean_batt_sentinel(tokens[1])
+            serial_no = ""
+        elif len(tokens) == 1:
+            mfg = _clean_mfg_str(tokens[0])
+            model = ""
+            serial_no = ""
+        else:
+            mfg = ""
+            model = ""
+            serial_no = ""
+        return (mfg, model, serial_no)
+
+
 __all__ = [
     "FL_PREFIX_TO_STATION",
     "STATION_NAME_TO_CODE",
@@ -935,6 +1081,7 @@ __all__ = [
     "normalize_for_report",
     "normalize_us_characteristic",
     "parse_background_temp",
+    "parse_battery_details",
     "resolve_station_code",
     "resolve_station_from_fl",
 ]
@@ -1038,6 +1185,8 @@ def resolve_station_from_fl(fl: str | None) -> str | None:
 
 
 __all__ = [
+    "FL_PREFIX_TO_STATION",
+    "STATION_NAME_TO_CODE",
     "extract_background_temperature",
     "format_busbar_position",
     "format_cbm_reading",
@@ -1059,6 +1208,7 @@ __all__ = [
     "normalize_tx_model",
     "normalize_us_characteristic",
     "parse_background_temp",
+    "parse_battery_details",
     "resolve_station_code",
     "resolve_station_from_fl",
 ]

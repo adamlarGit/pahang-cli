@@ -18,6 +18,7 @@ from src.core.normalizers import (
     normalize_tx_model,
     normalize_us_characteristic,
     parse_background_temp,
+    parse_battery_details,
 )
 from src.testsheet.feeder_thermal import (
     FEEDER_CHANNEL_COLUMNS,
@@ -1154,10 +1155,20 @@ class TestsheetExtractor:
                 continue
             col_b_upper = col_b.upper()
             if any(k in col_b_upper for k in ("BATTERY", "BATERI", "CHARGER")):
-                mfg = clean_val(ws_pce[f"J{r}"].value) or ""
+                raw_j = ws_pce[f"J{r}"].value
+                mfg = clean_val(raw_j) or ""
                 model = clean_val(ws_pce[f"K{r}"].value) or ""
                 sn = clean_val(ws_pce[f"L{r}"].value) or ""
                 photo_numbers = parse_photo_numbers(ws_pce[f"H{r}"].value)
+
+                if mfg:
+                    p_mfg, p_model, p_sn = parse_battery_details(raw_j)
+                    if p_mfg:
+                        mfg = p_mfg
+                    if p_model:
+                        model = p_model
+                    if p_sn:
+                        sn = p_sn
 
                 if mfg or model or sn or clean_val(ws_pce[f"C{r}"].value) or clean_val(ws_pce[f"E{r}"].value) or clean_val(ws_pce[f"F{r}"].value) or photo_numbers:
                     battery_banks.append(
