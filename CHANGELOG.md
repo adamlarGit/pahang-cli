@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.23.3] - 2026-09-25
+
 ### Fixed
 - **Atomic COM Copy-Paste Handshake & Re-Copy Resilience (`src/quick_report/compiler.py`, `src/full_report/slicer.py`)**:
   - Wrapped `_paste_with_retry` in an outer exception handler catching Word COM Error 4605 (`wdErrClipboardEmptyOrInvalid`) across report compilation and slicing; applies a 50ms post-copy settling delay, 0.25s backoff, clipboard zeroing via `clear_windows_clipboard()`, and re-executes source range copy on retry attempts (closes #63).

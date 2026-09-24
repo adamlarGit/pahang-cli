@@ -1,6 +1,6 @@
 # Project & Utility Automation CLI (`pahang-cli`)
 
-A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.23.2`).
+A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.23.3`).
 
 ---
 
@@ -14,7 +14,7 @@ To keep this landing page concise and maintainable as the suite scales, detailed
 - **[CBM Analysis & Recommendation Specification](file:///docs/cbm_analysis_recommendation_spec.md)** — Specification for pure-domain programmatic analysis and recommendation generation across all equipment families.
 - **[PRPD Graph Generation Guide](file:///docs/prpd_graph_generation_guide.md)** — Pure-Python PRPD decoders (UE01 FlatBuffers & JSON), 4-tier repetition density scatter bins, and dynamic CBM defect page embedding.
 - **[Utility Actions Guide](file:///docs/workflows/utility_actions.md)** — Deep dive into standalone tools (batch PDF conversions, diagonal borders, signature replacement, and separator PDF merging).
-- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.23.2`) following [Keep a Changelog](https://keepachangelog.com/).
+- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.23.3`) following [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
@@ -124,7 +124,7 @@ Automates end-to-end engineering tasks against the currently active workspace.
 | **10** | **Propagate Work Orders (DATA MSMS -> TOTAL PE)** | 6-stage ETL workflow mapping Work Orders from `DATA MSMS.xlsx` to blank WO cells in `TOTAL PE.xlsx` with strict formula and column preservation. |
 | **11** | **Ingest MSMS CSVs (RAW DATA -> TO BE FILLED)** | Ingests client MSMS CSV files from `RAW DATA/`, deduplicates by SHA-256 hash, normalizes filenames to canonical `DD-MM-YYYY_NNN.csv`, and moves them to `TO BE FILLED/`. |
 | **12** | **Populate Data MSMS (Testsheets -> TO BE FILLED CSVs)** | Fills detailed diagnostic CSV readings and visual inspection defect flags (`YES`/`NO`) in `TO BE FILLED/` from testsheets and master `QR03 VI` records with vendor boundary scoping (`REPORT BY == 'EET'`), equipment domain partitioning, active Feeder Pillar thermal synthesis, and single-decimal-place rounding. |
-| **13** | **Generate Full Reports** | Deep module (`generate`/`inspect`) compiling comprehensive 8-part Word full scanning reports (`.docx`) with Executive Summary Census, healthy component scanning pages (`templates/FULL REPORT/NORMAL IR US TEV/`), FLIR Tools+ ActiveX control preservation, automated PRPD graph embedding with non-TEV/US compartment skipping, unified cell shading engine with dynamic switchgear US and TEV OpenXML blanking, dynamic inline defect interleaving under `SubstationIsolatedBatchResiliencePolicy`, and automatic multi-part partitioning (`MultiPartPartitionPolicy`) for high-page-volume VCB and GIS switchgear (`Part 01 - Summary`, bay documents, `Part N+2 - TX and Condition`). Features interactive multi-station checkbox selection with ready pre-selection, dry-run telemetry with multi-part part counts, and batch summary reporting. |
+| **13** | **Generate Full Reports** | Deep module (`generate`/`inspect`) compiling comprehensive 8-part Word full scanning reports (`.docx`) with Executive Summary Census, healthy component scanning pages (`templates/FULL REPORT/NORMAL IR US TEV/`), FLIR Tools+ ActiveX control preservation, automated PRPD graph embedding with non-TEV/US compartment skipping, unified cell shading engine with dynamic switchgear US and TEV OpenXML blanking, dynamic inline defect interleaving under `SubstationIsolatedBatchResiliencePolicy`, automatic multi-part partitioning (`MultiPartPartitionPolicy`) for high-page-volume VCB and GIS switchgear (`Part 01 - Summary`, bay documents, `Part N+2 - TX and Condition`), resilient atomic copy-paste retry handshake, and per-substation Word COM process recycling. Features interactive multi-station checkbox selection with ready pre-selection, dry-run telemetry with multi-part part counts, and batch summary reporting. |
 | **14** | **Post-Process Full Reports (PDF + Testsheet Merge)** | Stage 2 post-processing discovering single and multi-part Full Report `.docx` files (`MultiPartPdfStitchingPolicy`), converting finalized documents to PDF via uniform virtual printer (`ComDocumentConverter`), sequentially merging multi-part panel files (`merge_pdfs_batch`), and appending pre-existing testsheet PDFs from `processed_testsheet/pdf/` (`PyPDF2`) into consolidated client deliverables (`FULL REPORT/<DATE>/<STEM>.pdf`). |
 
 ---
