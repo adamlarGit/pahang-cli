@@ -326,7 +326,11 @@ def select_multiple(
                 )
                 for opt in options
             ]
-            result = questionary.checkbox(message, choices=choices).ask()
+            result = questionary.checkbox(
+                message,
+                choices=choices,
+                instruction="(<space> to select, 'a' to toggle all, <enter> to confirm)",
+            ).ask()
             if result is None:
                 return None
             return list(result)
@@ -347,9 +351,11 @@ def _fallback_select_multiple(
             print(f"{index}. {option.title}{marker}")
 
         default_indexes = [str(i) for i, opt in enumerate(options, start=1) if opt.checked]
-        prompt = "Enter comma-separated numbers (e.g. 1, 3, 4), 'all' to select everything, or 'c' to cancel"
+        prompt = "Enter comma-separated numbers (e.g. 1, 3, 4), 'all' to select everything, 'none' to uncheck, or 'c' to cancel"
         if default_indexes:
             prompt += f" [Enter for checked ({', '.join(default_indexes)})]"
+        else:
+            prompt += " [Enter for none]"
         prompt += ": "
         print(prompt, end="")
         try:
@@ -361,11 +367,13 @@ def _fallback_select_multiple(
         if not raw_value:
             if default_indexes:
                 return [opt.value for opt in options if opt.checked]
-            return None
+            return []
         if raw_value.lower() in ("c", "cancel"):
             return None
         if raw_value.lower() == "all":
             return [opt.value for opt in options]
+        if raw_value.lower() in ("none", "clear"):
+            return []
 
         parts = [p.strip() for p in raw_value.split(",") if p.strip()]
         selected: list[T] = []
@@ -770,3 +778,147 @@ def prompt_target_inspection_dates(default_date: str | None = None) -> tuple[str
         if normalize_date_str(p)
     )
     return normalized_dates
+
+
+from datetime import timedelta
+
+def expand_date_range_syntax(raw_str: str) -> tuple[str, ...]:
+    """Parse comma-separated dates and range syntax into a deduplicated, ordered tuple of DD-MM-YYYY strings."""
+    if not raw_str or not raw_str.strip():
+        return ()
+        
+    parts = [p.strip() for p in raw_str.split(",")]
+    expanded_dates: set[datetime] = set()
+    
+    range_pattern = re.compile(r"^(.*?)(?:\.\.|\s+to\s+|\s+TO\s+|\s+-\s+)(.*?)$")
+    
+    for part in parts:
+        if not part:
+            continue
+            
+        match = range_pattern.match(part)
+        if match:
+            start_str, end_str = match.groups()
+            start_norm = normalize_date_str(start_str.strip())
+            end_norm = normalize_date_str(end_str.strip())
+            
+            if not start_norm or not end_norm:
+                continue
+                
+            start_dt = datetime.strptime(start_norm, "%d-%m-%Y")
+            end_dt = datetime.strptime(end_norm, "%d-%m-%Y")
+            
+            if start_dt > end_dt:
+                raise ValueError(f"Invalid date range: start date {start_norm} is after end date {end_norm}")
+                
+            current = start_dt
+            while current <= end_dt:
+                expanded_dates.add(current)
+                current += timedelta(days=1)
+        else:
+            norm = normalize_date_str(part)
+            if norm:
+                expanded_dates.add(datetime.strptime(norm, "%d-%m-%Y"))
+                
+    sorted_dates = sorted(list(expanded_dates))
+    return tuple(dt.strftime("%d-%m-%Y") for dt in sorted_dates)
+
+def select_pahang_inspection_dates_interactive(environment: 'ProjectEnvironment') -> tuple[Path, ...] | None:
+    """Prompt operator to select multiple date folders."""
+    while True:
+        station = select_or_create_testsheet_station(environment)
+        if not station:
+            return None
+            
+        while True:
+            month = select_or_create_testsheet_month(environment, station)
+            if not month:
+                break
+                
+            month_dir = environment.storage.get_testsheet_dir() / station / month
+            
+            if not month_dir.exists():
+                print(f"Directory not found: {month_dir}")
+                continue
+                
+            date_folders = [d for d in month_dir.iterdir() if is_pahang_date_folder(d)]
+            date_folders.sort(key=lambda d: datetime.strptime(d.name, "%d-%m-%Y"), reverse=True)
+            
+            if not date_folders:
+                print(f"No date folders found in {month_dir}. Returning to month selection.")
+                continue
+                
+            options = [SelectOption(title=d.name, value=d, checked=False) for d in date_folders]
+            
+            selected = select_multiple(
+                "Select date folder(s) to process:",
+                options
+            )
+            
+            if not selected:
+                # If operator cancels or selects 0 items, loop back to Month/Station selection instead of crashing or returning None
+                continue
+                
+            return tuple(selected)
+
+def prompt_target_inspection_dates_with_ranges(environment: 'ProjectEnvironment') -> tuple[Path, ...] | None:
+    """Prompt operator for dates using range syntax, mapping them to existing folders."""
+    while True:
+        print("""
+Enter target date(s). Supported formats:
+  - Single date:   01-05-2026
+  - Multiple:      01-05-2026, 02-05-2026, 05-05-2026
+  - Date range:    01-05-2026..05-05-2026 (or 01-05-2026 to 05-05-2026)
+  - Combined:      01-05-2026..03-05-2026, 10-05-2026""")
+  
+        try:
+            raw = input("Enter dates (or 'c' to cancel): ").strip()
+        except KeyboardInterrupt:
+            print()
+            return None
+            
+        if not raw or raw.lower() in ('c', 'cancel'):
+            return None
+            
+        try:
+            expanded_dates = expand_date_range_syntax(raw)
+        except ValueError as e:
+            print(f"Error: {e}")
+            continue
+            
+        if not expanded_dates:
+            print("No valid dates parsed. Please try again.")
+            continue
+            
+        testsheet_dir = environment.storage.get_testsheet_dir()
+        found_paths = []
+        missing_dates = []
+        
+        if testsheet_dir.exists():
+            # More careful searching: only direct children of month folders, which are children of station folders
+            for station_dir in testsheet_dir.iterdir():
+                if not station_dir.is_dir(): continue
+                for month_dir in station_dir.iterdir():
+                    if not month_dir.is_dir(): continue
+                    for date_dir in month_dir.iterdir():
+                        if not date_dir.is_dir(): continue
+                        if date_dir.name in expanded_dates:
+                            found_paths.append(date_dir)
+            
+            # Identify missing dates
+            found_names = {p.name for p in found_paths}
+            missing_dates = [d for d in expanded_dates if d not in found_names]
+        else:
+            missing_dates = list(expanded_dates)
+            
+        if not found_paths:
+            print("No matching date folders found for specified dates.")
+            continue
+            
+        if missing_dates:
+            print(f"\n✓ Found {len(found_paths)} date folder(s).")
+            print(f"⚠️ Missing {len(missing_dates)} date folder(s): {', '.join(missing_dates)}")
+            if not confirm(f"Proceed with the {len(found_paths)} found dates?", default=True):
+                continue
+                
+        return tuple(found_paths)

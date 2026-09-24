@@ -150,3 +150,71 @@ def test_select_substations_interactive_custom_callbacks() -> None:
 if __name__ == "__main__":
     unittest.main()
 
+
+from src.cli_selectors import (
+    expand_date_range_syntax,
+    select_pahang_inspection_dates_interactive,
+    prompt_target_inspection_dates_with_ranges,
+)
+from src.project.environment import ProjectEnvironment
+from unittest.mock import MagicMock
+
+def test_expand_date_range_syntax_single():
+    assert expand_date_range_syntax("01-05-2026") == ("01-05-2026",)
+
+def test_expand_date_range_syntax_comma_separated():
+    assert expand_date_range_syntax("01-05-2026, 03-05-2026, 02-05-2026") == ("01-05-2026", "02-05-2026", "03-05-2026")
+
+def test_expand_date_range_syntax_range_dotdot():
+    assert expand_date_range_syntax("01-05-2026..04-05-2026") == ("01-05-2026", "02-05-2026", "03-05-2026", "04-05-2026")
+
+def test_expand_date_range_syntax_range_to():
+    assert expand_date_range_syntax("01-05-2026 to 03-05-2026") == ("01-05-2026", "02-05-2026", "03-05-2026")
+
+def test_expand_date_range_syntax_whitespace_tolerance():
+    assert expand_date_range_syntax("  01-05-2026   TO    02-05-2026  , 04-05-2026 ") == ("01-05-2026", "02-05-2026", "04-05-2026")
+
+def test_expand_date_range_syntax_inverted():
+    with pytest.raises(ValueError):
+        expand_date_range_syntax("05-05-2026..01-05-2026")
+
+def test_select_pahang_inspection_dates_interactive_loop_back(tmp_path):
+    env = MagicMock(spec=ProjectEnvironment)
+    storage = MagicMock()
+    env.storage = storage
+    storage.get_testsheet_dir.return_value = tmp_path
+    
+    # Mock sequence: 
+    # 1. select station -> "RAUB"
+    # 2. select month -> "01. JANUARY"
+    # 3. select_multiple -> None (simulating zero selection or cancel)
+    # 4. select month -> None (simulating back)
+    # 5. select station -> None (simulating cancel)
+    with patch("src.cli_selectors.select_or_create_testsheet_station", side_effect=["RAUB", None]), \
+         patch("src.cli_selectors.select_or_create_testsheet_month", side_effect=["01. JANUARY", None]), \
+         patch("src.cli_selectors.select_multiple", return_value=None):
+         
+         month_dir = tmp_path / "RAUB" / "01. JANUARY"
+         month_dir.mkdir(parents=True)
+         (month_dir / "01-01-2026").mkdir()
+         
+         result = select_pahang_inspection_dates_interactive(env)
+         assert result is None
+
+def test_prompt_target_inspection_dates_with_ranges_partial(tmp_path):
+    env = MagicMock(spec=ProjectEnvironment)
+    storage = MagicMock()
+    env.storage = storage
+    storage.get_testsheet_dir.return_value = tmp_path
+    
+    # Create matching folder
+    st_dir = tmp_path / "RAUB" / "01. JANUARY"
+    st_dir.mkdir(parents=True)
+    d1 = st_dir / "01-01-2026"
+    d1.mkdir()
+    
+    with patch("builtins.input", side_effect=["01-01-2026, 02-01-2026"]), \
+         patch("src.cli_selectors.confirm", return_value=True):
+         
+         result = prompt_target_inspection_dates_with_ranges(env)
+         assert result == (d1,)
