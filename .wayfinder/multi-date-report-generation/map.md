@@ -37,7 +37,7 @@ graph TD
     T67["#67: feat(cli): multi-date interactive checklist & range-aware text selectors - Closed"]
     T68["#68: feat(quick-report): multi-date selection & date-aware progress telemetry - Closed"]
     T69["#69: feat(full-report): multi-date selection with date-prefixed substation checklist - Closed"]
-    T70["#70: docs(context): document MultiDateSelectionPolicy & verify e2e multi-date generation"]
+    T70["#70: docs(context): document MultiDateSelectionPolicy & verify e2e multi-date generation - Closed"]
 
     T67 --> T68
     T67 --> T69
@@ -71,7 +71,7 @@ graph TD
 - **Delivers**: `generate_full_reports_action` multi-date menu integration, interactive substation review checklist with date prefixes (`[DD-MM-YYYY] <STEM> [READY]`), and date-tagged progress sink messages.
 
 ### #70: docs(context): document MultiDateSelectionPolicy & verify e2e multi-date generation
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#70](https://github.com/adamlarGit/pahang-cli/issues/70)
 - **Blocked by**: #68, #69
 - **Ticket File**: [.wayfinder/multi-date-report-generation/tickets/070-e2e-verification-and-domain-documentation.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/multi-date-report-generation/tickets/070-e2e-verification-and-domain-documentation.md)

@@ -4,6 +4,14 @@ This file serves as the ubiquitous language and domain model reference for the P
 
 ## Concepts
 
+### MultiDateSelectionPolicy
+The ubiquitous policy governing multi-date target selection across all report generation workflows (Quick Report, Full Report, etc.). 
+- **Dual-Mode Entry**: Operators can use interactive tree checkboxes ("Browse Date Folders") or range-aware text input ("Enter Target Date(s)").
+- **Interactive Checklist**: Default checklist state is unchecked `[ ]`. Keyboard shortcut `'a'` toggles all. If zero items are selected or the prompt is cancelled, the workflow guarantees loop-back resilience (returning to month/station selection instead of aborting).
+- **Range Syntax Grammar**: Supports comma separation and sequential range expansion (`DD-MM-YYYY..DD-MM-YYYY` or `to` / `-`). Implements tolerant validation with pre-flight folder existence checks, displaying broken-down confirmation prompts when some dates are missing.
+- **Date-Prefixed Checklist**: Full Report generation displays interactive substation checklists prefixed with their corresponding date tags (e.g., `[01-05-2026] 001. PMU BENTONG [READY]`).
+- **Date-Aware Progress Telemetry**: Batch execution log sinks embed the inspection date tag inside progress messages (e.g., `[1/5] [01-05-2026] Generating...`).
+
 ### ProjectMetadata
 An immutable domain object (`src/project/models.py`) representing logical Pahang project metadata (`key`, `name`, `po_number`, `state`, `voltage_type`, `technologies`, `base_path`). Validates voltage rating (`11kV` or `33kV`).
 
