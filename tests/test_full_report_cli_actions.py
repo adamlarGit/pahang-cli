@@ -136,8 +136,8 @@ def test_full_report_action_manual_fl_input_success(
 
 def test_full_report_action_cancel_date_selection(mock_env: MagicMock) -> None:
     action = FullReportAction()
-    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="folder"), \
-         patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=None):
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="browse_dates"), \
+         patch("src.project_workflow_actions.cli_selectors.select_pahang_inspection_dates_interactive", return_value=None):
         result = action.execute(mock_env)
         assert result is None
 
@@ -169,8 +169,8 @@ def test_full_report_action_dry_run_telemetry_and_cancel_confirmation(
     action = FullReportAction(workflow=mock_workflow)
 
     date_dir = Path("C:/fake/project/TESTSHEET/RAUB/08. AUGUST/04-08-2026")
-    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="folder"), \
-         patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="browse_dates"), \
+         patch("src.project_workflow_actions.cli_selectors.select_pahang_inspection_dates_interactive", return_value=(date_dir,)), \
          patch("src.project_workflow_actions.cli_selectors.select_substations_interactive", return_value=[telem]), \
          patch("src.project_workflow_actions.cli_selectors.confirm", return_value=False) as mock_confirm:
 
@@ -252,8 +252,8 @@ def test_full_report_action_multi_station_selection_and_summary(
     action = FullReportAction(workflow=mock_workflow)
     date_dir = Path("C:/fake/project/TESTSHEET/RAUB/08. AUGUST/04-08-2026")
 
-    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="folder"), \
-         patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="browse_dates"), \
+         patch("src.project_workflow_actions.cli_selectors.select_pahang_inspection_dates_interactive", return_value=(date_dir,)), \
          patch("src.project_workflow_actions.cli_selectors.select_substations_interactive") as mock_interactive, \
          patch("src.project_workflow_actions.cli_selectors.confirm", return_value=True):
 
@@ -270,7 +270,7 @@ def test_full_report_action_multi_station_selection_and_summary(
 
         # Verify generate was invoked with the selected station
         mock_workflow.generate.assert_called_once_with(
-            date_dir,
+            (date_dir,),
             mock_env,
             station=["TALAPIA"],
             progress_sink=ANY,
