@@ -919,6 +919,13 @@ def test_transformer_scan_adapter_model_context(mock_substation_info: dict[str, 
     for item in res3.items:
         assert item.context["tx"]["model"] == "-"
 
+    # 4. Sentinel fallback to '-'
+    tx4 = TransformerSpec(tx_id="Tx 1", type="-")
+    adapter4 = TransformerScanAdapter(tx=tx4, substation_info=mock_substation_info)
+    res4 = adapter4.adapt()
+    for item in res4.items:
+        assert item.context["tx"]["model"] == "-"
+
 
 def test_dynamic_prpd_generation_with_tempfile_no_crash(
     mock_substation_info: dict[str, str],

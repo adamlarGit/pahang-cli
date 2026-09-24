@@ -169,7 +169,7 @@ def build_transformer_scan_spec(tx: TransformerSpec) -> TransformerScanSpec:
         manufacturer=tx.manufacturer,
         serial_no=tx.serial_no,
         type=tx.type,
-        model=getattr(tx, "model", "") or normalize_tx_model(getattr(tx, "type", "")),
+        model=tx.model or normalize_tx_model(tx.type),
         us_reading=tx.us_reading,
         us_char=tx.us_char,
         hv_cable_type=tx.hv_cable_type,

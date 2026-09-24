@@ -144,9 +144,11 @@ Extraction and counting policy for transformers from `PCE VI` and `PCE Testsheet
   - Raw transformer type/model text is mapped to canonical expanded designations:
     - `"H/S"`, `"HS"`, `"H.S."`, `"H.S"`, `"HERMETICALLY"`, `"HERMETICALLY SEAL"`, `"HERMETICALLY SEALED"` $\to$ `"HERMETICALLY SEAL"`
     - `"C/T"`, `"CT"`, `"C.T."`, `"C.T"`, `"CONSERVATOR"`, `"CONSERVATOR TANK"` $\to$ `"CONSERVATOR TANK"`
-  - Blank / sentinel values (`""`, `"-"`, `"N/A"`, `"NONE"`, `"NAN"`, `None`) fall back to `"-"`.
+  - Blank / sentinel values (`""`, `"-"`, `"N/A"`, `"NONE"`, `"NAN"`, `None`) normalize to empty string `""`.
   - Unknown non-empty values pass through as-is (e.g. `"CAST RESIN"`, custom manufacturer model).
   - Populated onto `TransformerSpec.model` (auto-defaulting in `__post_init__` from `TransformerSpec.type`) and `TransformerScanSpec.model`.
+  - **Domain Model Representation**: Extracted missing, empty, or sentinel transformer types/models are stored as empty string `""` on `TransformerSpec.model`.
+  - **Document Presentation**: Quick report and full report Jinja contexts convert empty string `""` to `"-"`.
 - **Template Presentation Convention (8 pt Typography)**:
   - In all 12 transformer docx templates across Full Report and Quick Report (`tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`), the table cell for `{{ tx.model }}` specifies 8 pt font size (`w:sz w:val="16"` and `w:szCs w:val="16"`) across paragraph and run properties to ensure expanded designations fit cleanly without cell overflow.
 

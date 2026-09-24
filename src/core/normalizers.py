@@ -649,20 +649,18 @@ def normalize_tx_model(val: str | None) -> str:
           -> 'HERMETICALLY SEAL'
         - 'C/T', 'CT', 'C.T.', 'C.T', 'CONSERVATOR', 'CONSERVATOR TANK'
           -> 'CONSERVATOR TANK'
-        - Blank / sentinels ('', '-', 'N/A', 'NONE', 'NAN', None) -> '-'
+        - Blank / sentinels ('', '-', 'N/A', 'NONE', 'NAN', None) -> ''
         - Any other non-empty string -> preserved as-is.
 
     Args:
         val: Transformer model string or abbreviation, or None.
 
     Returns:
-        Expanded canonical transformer model string, '-' if missing/sentinel, or original string trimmed.
+        Expanded canonical transformer model string, '' if missing/sentinel, or original string trimmed.
     """
     if _is_null_or_empty(val):
-        return "-"
+        return ""
     s = str(val).strip()
-    if not s or s.lower() in _NULL_SENTINELS:
-        return "-"
     s_upper = s.upper()
     if s_upper in TX_MODEL_MAP:
         return TX_MODEL_MAP[s_upper]

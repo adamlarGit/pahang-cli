@@ -193,6 +193,14 @@ def test_transformer_spec_model_auto_defaulting_and_override():
     assert tx_empty.type == ""
     assert tx_empty.model == ""
 
+    tx_dash = TransformerSpec(type="-")
+    assert tx_dash.type == "-"
+    assert tx_dash.model == ""
+
+    tx_na = TransformerSpec(type="N/A")
+    assert tx_na.type == "N/A"
+    assert tx_na.model == ""
+
 
 
 def test_lvdb_spec_defaults_and_immutability():

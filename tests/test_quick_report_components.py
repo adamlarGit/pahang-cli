@@ -2771,6 +2771,12 @@ def test_quick_report_transformer_model_normalization_render_context():
     ctx5 = _build_family_render_context(spec, rec_custom, overview=False, item_key="TX 1", pe_info={})
     assert ctx5["tx"]["model"] == "CAST RESIN"
 
+    # 5. Absent or sentinel model falls back to '-'
+    tx_empty = TransformerSpec(tx_id="Tx 1", type="-")
+    pkg_empty = SubstationEquipmentPackage(transformers=(tx_empty,))
+    ctx6 = _build_family_render_context(spec, rec1, overview=False, item_key="TX 1", pe_info={"equipment_specs": pkg_empty})
+    assert ctx6["tx"]["model"] == "-"
+
 
 
 

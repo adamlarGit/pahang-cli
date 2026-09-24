@@ -850,7 +850,7 @@ def test_normalize_tx_model() -> None:
     ):
         assert normalize_tx_model(alias) == "CONSERVATOR TANK"
 
-    # 3. Sentinels / empty / None fallback to '-'
+    # 3. Sentinels / empty / None normalize to empty string ""
     for sentinel in (
         None,
         "",
@@ -866,7 +866,7 @@ def test_normalize_tx_model() -> None:
         "nan",
         float("nan"),
     ):
-        assert normalize_tx_model(sentinel) == "-"
+        assert normalize_tx_model(sentinel) == ""
 
     # 4. Unknown non-empty values preserved as-is
     assert normalize_tx_model("CAST RESIN") == "CAST RESIN"

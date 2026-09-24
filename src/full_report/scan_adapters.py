@@ -981,9 +981,12 @@ class TransformerScanAdapter:
             raw_sn = _clean_str(self.tx.serial_no)
             tx_sn = "-" if raw_sn.upper() in ("NOT ACCESSIBLE", "-", "N/A", "NONE", "NAN", "") else raw_sn
 
+            raw_model = self.tx.model or self.tx.type
+            tx_model = normalize_tx_model(raw_model)
+
             tx_block = {
                 "manufacturer": _clean_str(self.tx.manufacturer),
-                "model": normalize_tx_model(getattr(self.tx, "model", None) or getattr(self.tx, "type", None)),
+                "model": tx_model or "-",
                 "rating": tx_rating,
                 "number": self.tx_id_str,
                 "panel": self.tx_id_str,

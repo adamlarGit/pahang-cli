@@ -845,10 +845,8 @@ def _build_tx_render_context(
 
     tx_mfg = (matched_tx.manufacturer if matched_tx and matched_tx.manufacturer else "") or _text_or_empty(record.brand)
     
-    tx_model = normalize_tx_model(
-        (matched_tx.model if matched_tx and matched_tx.model else (matched_tx.type if matched_tx and matched_tx.type else ""))
-        or _text_or_empty(record.model)
-    )
+    raw_model = (matched_tx.model if matched_tx else "") or (matched_tx.type if matched_tx else "") or _text_or_empty(record.model)
+    tx_model = normalize_tx_model(raw_model)
 
     tx_rating = (matched_tx.rating_kva if matched_tx and matched_tx.rating_kva else "") or _text_or_empty(record.rating)
     tx_serial = matched_tx.serial_no if matched_tx else ""
