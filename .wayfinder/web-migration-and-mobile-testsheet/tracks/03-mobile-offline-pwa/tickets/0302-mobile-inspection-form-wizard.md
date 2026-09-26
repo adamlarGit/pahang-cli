@@ -17,7 +17,10 @@ A responsive, touch-friendly multi-step form wizard tailored for on-site inspect
 
 ## Acceptance Criteria
 - [ ] Build multi-step wizard UI with clear step progress indicator.
+- [ ] Implement Project Profile screen establishing session defaults (PO number, voltage type, tester name, TNB rep, default station) to eliminate repetitive typing (`D-MASTER.20`).
+- [ ] Provide quick per-substation dropdown override for Station to support multi-station inspection days (`D-MASTER.20`).
 - [ ] Implement autosave to SQLite OPFS on every field change so no inputs are lost.
+- [ ] Capture thermal (`IR`) and digital (`DG`) photo index ranges (`D-MASTER.14`).
 - [ ] Support dynamic panel rows for switchgear configurations (VCB / RMU).
 - [ ] Quick-select toggles for visual checklist (Pass by default to minimize repetitive taps).
 - [ ] Form validation before marking inspection as completed.

@@ -16,6 +16,9 @@ Comprehensive regression and parity testing suite:
 
 ## Acceptance Criteria
 - [ ] Automated end-to-end integration test running web workflow triggers.
-- [ ] Output document verification confirming identical page layout and data points.
-- [ ] Full `pytest` test suite passing.
+- [ ] Parity verification confirming identical page layout and data points against the 3 official reference benchmarks (`D-MASTER.21`):
+  1. `005. TALAPIA (IR+VI)`
+  2. `179. CENDERAWASIH NO.1 (IR+VI)`
+  3. `144. TELEKOM TANAH PUTIH (TEV+VI)`
+- [ ] Full `pytest` test suite passing with 100% green status.
 - [ ] Update `CONTEXT.md` and user guides to document the local web interface and mobile PWA workflow.

@@ -14,8 +14,9 @@ A dedicated database merge service (`DatabaseMergeService`) that imports field i
 - [ ] Implement `DatabaseMergeService` in `src/db/merger.py`.
 - [ ] Validate uploaded database integrity (`PRAGMA quick_check` and schema version check).
 - [ ] Execute atomic merge via `ATTACH DATABASE '<uploaded_path>' AS mobile`:
-  - `INSERT OR REPLACE INTO main.inspections SELECT * FROM mobile.inspections;`
-  - Upsert child tables (`switchgear_panels`, `readings`, `defects`, etc.).
+  - Compare `updated_at` timestamps per substation inspection `(project_key, station, pe_num, inspection_date)`.
+  - For newer incoming inspections, execute clean-child deletion on existing child records (`switchgear_panels`, `readings`, `defects`, etc.) in `main` to prevent ghost records (`D-MASTER.17`).
+  - Insert or replace inspection header and re-insert child tables from `mobile`.
   - Execute within a single transaction and `DETACH DATABASE mobile`.
-- [ ] Return structured `MergeResult` reporting total inspections imported, updated, and warnings.
-- [ ] Add integration tests with mock mobile database files in `tests/db/test_merger.py`.
+- [ ] Return structured `MergeResult` reporting total inspections imported, updated, conflicts resolved, and warnings.
+- [ ] Add integration tests with mock mobile database files in `tests/db/test_merger.py` verifying ghost-row elimination on child deletions.
