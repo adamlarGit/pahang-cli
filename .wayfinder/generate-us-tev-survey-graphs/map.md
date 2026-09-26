@@ -35,7 +35,7 @@ graph TD
     T73["#73: feat(workflow): US+TEV graph generation workflow and dual-mode rendering engine - Closed"]
     T74["#74: feat(cli): utility action menu registration and US+TEV substation checklist - Closed"]
     T75["#75: refactor(scripts): align preview script with centralized measurement discovery - Closed"]
-    T76["#76: docs(adr): record ADR 0006, update CONTEXT.md, and run full E2E regression suite"]
+    T76["#76: docs(adr): record ADR 0006, update CONTEXT.md, and run full E2E regression suite - Closed"]
 
     T72 --> T73
     T73 --> T74
@@ -77,7 +77,7 @@ graph TD
 - **Delivers**: Refactor `scripts/generate_prpd_option_c_html.py` to import and reuse `discover_survey_measurements` and canonical label formatting from `src/quick_report/prpd.py`, eliminating duplicate legacy parsing code and ensuring 100% naming parity between preview outputs and production CLI utilities.
 
 ### #76: docs(adr): record ADR 0006, update CONTEXT.md, and run full E2E regression suite
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#76](https://github.com/adamlarGit/pahang-cli/issues/76)
 - **Blocked by**: #74, #75
 - **Ticket File**: [tickets/076-adr-context-docs-and-e2e-verification.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/generate-us-tev-survey-graphs/tickets/076-adr-context-docs-and-e2e-verification.md)
