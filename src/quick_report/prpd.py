@@ -8,6 +8,7 @@ deterministic asset discovery, and DocxTemplate InlineImage binding.
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass
 import gzip
 import http.server
 import json
@@ -41,7 +42,65 @@ from src.core.contract import (
     is_swg_compartment_us_eligible,
 )
 
+logger = logging.getLogger(__name__)
 
+
+@dataclass
+class DiscoveredMeasurement:
+    """Domain model representing an auto-discovered US or TEV survey measurement point."""
+    label: str
+    asset: str
+    subasset: str
+    component: str | None
+    sub_loc: str | None
+    tech: str  # "TEV" | "US"
+    html_file: str  # "TEV.html" | "Ultrasonic.html"
+    data_rel_path: str
+    meas_dir: Path
+
+
+def _clean_survey_token(val: str | None) -> str:
+    """Sanitize survey metadata tokens into uppercase filesystem-safe identifiers."""
+    if val is None:
+        return ""
+    s = str(val).strip()
+    if s.startswith("$"):
+        s = s[1:].strip()
+    return re.sub(r"[^\w]+", "_", s.upper()).strip("_")
+
+
+def format_measurement_label(
+    asset: str,
+    subasset: str | None,
+    component: str | None,
+    tech: str,
+) -> str:
+    """Format canonical measurement label: {ASSET}_{SUBASSET}_{COMPONENT}_{TECH}."""
+    clean_asset = _clean_survey_token(asset)
+    clean_subasset = _clean_survey_token(subasset) if subasset else ""
+    if clean_subasset in ("", "NONE"):
+        clean_subasset = ""
+
+    clean_comp = _clean_survey_token(component) if component else ""
+    if clean_comp in ("", "NONE"):
+        clean_comp = ""
+
+    clean_tech = _clean_survey_token(tech)
+    if "TEV" in clean_tech:
+        canonical_tech = "TEV"
+    elif "ULTRA" in clean_tech or clean_tech == "US":
+        canonical_tech = "US"
+    else:
+        canonical_tech = clean_tech
+
+    parts = [clean_asset]
+    if clean_subasset:
+        parts.append(clean_subasset)
+    if clean_comp:
+        parts.append(clean_comp)
+    parts.append(canonical_tech)
+
+    return "_".join(p for p in parts if p)
 # Non-overlapping Flexbox Layout: 320px Left Measurement Table + 840px Right PRPD Graph
 OPTION_C_INJECTION_TEMPLATE = """
 <style>
@@ -726,6 +785,200 @@ def discover_ultratev_survey_dir(raw_data_dir: Path | str | None) -> Path | None
         pass
 
     return None
+
+
+def discover_survey_measurements(survey_root: Path | str) -> list[DiscoveredMeasurement]:
+    """Auto-discover all US and TEV measurements across an UltraTEV survey folder.
+
+    Tier 1 (Manifest-driven): Reads survey_summary.js using raw_decode to protect against
+    software glitches with trailing trailer bytes.
+    Tier 2 (Deterministic Traversal Fallback): If survey_summary.js is absent or corrupted,
+    traverses filesystem scanning equipment subdirectories (SWG, VCB, RMU, TX) and parses
+    measurement_metadata.js to extract canonical fields.
+    """
+    root = Path(survey_root).resolve()
+    if not root.exists() or not root.is_dir():
+        return []
+
+    manifest_path = root / "survey_summary.js"
+    summary_data = None
+    if manifest_path.is_file():
+        try:
+            content = manifest_path.read_text(encoding="utf-8", errors="ignore")
+            start = content.find("{")
+            if start != -1:
+                decoder = json.JSONDecoder()
+                parsed, _ = decoder.raw_decode(content[start:])
+                if isinstance(parsed, dict):
+                    summary_data = parsed
+        except Exception as exc:
+            logger.warning(
+                "Failed parsing survey manifest %s: %s; falling back to filesystem traversal",
+                manifest_path,
+                exc,
+            )
+            summary_data = None
+
+    discovered: list[DiscoveredMeasurement] = []
+    seen_counts: dict[str, int] = {}
+
+    if summary_data is not None:
+        for asset in summary_data.get("assets", []):
+            if not isinstance(asset, dict):
+                continue
+            asset_name = str(asset.get("$ASSET_NAME", "")).strip()
+            sub_assets = asset.get("$SUB_ASSETS", [])
+            if not isinstance(sub_assets, list):
+                continue
+            for sub in sub_assets:
+                if not isinstance(sub, dict):
+                    continue
+                sub_name = str(sub.get("$SUB_ASSET_NAME", "")).strip()
+                measures = sub.get("$MEASURES", [])
+                if not isinstance(measures, list):
+                    continue
+                for meas in measures:
+                    if not isinstance(meas, dict):
+                        continue
+                    mtype = meas.get("$MEASURE_TYPE", "")
+                    data_rel = meas.get("Data", "")
+                    if not data_rel:
+                        continue
+                    data_rel_norm = str(data_rel).replace("\\", "/").strip("/")
+
+                    if mtype == "$TEV":
+                        tech = "TEV"
+                        html_file = "TEV.html"
+                    elif mtype == "$ULTRA":
+                        tech = "US"
+                        html_file = "Ultrasonic.html"
+                    else:
+                        continue
+
+                    meas_dir = (root / data_rel_norm).resolve()
+                    if not meas_dir.exists():
+                        continue
+
+                    component = meas.get("$COMPONENT")
+                    sub_loc = meas.get("$SUB_LOC")
+
+                    base_label = format_measurement_label(asset_name, sub_name, component, tech)
+                    if base_label not in seen_counts:
+                        seen_counts[base_label] = 1
+                        final_label = base_label
+                    else:
+                        seen_counts[base_label] += 1
+                        final_label = f"{base_label}_{seen_counts[base_label]}"
+                        logger.warning(
+                            "Duplicate measurement label '%s' in %s; renamed to '%s'",
+                            base_label,
+                            data_rel_norm,
+                            final_label,
+                        )
+
+                    discovered.append(
+                        DiscoveredMeasurement(
+                            label=final_label,
+                            asset=asset_name,
+                            subasset=sub_name,
+                            component=str(component) if component else None,
+                            sub_loc=str(sub_loc) if sub_loc else None,
+                            tech=tech,
+                            html_file=html_file,
+                            data_rel_path=data_rel_norm,
+                            meas_dir=meas_dir,
+                        )
+                    )
+
+        return discovered
+
+    # Tier 2: Deterministic Traversal Fallback
+    eq_prefixes = ("SWG", "VCB", "RMU", "TX")
+    try:
+        candidate_eq_dirs = [
+            d for d in sorted(root.iterdir(), key=lambda p: p.name.upper())
+            if d.is_dir() and (d.name.upper().startswith(eq_prefixes) or "TRANSFORMER" in d.name.upper())
+        ]
+    except OSError:
+        candidate_eq_dirs = []
+
+    for eq_dir in candidate_eq_dirs:
+        meas_dirs: list[Path] = []
+        try:
+            for p in sorted(eq_dir.rglob("*"), key=lambda x: str(x).upper()):
+                if p.is_dir() and ((p / "TEV.html").is_file() or (p / "Ultrasonic.html").is_file()):
+                    meas_dirs.append(p)
+        except OSError:
+            continue
+
+        for m_dir in meas_dirs:
+            meta_fields: dict[str, Any] = {}
+            meta_js = m_dir / "measurement_metadata.js"
+            if meta_js.is_file():
+                try:
+                    meta_content = meta_js.read_text(encoding="utf-8", errors="ignore")
+                    m_start = meta_content.find("{")
+                    if m_start != -1:
+                        meta_obj, _ = json.JSONDecoder().raw_decode(meta_content[m_start:])
+                        mf_list = meta_obj.get("measurement_fields", [])
+                        if mf_list and isinstance(mf_list, list) and isinstance(mf_list[0], dict):
+                            for f in mf_list[0].get("fields", []):
+                                if isinstance(f, dict):
+                                    fname = f.get("fieldname")
+                                    fdata = f.get("data")
+                                    if fname:
+                                        meta_fields[fname] = fdata
+                except Exception as meta_exc:
+                    logger.debug("Failed reading %s: %s", meta_js, meta_exc)
+
+            asset_name = str(meta_fields.get("$ASSET_NAME") or eq_dir.name).strip()
+            default_sub = m_dir.parent.name if m_dir.parent != eq_dir else ""
+            sub_name = str(meta_fields.get("$SUB_ASSET_NAME") or meta_fields.get("$PANEL_NO") or default_sub).strip()
+            component = meta_fields.get("$COMPONENT")
+            sub_loc = meta_fields.get("$SUB_LOC")
+
+            has_tev = (m_dir / "TEV.html").is_file()
+            has_us = (m_dir / "Ultrasonic.html").is_file()
+
+            tech_list = []
+            if has_tev:
+                tech_list.append(("TEV", "TEV.html"))
+            if has_us:
+                tech_list.append(("US", "Ultrasonic.html"))
+
+            rel_path = m_dir.relative_to(root).as_posix()
+
+            for tech, html_name in tech_list:
+                base_label = format_measurement_label(asset_name, sub_name, component, tech)
+                if base_label not in seen_counts:
+                    seen_counts[base_label] = 1
+                    final_label = base_label
+                else:
+                    seen_counts[base_label] += 1
+                    final_label = f"{base_label}_{seen_counts[base_label]}"
+                    logger.warning(
+                        "Duplicate measurement label '%s' in %s; renamed to '%s'",
+                        base_label,
+                        rel_path,
+                        final_label,
+                    )
+
+                discovered.append(
+                    DiscoveredMeasurement(
+                        label=final_label,
+                        asset=asset_name,
+                        subasset=sub_name,
+                        component=str(component) if component else None,
+                        sub_loc=str(sub_loc) if sub_loc else None,
+                        tech=tech,
+                        html_file=html_name,
+                        data_rel_path=rel_path,
+                        meas_dir=m_dir.resolve(),
+                    )
+                )
+
+    return discovered
+
 
 
 def find_swg_feeder_survey_dir(
