@@ -32,7 +32,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 ```mermaid
 graph TD
     T72["#72: feat(prpd): survey measurement discovery with multi-point component naming - Closed"]
-    T73["#73: feat(workflow): US+TEV graph generation workflow and dual-mode rendering engine"]
+    T73["#73: feat(workflow): US+TEV graph generation workflow and dual-mode rendering engine - Closed"]
     T74["#74: feat(cli): utility action menu registration and US+TEV substation checklist"]
     T75["#75: refactor(scripts): align preview script with centralized measurement discovery"]
     T76["#76: docs(adr): record ADR 0006, update CONTEXT.md, and run full E2E regression suite"]
@@ -56,7 +56,7 @@ graph TD
 - **Delivers**: `DiscoveredMeasurement` model, canonical label formatting (`{ASSET}_{SUBASSET}_{COMPONENT}_{TECH}`), manifest parsing (`survey_summary.js`) using `raw_decode`, deterministic directory traversal reading `measurement_metadata.js`, unit tests with VCB, RMU, and TX synthetic survey fixtures.
 
 ### #73: feat(workflow): US+TEV graph generation workflow and dual-mode rendering engine
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#73](https://github.com/adamlarGit/pahang-cli/issues/73)
 - **Blocked by**: #72
 - **Ticket File**: [tickets/073-us-tev-graph-workflow-engine.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/generate-us-tev-survey-graphs/tickets/073-us-tev-graph-workflow-engine.md)
