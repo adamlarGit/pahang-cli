@@ -33,7 +33,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 graph TD
     T72["#72: feat(prpd): survey measurement discovery with multi-point component naming - Closed"]
     T73["#73: feat(workflow): US+TEV graph generation workflow and dual-mode rendering engine - Closed"]
-    T74["#74: feat(cli): utility action menu registration and US+TEV substation checklist"]
+    T74["#74: feat(cli): utility action menu registration and US+TEV substation checklist - Closed"]
     T75["#75: refactor(scripts): align preview script with centralized measurement discovery"]
     T76["#76: docs(adr): record ADR 0006, update CONTEXT.md, and run full E2E regression suite"]
 
@@ -63,7 +63,7 @@ graph TD
 - **Delivers**: `BrowserPrerequisiteError`, `UsTevGraphWorkflow` dual-mode rendering engine reusing `SurveyHttpServer` / `render_prpd_option_c_image()` and `decode_tev_event_data()` / `generate_prpd_figure()` from `src/quick_report/prpd.py`, output destination resolution to `RAW DATA/US+TEV/graphs/`, idempotent overwrite, batch error isolation (`SubstationIsolatedBatchResiliencePolicy`), workflow unit tests.
 
 ### #74: feat(cli): utility action menu registration and US+TEV substation checklist
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#74](https://github.com/adamlarGit/pahang-cli/issues/74)
 - **Blocked by**: #73
 - **Ticket File**: [tickets/074-cli-utility-action-and-substation-checklist.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/generate-us-tev-survey-graphs/tickets/074-cli-utility-action-and-substation-checklist.md)
