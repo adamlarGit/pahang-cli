@@ -82,7 +82,7 @@ graph TD
 ### 🗺️ [Track 1: SQLite Domain Engine (Foundation)](./tracks/01-sqlite-domain-engine/map.md)
 - **Status**: Ready to chart / Frontier
 - **Sub-map Path**: `tracks/01-sqlite-domain-engine/map.md`
-- **Scope**: Canonical schema DDL with composite natural keys/UUIDs, Python SQLite repository, project database initialization (`<base_path>/pahang_project.db`), and `ATTACH DATABASE` merge mechanics.
+- **Scope**: Canonical schema DDL with composite natural keys/UUIDs, Python SQLite repository, project database initialization (`<base_path>/pahang_project.db`), `ATTACH DATABASE` merge mechanics, and in-memory `TestsheetDomainAdapter` bridging SQLite records directly into `TestsheetData` entities.
 
 ### 🗺️ [Track 2: Inverted Client Testsheet Generator](./tracks/02-inverted-testsheet-generator/map.md)
 - **Status**: Blocked by Track 1
@@ -122,6 +122,7 @@ graph TD
 - **D-MASTER.12**: Forward-only project database storage: SQLite database records new inspections starting from cutover date; historical Excel backfill is omitted.
 - **D-MASTER.13**: Collision-free entity identity: schema enforces UUIDs or natural composite keys `(project_key, station, pe_num, inspection_date)` across all tables to ensure safe `ATTACH DATABASE` merges without auto-increment collisions.
 - **D-MASTER.14**: Camera photo range linkage: mobile form wizard explicitly captures thermal (`IR`) and digital (`DG`) photo index ranges to feed desktop raw media pairing.
+- **D-MASTER.15**: In-memory domain adapter seam: SQLite records are mapped directly into in-memory `TestsheetData` entities via `TestsheetDomainAdapter` (Ticket 0104), allowing downstream workflows (`QuickReportWorkflow`, `FullReportWorkflow`, `UpdateQr02CbaWorkflow`, `PopulateTotalPeWorkflow`, `WhatsAppReportWorkflow`) to consume database inspections without disk round-trips or breaking changes to report generation engines.
 
 ---
 
