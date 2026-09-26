@@ -96,6 +96,18 @@ def _load_rename_flir_runner() -> Callable[[], object]:
     return run_rename_flir
 
 
+def _load_generate_us_tev_graphs_runner() -> Callable[[], object]:
+    """Lazy loader for US+TEV survey graph generation utility action."""
+    def _run() -> object:
+        from src.project.environment import get_or_create_utility_environment
+        from src.workflows.us_tev_graphs import run_generate_us_tev_graphs_action
+
+        env = get_or_create_utility_environment()
+        return run_generate_us_tev_graphs_action(env)
+
+    return _run
+
+
 def _load_diagonal_runner() -> Callable[[], object]:
     from src.workflows.diagonal_borders import run_diagonal
     return run_diagonal
@@ -185,6 +197,7 @@ UTILITY_ACTIONS: tuple[UtilityAction, ...] = (
     UtilityAction("Convert DOCX to PDF (batch)", _load_docx_to_pdf_runner),
     UtilityAction("Convert Testsheet to PDF (batch)", _load_testsheet_to_pdf_runner),
     UtilityAction("Rename FLIR raw files numbering", _load_rename_flir_runner),
+    UtilityAction("Generate US+TEV survey graphs", _load_generate_us_tev_graphs_runner),
     UtilityAction("Apply diagonal borders to blank cells", _load_diagonal_runner),
     UtilityAction("Replace signature images in testsheets", _load_replace_images_runner),
     UtilityAction("Generate WhatsApp report (from Quick Reports)", _load_whatsapp_runner),

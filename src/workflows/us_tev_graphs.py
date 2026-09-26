@@ -11,8 +11,16 @@ from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 import time
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
+from src.cli_selectors import (
+    SelectOption,
+    prompt_target_inspection_dates_with_ranges,
+    select_multiple,
+    select_one,
+    select_pahang_inspection_dates_interactive,
+)
+from src.quick_report.extractor import QuickReportExtractor
 from src.quick_report.prpd import (
     DiscoveredMeasurement,
     SurveyHttpServer,
@@ -24,6 +32,7 @@ from src.quick_report.prpd import (
     generate_prpd_figure,
     render_prpd_option_c_image,
 )
+from src.testsheet.models import SubstationTestsheetPackage
 
 logger = logging.getLogger(__name__)
 
@@ -186,3 +195,137 @@ class UsTevGraphWorkflow:
 
         summary.elapsed_time = time.time() - start_time
         return summary
+
+
+def discover_us_tev_candidate_substations(
+    environment: Any,
+    target_dates: Sequence[Path | str],
+) -> list[tuple[SubstationTestsheetPackage, Path, Path]]:
+    """Discover testsheet packages across target dates that contain valid US+TEV survey folders.
+
+    Returns list of tuples: (package, raw_data_dir, survey_dir).
+    """
+    extractor = QuickReportExtractor()
+    packages = extractor.extract(environment, folders=target_dates)
+
+    candidates: list[tuple[SubstationTestsheetPackage, Path, Path]] = []
+    for pkg in packages:
+        raw_dir = environment.storage.get_substation_raw_data_dir(
+            pkg.station,
+            pkg.month,
+            pkg.date_str,
+            pkg.substation_number,
+        )
+        if not raw_dir:
+            continue
+        survey_dir = discover_ultratev_survey_dir(raw_dir)
+        if survey_dir is not None and survey_dir.exists():
+            candidates.append((pkg, Path(raw_dir), survey_dir))
+
+    return candidates
+
+
+def _format_package_label(pkg: Any) -> str:
+    """Resolve human-readable substation name from package with inspection date prefix."""
+    name = getattr(pkg, "substation_name", None) or getattr(pkg, "substation_folder", None)
+    if not name and getattr(pkg, "data", None):
+        name = pkg.data.substation_name_site or pkg.data.substation_name_erms
+    if not name and hasattr(pkg, "substation_number"):
+        name = f"PE {pkg.substation_number}"
+    date_tag = getattr(pkg, "date_str", "")
+    return f"[{date_tag}] {name}" if date_tag else str(name or "Unknown Substation")
+
+
+def select_us_tev_substations_interactive(
+    candidates: list[tuple[SubstationTestsheetPackage, Path, Path]],
+) -> list[tuple[SubstationTestsheetPackage, Path, Path]]:
+    """Interactive single merged checklist selector for candidate substations across all dates."""
+    if not candidates:
+        return []
+
+    options: list[SelectOption[tuple[SubstationTestsheetPackage, Path, Path]]] = []
+    for candidate in candidates:
+        pkg = candidate[0]
+        title = _format_package_label(pkg)
+        options.append(SelectOption(title=title, value=candidate, checked=True))
+
+    selected = select_multiple(
+        "Select substations to generate US+TEV survey graphs ('a' toggles all):",
+        options,
+    )
+    if not selected:
+        return []
+    return list(selected)
+
+
+def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary | None:
+    """CLI utility action to independently generate US+TEV survey graphs."""
+    print("\n[UTILITY] Standalone US+TEV Survey Graph Generation...")
+    options = [
+        SelectOption("Browse Date Folders (Interactive Checklist)", "browse_dates"),
+        SelectOption("Enter Target Date(s) (Text Input / Range)", "enter_dates"),
+        SelectOption("Cancel", "__cancel__", shortcut_key="c"),
+    ]
+    mode_str = select_one("Generate US+TEV Survey Graphs - Select Date Mode", options)
+    if mode_str in ("__cancel__", None):
+        print("Operation cancelled.")
+        return None
+
+    if mode_str == "browse_dates":
+        selected_dates = select_pahang_inspection_dates_interactive(environment)
+    else:
+        selected_dates = prompt_target_inspection_dates_with_ranges(environment)
+
+    if not selected_dates:
+        print("Operation cancelled.")
+        return None
+
+    folder_dates = [d.name if isinstance(d, Path) else str(d) for d in selected_dates]
+    candidates = discover_us_tev_candidate_substations(environment, folder_dates)
+    if not candidates:
+        print("\n[WARN] No substations with valid US+TEV survey data found in selected date(s).")
+        return None
+
+    selected_candidates = select_us_tev_substations_interactive(candidates)
+    if not selected_candidates:
+        print("No substations selected. Operation cancelled.")
+        return None
+
+    prpd_config = environment.get_prpd_config()
+    render_mode = getattr(prpd_config, "mode", "option_c")
+
+    workflow = UsTevGraphWorkflow(mode=render_mode)
+    try:
+        workflow.check_browser_prerequisite()
+    except BrowserPrerequisiteError as exc:
+        print(f"\n[ERROR] Browser Prerequisite Error: {exc}")
+        return None
+
+    print(
+        f"\n[INFO] Starting US+TEV graph generation for {len(selected_candidates)} "
+        f"substation(s) in {render_mode.upper()} mode..."
+    )
+
+    batch: list[tuple[Any, Path]] = [
+        (_format_package_label(pkg), survey_dir)
+        for pkg, _raw_dir, survey_dir in selected_candidates
+    ]
+
+    def _on_progress(idx: int, total: int, pe_name: str, count: int, out_dir: Path) -> None:
+        print(f"[{idx}/{total}] {pe_name}: Generated {count} graphs -> {out_dir}")
+
+    summary = workflow.run_batch(batch, on_progress=_on_progress)
+
+    print("\n" + "=" * 80)
+    print("US+TEV SURVEY GRAPH GENERATION SUMMARY")
+    print("=" * 80)
+    print(f"Total Substations Processed: {summary.total_substations}")
+    print(f"Total Graphs Generated:     {summary.total_graphs}")
+    print(f"Elapsed Time:               {summary.elapsed_time:.2f} seconds")
+    if summary.errors:
+        print(f"\nErrors ({len(summary.errors)}):")
+        for err in summary.errors:
+            print(f"  - {err}")
+    print("=" * 80)
+    return summary
+
