@@ -110,6 +110,20 @@ Best-effort handling policy when a substation has no matching US+TEV archive in 
 ### UsTevIdempotencyPolicy
 Clean-overwrite policy for US+TEV destination folders. When extracting a zip archive into `RAW DATA/US+TEV/<ZIP_STEM>/`, if the target `<ZIP_STEM>` directory already exists, it is purged and re-extracted cleanly from source to prevent stale file artifacts.
 
+### UsTevGraphWorkflow
+The standalone utility workflow (`src/workflows/us_tev_graphs.py`) responsible for generating PRPD survey graphs independently for operator-selected substations without compiling reports. Discovers candidate substations across selected inspection dates, extracts measurements using a two-tier discovery engine (manifest-driven with deterministic filesystem fallback), renders graphs in either Option C (headless Chromium) or Option B (Matplotlib), and writes output images to the canonical destination.
+
+### UsTevGraphOutputDirectory
+The canonical destination directory strictly located at `<SUBSTATION_FOLDER>/RAW DATA/US+TEV/graphs/`. Holds generated PRPD survey graphs, ensuring complete isolation from report templates and preserving vendor raw files while supporting idempotent graph overwrites.
+
+### SurveyMeasurementNaming
+The ubiquitous file naming schema for generated US+TEV survey graphs:
+`{ASSET}_{SUBASSET}_{COMPONENT}_{TECH}.png`
+Normalizes uppercase tokens, strips leading `$`, preserves physical compartment labels (`CIRCUIT_BREAKER`, `CABLE_BOX`, `UPPER_BUSBARS`, `LOWER_BUSBARS`, `CT_CHAMBER`) across multi-point switchgear (such as `VCB_CUBICLE`), omits the component token when none is specified (`{ASSET}_{SUBASSET}_{TECH}.png`), and appends an incrementing numeric suffix (`_2`, `_3`) in the rare event of identical components.
+
+### BrowserPrerequisitePolicy
+The pre-flight environment prerequisite check enforced in Option C rendering mode. Verifies that Google Chrome or Microsoft Edge is installed and accessible on the host system prior to initiating batch substation graph generation, failing fast with an actionable `BrowserPrerequisiteError` rather than failing mid-batch during headless rendering.
+
 ### SwitchgearSpec & SwitchgearPanelSpec
 The canonical switchgear domain model in `src/testsheet/models.py`.
 - **Switchgear-Level Specs**: `switchgear_type` (e.g. `AIS`, `GIS`, `RMU`, `SF6`, `VCB`, `OCB`, `MRMU`), `manufacturer`, `model`, `manufactured_year`, `rating` (e.g. `12kV`, `630A` — attached strictly at the switchgear board level, not per panel), `serial_no` (overall board/tank serial number), and `panels: tuple[SwitchgearPanelSpec, ...]`.
@@ -231,7 +245,7 @@ The shared COM application lifecycle context manager in `src/postprocessing/conv
 The data integrity policy governing testsheet modifications during post-processing. Raw inspection workbooks in `TESTSHEET/<DATE>/<STEM>.xlsx` are treated as immutable sources of truth and are never overwritten directly. All post-processing alterations (signature insertion or sanitization, blank cell diagonal line drawing) are written exclusively to working copies located in `TESTSHEET/<DATE>/processed_testsheet/<STEM>.xlsx`.
 
 ### SubstationIsolatedBatchResiliencePolicy
-Per-substation error isolation policy during batch document post-processing. Failures encountered while converting, signing, or merging documents for an individual substation are trapped, logged, and collected into failure records (`PostProcessingFailure`), allowing remaining valid substations in the queue to continue processing to completion. Final batch status and all individual errors are consolidated into the immutable `PostProcessingSummary`.
+Per-substation error isolation policy during batch operations (document post-processing and standalone US+TEV survey graph generation). Failures encountered while processing an individual substation (converting/signing/merging documents, or unexpected errors parsing/rendering survey measurements) are trapped, logged, and collected into failure records (`PostProcessingFailure` or `UsTevWorkflowSummary.errors`), allowing remaining valid substations in the queue to continue processing to completion. Final batch status and all individual errors are consolidated into the immutable workflow summary (`PostProcessingSummary` or `UsTevWorkflowSummary`).
 
 ### SignaturePlaceholderSanitizationPolicy
 The clean placeholder sanitization policy implemented in `src/workflows/replace_signatures.py` when digital signature stamping is omitted or disabled (`mode="none"`). Ensures template tags `{{signvendor}}` and `{{signtnb}}` are cleanly stripped from testsheet cells without inserting image drawings, clearing cell values to prepare pristine blank signature boxes for manual wet-ink physical signing while preventing raw curly-brace template tags from appearing on client deliverables.

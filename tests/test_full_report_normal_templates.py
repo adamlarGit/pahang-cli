@@ -65,7 +65,7 @@ ACTIVEX_SPEC_MAP: dict[str, dict[str, str]] = {
     },
     "swg-panel.docx": {
         "control_name": "CIRViewer1211111131211",
-        "shape_id": "_x0000_i1029",
+        "shape_id": "_x0000_i1032",
         "control_rel": "rId8",
         "image_rel": "rId7",
     },
