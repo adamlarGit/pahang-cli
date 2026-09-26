@@ -1,6 +1,6 @@
 # Project & Utility Automation CLI (`pahang-cli`)
 
-A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.24.0`).
+A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.25.0`).
 
 ---
 
@@ -14,7 +14,7 @@ To keep this landing page concise and maintainable as the suite scales, detailed
 - **[CBM Analysis & Recommendation Specification](file:///docs/cbm_analysis_recommendation_spec.md)** — Specification for pure-domain programmatic analysis and recommendation generation across all equipment families.
 - **[PRPD Graph Generation Guide](file:///docs/prpd_graph_generation_guide.md)** — Pure-Python PRPD decoders (UE01 FlatBuffers & JSON), 4-tier repetition density scatter bins, and dynamic CBM defect page embedding.
 - **[Utility Actions Guide](file:///docs/workflows/utility_actions.md)** — Deep dive into standalone tools (batch PDF conversions, diagonal borders, signature replacement, and separator PDF merging).
-- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.24.0`) following [Keep a Changelog](https://keepachangelog.com/).
+- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.25.0`) following [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
@@ -142,6 +142,7 @@ Batch processing and file utilities invokable across any specified folder withou
 | **Convert DOCX to PDF (batch)** | Batch converts Word documents (`.docx`) to PDF via COM automation with exact typography and layout preservation. |
 | **Convert Testsheet to PDF (batch)** | Batch converts Excel testsheets (`.xlsx`) to PDF via COM automation with standard tab recognition (`PCE Testsheet` first, `PCE VI` last), A4 `PageSetup`, and virtual PDF printer scaling. |
 | **Rename FLIR raw files numbering** | Renames thermal/visual FLIR image pairs based on camera timestamp and EXIF sequence numbers. |
+| **Generate US+TEV survey graphs** | Independently generates PRPD ultrasound and TEV graphs into substation `RAW DATA/US+TEV/graphs/` folders using canonical multi-point compartment naming (`{ASSET}_{SUBASSET}_{COMPONENT}_{TECH}.png`) with interactive multi-date candidate discovery and batch error resilience. |
 | **Apply diagonal borders to blank cells** | Inserts diagonal strikethrough borders across empty/blank cells across standard testsheet table ranges. |
 | **Replace signature images in testsheets** | Replaces signature placeholders (`{{signvendor}}`, `{{signtnb}}`) with PNG signatures from `OTHERS/SIGN/<Person>` or sanitizes tags cleanly (`mode="none"`). |
 | **Generate WhatsApp report (from Quick Reports)** | Generates formatted WhatsApp daily summary `.docx` reports from completed Quick Report batches. |

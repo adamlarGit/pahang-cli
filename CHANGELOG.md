@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-09-26
+
+### Added
+- **Standalone US+TEV Survey Graph Generation Utility (`src/workflows/us_tev_graphs.py`, `src/utility_actions.py`, `docs/adr/0006-us-tev-survey-graph-generation-workflow.md`, `CONTEXT.md`)**:
+  - Registered dedicated CLI utility action labeled `"Generate US+TEV survey graphs"` at Position #9 (index 8) in `UTILITY_ACTIONS` with a zero-argument runner factory wrapping `get_or_create_utility_environment()` (closes #74).
+  - Built `UsTevGraphWorkflow` dual-mode rendering engine supporting Option C (Headless Chromium table + Flot composite graph) and Option B (pure-Python Matplotlib 4-tier repetition density scatter plots) with idempotent overwrite into `<SUBSTATION>/RAW DATA/US+TEV/graphs/` (`UsTevGraphOutputDirectory`) (closes #73).
+  - Introduced `UsTevCandidate` dataclass and candidate discovery engine filtering strictly to substations containing extracted `RAW DATA/US+TEV/` survey directories, presenting a single merged interactive checklist with date disambiguation prefixes `[{date_str}]` and date selection loopback resilience (closes #73, #74).
+  - Added pre-flight browser check raising actionable `BrowserPrerequisiteError` when Option C is configured without Chromium or Edge on the system (`BrowserPrerequisitePolicy`) (closes #73).
+  - Broadened `SubstationIsolatedBatchResiliencePolicy` to US+TEV graph generation, skipping zero-measurement surveys with non-blocking warnings and recording per-station exceptions in `UsTevWorkflowSummary.errors` (closes #73).
+  - Recorded `ADR 0006: Standalone US+TEV Survey Graph Generation Workflow` and updated `CONTEXT.md` with domain concepts (`UsTevGraphWorkflow`, `UsTevGraphOutputDirectory`, `UsTevCandidate`, `SurveyMeasurementNaming`, `BrowserPrerequisitePolicy`) (closes #76).
+- **Deterministic Multi-Point Measurement Discovery & Naming (`src/quick_report/prpd.py`)**:
+  - Implemented `discover_survey_measurements` with canonical schema `{ASSET}_{SUBASSET}_{COMPONENT}_{TECH}.png`, preserving physical engineering compartments (`CIRCUIT_BREAKER`, `CABLE_BOX`, `UPPER_BUSBARS`, `LOWER_BUSBARS`, `PRIMARY_CABLES`, `CT_CHAMBER`) across multi-point VCB cubicles (closes #72).
+  - Added two-tier discovery engine: Tier 1 manifest parsing using `json.JSONDecoder().raw_decode` immune to trailing duplicate bytes, and Tier 2 fallback traversal reading `measurement_metadata.js` inside measurement folders without guessing from timestamps (closes #72).
+  - Added hierarchical manifest asset name resolution inferring root folder names from measurement data paths (e.g. `TX1`, `VCB`, `RMU`, `SWG`) when `$ASSET_NAME` is missing or empty, avoiding false-positive `SWG` labels.
+  - Extracted shared `_deduplicate_measurement_label` helper with collision warnings.
+
+### Refactored
+- **Developer Preview Script Centralization (`scripts/generate_prpd_option_c_html.py`)**:
+  - Refactored `scripts/generate_prpd_option_c_html.py` to reuse `discover_survey_measurements` and canonical label formatting from `src/quick_report/prpd.py`, eliminating duplicate legacy parsing code and ensuring 100% naming parity between preview outputs and production CLI utilities (closes #75).
+  - Pruned dead `_sanitize_name` helper.
+
 ## [1.24.0] - 2026-09-26
 
 ### Added
