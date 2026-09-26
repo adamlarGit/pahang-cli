@@ -110,7 +110,7 @@ Option B reuses existing native Python decoders in `src/quick_report/prpd.py`:
 
 ### Decision 7: Batch Error Resilience (`SubstationIsolatedBatchResiliencePolicy`)
 - **Zero-Measurement Surveys**: If an extracted survey folder contains zero valid US or TEV measurements, logs a non-blocking console warning (`[WARN] No valid US/TEV measurements found in survey <dir>`), counts 0 graphs generated for that station, and continues.
-- **Substation Error Isolation**: If graph generation encounters an unexpected error on a specific substation (e.g. corrupted file, single-panel render timeout), the error is caught, recorded in `UsTevGraphResult.errors`, and execution continues with the remaining selected substations.
+- **Substation Error Isolation**: If graph generation encounters an unexpected error on a specific substation (e.g. corrupted file, single-panel render timeout), the error is caught, recorded in `UsTevWorkflowSummary.errors`, and execution continues with the remaining selected substations.
 - **Consolidated Summary**: At batch completion, the utility displays a summary showing total substations processed, total graphs generated, elapsed execution time, and any error details.
 
 ### Decision 8: Scope Containment & Downstream Isolation (Known Limitation)
@@ -119,6 +119,9 @@ Option B reuses existing native Python decoders in `src/quick_report/prpd.py`:
 
 ### Decision 9: CLI Menu Placement
 - Registered at **Position #9 (index 8)** in `UTILITY_ACTIONS` (`src/utility_actions.py`), immediately following `"Rename FLIR raw files numbering"`. This groups all raw inspection sensor tools (thermal FLIR and acoustic/electrical UltraTEV) together logically.
+
+### Accepted Maintenance Adjustments
+- `tests/test_full_report_normal_templates.py:68` was updated to `_x0000_i1032` to match the shape ID in `swg-panel.docx` on `main` from commit `a04a201`.
 
 ---
 

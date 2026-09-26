@@ -116,6 +116,13 @@ The standalone utility workflow (`src/workflows/us_tev_graphs.py`) responsible f
 ### UsTevGraphOutputDirectory
 The canonical destination directory strictly located at `<SUBSTATION_FOLDER>/RAW DATA/US+TEV/graphs/`. Holds generated PRPD survey graphs, ensuring complete isolation from report templates and preserving vendor raw files while supporting idempotent graph overwrites.
 
+### UsTevCandidate
+An immutable dataclass (`src/workflows/us_tev_graphs.py`) representing an eligible substation candidate discovered during US+TEV graph generation:
+- `package`: The substation's `SubstationTestsheetPackage`.
+- `raw_data_dir`: The root raw data directory for the substation (`<SUBSTATION>/RAW DATA`).
+- `survey_dir`: The resolved UltraTEV survey folder containing raw instrument assets.
+- `output_dir`: The canonical destination directory (`<SUBSTATION>/RAW DATA/US+TEV/graphs/`) where generated PRPD graph images are saved.
+
 ### SurveyMeasurementNaming
 The ubiquitous file naming schema for generated US+TEV survey graphs:
 `{ASSET}_{SUBASSET}_{COMPONENT}_{TECH}.png`

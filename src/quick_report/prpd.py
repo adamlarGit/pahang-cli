@@ -787,6 +787,27 @@ def discover_ultratev_survey_dir(raw_data_dir: Path | str | None) -> Path | None
     return None
 
 
+def _deduplicate_measurement_label(
+    seen_counts: dict[str, int],
+    base_label: str,
+    rel_path: str = "",
+) -> str:
+    """Assign a unique label, appending a numeric suffix if duplicate encountered."""
+    if base_label not in seen_counts:
+        seen_counts[base_label] = 1
+        return base_label
+
+    seen_counts[base_label] += 1
+    final_label = f"{base_label}_{seen_counts[base_label]}"
+    logger.warning(
+        "Duplicate measurement label '%s' in %s; renamed to '%s'",
+        base_label,
+        rel_path,
+        final_label,
+    )
+    return final_label
+
+
 def discover_survey_measurements(survey_root: Path | str) -> list[DiscoveredMeasurement]:
     """Auto-discover all US and TEV measurements across an UltraTEV survey folder.
 
@@ -826,7 +847,7 @@ def discover_survey_measurements(survey_root: Path | str) -> list[DiscoveredMeas
         for asset in summary_data.get("assets", []):
             if not isinstance(asset, dict):
                 continue
-            asset_name = str(asset.get("$ASSET_NAME", "")).strip()
+            raw_asset_name = str(asset.get("$ASSET_NAME", "")).strip()
             sub_assets = asset.get("$SUB_ASSETS", [])
             if not isinstance(sub_assets, list):
                 continue
@@ -862,19 +883,14 @@ def discover_survey_measurements(survey_root: Path | str) -> list[DiscoveredMeas
                     component = meas.get("$COMPONENT")
                     sub_loc = meas.get("$SUB_LOC")
 
-                    base_label = format_measurement_label(asset_name, sub_name, component, tech)
-                    if base_label not in seen_counts:
-                        seen_counts[base_label] = 1
-                        final_label = base_label
+                    if raw_asset_name:
+                        asset_name = raw_asset_name
                     else:
-                        seen_counts[base_label] += 1
-                        final_label = f"{base_label}_{seen_counts[base_label]}"
-                        logger.warning(
-                            "Duplicate measurement label '%s' in %s; renamed to '%s'",
-                            base_label,
-                            data_rel_norm,
-                            final_label,
-                        )
+                        parts = data_rel_norm.split("/")
+                        asset_name = parts[0] if parts and parts[0] else "SWG"
+
+                    base_label = format_measurement_label(asset_name, sub_name, component, tech)
+                    final_label = _deduplicate_measurement_label(seen_counts, base_label, data_rel_norm)
 
                     discovered.append(
                         DiscoveredMeasurement(
@@ -950,18 +966,7 @@ def discover_survey_measurements(survey_root: Path | str) -> list[DiscoveredMeas
 
             for tech, html_name in tech_list:
                 base_label = format_measurement_label(asset_name, sub_name, component, tech)
-                if base_label not in seen_counts:
-                    seen_counts[base_label] = 1
-                    final_label = base_label
-                else:
-                    seen_counts[base_label] += 1
-                    final_label = f"{base_label}_{seen_counts[base_label]}"
-                    logger.warning(
-                        "Duplicate measurement label '%s' in %s; renamed to '%s'",
-                        base_label,
-                        rel_path,
-                        final_label,
-                    )
+                final_label = _deduplicate_measurement_label(seen_counts, base_label, rel_path)
 
                 discovered.append(
                     DiscoveredMeasurement(

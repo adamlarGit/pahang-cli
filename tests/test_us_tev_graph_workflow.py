@@ -201,3 +201,44 @@ def test_batch_error_resilience(tmp_path: Path):
     assert summary.total_graphs == 4  # 2 from sub1, 2 from sub2
     assert len(summary.errors) == 1
     assert "Substation Bad" in summary.errors[0]
+
+
+def test_output_directory_resolution_for_nested_survey_archive(tmp_path: Path):
+    """Verify output directory strictly resolves to <SUBSTATION>/RAW DATA/US+TEV/graphs/
+    even when survey is nested inside <SUBSTATION>/RAW DATA/US+TEV/<ZIP_STEM>/.
+    """
+    sub_raw_us_tev = tmp_path / "PE_001" / "RAW DATA" / "US+TEV"
+    nested_zip_stem = sub_raw_us_tev / "20260917_SURVEY_ARCHIVE"
+    _setup_synthetic_survey(nested_zip_stem)
+
+    workflow = UsTevGraphWorkflow(mode="option_b")
+
+    # 1. run_substation with nested survey directory directly and output_dir=None
+    paths = workflow.run_substation(nested_zip_stem)
+    assert len(paths) == 2
+    canonical_graphs_dir = sub_raw_us_tev / "graphs"
+    assert canonical_graphs_dir.exists()
+    for p in paths:
+        assert p.parent == canonical_graphs_dir
+        assert p.exists()
+
+    # 2. run_substation passing parent US+TEV directory and output_dir=None
+    paths_from_parent = workflow.run_substation(sub_raw_us_tev)
+    assert len(paths_from_parent) == 2
+    for p in paths_from_parent:
+        assert p.parent == canonical_graphs_dir
+
+    # 3. run_batch with 3-tuple (item, nested_zip_stem, explicit_graphs_dir)
+    custom_graphs = tmp_path / "CUSTOM_GRAPHS"
+    batch_3_tuple = [("PE 001", nested_zip_stem, custom_graphs)]
+    summary = workflow.run_batch(batch_3_tuple)
+    assert summary.total_substations == 1
+    assert summary.total_graphs == 2
+    assert (custom_graphs / "VCB_PANEL_1_CIRCUIT_BREAKER_TEV.png").exists()
+
+    # 4. run_batch with 2-tuple (item, nested_zip_stem) without explicit output_dir
+    batch_2_tuple = [("PE 001", nested_zip_stem)]
+    summary_2 = workflow.run_batch(batch_2_tuple)
+    assert summary_2.total_substations == 1
+    assert summary_2.total_graphs == 2
+    assert (canonical_graphs_dir / "VCB_PANEL_1_CIRCUIT_BREAKER_TEV.png").exists()

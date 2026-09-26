@@ -382,3 +382,68 @@ def test_discover_survey_measurements_fallback_reading_metadata(tmp_path: Path):
     for m in discovered:
         assert isinstance(m, DiscoveredMeasurement)
         assert m.meas_dir.exists()
+
+
+def test_discover_survey_measurements_manifest_missing_asset_name_infers_from_path(tmp_path: Path):
+    """Test hierarchical asset resolution when manifest $ASSET_NAME is missing or empty.
+
+    Inspects top directory of Data path (e.g. TX1, VCB, RMU) instead of defaulting blindly to SWG.
+    """
+    survey_root = tmp_path / "US+TEV"
+    survey_root.mkdir(parents=True)
+
+    # Setup TX1 and VCB measurements with empty or missing $ASSET_NAME
+    tx_meas_dir = survey_root / "TX1" / "TRANSFORMER" / "20260917T110000_US"
+    _create_synthetic_measurement(tx_meas_dir, "US", "TX1", "TRANSFORMER", "$PRIMARY_CABLES")
+
+    vcb_meas_dir = survey_root / "VCB" / "PANEL_1" / "20260917T110100_TEV"
+    _create_synthetic_measurement(vcb_meas_dir, "TEV", "VCB", "PANEL_1", "$CIRCUIT_BREAKER")
+
+    summary = {
+        "assets": [
+            {
+                "$ASSET_NAME": "",  # Empty!
+                "$SUB_ASSETS": [
+                    {
+                        "$SUB_ASSET_NAME": "TRANSFORMER",
+                        "$MEASURES": [
+                            {
+                                "$COMPONENT": "$PRIMARY_CABLES",
+                                "$MEASURE_TYPE": "$ULTRA",
+                                "$SUB_LOC": "$NONE",
+                                "Data": "TX1/TRANSFORMER/20260917T110000_US",
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                # Missing $ASSET_NAME key entirely
+                "$SUB_ASSETS": [
+                    {
+                        "$SUB_ASSET_NAME": "PANEL_1",
+                        "$MEASURES": [
+                            {
+                                "$COMPONENT": "$CIRCUIT_BREAKER",
+                                "$MEASURE_TYPE": "$TEV",
+                                "$SUB_LOC": "$NONE",
+                                "Data": "VCB/PANEL_1/20260917T110100_TEV",
+                            }
+                        ],
+                    }
+                ],
+            },
+        ]
+    }
+    (survey_root / "survey_summary.js").write_text(f"var survey_summary = {json.dumps(summary)};\n", encoding="utf-8")
+
+    discovered = discover_survey_measurements(survey_root)
+    assert len(discovered) == 2
+
+    labels = [m.label for m in discovered]
+    assert "TX1_TRANSFORMER_PRIMARY_CABLES_US" in labels
+    assert "VCB_PANEL_1_CIRCUIT_BREAKER_TEV" in labels
+
+    by_label = {m.label: m for m in discovered}
+    assert by_label["TX1_TRANSFORMER_PRIMARY_CABLES_US"].asset == "TX1"
+    assert by_label["VCB_PANEL_1_CIRCUIT_BREAKER_TEV"].asset == "VCB"

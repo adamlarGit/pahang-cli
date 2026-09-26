@@ -66,12 +66,6 @@ from src.quick_report.prpd import (
     safe_path,
 )
 
-
-def _sanitize_name(name: str) -> str:
-    """Sanitize asset or sub-asset names into filesystem-safe uppercase tokens."""
-    return re.sub(r"[^\w]+", "_", name.upper()).strip("_")
-
-
 def find_survey_root(target_path: Path | str) -> Path:
     """Find the root survey directory by traversing upwards looking for survey_summary.js or resources."""
     cur = Path(target_path).resolve()

@@ -32,9 +32,20 @@ from src.quick_report.prpd import (
     generate_prpd_figure,
     render_prpd_option_c_image,
 )
+from src.project.models import PrpdMode
 from src.testsheet.models import SubstationTestsheetPackage
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class UsTevCandidate:
+    """Discovered candidate substation containing valid US+TEV survey data."""
+
+    package: SubstationTestsheetPackage
+    raw_data_dir: Path
+    survey_dir: Path
+    output_dir: Path
 
 
 class BrowserPrerequisiteError(RuntimeError):
@@ -63,7 +74,7 @@ class UsTevWorkflowSummary:
 def generate_substation_graphs(
     survey_root: Path | str,
     output_dir: Path | str,
-    mode: str = "option_c",
+    mode: PrpdMode = "option_c",
 ) -> list[Path]:
     """Generate US and TEV PRPD graphs for all discovered measurements in a survey directory.
 
@@ -139,8 +150,8 @@ def generate_substation_graphs(
 class UsTevGraphWorkflow:
     """Coordinates Phase-Resolved Partial Discharge (PRPD) graph generation across substations."""
 
-    def __init__(self, mode: str = "option_c") -> None:
-        self.mode = mode.lower()
+    def __init__(self, mode: PrpdMode = "option_c") -> None:
+        self.mode: PrpdMode = mode.lower() if isinstance(mode, str) else mode  # type: ignore[assignment]
 
     def check_browser_prerequisite(self) -> str:
         """Validate Chromium browser presence if running in Option C."""
@@ -161,12 +172,25 @@ class UsTevGraphWorkflow:
         s_root = Path(survey_root).resolve()
         resolved_root = discover_ultratev_survey_dir(s_root) or s_root
 
-        out_path = Path(output_dir).resolve() if output_dir else resolved_root / "graphs"
+        if output_dir:
+            out_path = Path(output_dir).resolve()
+        else:
+            if resolved_root.parent.name.upper() == "US+TEV":
+                out_path = resolved_root.parent / "graphs"
+            elif resolved_root.name.upper() == "US+TEV":
+                out_path = resolved_root / "graphs"
+            elif s_root.parent.name.upper() == "US+TEV":
+                out_path = s_root.parent / "graphs"
+            elif s_root.name.upper() == "US+TEV":
+                out_path = s_root / "graphs"
+            else:
+                out_path = resolved_root / "graphs"
+
         return generate_substation_graphs(resolved_root, out_path, self.mode)
 
     def run_batch(
         self,
-        substations: list[tuple[Any, Path | str]],
+        substations: Sequence[tuple[Any, ...]],
         on_progress: Callable[[int, int, str, int, Path], None] | None = None,
     ) -> UsTevWorkflowSummary:
         """Execute batch graph generation adhering to SubstationIsolatedBatchResiliencePolicy."""
@@ -177,19 +201,42 @@ class UsTevGraphWorkflow:
         self.check_browser_prerequisite()
 
         total = len(substations)
-        for idx, (substation_item, raw_or_survey_dir) in enumerate(substations, start=1):
+        for idx, item in enumerate(substations, start=1):
+            substation_item = item[0]
+            raw_or_survey_dir = item[1]
+            explicit_output_dir = item[2] if len(item) >= 3 else None
+
             path_obj = Path(raw_or_survey_dir).resolve()
             survey_root = discover_ultratev_survey_dir(path_obj) or path_obj
-            output_dir = survey_root / "graphs"
+
+            if explicit_output_dir is not None:
+                output_dir = Path(explicit_output_dir).resolve()
+            else:
+                if survey_root.parent.name.upper() == "US+TEV":
+                    output_dir = survey_root.parent / "graphs"
+                elif survey_root.name.upper() == "US+TEV":
+                    output_dir = survey_root / "graphs"
+                elif path_obj.parent.name.upper() == "US+TEV":
+                    output_dir = path_obj.parent / "graphs"
+                elif path_obj.name.upper() == "US+TEV":
+                    output_dir = path_obj / "graphs"
+                else:
+                    output_dir = survey_root / "graphs"
+
+            item_label = (
+                _format_package_label(substation_item)
+                if hasattr(substation_item, "station") or hasattr(substation_item, "substation_number") or hasattr(substation_item, "data")
+                else str(substation_item)
+            )
 
             try:
                 paths = self.run_substation(survey_root, output_dir)
                 count = len(paths)
                 summary.total_graphs += count
                 if on_progress:
-                    on_progress(idx, total, str(substation_item), count, output_dir)
+                    on_progress(idx, total, item_label, count, output_dir)
             except Exception as exc:
-                err_msg = f"Failed generating graphs for {substation_item}: {exc}"
+                err_msg = f"Failed generating graphs for {item_label}: {exc}"
                 logger.error(err_msg, exc_info=True)
                 summary.errors.append(err_msg)
 
@@ -200,15 +247,15 @@ class UsTevGraphWorkflow:
 def discover_us_tev_candidate_substations(
     environment: Any,
     target_dates: Sequence[Path | str],
-) -> list[tuple[SubstationTestsheetPackage, Path, Path]]:
+) -> list[UsTevCandidate]:
     """Discover testsheet packages across target dates that contain valid US+TEV survey folders.
 
-    Returns list of tuples: (package, raw_data_dir, survey_dir).
+    Returns list of UsTevCandidate dataclasses.
     """
     extractor = QuickReportExtractor()
     packages = extractor.extract(environment, folders=target_dates)
 
-    candidates: list[tuple[SubstationTestsheetPackage, Path, Path]] = []
+    candidates: list[UsTevCandidate] = []
     for pkg in packages:
         raw_dir = environment.storage.get_substation_raw_data_dir(
             pkg.station,
@@ -218,9 +265,18 @@ def discover_us_tev_candidate_substations(
         )
         if not raw_dir:
             continue
-        survey_dir = discover_ultratev_survey_dir(raw_dir)
+        raw_dir_path = Path(raw_dir)
+        survey_dir = discover_ultratev_survey_dir(raw_dir_path)
         if survey_dir is not None and survey_dir.exists():
-            candidates.append((pkg, Path(raw_dir), survey_dir))
+            output_dir = raw_dir_path / "US+TEV" / "graphs"
+            candidates.append(
+                UsTevCandidate(
+                    package=pkg,
+                    raw_data_dir=raw_dir_path,
+                    survey_dir=survey_dir,
+                    output_dir=output_dir,
+                )
+            )
 
     return candidates
 
@@ -237,15 +293,15 @@ def _format_package_label(pkg: Any) -> str:
 
 
 def select_us_tev_substations_interactive(
-    candidates: list[tuple[SubstationTestsheetPackage, Path, Path]],
-) -> list[tuple[SubstationTestsheetPackage, Path, Path]]:
+    candidates: list[UsTevCandidate],
+) -> list[UsTevCandidate]:
     """Interactive single merged checklist selector for candidate substations across all dates."""
     if not candidates:
         return []
 
-    options: list[SelectOption[tuple[SubstationTestsheetPackage, Path, Path]]] = []
+    options: list[SelectOption[UsTevCandidate]] = []
     for candidate in candidates:
-        pkg = candidate[0]
+        pkg = candidate.package
         title = _format_package_label(pkg)
         options.append(SelectOption(title=title, value=candidate, checked=True))
 
@@ -266,19 +322,21 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
         SelectOption("Enter Target Date(s) (Text Input / Range)", "enter_dates"),
         SelectOption("Cancel", "__cancel__", shortcut_key="c"),
     ]
-    mode_str = select_one("Generate US+TEV Survey Graphs - Select Date Mode", options)
-    if mode_str in ("__cancel__", None):
-        print("Operation cancelled.")
-        return None
 
-    if mode_str == "browse_dates":
-        selected_dates = select_pahang_inspection_dates_interactive(environment)
-    else:
-        selected_dates = prompt_target_inspection_dates_with_ranges(environment)
+    while True:
+        mode_str = select_one("Generate US+TEV Survey Graphs - Select Date Mode", options)
+        if mode_str in ("__cancel__", None):
+            print("Operation cancelled.")
+            return None
 
-    if not selected_dates:
-        print("Operation cancelled.")
-        return None
+        if mode_str == "browse_dates":
+            selected_dates = select_pahang_inspection_dates_interactive(environment)
+        else:
+            selected_dates = prompt_target_inspection_dates_with_ranges(environment)
+
+        if not selected_dates:
+            continue
+        break
 
     folder_dates = [d.name if isinstance(d, Path) else str(d) for d in selected_dates]
     candidates = discover_us_tev_candidate_substations(environment, folder_dates)
@@ -306,9 +364,9 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
         f"substation(s) in {render_mode.upper()} mode..."
     )
 
-    batch: list[tuple[Any, Path]] = [
-        (_format_package_label(pkg), survey_dir)
-        for pkg, _raw_dir, survey_dir in selected_candidates
+    batch: list[tuple[Any, Path, Path]] = [
+        (cand.package, cand.survey_dir, cand.output_dir)
+        for cand in selected_candidates
     ]
 
     def _on_progress(idx: int, total: int, pe_name: str, count: int, out_dir: Path) -> None:
