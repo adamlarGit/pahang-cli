@@ -31,7 +31,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 
 ```mermaid
 graph TD
-    T72["#72: feat(prpd): survey measurement discovery with multi-point component naming"]
+    T72["#72: feat(prpd): survey measurement discovery with multi-point component naming - Closed"]
     T73["#73: feat(workflow): US+TEV graph generation workflow and dual-mode rendering engine"]
     T74["#74: feat(cli): utility action menu registration and US+TEV substation checklist"]
     T75["#75: refactor(scripts): align preview script with centralized measurement discovery"]
@@ -49,7 +49,7 @@ graph TD
 ## Tickets
 
 ### #72: feat(prpd): survey measurement discovery with multi-point component naming
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#72](https://github.com/adamlarGit/pahang-cli/issues/72)
 - **Blocked by**: None (can start immediately)
 - **Ticket File**: [tickets/072-survey-measurement-discovery-and-naming.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/generate-us-tev-survey-graphs/tickets/072-survey-measurement-discovery-and-naming.md)
