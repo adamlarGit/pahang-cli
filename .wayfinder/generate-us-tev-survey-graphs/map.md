@@ -34,7 +34,7 @@ graph TD
     T72["#72: feat(prpd): survey measurement discovery with multi-point component naming - Closed"]
     T73["#73: feat(workflow): US+TEV graph generation workflow and dual-mode rendering engine - Closed"]
     T74["#74: feat(cli): utility action menu registration and US+TEV substation checklist - Closed"]
-    T75["#75: refactor(scripts): align preview script with centralized measurement discovery"]
+    T75["#75: refactor(scripts): align preview script with centralized measurement discovery - Closed"]
     T76["#76: docs(adr): record ADR 0006, update CONTEXT.md, and run full E2E regression suite"]
 
     T72 --> T73
@@ -70,7 +70,7 @@ graph TD
 - **Delivers**: Zero-arg runner factory `_load_generate_us_tev_graphs_runner()` wrapping `get_or_create_utility_environment()`, Station $\to$ Month $\to$ Date interactive selection (`select_pahang_inspection_dates_interactive`) and range input (`prompt_target_inspection_dates_with_ranges`), substation package discovery filtered strictly to stations with valid `RAW DATA/US+TEV/` surveys, single merged checklist prefixed with `[{date_str}]`, `UTILITY_ACTIONS` registration at Position #9 with label `"Generate US+TEV survey graphs"`, CLI integration unit tests.
 
 ### #75: refactor(scripts): align preview script with centralized measurement discovery
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#75](https://github.com/adamlarGit/pahang-cli/issues/75)
 - **Blocked by**: #72 (can execute in parallel with #73 and #74)
 - **Ticket File**: [tickets/075-developer-preview-script-refactoring.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/generate-us-tev-survey-graphs/tickets/075-developer-preview-script-refactoring.md)
