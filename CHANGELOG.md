@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-09-26
+
+### Added
+- **Multi-Date Interactive Selection & Range Syntax (`src/cli_selectors.py`, `CONTEXT.md`)**:
+  - Implemented `select_pahang_inspection_dates_interactive` presenting an interactive questionary checklist for available inspection dates with all checkboxes unchecked by default, `'a'` key toggle-all shortcut, and resilient 0-selection loopback returning `()` without aborting (closes #67).
+  - Implemented `prompt_target_inspection_dates_with_ranges` with formatted syntax guidance, comma-delimited tokens, calendar range expansion (`..` and case-insensitive `to`), chronological date ordering, and tolerant `[Y/n]` confirmation defaulting to Yes (closes #67).
+  - Added `MultiDateSelectionPolicy` to `CONTEXT.md` codifying interactive checklist semantics, range expansion rules, and batch progress telemetry across workflows (closes #70).
+
+### Changed
+- **Quick Report Multi-Date Selection & Date-Aware Telemetry (`src/project_workflow_actions.py`, `src/workflows/quick_report.py`)**:
+  - Extended `QuickReportAction` to offer `Browse Date Folders` and `Enter Target Date(s)` dual-mode selection, enabling batch report generation across multiple inspection dates in a single invocation (closes #68).
+  - Updated `QuickReportWorkflow` progress reporter sink with date-scoped context telemetry (`[1/N] [DD-MM-YYYY] Generating quick report for <STEM>`) (closes #68).
+- **Full Report Multi-Date Selection & Date-Prefixed Substation Checklist (`src/project_workflow_actions.py`, `src/workflows/full_report.py`)**:
+  - Extended `generate_full_reports_action` with dual-mode date selection (`Browse Date Folders` and `Enter Target Date(s)`) and unified date-prefixed substation review checklist (`[DD-MM-YYYY] <STEM> [READY]`) preserving chronological grouping across dates (closes #69).
+  - Updated `FullReportWorkflow` progress reporter sink with date-scoped context telemetry (`[1/N] [DD-MM-YYYY] Generating full report for <STEM>`) (closes #69).
+
+### Fixed
+- **Range Syntax Regex & Validation Resilience (`src/cli_selectors.py`)**:
+  - Added `re.IGNORECASE` to range regex ensuring case-insensitive `to` delimiter parsing and enforced start/end date validation catching malformed range endpoints.
+  - Aligned workflow test suites and action mocks with multi-date selector contracts and parameters.
+
 ## [1.23.3] - 2026-09-25
 
 ### Fixed
