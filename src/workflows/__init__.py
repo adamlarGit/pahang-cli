@@ -69,8 +69,11 @@ from src.workflows.us_audio import (
     UsAudioCandidate,
     UsAudioWorkflow,
     UsAudioWorkflowSummary,
+    discover_us_audio_candidate_substations,
     embed_survey_ultrasound_into_pdf,
     export_substation_16bit_wavs,
+    run_generate_us_audio_action,
+    select_us_audio_substations_interactive,
 )
 from src.workflows.whatsapp import WhatsAppReportWorkflow
 
@@ -130,9 +133,12 @@ __all__ = [
     "WhatsAppReportWorkflow",
     "TestsheetPdfNotFoundError",
     "TestsheetPdfValidationResult",
+    "discover_us_audio_candidate_substations",
     "embed_survey_ultrasound_into_pdf",
     "export_substation_16bit_wavs",
     "resolve_processed_testsheet_pdf_path",
+    "run_generate_us_audio_action",
+    "select_us_audio_substations_interactive",
     "validate_processed_testsheet_pdf",
 ]
 

@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 Part of Wayfinder Map: [map.md](../map.md)
 GitHub Issue: [#87](https://github.com/adamlarGit/pahang-cli/issues/87)
 Specification: [spec.md](../spec.md)
@@ -9,9 +9,9 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #086 (standalone audio workflow engine).
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Implement discovery and interactive selection helpers in `src/workflows/us_audio.py`:
+- [x] Implement discovery and interactive selection helpers in `src/workflows/us_audio.py`:
   - `discover_us_audio_candidate_substations(environment: ProjectEnvironment, target_dates: Sequence[Path | str]) -> list[UsAudioCandidate]`:
     - Extracts substation packages across dates using `QuickReportExtractor`.
     - Resolves raw material directory and checks for UltraTEV survey presence via `discover_ultratev_survey_dir()`.
@@ -23,7 +23,7 @@ Specification: [spec.md](../spec.md)
     - Reuses `select_multiple` to present a single merged checklist.
     - Default state is all pre-checked with `'a'` key shortcut to toggle.
     - Zero-selection loops back safely without halting.
-- [ ] Implement runner factory `_load_generate_us_audio_runner()` in `src/utility_actions.py`:
+- [x] Implement runner factory `_load_generate_us_audio_runner()` in `src/utility_actions.py`:
   - Prompts operator for mode:
     1. `"Embed ultrasound sounds into existing report PDFs (Full & Quick Report)"`
     2. `"Export converted 16-bit WAV files to RAW DATA/US+TEV/sounds/"`
@@ -33,10 +33,10 @@ Specification: [spec.md](../spec.md)
     - If Mode 1 (`embed_pdf`) is selected and zero candidates have deliverable PDFs on disk, displays an actionable notice explaining that reports must be compiled first, offering to switch to Mode 2 (`export_wav`) or return to menu.
   - Prompts substation checklist and executes `UsAudioWorkflow.run_batch()` with real-time console progress telemetry.
   - Displays summary box upon completion.
-- [ ] Register action in `UTILITY_ACTIONS` list in `src/utility_actions.py`:
+- [x] Register action in `UTILITY_ACTIONS` list in `src/utility_actions.py`:
   - Placed at Position #10 (index 9) immediately after `"Generate US+TEV survey graphs"`.
   - Label: `"Generate US 16-bit audio & embed sounds into PDFs"`.
-- [ ] Implement CLI integration unit tests in `tests/test_us_audio_cli.py`:
+- [x] Implement CLI integration unit tests in `tests/test_us_audio_cli.py`:
   - Test candidate filtering omits substations lacking US+TEV survey folders.
   - Test date-prefixed checklist formatting and `[PDF READY]` / `[NO PDF]` tags.
   - Test missing PDF notice in Mode 1 prompts user without crashing.

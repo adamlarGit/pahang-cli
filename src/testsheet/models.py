@@ -278,6 +278,21 @@ class SubstationTestsheetPackage:
     substation_number: int
     data: TestsheetData | None = None
 
+    @property
+    def substation_name(self) -> str:
+        """Return human-readable substation name."""
+        if self.data:
+            name = (
+                self.data.substation_name_site
+                or self.data.substation_name_erms
+                or self.data.station_name
+            )
+            if name:
+                return str(name)
+        if self.station:
+            return str(self.station)
+        return f"PE {self.substation_number}"
+
 
 @dataclass(frozen=True)
 class SubstationPackage:

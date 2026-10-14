@@ -79,7 +79,7 @@ graph TD
     T084["#084: feat(sound): in-memory 24-to-16-bit PCM converter & PyMuPDF xref sound annotator - Closed"]
     T085["#085: feat(sound): measurement discovery to PDF page and compartment matching engine - Closed"]
     T086["#086: feat(workflow): standalone US audio generation & retroactive PDF sound embedding workflow - Closed"]
-    T087["#087: feat(cli): utility action menu registration & interactive multi-date substation checklist - Open"]
+    T087["#087: feat(cli): utility action menu registration & interactive multi-date substation checklist - Closed"]
     T088["#088: feat(pipeline): automatic post-processing sound embedding for Full Report & Quick Report - Open"]
     T089["#089: docs(adr): record ADR 0007, update CONTEXT.md, and run full E2E regression suite - Open"]
 
@@ -118,7 +118,7 @@ graph TD
 - **Delivers**: `UsAudioWorkflow` in `src/workflows/us_audio.py` supporting `"export_wav"`, `"embed_pdf"`, and `"both"` execution modes, `export_substation_16bit_wavs` saving canonical `{meas.label}.wav` files into `<SUBSTATION>/RAW DATA/US+TEV/sounds/`, `embed_survey_ultrasound_into_pdf` modifying PDFs atomically via `AtomicPdfSavePolicy` (with context manager, pre-flight unlink, and guarded cleanup), idempotent sound embedding, error isolation via `SubstationIsolatedBatchResiliencePolicy`, and graceful degradation via `UsTevAudioResiliencePolicy`.
 
 ### #087: feat(cli): utility action menu registration & interactive multi-date substation checklist
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#87](https://github.com/adamlarGit/pahang-cli/issues/87)
 - **Blocked by**: #086
 - **Ticket File**: [tickets/087-cli-utility-action-and-substation-checklist.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/embed-ultrasound-audio-in-reports/tickets/087-cli-utility-action-and-substation-checklist.md)
