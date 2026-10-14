@@ -6,14 +6,17 @@ import logging
 import time
 from pathlib import Path
 
+from src.core.normalizers import format_month_folder
 from src.postprocessing.converters import (
     ComDocumentConverter,
     DocumentConverter,
     batch_com_session,
 )
 from src.project.environment import ProjectEnvironment
+from src.quick_report.prpd import discover_ultratev_survey_dir
 from src.testsheet.models import SubstationPackage
 from src.testsheet.repository import LocalTestsheetPackageRepository
+from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
 from src.workflows.diagonal_borders import process_workbook
 from src.workflows.models import (
     PostProcessingFailure,
@@ -228,6 +231,49 @@ class PostProcessingPipelineWorkflow:
 
                     # 6. PDF Merge: combine in-place into quick_report_pdf
                     converter.merge_pdfs(quick_report_pdf, testsheet_pdf, quick_report_pdf)
+
+                    # 7. Post-merge Sound Embedding Hook (IdempotentSoundEmbeddingPolicy & UsTevAudioResiliencePolicy)
+                    try:
+                        ts_parent = pkg.testsheet_xlsx.parent
+                        date_str = pkg.date_folder or ts_parent.name
+                        raw_month = (
+                            ts_parent.parent.name
+                            if len(ts_parent.parents) >= 1
+                            and not ts_parent.parent.name.upper().startswith("TESTSHEET")
+                            else None
+                        )
+                        month = (
+                            format_month_folder(raw_month)
+                            or format_month_folder(date_str)
+                            or (ts_parent.parent.name if len(ts_parent.parents) >= 1 else None)
+                        )
+                        station = (
+                            ts_parent.parent.parent.name
+                            if len(ts_parent.parents) >= 2
+                            and not ts_parent.parent.parent.name.upper().startswith("TESTSHEET")
+                            else pkg.station_name
+                        )
+
+                        raw_dir = None
+                        if hasattr(env, "storage") and hasattr(env.storage, "get_substation_raw_data_dir"):
+                            raw_dir = env.storage.get_substation_raw_data_dir(
+                                pkg.station_name, month, date_str, pkg.substation_number
+                            )
+                            if not raw_dir and station and station != pkg.station_name:
+                                raw_dir = env.storage.get_substation_raw_data_dir(
+                                    station, month, date_str, pkg.substation_number
+                                )
+
+                        survey_root = discover_ultratev_survey_dir(raw_dir)
+                        if survey_root is not None and survey_root.exists():
+                            count = embed_survey_ultrasound_into_pdf(quick_report_pdf, survey_root=survey_root, package=pkg)
+                            logger.info("[QUICK REPORT] Embedded %d ultrasound sounds into %s", count, quick_report_pdf.name)
+                            sink(f"[QUICK REPORT] Embedded {count} ultrasound sounds into {quick_report_pdf.name}")
+                        else:
+                            logger.info("[QUICK REPORT] No US+TEV raw data found for %s (#%s); skipping sound embedding", pkg.station_name, pkg.substation_number)
+                            sink(f"[QUICK REPORT] No US+TEV raw data found for {pkg.station_name} (#{pkg.substation_number}); skipping sound embedding")
+                    except Exception as sound_exc:
+                        logger.warning("[WARN] Sound embedding failed for %s: %s; keeping original PDF", quick_report_pdf.name, sound_exc)
 
                     processed_packages.append(pkg)
                     final_deliverables.append(quick_report_pdf)
