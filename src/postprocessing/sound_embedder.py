@@ -6,11 +6,380 @@ export, and low-level PyMuPDF xref sound object & annotation injection.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
+from typing import Any
 import wave
 
 import fitz
+
+from src.quick_report.prpd import (
+    DiscoveredMeasurement,
+    decode_ultrasonic_phase_plot,
+    find_swg_feeder_survey_dir,
+    find_tx_survey_dir,
+)
+
+# Canonical 1-to-1 chamber to component keyword mapping for switchgear cubicles
+CHAMBER_COMPONENT_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "BREAKER": ("CIRCUIT_BREAKER", "BREAKER"),
+    "CABLE": ("CABLE_BOX", "CABLES", "CABLE"),
+    "BUSBAR": ("BUSBAR", "UPPER_BUSBARS", "LOWER_BUSBARS"),
+    "PT": ("VT_CHAMBER", "VOLTAGE_TRANSFORMER", "VT", "PT"),
+    "VT": ("VT_CHAMBER", "VOLTAGE_TRANSFORMER", "VT", "PT"),
+}
+
+# Transformer active HV scanning page keywords
+TRANSFORMER_HV_SIDE_KEYWORDS: tuple[str, ...] = (
+    "HV CABLE",
+    "HV BUSHING",
+    "HV CABLE SPLIT",
+    "TRANSFORMER",
+)
+
+
+def find_sound_clip_anchor(page: fitz.Page) -> fitz.Rect | None:
+    """Locate the 'Sound clip' marker on a PDF page and return target speaker rect in Column 2.
+
+    Calculates target speaker annotation rectangle centered inside Column 2 aligned beneath
+    ultrasound measurement readings: fitz.Rect(236.0, inst.y0 - 2, 254.0, inst.y1 + 2).
+    If absent, returns None.
+
+    Args:
+        page: PyMuPDF Page object.
+
+    Returns:
+        fitz.Rect | None: Target speaker annotation rectangle, or None if marker is absent.
+    """
+    rects = page.search_for("Sound clip")
+    if not rects:
+        return None
+    inst = rects[0]
+    return fitz.Rect(236.0, inst.y0 - 2, 254.0, inst.y1 + 2)
+
+
+def extract_page_equipment_context(
+    page: fitz.Page,
+    package: Any = None,
+) -> dict[str, Any]:
+    r"""Extract physical equipment identifiers from a PDF deliverable page text.
+
+    Extracts text and regex matches:
+      - Switchgear panel index / feeder tag: r"Panel No\.\s*[:\n\r]*\s*([^\n\r]+)"
+      - Feeder name: r"Panel Name\s*[:\n\r]*\s*([^\n\r]+)" (from Row 4)
+      - Compartment area: r"Area\s*[:\n\r]*\s*([A-Za-z0-9_\s]+?)(?:\s+(?:Panel|IR|Time|Model|Tx)|$)"
+      - Transformer unit index: r"Tx No\.\s*[:\n\r]*(?:TX|Tx|TRANSFORMER)?\s*(\d+)" and r"(?:Tx No\.|TX)\s*[:\n\r]*\s*(?:TX)?\s*(\d+)"
+
+    Enforces TwoTierPanelMatchingPolicy:
+      - Tier 1: Parses explicit digits from Panel No. if present (e.g. 1, Panel 1, 1 (CRB70001) -> 1).
+      - Tier 2: If unnumbered utility code (e.g. CRB00764), uses extracted Panel Name to resolve
+        via find_swg_feeder_survey_dir directly, falling back to package.equipment.switchgears[0].panels
+        if package is provided.
+
+    Args:
+        page: PyMuPDF Page object.
+        package: Optional SubstationTestsheetPackage containing equipment catalogs.
+
+    Returns:
+        dict[str, Any]: Dictionary containing extracted equipment context.
+    """
+    text = page.get_text("text")
+
+    # 1. Switchgear panel index / feeder tag (captures "1", "Panel 1", "1 (CRB70001)", "CRB00764")
+    m_panel = re.search(r"Panel No\.\s*[:\n\r]*\s*([^\n\r]+)", text)
+    raw_panel_no = m_panel.group(1).strip() if m_panel else ""
+
+    # 2. Feeder name (Row 4)
+    m_name = re.search(r"Panel Name\s*[:\n\r]*\s*([^\n\r]+)", text)
+    panel_name = m_name.group(1).strip() if m_name else ""
+
+    # 3. Compartment area
+    m_area = re.search(
+        r"Area\s*[:\n\r]*\s*([A-Za-z0-9_\s]+?)(?:\s+(?:Panel|IR|Time|Model|Tx)|$)",
+        text,
+        re.MULTILINE,
+    )
+    area = m_area.group(1).strip() if m_area else ""
+
+    # 4. Transformer unit index (strict delimiter requirement to prevent matching feeder names like "TX 1 INCOMER")
+    tx_idx: int | None = None
+    raw_tx_no = ""
+    m_tx = (
+        re.search(r"Tx No\.\s*[:\n\r]*\s*(?:TX|Tx|TRANSFORMER)?\s*(\d+)", text, re.IGNORECASE)
+        or re.search(r"\b(?:Tx No\.|TX)\s*[:\n\r]+\s*(?:TX)?\s*(\d+)", text, re.IGNORECASE)
+    )
+    if m_tx:
+        tx_idx = int(m_tx.group(1))
+        raw_tx_no = m_tx.group(0).strip()
+
+    # Enforce TwoTierPanelMatchingPolicy
+    panel_no: int | None = None
+    if raw_panel_no:
+        # Tier 1: Check for explicit digits (e.g. "1", "Panel 1", "1 (CRB70001)")
+        m_tier1 = (
+            re.search(r"^Panel\s*(\d+)", raw_panel_no, re.IGNORECASE)
+            or re.search(r"^(\d+)", raw_panel_no)
+        )
+        if m_tier1:
+            panel_no = int(m_tier1.group(1))
+        elif package is not None:
+            # Tier 2: Check package switchgear panel catalog fallback
+            eq = getattr(package, "equipment", package)
+            swgs = getattr(eq, "switchgears", ())
+            if swgs:
+                primary_swg = swgs[0]
+                for p in getattr(primary_swg, "panels", ()):
+                    feeder_tag = getattr(p, "panel_feeder_no", "") or ""
+                    p_name = getattr(p, "name", "") or ""
+                    if (feeder_tag and feeder_tag.strip().upper() == raw_panel_no.upper()) or (
+                        panel_name and p_name and p_name.strip().upper() == panel_name.upper()
+                    ):
+                        panel_no = getattr(p, "panel_no", None)
+                        break
+
+    return {
+        "panel_no": panel_no,
+        "panel_name": panel_name,
+        "raw_panel_no": raw_panel_no,
+        "area": area,
+        "tx_idx": tx_idx,
+        "raw_tx_no": raw_tx_no,
+    }
+
+
+def get_measurement_db(meas: DiscoveredMeasurement) -> float:
+    """Extract ultrasound dB reading from measurement directory for tie-breaking.
+
+    Inspects ultrasonic_phase_plot.js and measurement_metadata.js (via ADR-0006 JSON raw_decode).
+    If readings cannot be decoded, returns -999.0 as a baseline sentinel.
+    """
+    # 1. Try ultrasonic_phase_plot.js
+    phase_plot_path = meas.meas_dir / "ultrasonic_phase_plot.js"
+    if phase_plot_path.is_file():
+        try:
+            events = decode_ultrasonic_phase_plot(phase_plot_path)
+            if events:
+                return max(float(e.get("amplitude", e.get("peak", -999.0))) for e in events)
+        except Exception:
+            pass
+
+    # 2. Try measurement_metadata.js via ADR-0006 JSON raw_decode
+    meta_path = meas.meas_dir / "measurement_metadata.js"
+    if meta_path.is_file():
+        try:
+            raw_text = meta_path.read_text(encoding="utf-8", errors="ignore")
+            start_idx = raw_text.find("{")
+            if start_idx != -1:
+                meta_dict, _ = json.JSONDecoder().raw_decode(raw_text[start_idx:])
+                trend = meta_dict.get("Trend", [])
+                if trend and isinstance(trend, list) and isinstance(trend[0], dict):
+                    db_val = trend[0].get("$MEASURE_DBUV")
+                    if db_val is not None:
+                        return float(db_val)
+
+                for group in meta_dict.get("measurement_fields", []):
+                    for field in group.get("fields", []):
+                        if field.get("fieldname") == "$MEASURE_DBUV":
+                            return float(field.get("data", -999.0))
+        except Exception:
+            pass
+
+    return -999.0
+
+
+def _validate_and_return_8k_wav(meas: DiscoveredMeasurement) -> Path:
+    """Validate mandatory presence of non-empty 8k.wav and return its Path.
+
+    Raises:
+        FileNotFoundError: If 8k.wav does not exist or has 0 bytes.
+    """
+    wav_path = meas.meas_dir / "8k.wav"
+    if not wav_path.is_file():
+        raise FileNotFoundError(
+            f"Missing mandatory 8k.wav for measurement: {meas.label} in {meas.meas_dir}"
+        )
+    if wav_path.stat().st_size == 0:
+        raise FileNotFoundError(
+            f"Mandatory 8k.wav is empty (0 bytes) for measurement: {meas.label} in {meas.meas_dir}"
+        )
+    return wav_path
+
+
+def resolve_measurement_audio_for_page(
+    survey_root: Path,
+    measurements: list[DiscoveredMeasurement],
+    page_context: dict[str, Any],
+) -> Path | None:
+    """Canonical mapping resolver linking a deliverable PDF page to its UltraTEV 8k.wav audio recording.
+
+    Filters measurements to tech == "US".
+    Enforces VcbAudioAttributionPolicy, TransformerAudioAttributionPolicy, and RmuAudioAttributionPolicy.
+    Enforces mandatory presence of non-empty 8k.wav (raising FileNotFoundError if missing).
+
+    Args:
+        survey_root: Substation survey root directory.
+        measurements: List of all auto-discovered survey measurements.
+        page_context: Extracted page equipment context from extract_page_equipment_context.
+
+    Returns:
+        Path | None: Resolved path to the target 8k.wav file, or None if unmeasured or non-acoustic.
+    """
+    us_meas = [m for m in measurements if m.tech == "US"]
+    if not us_meas:
+        return None
+
+    area = str(page_context.get("area", "")).strip().upper()
+    tx_idx = page_context.get("tx_idx")
+
+    # Guard: Non-acoustic SECONDARY COMPARTMENT or empty area
+    if not area or "SECONDARY" in area:
+        return None
+
+    # 1. Transformer Audio Attribution Policy
+    # Only applies to active HV side scanning pages
+    is_hv_side_page = any(kw in area for kw in TRANSFORMER_HV_SIDE_KEYWORDS)
+    if is_hv_side_page:
+        eff_tx_idx = tx_idx if tx_idx is not None else 1
+        tx_dir = find_tx_survey_dir(survey_root, eff_tx_idx) if survey_root and survey_root.exists() else None
+
+        candidates: list[DiscoveredMeasurement] = []
+        for m in us_meas:
+            matched = False
+            if tx_dir and (m.meas_dir == tx_dir or tx_dir in m.meas_dir.parents):
+                matched = True
+            elif f"TX{eff_tx_idx}" in m.label.upper() or f"TX{eff_tx_idx}" in m.asset.upper():
+                matched = True
+            elif eff_tx_idx == 1 and (
+                "_TX_" in m.label.upper()
+                or m.asset.upper() in ("TX", "TRANSFORMER")
+                or "TRANSFORMER" in m.subasset.upper()
+            ):
+                matched = True
+
+            if matched:
+                candidates.append(m)
+
+        if not candidates:
+            return None
+
+        selected = max(candidates, key=get_measurement_db)
+        return _validate_and_return_8k_wav(selected)
+
+    # 2. Switchgear Cubicle (VCB / RMU)
+    panel_no = page_context.get("panel_no") or 0
+    raw_panel_no = str(page_context.get("raw_panel_no", "")).strip()
+    panel_name = str(page_context.get("panel_name", "")).strip()
+
+    feeder_dir = (
+        find_swg_feeder_survey_dir(survey_root, panel_no=panel_no, feeder_no=raw_panel_no, panel_name=panel_name)
+        if survey_root and survey_root.exists()
+        else None
+    )
+
+    # Collect measurements belonging to this panel
+    panel_measurements: list[DiscoveredMeasurement] = []
+    if feeder_dir:
+        panel_measurements = [
+            m for m in us_meas
+            if m.meas_dir == feeder_dir or feeder_dir in m.meas_dir.parents
+        ]
+
+    if not panel_measurements:
+        targets: list[str] = []
+        if panel_no > 0:
+            targets.extend([
+                f"PANEL_{panel_no}",
+                f"PANEL {panel_no}",
+                f"FEEDER_{panel_no}",
+                f"FEEDER {panel_no}",
+                f"PANEL_{str(panel_no).zfill(2)}",
+                f"FEEDER_{str(panel_no).zfill(2)}",
+            ])
+        if panel_name:
+            targets.append(panel_name.strip().upper())
+            targets.append(panel_name.strip().upper().replace(" ", "_"))
+        if raw_panel_no:
+            targets.append(raw_panel_no.strip().upper())
+            targets.append(raw_panel_no.strip().upper().replace(" ", "_"))
+
+        if targets:
+            panel_measurements = [
+                m for m in us_meas
+                if any(t in m.subasset.upper() or t in m.label.upper() for t in targets)
+            ]
+
+    # Equipment type detection: distinguish RMU from modular VCB cubicles
+    is_rmu = (
+        any(m.asset.upper() == "RMU" or m.label.upper().startswith("RMU_") for m in us_meas)
+        or "RMU" in str(page_context.get("switchgear_type", "")).upper()
+        or (feeder_dir and "RMU" in feeder_dir.as_posix().upper())
+    )
+
+    # Check for RMU board-level fallback (strictly restricted to RMU)
+    is_cable_page = "CABLE" in area
+    if not panel_measurements:
+        if is_rmu and is_cable_page:
+            has_feeder_subfolders = False
+            if survey_root and survey_root.exists():
+                try:
+                    for d in survey_root.iterdir():
+                        if d.is_dir() and d.name.upper().startswith(("SWG", "VCB", "RMU")):
+                            for sub in d.iterdir():
+                                if sub.is_dir() and any(k in sub.name.upper() for k in ("FEEDER", "PANEL")):
+                                    has_feeder_subfolders = True
+                                    break
+                except OSError:
+                    pass
+
+            if not has_feeder_subfolders:
+                board_level = [
+                    m for m in us_meas
+                    if m.label.upper() in ("RMU_US", "SWG_US")
+                    or (m.asset.upper() in ("RMU", "SWG") and (not m.component or m.component.upper() in ("$NONE", "NONE", "")))
+                ]
+                if board_level:
+                    selected = max(board_level, key=get_measurement_db)
+                    return _validate_and_return_8k_wav(selected)
+
+        # Zero cross-chamber leakage for VCB or unmeasured panels
+        return None
+
+    # RmuAudioAttributionPolicy: single untagged US recordings match active cable scanning page
+    if is_rmu and is_cable_page and len(panel_measurements) == 1:
+        single_m = panel_measurements[0]
+        if not single_m.component or single_m.component.upper() in ("$NONE", "NONE", ""):
+            return _validate_and_return_8k_wav(single_m)
+
+    # VcbAudioAttributionPolicy: Strict 1-to-1 chamber mapping
+    chamber_matched: list[DiscoveredMeasurement] = []
+    for chamber_key, component_keys in CHAMBER_COMPONENT_KEYWORDS.items():
+        if chamber_key in area:
+            candidates = [
+                m for m in panel_measurements
+                if m.component and any(ck in m.component.upper() for ck in component_keys)
+            ]
+            if chamber_key == "BUSBAR":
+                # Multi-measurement tie-breaking: prioritize $UPPER_BUSBARS over $LOWER_BUSBARS
+                upper = [
+                    m for m in candidates
+                    if "UPPER" in m.component.upper() or "UPPER" in m.label.upper()
+                ]
+                chamber_matched = upper if upper else candidates
+            else:
+                chamber_matched = candidates
+            break
+
+    if not chamber_matched:
+        # Zero cross-chamber leaking: single recordings apply strictly to their own chamber and are never cloned.
+        return None
+
+    # Tie-breaking: select recording with highest ultrasound dB reading
+    selected = max(chamber_matched, key=get_measurement_db)
+    return _validate_and_return_8k_wav(selected)
+
+
+
 
 
 def convert_24bit_wav_to_16bit_pcm(wav_path: Path | str) -> tuple[bytes, int, int]:

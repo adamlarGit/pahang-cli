@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 Part of Wayfinder Map: [map.md](../map.md)
 GitHub Issue: [#85](https://github.com/adamlarGit/pahang-cli/issues/85)
 Specification: [spec.md](../spec.md)
@@ -9,9 +9,9 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #084 (in-memory audio converter & PyMuPDF sound annotator).
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] Extend `src/postprocessing/sound_embedder.py` with page inspection and measurement matching helpers:
+- [x] Extend `src/postprocessing/sound_embedder.py` with page inspection and measurement matching helpers:
   - `find_sound_clip_anchor(page: fitz.Page) -> fitz.Rect | None`: Searches page for text `"Sound clip"`. If found, calculates target speaker annotation rectangle centered inside **Column 2** aligned beneath ultrasound measurement readings: `fitz.Rect(236.0, inst.y0 - 2, 254.0, inst.y1 + 2)`. If absent, returns `None`.
   - `extract_page_equipment_context(page: fitz.Page, package: SubstationTestsheetPackage | None = None) -> dict[str, Any]`:
     - Extracts text and regex matches:
@@ -22,8 +22,8 @@ Specification: [spec.md](../spec.md)
     - Enforces `TwoTierPanelMatchingPolicy`:
       - *Tier 1*: Parses explicit digits from `Panel No.` if present (e.g. `1`, `Panel 1`, `1 (CRB70001)` $\to$ `1`).
       - *Tier 2*: If unnumbered utility code (e.g. `CRB00764`), uses extracted `Panel Name` to resolve via `find_swg_feeder_survey_dir` directly, falling back to `package.equipment.switchgears[0].panels` if package is provided.
-- [ ] Modularize and reuse the 3-tier feeder matching engine from `src/quick_report/prpd.py` (`find_swg_feeder_survey_dir` and `find_tx_survey_dir`) across both PRPD graph generation and sound embedding.
-- [ ] Implement canonical mapping resolver `resolve_measurement_audio_for_page(survey_root: Path, measurements: list[DiscoveredMeasurement], page_context: dict[str, Any]) -> Path | None`:
+- [x] Modularize and reuse the 3-tier feeder matching engine from `src/quick_report/prpd.py` (`find_swg_feeder_survey_dir` and `find_tx_survey_dir`) across both PRPD graph generation and sound embedding.
+- [x] Implement canonical mapping resolver `resolve_measurement_audio_for_page(survey_root: Path, measurements: list[DiscoveredMeasurement], page_context: dict[str, Any]) -> Path | None`:
   - Filters measurements to `tech == "US"`.
   - Enforces `VcbAudioAttributionPolicy` for switchgear cubicles:
     - Strict 1-to-1 chamber mapping:
@@ -44,7 +44,7 @@ Specification: [spec.md](../spec.md)
   - Resolves target `8k.wav` file inside matching measurement directory (`meas.meas_dir / "8k.wav"`).
   - Mandatory presence invariant: `8k.wav` must exist and be non-empty; if missing, raises `FileNotFoundError` (fails loudly; zero fallback to `10k.wav` or `192k.wav`).
   - Returns file path if valid and non-zero byte, else `None`.
-- [ ] Implement unit test suite in `tests/test_sound_matching.py`:
+- [x] Implement unit test suite in `tests/test_sound_matching.py`:
   - Test anchor detection centers speaker rectangle inside Column 2 ($x \in [236, 254]\text{ pt}$).
   - Test anchor detection returns `None` on pages without `"Sound clip"` (overviews, condition pages, sticker pages, secondary compartments).
   - Test `TwoTierPanelMatchingPolicy` across bare digits (`1`), prefixed codes (`1 (CRB70001)`), and unnumbered SCADA codes (`CRB00764`) with Row 4 `Panel Name`.

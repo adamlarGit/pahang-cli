@@ -77,7 +77,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 ```mermaid
 graph TD
     T084["#084: feat(sound): in-memory 24-to-16-bit PCM converter & PyMuPDF xref sound annotator - Closed"]
-    T085["#085: feat(sound): measurement discovery to PDF page and compartment matching engine - Open"]
+    T085["#085: feat(sound): measurement discovery to PDF page and compartment matching engine - Closed"]
     T086["#086: feat(workflow): standalone US audio generation & retroactive PDF sound embedding workflow - Open"]
     T087["#087: feat(cli): utility action menu registration & interactive multi-date substation checklist - Open"]
     T088["#088: feat(pipeline): automatic post-processing sound embedding for Full Report & Quick Report - Open"]
@@ -104,7 +104,7 @@ graph TD
 - **Delivers**: `convert_24bit_wav_to_16bit_pcm` in `src/postprocessing/sound_embedder.py` downscaling 24-bit to 16-bit PCM frames in memory via `wave` and `bytearray` slice assignment (sample >> 8), `export_16bit_wav` file writer, low-level PyMuPDF ISO 32000-1 `/Subtype /Sound` annotation injection via `doc.update_stream()`, Column 2 icon centering (`SoundClipAnchorPolicy`), indirect `/Annots` xref resolution, `IdempotentSoundEmbeddingPolicy` stream update/replacement, and unit tests with synthetic WAV fixtures.
 
 ### #085: feat(sound): measurement discovery to PDF page and compartment matching engine
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#85](https://github.com/adamlarGit/pahang-cli/issues/85)
 - **Blocked by**: #084
 - **Ticket File**: [tickets/085-measurement-to-page-matching-engine.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/embed-ultrasound-audio-in-reports/tickets/085-measurement-to-page-matching-engine.md)

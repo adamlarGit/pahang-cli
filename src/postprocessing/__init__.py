@@ -12,6 +12,9 @@ from .sound_embedder import (
     convert_24bit_wav_to_16bit_pcm,
     embed_sound_annotation,
     export_16bit_wav,
+    extract_page_equipment_context,
+    find_sound_clip_anchor,
+    resolve_measurement_audio_for_page,
 )
 
 __all__ = [
@@ -26,5 +29,8 @@ __all__ = [
     "convert_24bit_wav_to_16bit_pcm",
     "export_16bit_wav",
     "embed_sound_annotation",
+    "extract_page_equipment_context",
+    "find_sound_clip_anchor",
+    "resolve_measurement_audio_for_page",
 ]
 
