@@ -8,6 +8,11 @@ from .converters import (
     batch_com_session,
     select_and_sort_sheets,
 )
+from .sound_embedder import (
+    convert_24bit_wav_to_16bit_pcm,
+    embed_sound_annotation,
+    export_16bit_wav,
+)
 
 __all__ = [
     "BatchComSession",
@@ -18,4 +23,8 @@ __all__ = [
     "_is_pce_vi_sheet",
     "batch_com_session",
     "select_and_sort_sheets",
+    "convert_24bit_wav_to_16bit_pcm",
+    "export_16bit_wav",
+    "embed_sound_annotation",
 ]
+
