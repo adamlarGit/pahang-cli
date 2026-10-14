@@ -78,7 +78,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 graph TD
     T084["#084: feat(sound): in-memory 24-to-16-bit PCM converter & PyMuPDF xref sound annotator - Closed"]
     T085["#085: feat(sound): measurement discovery to PDF page and compartment matching engine - Closed"]
-    T086["#086: feat(workflow): standalone US audio generation & retroactive PDF sound embedding workflow - Open"]
+    T086["#086: feat(workflow): standalone US audio generation & retroactive PDF sound embedding workflow - Closed"]
     T087["#087: feat(cli): utility action menu registration & interactive multi-date substation checklist - Open"]
     T088["#088: feat(pipeline): automatic post-processing sound embedding for Full Report & Quick Report - Open"]
     T089["#089: docs(adr): record ADR 0007, update CONTEXT.md, and run full E2E regression suite - Open"]
@@ -111,7 +111,7 @@ graph TD
 - **Delivers**: Modularization of shared 3-tier feeder matching engine (`find_swg_feeder_survey_dir`), `find_sound_clip_anchor` locating `"Sound clip"` text and computing speaker rectangle centered in Column 2 ($x \in [236, 254]\text{ pt}$), `TwoTierPanelMatchingPolicy` with Row 4 `Panel Name` extraction decoupling matching from `package`, prefix-tolerant transformer regex (`r"Tx No\.\s*[:\n\r]*(?:TX|Tx|TRANSFORMER)?\s*(\d+)"`), `VcbAudioAttributionPolicy` with deterministic multi-measurement tie-breaking ($UPPER\_BUSBARS > $LOWER\_BUSBARS; highest dB), `RmuAudioAttributionPolicy` with board-level acoustic fallback, mandatory `8k.wav` fail-loud verification, unit tests covering VCB cubicles, RMU, and Transformers.
 
 ### #086: feat(workflow): standalone US audio generation & retroactive PDF sound embedding workflow
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#86](https://github.com/adamlarGit/pahang-cli/issues/86)
 - **Blocked by**: #084, #085
 - **Ticket File**: [tickets/086-standalone-audio-workflow-and-wav-export.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/embed-ultrasound-audio-in-reports/tickets/086-standalone-audio-workflow-and-wav-export.md)

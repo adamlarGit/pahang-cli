@@ -15,6 +15,7 @@ from .sound_embedder import (
     extract_page_equipment_context,
     find_sound_clip_anchor,
     resolve_measurement_audio_for_page,
+    validate_and_return_8k_wav,
 )
 
 __all__ = [
@@ -32,5 +33,6 @@ __all__ = [
     "extract_page_equipment_context",
     "find_sound_clip_anchor",
     "resolve_measurement_audio_for_page",
+    "validate_and_return_8k_wav",
 ]
 

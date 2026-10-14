@@ -65,6 +65,13 @@ from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.raw_material import AutomatedRawMaterialSummary, RawMaterialWorkflow
 from src.workflows.service import WorkflowService
 from src.workflows.update_qr02_cba import UpdateQr02CbaWorkflow
+from src.workflows.us_audio import (
+    UsAudioCandidate,
+    UsAudioWorkflow,
+    UsAudioWorkflowSummary,
+    embed_survey_ultrasound_into_pdf,
+    export_substation_16bit_wavs,
+)
 from src.workflows.whatsapp import WhatsAppReportWorkflow
 
 __all__ = [
@@ -115,11 +122,16 @@ __all__ = [
     "RawMaterialWorkflow",
     "TotalPeLookups",
     "UpdateQr02CbaWorkflow",
+    "UsAudioCandidate",
+    "UsAudioWorkflow",
+    "UsAudioWorkflowSummary",
     "WorkflowService",
     "format_package_history_key",
     "WhatsAppReportWorkflow",
     "TestsheetPdfNotFoundError",
     "TestsheetPdfValidationResult",
+    "embed_survey_ultrasound_into_pdf",
+    "export_substation_16bit_wavs",
     "resolve_processed_testsheet_pdf_path",
     "validate_processed_testsheet_pdf",
 ]

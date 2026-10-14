@@ -188,7 +188,7 @@ def get_measurement_db(meas: DiscoveredMeasurement) -> float:
     return -999.0
 
 
-def _validate_and_return_8k_wav(meas: DiscoveredMeasurement) -> Path:
+def validate_and_return_8k_wav(meas: DiscoveredMeasurement) -> Path:
     """Validate mandatory presence of non-empty 8k.wav and return its Path.
 
     Raises:
@@ -204,6 +204,9 @@ def _validate_and_return_8k_wav(meas: DiscoveredMeasurement) -> Path:
             f"Mandatory 8k.wav is empty (0 bytes) for measurement: {meas.label} in {meas.meas_dir}"
         )
     return wav_path
+
+
+_validate_and_return_8k_wav = validate_and_return_8k_wav
 
 
 def resolve_measurement_audio_for_page(
