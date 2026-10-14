@@ -81,7 +81,7 @@ graph TD
     T086["#086: feat(workflow): standalone US audio generation & retroactive PDF sound embedding workflow - Closed"]
     T087["#087: feat(cli): utility action menu registration & interactive multi-date substation checklist - Closed"]
     T088["#088: feat(pipeline): automatic post-processing sound embedding for Full Report & Quick Report - Closed"]
-    T089["#089: docs(adr): record ADR 0007, update CONTEXT.md, and run full E2E regression suite - Open"]
+    T089["#089: docs(adr): record ADR 0007, update CONTEXT.md, and run full E2E regression suite - Closed"]
 
     T084 --> T085
     T084 --> T086
@@ -132,7 +132,7 @@ graph TD
 - **Delivers**: Post-merge sound embedding hook in `FullReportPostProcessingWorkflow._compile_deliverable` at unified exit point using Row 4 `Panel Name` extraction, post-merge hook in `PostProcessingPipelineWorkflow.execute` immediately following Quick Report PDF testsheet merge, idempotent sound injection, non-blocking diagnostic logging on missing raw survey data, pipeline integration unit tests.
 
 ### #089: docs(adr): record ADR 0007, update CONTEXT.md, and run full E2E regression suite
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#89](https://github.com/adamlarGit/pahang-cli/issues/89)
 - **Blocked by**: #087, #088
 - **Ticket File**: [tickets/089-adr-context-docs-and-e2e-verification.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/embed-ultrasound-audio-in-reports/tickets/089-adr-context-docs-and-e2e-verification.md)

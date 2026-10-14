@@ -74,14 +74,7 @@ This document details the standalone batch processing tools available under the 
 
 ---
 
-## 10. Remove desktop.ini Files (`src/remove_desktop_ini_workflow.py` & `scripts/remove_desktop_ini.ps1`)
-- **Purpose:** Recursively scans a user-specified target directory and deletes all hidden/system `desktop.ini` configuration files.
-- **Interactive CLI Mechanics:** Interactively prompts the operator to enter their desired target folder path (with instant fallback to current working directory).
-- **Execution & Fallback Engine:** On Windows systems, executes `scripts/remove_desktop_ini.ps1` via `powershell -ExecutionPolicy Bypass` with `-Force` attributes. Includes a native Python fallback (`os.walk` + `os.chmod` `S_IWRITE`) to ensure seamless cross-platform functionality.
-
----
-
-## 11. Generate US 16-bit Audio & Embed Sounds into PDFs (`src/workflows/us_audio.py`)
+## 10. Generate US 16-bit Audio & Embed Sounds into PDFs (`src/workflows/us_audio.py`)
 - **Purpose:** Standalone utility workflow to downscale UltraTEV 24-bit heterodyne demodulated `8k.wav` acoustic recordings to 16-bit PCM in memory and either export canonical 16-bit WAV files into `<SUBSTATION>/RAW DATA/US+TEV/sounds/` or embed ISO 32000-1 Sound Annotations into deliverable Full Report and Quick Report PDFs.
 - **Interactive Modes:**
   1. `Embed ultrasound sounds into existing report PDFs (Full & Quick Report)`
@@ -92,3 +85,11 @@ This document details the standalone batch processing tools available under the 
   - Automatically filters substations across dates strictly to those possessing valid US+TEV surveys.
   - Displays deliverable PDF availability tags (`[PDF READY]` vs `[NO PDF]`).
   - If Mode 1 (`embed_pdf`) is selected and zero deliverable PDFs are found on disk, presents an actionable notice offering to switch to Mode 2 (`export_wav`) or cancel without crashing.
+
+---
+
+## 11. Remove desktop.ini Files (`src/remove_desktop_ini_workflow.py` & `scripts/remove_desktop_ini.ps1`)
+- **Purpose:** Recursively scans a user-specified target directory and deletes all hidden/system `desktop.ini` configuration files.
+- **Interactive CLI Mechanics:** Interactively prompts the operator to enter their desired target folder path (with instant fallback to current working directory).
+- **Execution & Fallback Engine:** On Windows systems, executes `scripts/remove_desktop_ini.ps1` via `powershell -ExecutionPolicy Bypass` with `-Force` attributes. Includes a native Python fallback (`os.walk` + `os.chmod` `S_IWRITE`) to ensure seamless cross-platform functionality.
+
