@@ -5,6 +5,12 @@ from src.testsheet.extractor import (
     parse_photo_numbers,
     parse_secondary_photo,
 )
+from src.testsheet.parsers import (
+    PceTestsheetParser,
+    PpuTestsheetParser,
+    TestsheetParserStrategy,
+    get_testsheet_parser,
+)
 from src.testsheet.mapper import (
     TestsheetReadingMapper,
     get_sheet_name,
@@ -54,4 +60,8 @@ __all__ = [
     "get_sheet_name",
     "parse_equipment_index",
     "resolve_feeder_channel",
+    "TestsheetParserStrategy",
+    "PceTestsheetParser",
+    "PpuTestsheetParser",
+    "get_testsheet_parser",
 ]

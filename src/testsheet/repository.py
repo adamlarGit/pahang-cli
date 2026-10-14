@@ -14,8 +14,18 @@ from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 class SubstationTestsheetRepository:
     """Discovers testsheet packages across Pahang's TESTSHEET directory hierarchy."""
 
-    def __init__(self, extractor: TestsheetExtractor | None = None) -> None:
-        self.extractor = extractor or TestsheetExtractor()
+    def __init__(
+        self,
+        extractor: TestsheetExtractor | None = None,
+        voltage_type: str | None = None,
+    ) -> None:
+        self.voltage_type = voltage_type
+        if extractor is not None:
+            if voltage_type is not None and getattr(extractor, "voltage_type", None) is None:
+                extractor.voltage_type = voltage_type
+            self.extractor = extractor
+        else:
+            self.extractor = TestsheetExtractor(voltage_type=voltage_type)
 
     def discover_packages(
         self,
