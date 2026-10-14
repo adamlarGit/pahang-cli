@@ -191,34 +191,35 @@ def test_embed_sound_annotation_on_blank_page():
 
 def test_embed_sound_annotation_idempotency():
     """Assert subsequent injections at intersecting rect update stream without duplicate annots."""
+    # 1. Test in-memory update across successive calls on new document
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)
     rect = fitz.Rect(236.0, 600.0, 254.0, 618.0)
     pcm_bytes_1 = b"\x01\x02" * 50
     pcm_bytes_2 = b"\x03\x04" * 100
 
-    # First injection
     xref_1 = embed_sound_annotation(doc, page, rect, pcm_bytes_1, framerate=8000, channels=1)
-
-    # Second injection at same rectangle
     xref_2 = embed_sound_annotation(doc, page, rect, pcm_bytes_2, framerate=8000, channels=1)
-
     assert xref_1 == xref_2
 
-    # Save and reload to inspect PDF structure
     pdf_bytes = doc.tobytes()
     doc.close()
 
+    # 2. Test re-opening pre-annotated PDF: re-embedding preserves len(list(page.annots())) in memory
     reloaded_doc = fitz.open("pdf", pdf_bytes)
     reloaded_page = reloaded_doc[0]
-    annots = list(reloaded_page.annots())
+    assert len(list(reloaded_page.annots())) == 1
 
-    assert len(annots) == 1
-    sound_key = reloaded_doc.xref_get_key(annots[0].xref, "Sound")
+    pcm_bytes_3 = b"\x05\x06" * 80
+    xref_3 = embed_sound_annotation(reloaded_doc, reloaded_page, rect, pcm_bytes_3, framerate=8000, channels=1)
+    assert xref_3 == xref_1
+    assert len(list(reloaded_page.annots())) == 1
+
+    sound_key = reloaded_doc.xref_get_key(xref_3, "Sound")
     sound_xref = int(sound_key[1].split()[0])
-    stream_bytes = reloaded_doc.xref_stream(sound_xref)
-    assert stream_bytes == pcm_bytes_2
+    assert reloaded_doc.xref_stream(sound_xref) == pcm_bytes_3
     reloaded_doc.close()
+
 
 
 def test_embed_sound_annotation_with_indirect_annots_object():
