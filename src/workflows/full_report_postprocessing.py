@@ -35,6 +35,8 @@ from src.postprocessing.converters import (
 )
 from src.project.storage import extract_numerical_prefix
 from src.quick_report.extractor import DAILY_DATE_FOLDER_PATTERN
+from src.quick_report.prpd import discover_ultratev_survey_dir
+from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
 
 if TYPE_CHECKING:
     from src.project.environment import ProjectEnvironment
@@ -568,6 +570,7 @@ class FullReportPostProcessingWorkflow:
                             group=target_group,
                             testsheet_pdf_path=ts_pdf,
                             output_pdf_path=out_pdf,
+                            environment=environment,
                             word_app=word_app,
                             session=session,
                         )
@@ -652,6 +655,7 @@ class FullReportPostProcessingWorkflow:
             group=group,
             testsheet_pdf_path=ts_pdf,
             output_pdf_path=out_p,
+            environment=environment,
             session=session,
         )
 
@@ -667,6 +671,7 @@ class FullReportPostProcessingWorkflow:
         testsheet_pdf_path: Path,
         output_pdf_path: Path,
         *,
+        environment: ProjectEnvironment | None = None,
         word_app: Any = None,
         session: Any = None,
     ) -> None:
@@ -724,6 +729,35 @@ class FullReportPostProcessingWorkflow:
                         temp_conv_pdf.unlink()
                     except Exception:
                         pass
+
+        # Unified Exit Point: Sound embedding hook (IdempotentSoundEmbeddingPolicy & UsTevAudioResiliencePolicy)
+        if environment is not None and out_pdf.exists():
+            try:
+                doc_p = group.primary_docx_path.resolve()
+                date_str = doc_p.parent.name
+                month = doc_p.parent.parent.name
+                station = doc_p.parent.parent.parent.name
+
+                pe_num = None
+                try:
+                    pe_num = extract_numerical_prefix(group.stem)
+                except ValueError:
+                    pass
+
+                raw_dir = None
+                if pe_num is not None and hasattr(environment, "storage") and hasattr(environment.storage, "get_substation_raw_data_dir"):
+                    raw_dir = environment.storage.get_substation_raw_data_dir(
+                        station, month, date_str, pe_num
+                    )
+
+                survey_root = discover_ultratev_survey_dir(raw_dir)
+                if survey_root is not None and survey_root.exists():
+                    count = embed_survey_ultrasound_into_pdf(out_pdf, survey_root=survey_root)
+                    logger.info("[FULL REPORT] Embedded %d ultrasound sounds into %s", count, out_pdf.name)
+                else:
+                    logger.info("[FULL REPORT] No US+TEV raw data found for %s; skipping sound embedding", stem)
+            except Exception as exc:
+                logger.warning("[WARN] Sound embedding failed for %s: %s; keeping original PDF", out_pdf.name, exc)
 
     def _establish_batch_session(self, explicit_session: Any) -> Any:
         """Establish single BatchComSession context across batch conversions."""

@@ -80,7 +80,7 @@ graph TD
     T085["#085: feat(sound): measurement discovery to PDF page and compartment matching engine - Closed"]
     T086["#086: feat(workflow): standalone US audio generation & retroactive PDF sound embedding workflow - Closed"]
     T087["#087: feat(cli): utility action menu registration & interactive multi-date substation checklist - Closed"]
-    T088["#088: feat(pipeline): automatic post-processing sound embedding for Full Report & Quick Report - Open"]
+    T088["#088: feat(pipeline): automatic post-processing sound embedding for Full Report & Quick Report - Closed"]
     T089["#089: docs(adr): record ADR 0007, update CONTEXT.md, and run full E2E regression suite - Open"]
 
     T084 --> T085
@@ -125,7 +125,7 @@ graph TD
 - **Delivers**: Discovery helper `discover_us_audio_candidate_substations`, interactive merged checklist `select_us_audio_substations_interactive` with `[{date_str}]` prefixes and deliverable PDF readiness tags (`[PDF READY]` vs `[NO PDF]`), actionable prompt on missing PDFs for Mode 1, runner factory `_load_generate_us_audio_runner()` with mode selection sub-menu, registration at Position #10 in `UTILITY_ACTIONS` with label `"Generate US 16-bit audio & embed sounds into PDFs"`, CLI integration unit tests.
 
 ### #088: feat(pipeline): automatic post-processing sound embedding for Full Report & Quick Report
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#88](https://github.com/adamlarGit/pahang-cli/issues/88)
 - **Blocked by**: #086 (can execute in parallel with #087)
 - **Ticket File**: [tickets/088-pipeline-auto-integration-quick-and-full-report.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/embed-ultrasound-audio-in-reports/tickets/088-pipeline-auto-integration-quick-and-full-report.md)

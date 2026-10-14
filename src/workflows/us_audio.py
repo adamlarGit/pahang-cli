@@ -41,7 +41,7 @@ from src.quick_report.prpd import (
     discover_survey_measurements,
     discover_ultratev_survey_dir,
 )
-from src.testsheet.models import SubstationTestsheetPackage
+from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +158,7 @@ def export_substation_16bit_wavs(
 def embed_survey_ultrasound_into_pdf(
     pdf_path: Path | str,
     survey_root: Path | str | None,
-    package: SubstationTestsheetPackage | None = None,
+    package: SubstationTestsheetPackage | SubstationPackage | None = None,
 ) -> int:
     """Retroactively embed ultrasound sound annotations into an existing deliverable PDF.
 
