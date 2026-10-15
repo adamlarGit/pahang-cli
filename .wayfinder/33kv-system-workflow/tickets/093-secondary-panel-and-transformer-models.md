@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 Part of #90
 Specification: [spec.md](../spec.md)
 
@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #92
 
-**Status:** ready-for-agent
+**Status:** closed
 
 ## Detailed Design & Architecture
 
@@ -62,14 +62,14 @@ Specification: [spec.md](../spec.md)
 
 ## Acceptance Criteria Checklist
 
-- [ ] Implement `PowerTransformerSpec` as a subclass of `TransformerSpec` in `src/testsheet/models.py`.
-- [ ] Implement transformer classification function handling $\ge 5$ MVA, $100-1000$ kVA, and logging warnings for out-of-range ratings.
-- [ ] Implement `_extract_tx_sheet()` in `PpuTestsheetParser`:
-  - [ ] Parse Rows 6–9 metadata (Model, Manufacturer, Rating, Serial No).
-  - [ ] Parse Part 1 (Rows 14–28) HV/LV load, cable types, ultrasound, and cable thermals.
-  - [ ] Parse Part 2 (Rows 33–48) Marshalling Kiosk, Conservator, Body, Cooling Fin thermals.
-  - [ ] Parse Rows 49–52 station service LVDB into `LVDBSpec`.
-  - [ ] Correlate all parts into unified `PowerTransformerSpec` / `TransformerSpec` instances.
-  - [ ] Support 0-transformer substations (SSU).
-- [ ] Add unit tests in `tests/test_ppu_transformer_parsing.py` verifying full extraction, classification, SSU tolerance, and out-of-range handling.
-- [ ] Verify full test suite passes with 0 regressions.
+- [x] Implement `PowerTransformerSpec` as a subclass of `TransformerSpec` in `src/testsheet/models.py`.
+- [x] Implement transformer classification function handling $\ge 5$ MVA, $100-1000$ kVA, and logging warnings for out-of-range ratings.
+- [x] Implement `_extract_tx_sheet()` in `PpuTestsheetParser`:
+  - [x] Parse Rows 6–9 metadata (Model, Manufacturer, Rating, Serial No).
+  - [x] Parse Part 1 (Rows 14–28) HV/LV load, cable types, ultrasound, and cable thermals.
+  - [x] Parse Part 2 (Rows 33–48) Marshalling Kiosk, Conservator, Body, Cooling Fin thermals.
+  - [x] Parse Rows 49–52 station service LVDB into `LVDBSpec`.
+  - [x] Correlate all parts into unified `PowerTransformerSpec` / `TransformerSpec` instances.
+  - [x] Support 0-transformer substations (SSU).
+- [x] Add unit tests in `tests/test_ppu_transformer_parsing.py` verifying full extraction, classification, SSU tolerance, and out-of-range handling.
+- [x] Verify full test suite passes with 0 regressions.

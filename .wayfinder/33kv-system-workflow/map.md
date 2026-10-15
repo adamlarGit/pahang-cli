@@ -56,7 +56,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 graph TD
     T91["#91: TestsheetParserStrategy seam + PceTestsheetParser refactor - Closed"]
     T92["#92: PpuTestsheetParser (metadata, 6-row SWG, TX, VI) - Closed"]
-    T93["#93: Power Transformer domain model & TX parsing"]
+    T93["#93: Power Transformer domain model & TX parsing - Closed"]
     T94["#94: Contract 750-39 storage + Qr02Cba33kVTransaction"]
     T95["#95: Raw material sorting & US+TEV pairing"]
     T96["#96: PPU condition builder & Quick Report plan"]
@@ -109,7 +109,7 @@ graph TD
 - **Delivers**: `PpuTestsheetParser` for 33kV workbooks parsing metadata (substation name, FL, date, type), dual-voltage switchgear lineups (6 physical sub-rows + Column Q SP: secondary panel), `Visual Inspec.` findings, RHS/LHS overview bays, `RAW DATA` photo bounds, and shared PPU workbook test fixture factory.
 
 ### #93: feat(33kv-domain): Power Transformer domain model and TX sheet parser
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#93](https://github.com/adamlarGit/pahang-cli/issues/93)
 - **Blocked by**: #92
 - **Ticket File**: [tickets/093-secondary-panel-and-transformer-models.md](./tickets/093-secondary-panel-and-transformer-models.md)
