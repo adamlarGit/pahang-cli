@@ -4,7 +4,10 @@ import io
 from pathlib import Path
 import struct
 import wave
-import fitz
+try:
+    import pymupdf as fitz
+except ImportError:
+    import fitz
 import pytest
 
 from src.postprocessing.sound_embedder import (

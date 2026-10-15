@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-10-15
+
+### Added
+- **Ultrasound Audio Embedding & In-Memory 16-Bit Conversion Engine (`src/postprocessing/sound_embedder.py`, `src/workflows/us_audio.py`, `docs/adr/0007-ultrasound-audio-embedding-and-conversion.md`, `CONTEXT.md`)**:
+  - Implemented pure-Python in-memory 24-to-16-bit PCM audio downscaler (`convert_24bit_wav_to_16bit_pcm`) using standard `wave` and `bytearray` slice assignment (sample >> 8), downscaling UltraTEV heterodyne demodulated `8k.wav` recordings with zero disk overhead (closes #84).
+  - Built low-level PyMuPDF ISO 32000-1 `/Subtype /Sound` annotator injecting valid sound streams and linking speaker annotations via direct cross-reference (`xref`) construction and indirect `/Annots` array management (`embed_sound_annotation`) (closes #84).
+  - Added `find_sound_clip_anchor` locating `"Sound clip"` key text in scanning templates and centering speaker icons in Column 2 (`SoundClipAnchorPolicy`) (closes #85).
+  - Codified attribution policies: `VcbAudioAttributionPolicy` for 1-to-1 physical chamber matching with deterministic tie-breaking ($UPPER_BUSBARS > $LOWER_BUSBARS; highest dB), `TransformerAudioAttributionPolicy` sharing HV acoustic tracks across cable/bushing pages with prefix tolerance, and `RmuAudioAttributionPolicy` with board-level acoustic fallback (`RMU_US`) (closes #85).
+  - Implemented `TwoTierPanelMatchingPolicy` with Row 4 `Panel Name` extraction, decoupling feeder matching from testsheet package parsing (closes #85).
+  - Built standalone `UsAudioWorkflow` with dual-trigger execution supporting `"export_wav"`, `"embed_pdf"`, and `"both"` modes, exporting canonical `{meas.label}.wav` files to `<SUBSTATION>/RAW DATA/US+TEV/sounds/` (`UsAudioOutputDirectory`) (closes #86).
+  - Registered dedicated CLI utility action labeled `"Generate US 16-bit audio & embed sounds into PDFs"` at Position #10 in `UTILITY_ACTIONS` with interactive multi-date candidate discovery and deliverable readiness tags (`[PDF READY]` vs `[NO PDF]`) (closes #87).
+  - Integrated automated post-merge sound embedding hooks at the unified exit of `FullReportPostProcessingWorkflow._compile_deliverable` and Step 6 of `PostProcessingPipelineWorkflow.execute` (closes #88).
+  - Added `IdempotentSoundEmbeddingPolicy` for in-place stream updates and `AtomicPdfSavePolicy` with context-managed handle closure, pre-flight cleanup, and atomic file replacement (closes #84, #86).
+  - Added `UsTevAudioResiliencePolicy` guaranteeing non-blocking graceful degradation when survey directories or individual recordings are absent (closes #86, #88).
+  - Recorded `ADR 0007: Ultrasound Audio Embedding and In-Memory 16-Bit Conversion` and updated `CONTEXT.md` with 10 new ubiquitous domain concepts (closes #89).
+  - Added explicit `pymupdf>=1.26.0` dependency to `pyproject.toml` and synchronized `uv.lock`.
+
 ## [1.25.0] - 2026-09-26
+
 
 ### Added
 - **Standalone US+TEV Survey Graph Generation Utility (`src/workflows/us_tev_graphs.py`, `src/utility_actions.py`, `docs/adr/0006-us-tev-survey-graph-generation-workflow.md`, `CONTEXT.md`)**:

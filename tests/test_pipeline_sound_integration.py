@@ -15,7 +15,10 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from unittest.mock import patch
-import fitz
+try:
+    import pymupdf as fitz
+except ImportError:
+    import fitz
 import pytest
 
 from src.postprocessing.converters import FakeDocumentConverter

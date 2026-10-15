@@ -17,7 +17,10 @@ import json
 import os
 from pathlib import Path
 import wave
-import fitz
+try:
+    import pymupdf as fitz
+except ImportError:
+    import fitz
 import pytest
 
 from src.postprocessing.sound_embedder import convert_24bit_wav_to_16bit_pcm
