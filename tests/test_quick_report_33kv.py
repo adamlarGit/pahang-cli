@@ -43,6 +43,7 @@ def _make_ppu_package(
     has_cable_cellar: bool = True,
     substation_number: int = 1,
     substation_name: str = "PPU APMM 33-11kV",
+    extra_switchgears: tuple[SwitchgearSpec, ...] = (),
 ) -> SubstationTestsheetPackage:
     switchgears: list[SwitchgearSpec] = []
     if has_33kv:
@@ -73,6 +74,8 @@ def _make_ppu_package(
                 ),
             )
         )
+    if extra_switchgears:
+        switchgears.extend(extra_switchgears)
 
     transformers: list[TransformerSpec] = []
     for i in range(1, power_tx_count + 1):
@@ -448,6 +451,42 @@ def test_master_qr03_defect_repository_vi_defects_strict_750_39(tmp_path: Path) 
 
     # Non-existent station returns empty list without falling back to anything else
     assert repo.fetch_vi_defects("NON-EXISTENT-FL") == []
+
+
+def test_format_summary_equipment_prefix_handling() -> None:
+    """Verify format_summary_equipment correctly strips GIS/VCB prefixes from raw_id."""
+    pkg = _make_ppu_package()
+    pe_info = {"equipment": pkg.data.equipment}
+
+    defect = CbmDefectRecord(
+        equipment="GIS 33kV",
+        equipment_id="GIS 33kV - PANEL 1P5",
+        technology="US",
+        us_reading="25",
+    )
+    formatted = format_summary_equipment(defect, pe_info=pe_info)
+    assert "PANEL GIS 33kV" not in formatted
+    assert "PANEL 1P5" in formatted
+    assert "INCOMER 1" in formatted
+
+
+def test_ppu_condition_pairs_dual_33kv_only() -> None:
+    """Verify station with two 33kV switchgears and no 11kV switchgear does not falsely emit 11kV pair."""
+    swg2 = SwitchgearSpec(
+        switchgear_type="GIS 33kV",
+        manufacturer="TAMCO",
+        model="GV3",
+        panels=(SwitchgearPanelSpec(panel_no=1, panel_feeder_no="3P2", name="FEEDER 2"),),
+    )
+    pkg = _make_ppu_package(has_33kv=True, has_11kv=False, extra_switchgears=(swg2,))
+
+    policy = PpuSubstationConditionPairBuilderPolicy()
+    pairs = policy.build(pkg)
+
+    pair_keys = [f"{p[0]}|{p[1]}" for p in pairs]
+    assert any("SWITCHGEAR 33kV" in k for k in pair_keys)
+    assert not any("SWITCHGEAR 11kV" in k for k in pair_keys)
+
 
 
 

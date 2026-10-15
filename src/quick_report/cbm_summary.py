@@ -109,9 +109,13 @@ def format_summary_equipment(
 
         if raw_id:
             if " - " in raw_id:
-                p_feeder, p_name = raw_id.split(" - ", 1)
-                p_feeder = p_feeder.strip()
-                p_name = p_name.strip()
+                parts = raw_id.split(" - ", 1)
+                if parts[0].strip().upper().startswith(("GIS", "VCB", "SWG", "SWITCHGEAR", "RMU")):
+                    p_feeder = parts[1].strip()
+                    p_name = matched_panel.name if matched_panel and matched_panel.name else parts[1].strip()
+                else:
+                    p_feeder = parts[0].strip()
+                    p_name = parts[1].strip()
                 p_feeder_line = p_feeder if p_feeder.upper().startswith("PANEL") else f"PANEL {p_feeder}"
                 return f"{equip}\n{p_feeder_line}\n{p_name}"
             else:

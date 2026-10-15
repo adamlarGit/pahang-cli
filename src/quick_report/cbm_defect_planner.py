@@ -189,6 +189,10 @@ class CbmDefectPlanner:
         if spec.id == "swg":
             if "SWG 2" in combined or "SWITCHGEAR 2" in combined or "SWG2" in combined:
                 return "SWG 2"
+            if "33KV" in combined or "33 KV" in combined:
+                return "GIS 33kV" if "GIS" in combined else "SWG 33kV"
+            if "11KV" in combined or "11 KV" in combined:
+                return "VCB 11kV" if "VCB" in combined else "SWG 11kV"
             return raw_eq or "SWG"
 
         if spec.id == "battery":

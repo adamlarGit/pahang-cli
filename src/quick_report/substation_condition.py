@@ -60,8 +60,15 @@ class PpuSubstationConditionPairBuilderPolicy:
             else:
                 swg_33_present = True
         elif len(eq.switchgears) >= 2:
-            swg_33_present = True
-            swg_11_present = True
+            for s in eq.switchgears:
+                text_s = f"{s.switchgear_type} {s.model} {s.rating} {s.serial_no}".upper()
+                if "33" in text_s or "GIS" in text_s or any(p.panel_feeder_no.upper().startswith(("3P", "3K", "3T")) for p in s.panels):
+                    swg_33_present = True
+                if "11" in text_s or any(p.panel_feeder_no.upper().startswith("1K") for p in s.panels):
+                    swg_11_present = True
+            if not swg_33_present and not swg_11_present:
+                swg_33_present = True
+                swg_11_present = True
 
         # Page 1: Switchgear
         if swg_33_present:
