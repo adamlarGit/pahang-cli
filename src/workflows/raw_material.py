@@ -10,13 +10,39 @@ from typing import Sequence
 import zipfile
 import openpyxl
 
-from src.core.normalizers import format_month_folder, normalize_date_str
+from src.core.normalizers import (
+    format_month_folder,
+    normalize_date_str,
+    normalize_substation_tokens,
+)
 from src.project.environment import ProjectEnvironment
 from src.project.models import CameraConfig
+from src.project.storage import extract_numerical_prefix, parse_substation_stem
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import PhotoRange, SubstationTestsheetPackage, TestsheetData
 from src.testsheet.repository import SubstationTestsheetRepository
 from src.workflows.models import RawMaterialRequest, RawMaterialResult
+
+
+def is_33kv_package(environment: ProjectEnvironment, package: SubstationTestsheetPackage) -> bool:
+    """Determine whether a testsheet package belongs to 33kV workflow."""
+    voltage_type = getattr(environment.metadata, "voltage_type", None)
+    if voltage_type == "11kV":
+        return False
+    if voltage_type == "33kV":
+        return True
+
+    try:
+        stem_info = parse_substation_stem(package.testsheet_path.stem)
+        if stem_info.station_type in ("PPU", "PMU", "SSU") or stem_info.voltage_token is not None:
+            return True
+    except ValueError:
+        pass
+
+    return any(
+        token in package.testsheet_path.stem.upper()
+        for token in ("33KV", "33-11KV", "PPU", "PMU", "SSU")
+    )
 
 
 @dataclass(frozen=True)
@@ -246,13 +272,22 @@ class RawMaterialExtractor:
         return ir_photos, dg_photos
 
     def _scan_us_tev_archives(self, unsorted_dir: Path) -> list[Path]:
-        us_tev_source_dir = unsorted_dir / "US+TEV" if (unsorted_dir / "US+TEV").exists() else unsorted_dir
-        if not us_tev_source_dir.exists():
-            return []
-        return [
-            p for p in us_tev_source_dir.iterdir()
-            if p.is_file() and p.suffix.lower() == ".zip"
-        ]
+        candidate_dirs: list[Path] = []
+        for subname in ("US+TEV", "US"):
+            sub = unsorted_dir / subname
+            if sub.exists() and sub.is_dir():
+                candidate_dirs.append(sub)
+        if unsorted_dir.exists() and unsorted_dir.is_dir():
+            candidate_dirs.append(unsorted_dir)
+
+        seen: set[Path] = set()
+        archives: list[Path] = []
+        for cdir in candidate_dirs:
+            for p in cdir.iterdir():
+                if p.is_file() and p.suffix.lower() == ".zip" and p not in seen:
+                    seen.add(p)
+                    archives.append(p)
+        return archives
 
     def _scan_directory_for_images(self, directory: Path) -> list[Path]:
         return [
@@ -510,16 +545,24 @@ class RawMaterialFilter:
 
         return min(start_num, end_num), max(start_num, end_num)
 
-    def filter_us_tev_archive(
+    def filter_us_tev_archives(
         self,
         archives: Sequence[Path],
         substation_number: int,
         warnings: list[str],
-    ) -> Path | None:
-        """Filter and match a single US+TEV archive for a substation PE."""
+        voltage_type: str = "11kV",
+        station_name: str | None = None,
+    ) -> list[Path]:
+        """Filter and match US+TEV archive(s) for a substation.
+
+        For 11kV: Enforces strict 1-to-1 archive cardinality (raises RuntimeError on multiple).
+        For 33kV: Supports 1-to-many multi-board archive matching.
+        Supports 2-digit zero-padded numbers and station name token disambiguation.
+        """
         substation_folder_name = f"{substation_number:03d}"
         num_patterns = [
             re.compile(rf"(?:^|[\W_]){substation_number:03d}(?:[\W_]|$)", re.IGNORECASE),
+            re.compile(rf"(?:^|[\W_]){substation_number:02d}(?:[\W_]|$)", re.IGNORECASE),
             re.compile(rf"(?:^|[\W_]){substation_number}(?:[\W_]|$)", re.IGNORECASE),
         ]
 
@@ -532,16 +575,44 @@ class RawMaterialFilter:
                 if archive not in matched:
                     matched.append(archive)
 
-        if len(matched) > 1:
+        if station_name and len(matched) > 1:
+            target_tokens = normalize_substation_tokens(station_name)
+            if target_tokens:
+                filtered_by_station = [
+                    a for a in matched
+                    if normalize_substation_tokens(a.stem).intersection(target_tokens)
+                ]
+                if filtered_by_station:
+                    matched = filtered_by_station
+
+        if voltage_type != "33kV" and len(matched) > 1:
             raise RuntimeError(
                 f"Multiple US+TEV archives matched PE {substation_folder_name}: {[m.name for m in matched]}"
             )
 
         if not matched:
             warnings.append(f"PE {substation_folder_name}: No US+TEV archive found in unsorted raw data.")
-            return None
+            return []
 
-        return matched[0]
+        return matched
+
+    def filter_us_tev_archive(
+        self,
+        archives: Sequence[Path],
+        substation_number: int,
+        warnings: list[str],
+        voltage_type: str = "11kV",
+        station_name: str | None = None,
+    ) -> Path | None:
+        """Filter and match a single US+TEV archive for a substation PE."""
+        matched = self.filter_us_tev_archives(
+            archives=archives,
+            substation_number=substation_number,
+            warnings=warnings,
+            voltage_type=voltage_type,
+            station_name=station_name,
+        )
+        return matched[0] if matched else None
 
 
 class RawMaterialTransformer:
@@ -554,14 +625,21 @@ class RawMaterialTransformer:
         filtered_ir: Sequence[tuple[Path, int]],
         filtered_dg: Sequence[tuple[Path, int]],
         matched_us_tev: Path | None = None,
+        matched_us_tevs: Sequence[Path] | None = None,
     ) -> TransformationPlan:
         """Construct transformation plan containing destination paths, copy instructions, and extract instructions."""
-        substation_folder_name = f"{package.substation_number:03d}"
+        is_33kv = is_33kv_package(environment, package)
+        substation_folder_name = package.testsheet_path.stem if is_33kv else f"{package.substation_number:03d}"
         substation_dest_dir = self._resolve_substation_dest_dir(environment, package, substation_folder_name)
 
         ir_dest_dir = substation_dest_dir / "IR"
         dg_dest_dir = substation_dest_dir / "DG"
-        us_tev_dest_dir = substation_dest_dir / "US+TEV"
+
+        # Check if destination already has substation_dest_dir / "US"; if so, maintain "US", else "US+TEV"
+        if (substation_dest_dir / "US").exists() and (substation_dest_dir / "US").is_dir():
+            us_tev_dest_dir = substation_dest_dir / "US"
+        else:
+            us_tev_dest_dir = substation_dest_dir / "US+TEV"
 
         directories_to_create = (ir_dest_dir, dg_dest_dir, us_tev_dest_dir)
 
@@ -571,17 +649,21 @@ class RawMaterialTransformer:
         )
 
         extract_instructions: list[ExtractInstruction] = []
-        us_tev_count = 0
-        if matched_us_tev is not None:
-            extract_dest_dir = us_tev_dest_dir / matched_us_tev.stem
+        archives_to_extract: list[Path] = []
+        if matched_us_tevs is not None:
+            archives_to_extract.extend(matched_us_tevs)
+        elif matched_us_tev is not None:
+            archives_to_extract.append(matched_us_tev)
+
+        for archive in archives_to_extract:
+            extract_dest_dir = us_tev_dest_dir / archive.stem
             extract_instructions.append(
                 ExtractInstruction(
-                    source_archive=matched_us_tev,
+                    source_archive=archive,
                     dest_dir=extract_dest_dir,
                     substation_folder_name=substation_folder_name,
                 )
             )
-            us_tev_count = 1
 
         return TransformationPlan(
             directories_to_create=directories_to_create,
@@ -590,9 +672,8 @@ class RawMaterialTransformer:
             substation_folder_name=substation_folder_name,
             ir_count=len(filtered_ir),
             dg_count=len(filtered_dg),
-            us_tev_count=us_tev_count,
+            us_tev_count=len(extract_instructions),
         )
-
 
     def _resolve_substation_dest_dir(
         self,
@@ -602,14 +683,28 @@ class RawMaterialTransformer:
     ) -> Path:
         raw_material_root = environment.storage.get_raw_material_dir()
         month_folder = format_month_folder(package.month) or format_month_folder(package.date_str) or "01. JANUARY"
-        return (
+        date_dir = (
             raw_material_root
             / (package.station or "UNASSIGNED")
             / month_folder
             / (package.date_str or "01-01-2026")
-            / substation_folder_name
-            / "RAW DATA"
         )
+
+        if is_33kv_package(environment, package):
+            if date_dir.exists():
+                for child in date_dir.iterdir():
+                    if not child.is_dir():
+                        continue
+                    try:
+                        child_num = extract_numerical_prefix(child.name)
+                    except ValueError:
+                        continue
+                    if child_num == package.substation_number:
+                        return child
+
+            return date_dir / package.testsheet_path.stem
+
+        return date_dir / f"{package.substation_number:03d}" / "RAW DATA"
 
     def _create_copy_instructions(
         self,
@@ -792,10 +887,24 @@ class RawMaterialWorkflow:
             warnings=warnings,
         )
 
-        matched_us_tev = self.filter_stage.filter_us_tev_archive(
+        voltage_type = getattr(environment.metadata, "voltage_type", "11kV")
+        substation_name: str | None = None
+        try:
+            stem_info = parse_substation_stem(pkg.testsheet_path.stem)
+            if stem_info.name:
+                substation_name = stem_info.name
+        except ValueError:
+            pass
+
+        if not substation_name and pkg.data and pkg.data.substation_name_erms:
+            substation_name = pkg.data.substation_name_erms
+
+        matched_us_tevs = self.filter_stage.filter_us_tev_archives(
             archives=extracted.us_tev_archives,
             substation_number=pkg.substation_number,
             warnings=warnings,
+            voltage_type=voltage_type,
+            station_name=substation_name,
         )
 
         plan = self.transformer.build_plan(
@@ -803,7 +912,7 @@ class RawMaterialWorkflow:
             package=pkg,
             filtered_ir=filtered_ir,
             filtered_dg=filtered_dg,
-            matched_us_tev=matched_us_tev,
+            matched_us_tevs=matched_us_tevs,
         )
 
         ir_copied, dg_copied, us_tev_extracted = self.loader.execute_plan(environment, plan)

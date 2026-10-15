@@ -12,54 +12,7 @@ import docx
 
 logger = logging.getLogger(__name__)
 
-# Standard electrical prefixes to normalize and strip
-ELECTRICAL_PREFIXES = frozenset({
-    "PE",
-    "SSU",
-    "PPU",
-    "PMU",
-    "SS",
-})
-
-
-def normalize_substation_tokens(name: str | None) -> set[str]:
-    """Normalize substation name into canonical uppercase alphanumeric stem tokens.
-
-    Strips:
-    - Leading PE numbers and dots (e.g. '005. ', 'PE 144 ', 'P/E 179 ')
-    - Standard electrical prefixes ('P/E', 'PE', 'SSU', 'PPU', 'PMU', 'S/S')
-    - Parenthesized suffixes: equipment '(VCB)', defect '(IR+VI)', '(IR+US+TEV)', etc.
-    - Non-alphanumeric punctuation
-    """
-    if not name:
-        return set()
-
-    text = str(name).strip()
-    if not text or text == "-":
-        return set()
-
-    # 1. Strip parenthesized suffixes e.g. (VCB), (IR+VI), (11kV)
-    text = re.sub(r"\([^)]*\)", " ", text)
-
-    # 2. Normalize common electrical slash notations before stripping
-    text = re.sub(r"\bP/E\b", "PE", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bS/S\b", "SS", text, flags=re.IGNORECASE)
-
-    # 3. Strip leading number / dot sequences and electrical prefixes (e.g. "005. PE TALAPIA")
-    for _ in range(2):
-        text = re.sub(r"^\s*\d+\s*[\.\-]?\s*", " ", text)
-        text = re.sub(r"^\s*\b(?:PE|SSU|PPU|PMU|SS)\b\s*(?:\d+[\.\-]?)?\s*", " ", text, flags=re.IGNORECASE)
-
-    # 5. Extract alphanumeric tokens
-    raw_tokens = re.findall(r"[A-Za-z0-9]+", text.upper())
-
-    # Filter out standalone electrical prefix tokens and purely single dot/hyphens
-    filtered = {
-        tok for tok in raw_tokens
-        if tok not in ELECTRICAL_PREFIXES
-    }
-
-    return filtered
+from src.core.normalizers import ELECTRICAL_PREFIXES, normalize_substation_tokens
 
 
 def is_substation_attribution_match(

@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 Part of #90
 Specification: [spec.md](../spec.md)
 
@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #92
 
-**Status:** ready-for-agent
+**Status:** closed
 
 ## Detailed Design & Architecture
 
@@ -60,16 +60,16 @@ Specification: [spec.md](../spec.md)
 
 ## Acceptance Criteria Checklist
 
-- [ ] Define `SubstationStemInfo` and implement `parse_substation_stem()` in `src/project/storage.py`.
-- [ ] Update `WorkspaceStorage.get_substation_raw_data_dir()` to match directories using `extract_numerical_prefix()` and recognize `US` alongside `US+TEV`.
-- [ ] Adapt `RawMaterialTransformer._resolve_substation_dest_dir()` to target existing matching directories or testsheet stems for 33kV while preserving `f"{num:03d}"` for 11kV.
-- [ ] Update `RawMaterialExtractor._scan_us_tev_archives()` to scan `US+TEV` and `US` directories.
-- [ ] Update `RawMaterialFilter` and `UsTevCardinalityPolicy` to support multi-board archives for 33kV (extracting into separate `<ZIP_STEM>` folders) while retaining 1-to-1 check for 11kV.
-- [ ] Extend `UsTevArchiveMatching` to support 2-digit tokens (`f"{num:02d}"`) and station name token disambiguation.
-- [ ] Add unit tests in `tests/test_raw_material_33kv.py` covering:
-  - [ ] 33kV substation stem parsing (PPU, PMU, SSU, multi-voltage tokens, nested parentheses).
-  - [ ] Raw data directory resolution with 2-digit stems.
-  - [ ] Multi-board US+TEV archive matching and extraction.
-  - [ ] Dual `US` / `US+TEV` source folder discovery.
-  - [ ] Blank `RAW DATA` bounds resilience.
-- [ ] Verify full test suite passes with 0 regressions.
+- [x] Define `SubstationStemInfo` and implement `parse_substation_stem()` in `src/project/storage.py`.
+- [x] Update `WorkspaceStorage.get_substation_raw_data_dir()` to match directories using `extract_numerical_prefix()` and recognize `US` alongside `US+TEV`.
+- [x] Adapt `RawMaterialTransformer._resolve_substation_dest_dir()` to target existing matching directories or testsheet stems for 33kV while preserving `f"{num:03d}"` for 11kV.
+- [x] Update `RawMaterialExtractor._scan_us_tev_archives()` to scan `US+TEV` and `US` directories.
+- [x] Update `RawMaterialFilter` and `UsTevCardinalityPolicy` to support multi-board archives for 33kV (extracting into separate `<ZIP_STEM>` folders) while retaining 1-to-1 check for 11kV.
+- [x] Extend `UsTevArchiveMatching` to support 2-digit tokens (`f"{num:02d}"`) and station name token disambiguation.
+- [x] Add unit tests in `tests/test_raw_material_33kv.py` covering:
+  - [x] 33kV substation stem parsing (PPU, PMU, SSU, multi-voltage tokens, nested parentheses).
+  - [x] Raw data directory resolution with 2-digit stems.
+  - [x] Multi-board US+TEV archive matching and extraction.
+  - [x] Dual `US` / `US+TEV` source folder discovery.
+  - [x] Blank `RAW DATA` bounds resilience.
+- [x] Verify full test suite passes with 0 regressions.

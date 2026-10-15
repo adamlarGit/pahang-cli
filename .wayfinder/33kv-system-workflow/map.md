@@ -58,7 +58,7 @@ graph TD
     T92["#92: PpuTestsheetParser (metadata, 6-row SWG, TX, VI) - Closed"]
     T93["#93: Power Transformer domain model & TX parsing - Closed"]
     T94["#94: Contract 750-39 storage + Qr02Cba33kVTransaction - Closed"]
-    T95["#95: Raw material sorting & US+TEV pairing"]
+    T95["#95: Raw material sorting & US+TEV pairing - Closed"]
     T96["#96: PPU condition builder & Quick Report plan"]
     T97["#97: 33kV Post-processing (Signatures, Diagonals, per-sheet PageSetup PDF export, stitching)"]
     T98["#98: 33kV Populate TOTAL PE from testsheets"]
@@ -123,7 +123,7 @@ graph TD
 - **Delivers**: Statewide `ENGR-750-39 -CBA-PAHANG - {YEAR}.xlsx` storage path resolution (exact year match first, glob fallback with `ValueError` on ambiguity), `Qr02Cba33kVTransaction` handling Columns G–R, and QR03 defect lookup verification.
 
 ### #95: feat(33kv-raw): Raw material directory discovery and US+TEV multi-board archive extraction
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#95](https://github.com/adamlarGit/pahang-cli/issues/95)
 - **Blocked by**: #92
 - **Ticket File**: [tickets/095-raw-material-sorting-and-us-tev-pairing.md](./tickets/095-raw-material-sorting-and-us-tev-pairing.md)

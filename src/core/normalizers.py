@@ -1152,7 +1152,56 @@ def resolve_station_from_fl(fl: str | None) -> str | None:
     return FL_PREFIX_TO_STATION.get(prefix, None)
 
 
+ELECTRICAL_PREFIXES = frozenset({
+    "PE",
+    "SSU",
+    "PPU",
+    "PMU",
+    "SS",
+})
+
+
+def normalize_substation_tokens(name: str | None) -> set[str]:
+    """Normalize substation name into canonical uppercase alphanumeric stem tokens.
+
+    Strips:
+    - Leading PE numbers and dots (e.g. '005. ', 'PE 144 ', 'P/E 179 ')
+    - Standard electrical prefixes ('P/E', 'PE', 'SSU', 'PPU', 'PMU', 'S/S')
+    - Parenthesized suffixes: equipment '(VCB)', defect '(IR+VI)', '(IR+US+TEV)', etc.
+    - Non-alphanumeric punctuation
+    """
+    if not name:
+        return set()
+
+    text = str(name).strip()
+    if not text or text == "-":
+        return set()
+
+    # 1. Strip parenthesized suffixes e.g. (VCB), (IR+VI), (11kV)
+    text = re.sub(r"\([^)]*\)", " ", text)
+
+    # 2. Normalize common electrical slash notations before stripping
+    text = re.sub(r"\bP/E\b", "PE", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bS/S\b", "SS", text, flags=re.IGNORECASE)
+
+    # 3. Strip leading number / dot sequences and electrical prefixes (e.g. "005. PE TALAPIA")
+    for _ in range(2):
+        text = re.sub(r"^\s*\d+\s*[\.\-]?\s*", " ", text)
+        text = re.sub(r"^\s*\b(?:PE|SSU|PPU|PMU|SS)\b\s*(?:\d+[\.\-]?)?\s*", " ", text, flags=re.IGNORECASE)
+
+    # 4. Extract alphanumeric tokens
+    raw_tokens = re.findall(r"[A-Za-z0-9]+", text.upper())
+
+    # Filter out standalone electrical prefix tokens and purely single dot/hyphens
+    filtered = {
+        tok for tok in raw_tokens
+        if tok not in ELECTRICAL_PREFIXES
+    }
+    return filtered
+
+
 __all__ = [
+    "ELECTRICAL_PREFIXES",
     "FL_PREFIX_TO_STATION",
     "STATION_NAME_TO_CODE",
     "extract_background_temperature",
@@ -1173,6 +1222,7 @@ __all__ = [
     "normalize_for_csv",
     "normalize_for_excel",
     "normalize_for_report",
+    "normalize_substation_tokens",
     "normalize_tx_model",
     "normalize_us_characteristic",
     "parse_background_temp",

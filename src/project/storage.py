@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
@@ -13,6 +14,60 @@ from src.core.normalizers import format_month_folder
 from src.project.models import HealthCheckItem, WorkspaceHealth
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class SubstationStemInfo:
+    """Structured information parsed from a substation filename stem."""
+
+    substation_number: int
+    station_type: str | None = None
+    name: str = ""
+    voltage_token: str | None = None
+    defect_suffix: str | None = None
+
+
+def parse_substation_stem(name: str) -> SubstationStemInfo:
+    """Parse a substation stem name into structured SubstationStemInfo."""
+    raw = name.strip()
+    match_num = re.match(r"^(\d+)", raw)
+    if not match_num:
+        raise ValueError(f"No numerical prefix found in substation stem: '{name}'")
+
+    substation_number = int(match_num.group(1))
+    remainder = raw[match_num.end():].lstrip(" ._-")
+
+    # 1. Defect suffix at the end: e.g. (VI), (US+VI), (IR+US+TEV+VI)
+    defect_suffix: str | None = None
+    defect_match = re.search(r"\((?:IR|US|TEV|VI|[+\s])+\)\s*$", remainder, re.IGNORECASE)
+    if defect_match:
+        defect_suffix = defect_match.group(0).strip()
+        remainder = remainder[:defect_match.start()].strip()
+
+    # 2. Voltage token at the end of remainder: e.g. 33-11kV, 275-132-33-11kV, 33kV, 11kV
+    voltage_token: str | None = None
+    voltage_match = re.search(r"(\b\d+(?:-\d+)*\s*kV)\s*$", remainder, re.IGNORECASE)
+    if voltage_match:
+        voltage_token = voltage_match.group(1).strip()
+        remainder = remainder[:voltage_match.start()].strip()
+
+    # 3. Station type prefix: e.g. PPU, PMU, SSU, PE
+    station_type: str | None = None
+    station_match = re.match(r"^(PPU|PMU|SSU|PE)\b", remainder, re.IGNORECASE)
+    if station_match:
+        station_type = station_match.group(1).upper()
+        remainder = remainder[station_match.end():].strip(" ._-")
+
+    station_name = remainder.strip()
+
+    return SubstationStemInfo(
+        substation_number=substation_number,
+        station_type=station_type,
+        name=station_name,
+        voltage_token=voltage_token,
+        defect_suffix=defect_suffix,
+    )
+
 
 
 def sanitize_filename(name: str) -> str:
@@ -592,24 +647,24 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         if not date_dir.exists():
             return None
 
-        sub_str = f"{substation_number:03d}"
-        sub_int_str = str(substation_number)
-
         for child in date_dir.iterdir():
             if not child.is_dir():
                 continue
-            name = child.name.strip()
-            if (
-                name.startswith(sub_str)
-                or name == sub_int_str
-                or name.startswith(f"{sub_int_str}.")
-                or name.startswith(f"{sub_int_str}_")
-                or name.startswith(f"{sub_int_str} ")
-            ):
+            try:
+                child_num = extract_numerical_prefix(child.name)
+            except ValueError:
+                continue
+
+            if child_num == substation_number:
                 raw_data_sub = child / "RAW DATA"
                 if raw_data_sub.exists() and raw_data_sub.is_dir():
                     return raw_data_sub
-                if (child / "US+TEV").exists() or (child / "IR").exists() or (child / "DG").exists():
+                if (
+                    (child / "US+TEV").exists()
+                    or (child / "US").exists()
+                    or (child / "IR").exists()
+                    or (child / "DG").exists()
+                ):
                     return child
 
         return None

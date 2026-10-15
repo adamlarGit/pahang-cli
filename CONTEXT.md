@@ -96,13 +96,18 @@ The deep module in `src/workflows/replace_signatures.py` responsible for process
 A standalone utility workflow that scans a target folder for PDFs, sorts them in ascending numerical order based on filename leading digits (`001`, `002`), and merges them into a single output PDF with `separator_sheet.pdf` inserted strictly between consecutive PDF files.
 
 ### UsTevArchiveMatching
-The matching rule for discovering and pairing UltraTEV raw data archives (`.zip` files or directories in `TESTSHEET/<STATION>/<MONTH>/<DD-MM-YYYY>/UNSORTED RAW DATA/US+TEV/`) to a `SubstationTestsheetPackage`. Evaluates strict PE number token matching across filename delimiters (`_083-`, `_083_`, `083-`, `083_`, `_083.`, `_083`).
+The matching rule for discovering and pairing UltraTEV raw data archives (`.zip` files or directories in `TESTSHEET/<STATION>/<MONTH>/<DD-MM-YYYY>/UNSORTED RAW DATA/US+TEV/` or `US/` or root `UNSORTED RAW DATA/`) to a `SubstationTestsheetPackage`. Evaluates PE number token matching across filename delimiters (`_083-`, `_083_`, `083-`, `083_`, `_083.`, `_083`), supporting 2-digit zero-padded tokens (`01_`, `05_`), and disambiguating candidate archives across stations via `normalize_substation_tokens()`.
 
 ### UsTevDestinationFolder
-The extracted UltraTEV survey folder created under `RAW MATERIAL/<STATION>/<MONTH>/<DD-MM-YYYY>/<PE_NUM_3DIGITS>/RAW DATA/US+TEV/<ZIP_STEM>/`. Contains uncompressed instrument survey assets (`index.html`, `survey_metadata.js`, `survey_summary.js`, `resources/`, and equipment directories).
+The extracted UltraTEV survey folder created under `RAW MATERIAL/<STATION>/<MONTH>/<DD-MM-YYYY>/<SUBSTATION_FOLDER>/US+TEV/<ZIP_STEM>/` (or `.../US/<ZIP_STEM>/` if an existing `US` folder is present). For 11kV, `<SUBSTATION_FOLDER>` is strictly `<PE_NUM_3DIGITS>/RAW DATA`. For 33kV, `<SUBSTATION_FOLDER>` defaults to the testsheet stem (e.g. `01. PPU APMM 33-11kV (VI)`) or resolves to an existing matched directory. Contains uncompressed instrument survey assets (`index.html`, `survey_metadata.js`, `survey_summary.js`, `resources/`, and equipment directories).
 
 ### UsTevCardinalityPolicy
-Strict 1-to-1 archive enforcement policy for US+TEV. Each substation PE package must match at most one `.zip` archive in `UNSORTED RAW DATA/US+TEV/`. If multiple matching zip files or ambiguous records are discovered for a single PE number, the workflow raises a validation error to prevent misattribution.
+Archive cardinality policy for US+TEV surveys:
+- **11kV**: Strict 1-to-1 archive enforcement. Each substation PE package must match at most one `.zip` archive. If multiple matching zip files are discovered for a single PE number, the workflow raises a validation error to prevent misattribution.
+- **33kV**: Multi-board archive support. A substation may contain multiple switchgear voltage boards (e.g. `01_PPU_APMM_33KV.zip` and `01_PPU_APMM_11KV.zip`). All matching archives are extracted idempotently into individual `<ZIP_STEM>` subdirectories.
+
+### SubstationStemInfo & parse_substation_stem
+The structured representation in `src/project/storage.py` for parsing 33kV and legacy substation stem names into `substation_number`, `station_type` (`PPU`, `PMU`, `SSU`, `PE`), `name` (e.g. `APMM`, `KIIP (SSU CAMEL POWER)`), `voltage_token` (e.g. `33-11kV`, `275-132-33-11kV`, `33kV`), and `defect_suffix` (e.g. `(VI)`, `(IR+US+TEV+VI)`).
 
 ### UsTevResiliencePolicy
 Best-effort handling policy when a substation has no matching US+TEV archive in unsorted raw data. The workflow provisions an empty `RAW DATA/US+TEV/` directory, logs a non-blocking warning, and continues processing photos and other packages without halting.
