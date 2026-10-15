@@ -45,9 +45,12 @@ TRANSFORMER_HV_SIDE_KEYWORDS: tuple[str, ...] = (
 def find_sound_clip_anchor(page: fitz.Page) -> fitz.Rect | None:
     """Locate the 'Sound clip' marker on a PDF page and return target speaker rect in Column 2.
 
-    Calculates target speaker annotation rectangle centered inside Column 2 aligned beneath
-    ultrasound measurement readings: fitz.Rect(236.0, inst.y0 - 2, 254.0, inst.y1 + 2).
-    If absent, returns None.
+    Searches the page for the 'Sound clip' label. If present, detects the exact coordinates of
+    the visible speaker icon image in Column 2 (x in [180, 250] pt vertically aligned within +/-15 pt
+    of the label) and centers an 18x18 pt hit target directly superimposed over the visible icon.
+    If no embedded image is present (e.g., text-only synthetic test sheets), falls back to the canonical
+    Column 2 icon center coordinates (cx = 210.30 pt, cy = (inst.y0 + inst.y1) / 2.0).
+    If the 'Sound clip' marker is absent, returns None.
 
     Args:
         page: PyMuPDF Page object.
@@ -59,7 +62,28 @@ def find_sound_clip_anchor(page: fitz.Page) -> fitz.Rect | None:
     if not rects:
         return None
     inst = rects[0]
-    return fitz.Rect(236.0, inst.y0 - 2, 254.0, inst.y1 + 2)
+
+    # Discover exact visible speaker icon image in Column 2
+    icon_rect: fitz.Rect | None = None
+    try:
+        for img in page.get_images():
+            for r in page.get_image_rects(img[0]):
+                if inst.y0 - 15.0 <= r.y0 <= inst.y1 + 15.0 and 180.0 <= r.x0 <= 250.0:
+                    icon_rect = r
+                    break
+            if icon_rect is not None:
+                break
+    except Exception:
+        pass
+
+    if icon_rect is not None:
+        cx = (icon_rect.x0 + icon_rect.x1) / 2.0
+        cy = (icon_rect.y0 + icon_rect.y1) / 2.0
+    else:
+        cx = 210.30
+        cy = (inst.y0 + inst.y1) / 2.0
+
+    return fitz.Rect(cx - 9.0, cy - 9.0, cx + 9.0, cy + 9.0)
 
 
 def extract_page_equipment_context(
@@ -461,12 +485,27 @@ def export_16bit_wav(src_wav_path: Path | str, dest_wav_path: Path | str) -> Pat
     return dest_path
 
 
+def _is_matching_sound_rect(candidate_rect: fitz.Rect, target_rect: fitz.Rect) -> bool:
+    """Check if candidate sound annotation matches target hit rect.
+
+    Matches if rectangles intersect, or if candidate is within +/-20 pt vertically in Column 2
+    (x in [170, 270] pt), ensuring existing annotations (e.g. from prior legacy offset coordinates)
+    are recognized and migrated in place.
+    """
+    if candidate_rect.intersects(target_rect):
+        return True
+    return (
+        abs(candidate_rect.y0 - target_rect.y0) <= 20.0
+        and 170.0 <= candidate_rect.x0 <= 270.0
+    )
+
+
 def _find_existing_sound_annot(
     doc: fitz.Document,
     page: fitz.Page,
     rect: fitz.Rect,
 ) -> tuple[int, int] | None:
-    r"""Find an existing /Subtype /Sound annotation intersecting rect.
+    r"""Find an existing /Subtype /Sound annotation matching target rect or row.
 
     Inspects both high-level page annotations and low-level page /Annots array objects
     to enforce IdempotentSoundEmbeddingPolicy across all document lifecycle states.
@@ -486,7 +525,7 @@ def _find_existing_sound_annot(
                 if st[1] == "/Sound":
                     is_sound = True
 
-            if is_sound and annot.rect.intersects(rect):
+            if is_sound and _is_matching_sound_rect(annot.rect, rect):
                 sound_val = doc.xref_get_key(annot.xref, "Sound")
                 if sound_val[0] == "xref":
                     sound_xref = int(sound_val[1].split()[0])
@@ -516,7 +555,7 @@ def _find_existing_sound_annot(
                 if len(nums) == 4:
                     pdf_x0, pdf_y0, pdf_x1, pdf_y1 = nums
                     mupdf_rect = fitz.Rect(pdf_x0, page_h - pdf_y1, pdf_x1, page_h - pdf_y0)
-                    if mupdf_rect.intersects(rect):
+                    if _is_matching_sound_rect(mupdf_rect, rect):
                         sound_val = doc.xref_get_key(candidate_xref, "Sound")
                         if sound_val[0] == "xref":
                             sound_xref = int(sound_val[1].split()[0])
@@ -564,7 +603,8 @@ def embed_sound_annotation(
     """Embeds an ISO 32000-1 compliant Sound annotation into a PDF page.
 
     Enforces IdempotentSoundEmbeddingPolicy: If a /Subtype /Sound annotation already
-    intersects rect, updates the existing sound object stream directly and returns
+    exists for this slot, updates the existing sound object stream and annotation properties
+    (/Rect, /CA 0.0, /Border [0 0 0], and empty /AP Form XObject) directly and returns
     the existing annotation xref without creating duplicate stacked icons or leaking
     unreferenced streams.
 
@@ -579,10 +619,36 @@ def embed_sound_annotation(
     Returns:
         int: Cross-reference integer (xref) of the Sound annotation.
     """
+    page_h = page.rect.height
+    pdf_y0 = page_h - rect.y1
+    pdf_y1 = page_h - rect.y0
+
     existing = _find_existing_sound_annot(doc, page, rect)
     if existing is not None:
         annot_xref, sound_xref = existing
+        # 1. Update audio stream and sampling metadata
         doc.update_stream(sound_xref, pcm_bytes)
+        doc.xref_set_key(sound_xref, "R", str(framerate))
+        doc.xref_set_key(sound_xref, "C", str(channels))
+
+        # 2. Update hit rect, transparency, and empty appearance Form XObject
+        doc.xref_set_key(
+            annot_xref,
+            "Rect",
+            f"[{rect.x0:.2f} {pdf_y0:.2f} {rect.x1:.2f} {pdf_y1:.2f}]",
+        )
+        doc.xref_set_key(annot_xref, "CA", "0.0")
+        doc.xref_set_key(annot_xref, "Border", "[0 0 0]")
+
+        app_info = doc.xref_get_key(annot_xref, "AP")
+        if app_info[0] == "null" or not app_info[1]:
+            app_xref = doc.get_new_xref()
+            doc.update_object(
+                app_xref,
+                f"<< /Type /XObject /Subtype /Form /BBox [0 0 {rect.width:.2f} {rect.height:.2f}] /Resources << >> >>",
+            )
+            doc.update_stream(app_xref, b"")
+            doc.xref_set_key(annot_xref, "AP", f"<< /N {app_xref} 0 R >>")
         return annot_xref
 
     # 1. Allocate and populate Sound Object stream
@@ -593,19 +659,25 @@ def embed_sound_annotation(
     )
     doc.update_stream(sound_xref, pcm_bytes)
 
-    # 2. Convert PyMuPDF coordinates (top-left origin) to PDF points (bottom-left origin)
-    page_h = page.rect.height
-    pdf_y0 = page_h - rect.y1
-    pdf_y1 = page_h - rect.y0
+    # 2. Transparent Empty Appearance Form XObject
+    app_xref = doc.get_new_xref()
+    doc.update_object(
+        app_xref,
+        f"<< /Type /XObject /Subtype /Form /BBox [0 0 {rect.width:.2f} {rect.height:.2f}] /Resources << >> >>",
+    )
+    doc.update_stream(app_xref, b"")
 
-    # 3. Allocate and populate Sound Annotation dictionary
+    # 3. Sound Annotation Dictionary with /CA 0.0, /Border [0 0 0], empty /AP
     annot_xref = doc.get_new_xref()
     annot_dict = (
         f"<< /Type /Annot /Subtype /Sound "
         f"/Rect [{rect.x0:.2f} {pdf_y0:.2f} {rect.x1:.2f} {pdf_y1:.2f}] "
         f"/Sound {sound_xref} 0 R "
         f"/Name /Speaker "
+        f"/CA 0.0 "
+        f"/Border [0 0 0] "
         f"/F 4 "
+        f"/AP << /N {app_xref} 0 R >> "
         f"/P {page.xref} 0 R >>"
     )
     doc.update_object(annot_xref, annot_dict)

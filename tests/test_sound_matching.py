@@ -1,7 +1,7 @@
 """Unit tests for ultrasound measurement discovery, page inspection, and compartment matching.
 
 Tests cover:
-- Anchor detection centering speaker rectangle inside Column 2 (x in [236, 254] pt).
+- Anchor detection centering speaker rectangle directly over visible icon image (or fallback cx = 210.30 pt).
 - Anchor detection returns None on pages without "Sound clip".
 - TwoTierPanelMatchingPolicy across bare digits, prefixed codes, and unnumbered SCADA codes.
 - VcbAudioAttributionPolicy (1-to-1 chamber mapping, zero cross-chamber leakage, tie-breaking).
@@ -67,8 +67,8 @@ def _create_synthetic_page(text_blocks: list[tuple[float, float, str]]) -> fitz.
 # Seam 1: Anchor Detection Tests
 # ==============================================================================
 
-def test_find_sound_clip_anchor_centers_speaker_rect_in_column_2():
-    """Anchor detection locates 'Sound clip' and centers rectangle inside Column 2 (x in [236, 254])."""
+def test_find_sound_clip_anchor_centers_speaker_rect_in_column_2_fallback():
+    """Anchor detection locates 'Sound clip' and centers fallback rectangle in Column 2 (cx = 210.30)."""
     # Insert "Sound clip" at typical Row 31 position in Column 1 (x ~ 80, y ~ 650)
     doc = _create_synthetic_page([(80.0, 650.0, "Sound clip")])
     page = doc[0]
@@ -77,17 +77,45 @@ def test_find_sound_clip_anchor_centers_speaker_rect_in_column_2():
     assert rect is not None
     assert isinstance(rect, fitz.Rect)
 
-    # Asserts speaker annotation rectangle is strictly centered in Column 2
-    assert rect.x0 == 236.0
-    assert rect.x1 == 254.0
+    # Asserts speaker annotation rectangle is strictly centered in Column 2 over cx = 210.30
+    assert abs(rect.x0 - 201.30) < 1e-2
+    assert abs(rect.x1 - 219.30) < 1e-2
     assert rect.width == 18.0
+    assert rect.height == 18.0
 
-    # Vertical alignment matches text instance y0 - 2, y1 + 2
+    # Vertical alignment matches text instance center
     insts = page.search_for("Sound clip")
     assert len(insts) == 1
     inst = insts[0]
-    assert abs(rect.y0 - (inst.y0 - 2)) < 1e-3
-    assert abs(rect.y1 - (inst.y1 + 2)) < 1e-3
+    expected_cy = (inst.y0 + inst.y1) / 2.0
+    actual_cy = (rect.y0 + rect.y1) / 2.0
+    assert abs(actual_cy - expected_cy) < 1e-2
+
+
+def test_find_sound_clip_anchor_detects_visible_speaker_image_rect():
+    """Anchor detection locates visible speaker image in Column 2 and centers hit box directly on top."""
+    doc = fitz.open()
+    page = doc.new_page(width=595.0, height=842.0)
+    page.insert_text(fitz.Point(89.0, 605.0), "Sound clip", fontsize=10)
+
+    # Insert a dummy image representing Word's embedded sound icon at [202.38, 596.58, 218.22, 612.36]
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 16, 16), 1)
+    img_rect = fitz.Rect(202.38, 596.58, 218.22, 612.36)
+    page.insert_image(img_rect, pixmap=pix)
+
+    rect = find_sound_clip_anchor(page)
+    assert rect is not None
+    assert isinstance(rect, fitz.Rect)
+
+    # Hit box is 18x18 pt centered directly over the image center (210.30, 604.47)
+    cx = (img_rect.x0 + img_rect.x1) / 2.0
+    cy = (img_rect.y0 + img_rect.y1) / 2.0
+    assert abs(rect.x0 - (cx - 9.0)) < 1e-2
+    assert abs(rect.x1 - (cx + 9.0)) < 1e-2
+    assert abs(rect.y0 - (cy - 9.0)) < 1e-2
+    assert abs(rect.y1 - (cy + 9.0)) < 1e-2
+    assert rect.width == 18.0
+    assert rect.height == 18.0
 
 
 def test_find_sound_clip_anchor_returns_none_when_marker_absent():
