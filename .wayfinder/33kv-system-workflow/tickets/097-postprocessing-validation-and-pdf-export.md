@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 Part of #90
 Specification: [spec.md](../spec.md)
 
@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #96
 
-**Status:** ready-for-agent
+**Status:** closed
 
 ## Detailed Design & Architecture
 
@@ -82,25 +82,25 @@ Specification: [spec.md](../spec.md)
 
 ## Acceptance Criteria Checklist
 
-- [ ] Update `validate_postprocessing_preflight()` and `rename_files_match()` to pair files by `extract_numerical_prefix()`.
-- [ ] Implement voltage-aware sequential sheet selection in `select_and_sort_sheets()`:
-  - [ ] Sort `33kV (Main)` → `33kV (Extra)` (sequentially numbered) → `11kV (Main)` → `11kV (Extra)` (sequentially numbered) → `TX` → `Visual Inspec.`.
-  - [ ] Strictly exclude `RAW DATA` and unpopulated extra sheets.
-  - [ ] Preserve 11kV ordering for `PCE Testsheet` / `PCE VI`.
-- [ ] Implement per-sheet `PageSetup` in `ComDocumentConverter`:
-  - [ ] Switchgear: Landscape A4, 1mm side margins, fit 1-page wide, unconstrained height.
-  - [ ] TX: Landscape A4, 1mm side margins, fit 1-page wide, unconstrained height.
-  - [ ] VI: Portrait A4, standard 0.25"/0.75" margins, fit 1-page wide.
-- [ ] Implement 3-family signature anchor geometries in `replace_pce_images()`:
-  - [ ] Switchgear placeholder replacement at `E77` (vendor) and `L77` (TNB).
-  - [ ] TX placeholder replacement at `F73` (vendor) and `R73` (TNB).
-  - [ ] VI placeholder replacement at `D82` (vendor) and `M82` (TNB).
-  - [ ] Placeholder sanitization in `mode="none"`.
-- [ ] Update `diagonal_borders.py` for 33kV:
-  - [ ] Switchgear: scan `C15:U62`.
-  - [ ] TX: scan groups `F14:AD28`, `F33:AD47`, `D51:F54`, `D57:O58`, `C62:Q71`.
-  - [ ] VI: strictly unslashed.
-  - [ ] Merged cells preserved and openpyxl zip repaired.
-- [ ] Verify sequential PDF concatenation produces canonical `<STEM>.pdf` combining portrait Quick Report, landscape switchgear/TX, and portrait VI.
-- [ ] Add unit tests in `tests/test_postprocessing_33kv.py` covering pre-flight validation, sheet selection/sorting, diagonal scan ranges, and signature anchors.
-- [ ] Verify full test suite passes with 0 regressions.
+- [x] Update `validate_postprocessing_preflight()` and `rename_files_match()` to pair files by `extract_numerical_prefix()`.
+- [x] Implement voltage-aware sequential sheet selection in `select_and_sort_sheets()`:
+  - [x] Sort `33kV (Main)` → `33kV (Extra)` (sequentially numbered) → `11kV (Main)` → `11kV (Extra)` (sequentially numbered) → `TX` → `Visual Inspec.`.
+  - [x] Strictly exclude `RAW DATA` and unpopulated extra sheets.
+  - [x] Preserve 11kV ordering for `PCE Testsheet` / `PCE VI`.
+- [x] Implement per-sheet `PageSetup` in `ComDocumentConverter`:
+  - [x] Switchgear: Landscape A4, 1mm side margins, fit 1-page wide, unconstrained height.
+  - [x] TX: Landscape A4, 1mm side margins, fit 1-page wide, unconstrained height.
+  - [x] VI: Portrait A4, standard 0.25"/0.75" margins, fit 1-page wide.
+- [x] Implement 3-family signature anchor geometries in `replace_pce_images()`:
+  - [x] Switchgear placeholder replacement at `E77` (vendor) and `L77` (TNB).
+  - [x] TX placeholder replacement at `F73` (vendor) and `R73` (TNB).
+  - [x] VI placeholder replacement at `D82` (vendor) and `M82` (TNB).
+  - [x] Placeholder sanitization in `mode="none"`.
+- [x] Update `diagonal_borders.py` for 33kV:
+  - [x] Switchgear: scan `C15:U62`.
+  - [x] TX: scan groups `F14:AD28`, `F33:AD47`, `D51:F54`, `D57:O58`, `C62:Q71`.
+  - [x] VI: strictly unslashed.
+  - [x] Merged cells preserved and openpyxl zip repaired.
+- [x] Verify sequential PDF concatenation produces canonical `<STEM>.pdf` combining portrait Quick Report, landscape switchgear/TX, and portrait VI.
+- [x] Add unit tests in `tests/test_postprocessing_33kv.py` covering pre-flight validation, sheet selection/sorting, diagonal scan ranges, and signature anchors.
+- [x] Verify full test suite passes with 0 regressions.

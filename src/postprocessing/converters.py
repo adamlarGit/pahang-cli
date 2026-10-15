@@ -6,6 +6,7 @@ import io
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
+import re
 from types import TracebackType
 from typing import Sequence
 
@@ -36,21 +37,109 @@ def _is_pce_vi_sheet(ws_name: str) -> bool:
     )
 
 
+def classify_sheet_layout(sheet_name: str) -> str:
+    """Classify worksheet name into layout keys: switchgear, transformer, visual_inspection, pce_testsheet, pce_vi."""
+    s = str(sheet_name).strip().lower()
+    if _is_pce_testsheet_sheet(s):
+        return "pce_testsheet"
+    if _is_pce_vi_sheet(s):
+        return "pce_vi"
+    if s == "tx" or s.startswith("tx ") or s.startswith("tx(") or s.startswith("tx-") or s.startswith("tx_"):
+        return "transformer"
+    if s.startswith("visual inspec"):
+        return "visual_inspection"
+    if s.startswith("33kv") or s.startswith("11kv") or "33kv" in s or "11kv" in s:
+        return "switchgear"
+    return "unknown"
+
+
+def _is_33kv_workbook(worksheet_names: Sequence[str]) -> bool:
+    """Return True if workbook contains 33kV-family sheets."""
+    for ws_name in worksheet_names:
+        name = ws_name.strip().lower()
+        if (
+            name.startswith("33kv")
+            or name.startswith("11kv (main)")
+            or name.startswith("11kv (extra)")
+            or name == "tx"
+            or name.startswith("tx ")
+        ):
+            return True
+    return False
+
+
+def _extract_extra_index(sheet_name: str) -> int:
+    """Extract sequential numbering from extra switchgear sheet name (e.g. 33kV (Extra) (2) -> 2)."""
+    m = re.search(r"\((\d+)\)\s*$", sheet_name.strip())
+    if m:
+        return int(m.group(1))
+    return 1
+
+
 def select_and_sort_sheets(
     worksheet_names: Sequence[str],
     target_sheets: Sequence[str] | None = None,
 ) -> list[str]:
     """Select and sort target worksheet names from a workbook.
 
-    If `target_sheets` is None, matches any sheets where `_is_pce_testsheet_sheet`
-    or `_is_pce_vi_sheet` returns True. Sorts PCE Testsheet and copied variations
-    (`(2)`, `(3)`) first, and PCE VI and copied variations (`(2)`, `(3)`) last.
-    If `target_sheets` is specified, matches exact sheet names present in the
-    workbook.
+    For 33kV workbooks:
+      Sorts sheets in strict sequential order:
+        1. 33kV (Main)
+        2. 33kV (Extra), 33kV (Extra) (2) ... (sorted by extra index)
+        3. 11kV (Main)
+        4. 11kV (Extra), 11kV (Extra) (2) ... (sorted by extra index)
+        5. TX
+        6. Visual Inspec. / Visual Inspection
+      Strictly excludes RAW DATA and unpopulated extra template sheets.
+
+    For 11kV workbooks:
+      Preserves PCE Testsheet first and PCE VI last.
     """
     if target_sheets is not None:
         return [name for name in target_sheets if name in worksheet_names]
 
+    if _is_33kv_workbook(worksheet_names):
+        main_33: list[str] = []
+        extra_33: list[str] = []
+        main_11: list[str] = []
+        extra_11: list[str] = []
+        tx_sheets: list[str] = []
+        vi_sheets: list[str] = []
+
+        for name in worksheet_names:
+            s_clean = name.strip()
+            s_lower = s_clean.lower()
+
+            # Strictly exclude RAW DATA
+            if s_lower == "raw data" or s_lower.startswith("raw data"):
+                continue
+
+            # Strictly exclude template sheets
+            if "template" in s_lower or "unpopulated" in s_lower:
+                continue
+
+            layout = classify_sheet_layout(s_clean)
+            if layout == "switchgear":
+                if s_lower.startswith("33kv (main)") or s_lower == "33kv (main)":
+                    main_33.append(name)
+                elif s_lower.startswith("33kv (extra)"):
+                    extra_33.append(name)
+                elif s_lower.startswith("11kv (main)") or s_lower == "11kv (main)":
+                    main_11.append(name)
+                elif s_lower.startswith("11kv (extra)"):
+                    extra_11.append(name)
+            elif layout == "transformer":
+                tx_sheets.append(name)
+            elif layout == "visual_inspection":
+                vi_sheets.append(name)
+
+        # Sort extras sequentially
+        extra_33.sort(key=_extract_extra_index)
+        extra_11.sort(key=_extract_extra_index)
+
+        return main_33 + extra_33 + main_11 + extra_11 + tx_sheets + vi_sheets
+
+    # 11kV fallback:
     testsheet_names: list[str] = []
     vi_names: list[str] = []
     for name in worksheet_names:
@@ -305,8 +394,13 @@ class ComDocumentConverter(DocumentConverter):
         """Configure ActivePrinter to a standardized virtual PDF printer (e.g. Microsoft Print to PDF) to ensure uniform sheet scaling."""
         configure_uniform_printer(excel_app)
 
-    def _configure_target_page_setup(self, target: object) -> None:
-        """Enforce standardized PageSetup properties (`PaperSize=9`, `Orientation=2`, `FitToPagesWide=1`, `FitToPagesTall=1`, `Zoom=False`)."""
+    def _configure_target_page_setup(self, target: object, sheet_name: str | None = None) -> None:
+        """Enforce standardized PageSetup properties per sheet family.
+
+        Switchgear & Transformer: Landscape A4, 2.83pt (~1mm) margins, fit 1-page wide, unconstrained height.
+        Visual Inspection: Portrait A4, 18pt/54pt margins, fit 1-page wide, unconstrained height.
+        11kV sheets: Landscape A4, fit 1-page wide and tall.
+        """
         if not self.optimize_page_setup:
             return
         try:
@@ -317,14 +411,34 @@ class ComDocumentConverter(DocumentConverter):
                 sheets_to_process.extend(list(target.Worksheets))
 
             for ws in sheets_to_process:
+                name = getattr(ws, "Name", "") or sheet_name or ""
+                layout = classify_sheet_layout(name)
                 try:
-                    ws.PageSetup.PaperSize = 9  # xlPaperA4 (210 x 297 mm)
-                    ws.PageSetup.Orientation = 2  # xlLandscape
                     ws.PageSetup.Zoom = False
-                    ws.PageSetup.FitToPagesWide = 1
-                    ws.PageSetup.FitToPagesTall = 1
+                    ws.PageSetup.PaperSize = 9  # xlPaperA4 (210 x 297 mm)
+
+                    if layout in ("switchgear", "transformer"):
+                        ws.PageSetup.Orientation = 2  # xlLandscape
+                        ws.PageSetup.LeftMargin = 2.83
+                        ws.PageSetup.RightMargin = 2.83
+                        ws.PageSetup.TopMargin = 0
+                        ws.PageSetup.BottomMargin = 0
+                        ws.PageSetup.FitToPagesWide = 1
+                        ws.PageSetup.FitToPagesTall = False
+                    elif layout == "visual_inspection":
+                        ws.PageSetup.Orientation = 1  # xlPortrait
+                        ws.PageSetup.LeftMargin = 18.0
+                        ws.PageSetup.RightMargin = 18.0
+                        ws.PageSetup.TopMargin = 54.0
+                        ws.PageSetup.BottomMargin = 54.0
+                        ws.PageSetup.FitToPagesWide = 1
+                        ws.PageSetup.FitToPagesTall = False
+                    else:
+                        ws.PageSetup.Orientation = 2  # xlLandscape
+                        ws.PageSetup.FitToPagesWide = 1
+                        ws.PageSetup.FitToPagesTall = 1
                 except Exception as exc:
-                    logging.debug("Could not configure PageSetup for sheet: %s", exc)
+                    logging.debug("Could not configure PageSetup for sheet %s: %s", name, exc)
         except Exception as exc:
             logging.debug("Could not inspect sheets for PageSetup: %s", exc)
 
@@ -399,6 +513,22 @@ class ComDocumentConverter(DocumentConverter):
             selected_names = select_and_sort_sheets(worksheet_names, target_sheets)
             ws_map = {ws.Name: ws for ws in wb.Worksheets}
             selected_sheets = [ws_map[name] for name in selected_names if name in ws_map]
+
+            # In COM mode, filter out unpopulated extra template sheets whose B15 and C15 are empty
+            filtered_sheets = []
+            for ws in selected_sheets:
+                s_lower = ws.Name.strip().lower()
+                if "extra" in s_lower:
+                    try:
+                        b15 = ws.Range("B15").Value
+                        c15 = ws.Range("C15").Value
+                        if (b15 is None or str(b15).strip() == "") and (c15 is None or str(c15).strip() == ""):
+                            logging.info("Skipping unpopulated extra template sheet: %s", ws.Name)
+                            continue
+                    except Exception:
+                        pass
+                filtered_sheets.append(ws)
+            selected_sheets = filtered_sheets
 
             if not selected_sheets:
                 self._configure_target_page_setup(wb)
@@ -633,10 +763,28 @@ class FakeDocumentConverter(DocumentConverter):
         self.convert_testsheet_calls.append((xlsx_path, pdf_path, target_sheets))
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
 
+        selected_sheets = list(target_sheets) if target_sheets is not None else None
+        if selected_sheets is None and xlsx_path.exists():
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(xlsx_path, read_only=True)
+                selected_sheets = select_and_sort_sheets(wb.sheetnames)
+                wb.close()
+            except Exception:
+                selected_sheets = None
+
         writer = PdfWriter()
-        page_count = len(target_sheets) if target_sheets is not None and len(target_sheets) > 0 else 1
-        for _ in range(page_count):
-            writer.add_blank_page(width=792, height=612)
+        if selected_sheets:
+            for sname in selected_sheets:
+                layout = classify_sheet_layout(sname)
+                if layout == "visual_inspection":
+                    writer.add_blank_page(width=612, height=792)  # Portrait A4
+                else:
+                    writer.add_blank_page(width=792, height=612)  # Landscape A4
+        else:
+            page_count = len(target_sheets) if target_sheets is not None and len(target_sheets) > 0 else 1
+            for _ in range(page_count):
+                writer.add_blank_page(width=792, height=612)
 
         with open(pdf_path, "wb") as f:
             writer.write(f)

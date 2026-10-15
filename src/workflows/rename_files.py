@@ -22,6 +22,16 @@ class RenameFilesSummary:
     renamed: tuple[RenamePair, ...]
 
 
+def _extract_prefix_safe(filename: str) -> int | None:
+    try:
+        return extract_numerical_prefix(filename)
+    except ValueError:
+        try:
+            return extract_numerical_prefix(filename, split_char="_")
+        except ValueError:
+            return None
+
+
 def rename_files_match(
     input_directory: str | Path,
     output_directory: str | Path,
@@ -38,13 +48,8 @@ def rename_files_match(
         raise FileNotFoundError(f"Output directory not found or not a directory: {output_dir}")
 
     def sort_key(filename: str) -> tuple[int, str]:
-        try:
-            return (extract_numerical_prefix(filename), filename.lower())
-        except ValueError:
-            try:
-                return (extract_numerical_prefix(filename, split_char="_"), filename.lower())
-            except ValueError:
-                return (999999, filename.lower())
+        pfx = _extract_prefix_safe(filename)
+        return (pfx if pfx is not None else 999999, filename.lower())
 
     norm_target = (target_type or "").strip().lower()
 
@@ -101,23 +106,17 @@ def rename_files_match(
 
     prefix_to_input: dict[int, str] = {}
     for inp in input_files:
-        try:
-            num = extract_numerical_prefix(inp)
-            prefix_to_input[num] = inp
-        except ValueError:
-            pass
+        pfx = _extract_prefix_safe(inp)
+        if pfx is not None:
+            prefix_to_input[pfx] = inp
 
     paired: list[tuple[str, str]] = []
     prefix_matched = True
     for out in output_items:
-        try:
-            num = extract_numerical_prefix(out)
-            if num in prefix_to_input:
-                paired.append((out, prefix_to_input[num]))
-            else:
-                prefix_matched = False
-                break
-        except ValueError:
+        pfx = _extract_prefix_safe(out)
+        if pfx is not None and pfx in prefix_to_input:
+            paired.append((out, prefix_to_input[pfx]))
+        else:
             prefix_matched = False
             break
 

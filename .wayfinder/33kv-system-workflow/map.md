@@ -60,7 +60,7 @@ graph TD
     T94["#94: Contract 750-39 storage + Qr02Cba33kVTransaction - Closed"]
     T95["#95: Raw material sorting & US+TEV pairing - Closed"]
     T96["#96: PPU condition builder & Quick Report plan - Closed"]
-    T97["#97: 33kV Post-processing (Signatures, Diagonals, per-sheet PageSetup PDF export, stitching)"]
+    T97["#97: 33kV Post-processing (Signatures, Diagonals, per-sheet PageSetup PDF export, stitching) - Closed"]
     T98["#98: 33kV Populate TOTAL PE from testsheets"]
     T99["#99: 33kV WhatsApp daily report generation"]
     T100["#100: 33kV MSMS pipeline (Consolidate, Enrich, Propagate, Ingest, Mapper T1SUB33)"]
@@ -137,7 +137,7 @@ graph TD
 - **Delivers**: `PpuSubstationConditionPairBuilderPolicy` in `src/quick_report/substation_condition.py` (33kV/11kV switchgear, transformers, cable cellars, control panels, NER), multi-voltage CBM defect detail page generation iterating `switchgears` (plural) for dual-voltage packages, and VI defect detail callouts.
 
 ### #97: feat(33kv-postprocessing): 33kV pre-flight validation, signature alignment, diagonal borders, per-sheet PageSetup PDF export & deliverable stitching
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#97](https://github.com/adamlarGit/pahang-cli/issues/97)
 - **Blocked by**: #96
 - **Ticket File**: [tickets/097-postprocessing-validation-and-pdf-export.md](./tickets/097-postprocessing-validation-and-pdf-export.md)

@@ -64,19 +64,26 @@ class PreFlightValidationResult:
         return True
 
 
+def _extract_prefix_safe(name: str) -> int | None:
+    """Safely extract numerical prefix from filename, trying dot and underscore separators."""
+    try:
+        return extract_numerical_prefix(name)
+    except ValueError:
+        try:
+            return extract_numerical_prefix(name, split_char="_")
+        except ValueError:
+            return None
+
+
 def _sort_by_numerical_prefix(paths: Sequence[Path]) -> list[Path]:
     """Sort path items by leading numerical prefix or fallback to lowercase name."""
 
     def sort_key(p: Path) -> tuple[int, str]:
-        try:
-            return (extract_numerical_prefix(p.name), p.name.lower())
-        except ValueError:
-            try:
-                return (extract_numerical_prefix(p.name, split_char="_"), p.name.lower())
-            except ValueError:
-                return (999999, p.name.lower())
+        pfx = _extract_prefix_safe(p.name)
+        return (pfx if pfx is not None else 999999, p.name.lower())
 
     return sorted(paths, key=sort_key)
+
 
 
 def filter_valid_quick_reports(directory: Path | str) -> list[Path]:
@@ -314,6 +321,29 @@ def validate_postprocessing_preflight(
             raw_materials=raw_materials,
         )
 
+    # Prefix pairing validation: verify each quick report has a corresponding testsheet by numerical prefix
+    qr_prefixes = [_extract_prefix_safe(p.name) for p in quick_reports]
+    ts_prefixes = [_extract_prefix_safe(p.name) for p in testsheets]
+    qr_valid_pfx = [p for p in qr_prefixes if p is not None]
+    ts_valid_pfx = [p for p in ts_prefixes if p is not None]
+
+    if set(qr_valid_pfx) != set(ts_valid_pfx):
+        qr_names = [p.name for p in quick_reports]
+        ts_names = [p.name for p in testsheets]
+        raise PreFlightValidationError(
+            f"Pre-flight integrity check failed for date folder '{date_str}': "
+            f"Numerical prefix mismatch detected between QUICK REPORT and TESTSHEET.\n"
+            f"  Quick Reports ({qr_count}): {qr_names} (prefixes: {sorted(set(qr_valid_pfx))})\n"
+            f"  Testsheets ({ts_count}): {ts_names} (prefixes: {sorted(set(ts_valid_pfx))})",
+            date_folder=date_str,
+            quick_report_count=qr_count,
+            testsheet_count=ts_count,
+            raw_material_count=raw_material_count,
+            quick_reports=quick_reports,
+            testsheets=testsheets,
+            raw_materials=raw_materials,
+        )
+
     if raw_material_count is not None and raw_material_count != qr_count:
         raw_names = [p.name for p in raw_materials]
         raise PreFlightValidationError(
@@ -329,6 +359,26 @@ def validate_postprocessing_preflight(
             testsheets=testsheets,
             raw_materials=raw_materials,
         )
+
+    if raw_materials:
+        raw_prefixes = [_extract_prefix_safe(p.name) for p in raw_materials]
+        raw_valid_pfx = [p for p in raw_prefixes if p is not None]
+        if set(raw_valid_pfx) != set(qr_valid_pfx):
+            raw_names = [p.name for p in raw_materials]
+            qr_names = [p.name for p in quick_reports]
+            raise PreFlightValidationError(
+                f"Pre-flight integrity check failed for date folder '{date_str}': "
+                f"Numerical prefix mismatch detected between RAW MATERIAL and QUICK REPORT.\n"
+                f"  Raw Materials ({raw_material_count}): {raw_names} (prefixes: {sorted(set(raw_valid_pfx))})\n"
+                f"  Quick Reports ({qr_count}): {qr_names} (prefixes: {sorted(set(qr_valid_pfx))})",
+                date_folder=date_str,
+                quick_report_count=qr_count,
+                testsheet_count=ts_count,
+                raw_material_count=raw_material_count,
+                quick_reports=quick_reports,
+                testsheets=testsheets,
+                raw_materials=raw_materials,
+            )
 
     return PreFlightValidationResult(
         date_folder=date_str,

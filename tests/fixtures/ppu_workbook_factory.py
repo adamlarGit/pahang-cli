@@ -46,6 +46,7 @@ def create_ppu_testsheet_workbook(
     transformers: Sequence[Mapping[str, Any]] | None = None,
     local_tx: Mapping[str, Any] | None = None,
     lvdb_details: Mapping[str, Any] | None = None,
+    include_signature_placeholders: bool = False,
 ) -> openpyxl.Workbook:
     """Build a synthetic PPU 33kV/11kV openpyxl workbook for testing."""
     wb = openpyxl.Workbook()
@@ -163,6 +164,11 @@ def create_ppu_testsheet_workbook(
             if o_idx < len(overview_lhs):
                 ws[f"P{row_num}"] = overview_lhs[o_idx]
 
+        # Signature placeholders (Rows 74-80)
+        if include_signature_placeholders:
+            ws["E77"] = "{{signvendor}}"
+            ws["L77"] = "{{signtnb}}"
+
     # Resolve v2 default values
     v2_33 = substation_number if v2_substation_num_33kv is _DEFAULT_SENTINEL else v2_substation_num_33kv
     v2_11 = substation_number if v2_substation_num_11kv is _DEFAULT_SENTINEL else v2_substation_num_11kv
@@ -264,6 +270,11 @@ def create_ppu_testsheet_workbook(
             ws_vi[f"B{r_num}"] = f"8.{o_idx + 1}"
             ws_vi[f"C{r_num}"] = remark
             ws_vi[f"F{r_num}"] = remark
+
+    # Signature placeholders (Rows 80-87)
+    if include_signature_placeholders:
+        ws_vi["D82"] = "{{signvendor}}"
+        ws_vi["M82"] = "{{signtnb}}"
 
     # 4. RAW DATA sheet
     bounds = raw_photo_bounds if raw_photo_bounds is not None else {"ir_start": 1, "ir_end": 50, "dg_start": 51, "dg_end": 90}
@@ -521,6 +532,11 @@ def create_ppu_testsheet_workbook(
             ws_tx["D53"] = lvdb_details.get("model", "")
             ws_tx["B54"] = "Manufacturer:"
             ws_tx["D54"] = lvdb_details.get("manufacturer", "")
+
+        # Signature placeholders (Rows 70-78)
+        if include_signature_placeholders:
+            ws_tx["F73"] = "{{signvendor}}"
+            ws_tx["R73"] = "{{signtnb}}"
 
     # Remove the initial blank sheet
     if default_sheet in wb.worksheets:

@@ -13,16 +13,30 @@ from openpyxl import load_workbook
 from openpyxl.styles import Border, Side
 from openpyxl.utils import range_boundaries
 
-from src.postprocessing.converters import _is_pce_testsheet_sheet, _is_pce_vi_sheet
+from src.postprocessing.converters import (
+    _is_pce_testsheet_sheet,
+    _is_pce_vi_sheet,
+    classify_sheet_layout,
+)
 
 # Define diagonal border style
 diagonal = Side(style="thin")
 
-# List of ranges to process
+# List of ranges to process for 11kV PCE sheets
 TESTSHEET_RANGES_TO_PROCESS = ["A3:Y55", "A56:Q65"]
 VI_SHEET_RANGES_TO_PROCESS = [
     "C6:H6", "K6:N6", "C7:H7", "K7:N7", "C12:H12", "C13:F13", "O13",
     "C15:H15", "C16:F16", "J16:K16", "O16"
+]
+
+# List of ranges to process for 33kV sheets
+SWITCHGEAR_33KV_RANGES = ["C15:U62"]
+TX_33KV_RANGES = [
+    "F14:AD28",  # Group 1: Primary Terminations & Ultrasound
+    "F33:AD47",  # Group 2: Auxiliary Components
+    "D51:F54",   # Group 3: Station Service LVDB Section
+    "D57:O58",   # Group 4: Neutral Earthing Resistor Section
+    "C62:Q71",   # Group 5: Inspection Notes Section
 ]
 
 
@@ -281,7 +295,17 @@ def process_workbook(file_path: str | Path) -> str:
     wb = load_workbook(str(path), data_only=False)
 
     for ws in wb.worksheets:
-        if _is_pce_testsheet_sheet(ws.title):
+        layout = classify_sheet_layout(ws.title)
+        if layout == "switchgear":
+            for rng in SWITCHGEAR_33KV_RANGES:
+                process_range(ws, rng, wb)
+        elif layout == "transformer":
+            for rng in TX_33KV_RANGES:
+                process_range(ws, rng, wb)
+        elif layout == "visual_inspection":
+            # Visual Inspection is strictly unslashed (0 diagonal cells)
+            pass
+        elif _is_pce_testsheet_sheet(ws.title):
             for rng in TESTSHEET_RANGES_TO_PROCESS:
                 process_range(ws, rng, wb)
         elif _is_pce_vi_sheet(ws.title):

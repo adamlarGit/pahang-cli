@@ -17,6 +17,8 @@ from openpyxl.drawing.image import Image
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 
 from src import cli_selectors
+from src.postprocessing.converters import classify_sheet_layout
+from src.workflows.diagonal_borders import _repair_openpyxl_zip
 
 
 @dataclass(frozen=True)
@@ -36,7 +38,7 @@ def replace_pce_images(
     output_path: str | Path | None = None,
     mode: str = "placeholder",
 ) -> str:
-    """Replace inspection photos or placeholders on 'PCE Testsheet' and 'PCE VI' inside the given Excel file."""
+    """Replace inspection photos or placeholders on switchgear, TX, VI, and PCE sheets inside the given Excel file."""
     path = Path(xlsx_path).expanduser().resolve()
     p1 = Path(photo1_path).expanduser().resolve() if photo1_path else None
     p2 = Path(photo2_path).expanduser().resolve() if photo2_path else None
@@ -66,6 +68,9 @@ def replace_pce_images(
     if mode.lower() in ("placeholder", "none"):
         for ws in wb.worksheets:
             placeholders_replaced = 0
+            layout = classify_sheet_layout(ws.title)
+            title_lower = ws.title.lower()
+
             for row in ws.iter_rows():
                 for cell in row:
                     if isinstance(cell, MergedCell) or not cell.value or not isinstance(cell.value, str):
@@ -87,17 +92,28 @@ def replace_pce_images(
                     cell.value = val_clean if val_clean else None
 
                     if has_vendor:
-                        if p1 is not None:
+                        if mode.lower() != "none" and p1 is not None:
                             chosen_p1 = get_img_file(p1)
                             img1 = Image(str(chosen_p1))
                             if get_format(chosen_p1) == "png":
                                 img1.format = "png"
 
-                            title_lower = ws.title.lower()
-                            if "pce testsheet" in title_lower:
+                            if layout == "switchgear":
+                                # Switchgear vendor placeholder at E77 (spans Cols 3–6, Rows 74–80)
+                                marker_from = AnchorMarker(col=3, colOff=0, row=74, rowOff=0)
+                                marker_to = AnchorMarker(col=6, colOff=0, row=80, rowOff=0)
+                            elif layout == "transformer":
+                                # Transformer vendor placeholder at F73 (spans Cols 5–8, Rows 70–76)
+                                marker_from = AnchorMarker(col=5, colOff=0, row=70, rowOff=0)
+                                marker_to = AnchorMarker(col=8, colOff=0, row=76, rowOff=0)
+                            elif layout == "visual_inspection":
+                                # Visual inspection vendor placeholder at D82 (spans Cols 3–6, Rows 80–86)
+                                marker_from = AnchorMarker(col=3, colOff=0, row=80, rowOff=0)
+                                marker_to = AnchorMarker(col=6, colOff=0, row=86, rowOff=0)
+                            elif layout == "pce_testsheet" or "pce testsheet" in title_lower:
                                 marker_from = AnchorMarker(col=3, colOff=1449204, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=12650)
                                 marker_to = AnchorMarker(col=6, colOff=826923, row=row_idx + 4, rowOff=62917)
-                            elif "pce vi" in title_lower:
+                            elif layout == "pce_vi" or "pce vi" in title_lower:
                                 marker_from = AnchorMarker(col=2, colOff=14608, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=164752)
                                 marker_to = AnchorMarker(col=5, colOff=663339, row=row_idx + 3, rowOff=50601)
                             else:
@@ -109,17 +125,28 @@ def replace_pce_images(
                         placeholders_replaced += 1
 
                     if has_tnb:
-                        if p2 is not None:
+                        if mode.lower() != "none" and p2 is not None:
                             chosen_p2 = get_img_file(p2)
                             img2 = Image(str(chosen_p2))
                             if get_format(chosen_p2) == "png":
                                 img2.format = "png"
 
-                            title_lower = ws.title.lower()
-                            if "pce testsheet" in title_lower:
+                            if layout == "switchgear":
+                                # Switchgear TNB placeholder at L77 (spans Cols 10–13, Rows 73–80)
+                                marker_from = AnchorMarker(col=10, colOff=0, row=73, rowOff=0)
+                                marker_to = AnchorMarker(col=13, colOff=0, row=80, rowOff=0)
+                            elif layout == "transformer":
+                                # Transformer TNB placeholder at R73 (spans Cols 16–22, Rows 70–78)
+                                marker_from = AnchorMarker(col=16, colOff=0, row=70, rowOff=0)
+                                marker_to = AnchorMarker(col=22, colOff=0, row=78, rowOff=0)
+                            elif layout == "visual_inspection":
+                                # Visual inspection TNB placeholder at M82 (spans Cols 11–16, Rows 80–87)
+                                marker_from = AnchorMarker(col=11, colOff=0, row=80, rowOff=0)
+                                marker_to = AnchorMarker(col=16, colOff=0, row=87, rowOff=0)
+                            elif layout == "pce_testsheet" or "pce testsheet" in title_lower:
                                 marker_from = AnchorMarker(col=19, colOff=502432, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=24928)
                                 marker_to = AnchorMarker(col=24, colOff=23064, row=row_idx + 6, rowOff=12017)
-                            elif "pce vi" in title_lower:
+                            elif layout == "pce_vi" or "pce vi" in title_lower:
                                 marker_from = AnchorMarker(col=10, colOff=463652, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=114300)
                                 marker_to = AnchorMarker(col=14, colOff=197220, row=row_idx + 4, rowOff=126503)
                             else:
@@ -130,12 +157,7 @@ def replace_pce_images(
                             ws.add_image(img2)
                         placeholders_replaced += 1
 
-            if ws.title in ["PCE Testsheet", "PCE VI"]:
-                if placeholders_replaced > 0:
-                    print(f" -> Replaced/cleared {placeholders_replaced} placeholder(s) on '{ws.title}' successfully.")
-                else:
-                    print(f" -> Warning: No '{{{{signvendor}}}}' or '{{{{signtnb}}}}' placeholders found on '{ws.title}'.")
-            elif placeholders_replaced > 0:
+            if placeholders_replaced > 0:
                 print(f" -> Replaced/cleared {placeholders_replaced} placeholder(s) on '{ws.title}' successfully.")
 
     else:
@@ -176,6 +198,8 @@ def replace_pce_images(
 
     save_target = str(output_path) if output_path else str(path)
     wb.save(save_target)
+    wb.close()
+    _repair_openpyxl_zip(path, Path(save_target))
     print(f"Saved updated workbook to: {save_target}\n")
     return save_target
 
