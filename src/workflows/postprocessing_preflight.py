@@ -324,17 +324,58 @@ def validate_postprocessing_preflight(
     # Prefix pairing validation: verify each quick report has a corresponding testsheet by numerical prefix
     qr_prefixes = [_extract_prefix_safe(p.name) for p in quick_reports]
     ts_prefixes = [_extract_prefix_safe(p.name) for p in testsheets]
-    qr_valid_pfx = [p for p in qr_prefixes if p is not None]
-    ts_valid_pfx = [p for p in ts_prefixes if p is not None]
 
-    if set(qr_valid_pfx) != set(ts_valid_pfx):
+    missing_qr_pfx = [p.name for p, pfx in zip(quick_reports, qr_prefixes) if pfx is None]
+    missing_ts_pfx = [p.name for p, pfx in zip(testsheets, ts_prefixes) if pfx is None]
+    if missing_qr_pfx or missing_ts_pfx:
+        raise PreFlightValidationError(
+            f"Pre-flight integrity check failed for date folder '{date_str}': "
+            f"Files missing numerical prefix.\n"
+            f"  Quick Reports missing prefix: {missing_qr_pfx}\n"
+            f"  Testsheets missing prefix: {missing_ts_pfx}",
+            date_folder=date_str,
+            quick_report_count=qr_count,
+            testsheet_count=ts_count,
+            raw_material_count=raw_material_count,
+            quick_reports=quick_reports,
+            testsheets=testsheets,
+            raw_materials=raw_materials,
+        )
+
+    if len(qr_prefixes) != len(set(qr_prefixes)):
+        raise PreFlightValidationError(
+            f"Pre-flight integrity check failed for date folder '{date_str}': "
+            f"Duplicate numerical prefixes detected in QUICK REPORT files: {[p.name for p in quick_reports]}",
+            date_folder=date_str,
+            quick_report_count=qr_count,
+            testsheet_count=ts_count,
+            raw_material_count=raw_material_count,
+            quick_reports=quick_reports,
+            testsheets=testsheets,
+            raw_materials=raw_materials,
+        )
+
+    if len(ts_prefixes) != len(set(ts_prefixes)):
+        raise PreFlightValidationError(
+            f"Pre-flight integrity check failed for date folder '{date_str}': "
+            f"Duplicate numerical prefixes detected in TESTSHEET files: {[p.name for p in testsheets]}",
+            date_folder=date_str,
+            quick_report_count=qr_count,
+            testsheet_count=ts_count,
+            raw_material_count=raw_material_count,
+            quick_reports=quick_reports,
+            testsheets=testsheets,
+            raw_materials=raw_materials,
+        )
+
+    if set(qr_prefixes) != set(ts_prefixes):
         qr_names = [p.name for p in quick_reports]
         ts_names = [p.name for p in testsheets]
         raise PreFlightValidationError(
             f"Pre-flight integrity check failed for date folder '{date_str}': "
             f"Numerical prefix mismatch detected between QUICK REPORT and TESTSHEET.\n"
-            f"  Quick Reports ({qr_count}): {qr_names} (prefixes: {sorted(set(qr_valid_pfx))})\n"
-            f"  Testsheets ({ts_count}): {ts_names} (prefixes: {sorted(set(ts_valid_pfx))})",
+            f"  Quick Reports ({qr_count}): {qr_names} (prefixes: {sorted(set(qr_prefixes))})\n"
+            f"  Testsheets ({ts_count}): {ts_names} (prefixes: {sorted(set(ts_prefixes))})",
             date_folder=date_str,
             quick_report_count=qr_count,
             testsheet_count=ts_count,
@@ -362,15 +403,39 @@ def validate_postprocessing_preflight(
 
     if raw_materials:
         raw_prefixes = [_extract_prefix_safe(p.name) for p in raw_materials]
-        raw_valid_pfx = [p for p in raw_prefixes if p is not None]
-        if set(raw_valid_pfx) != set(qr_valid_pfx):
+        missing_raw_pfx = [p.name for p, pfx in zip(raw_materials, raw_prefixes) if pfx is None]
+        if missing_raw_pfx:
+            raise PreFlightValidationError(
+                f"Pre-flight integrity check failed for date folder '{date_str}': "
+                f"Raw material folders missing numerical prefix: {missing_raw_pfx}",
+                date_folder=date_str,
+                quick_report_count=qr_count,
+                testsheet_count=ts_count,
+                raw_material_count=raw_material_count,
+                quick_reports=quick_reports,
+                testsheets=testsheets,
+                raw_materials=raw_materials,
+            )
+        if len(raw_prefixes) != len(set(raw_prefixes)):
+            raise PreFlightValidationError(
+                f"Pre-flight integrity check failed for date folder '{date_str}': "
+                f"Duplicate numerical prefixes detected in RAW MATERIAL folders: {[p.name for p in raw_materials]}",
+                date_folder=date_str,
+                quick_report_count=qr_count,
+                testsheet_count=ts_count,
+                raw_material_count=raw_material_count,
+                quick_reports=quick_reports,
+                testsheets=testsheets,
+                raw_materials=raw_materials,
+            )
+        if set(raw_prefixes) != set(qr_prefixes):
             raw_names = [p.name for p in raw_materials]
             qr_names = [p.name for p in quick_reports]
             raise PreFlightValidationError(
                 f"Pre-flight integrity check failed for date folder '{date_str}': "
                 f"Numerical prefix mismatch detected between RAW MATERIAL and QUICK REPORT.\n"
-                f"  Raw Materials ({raw_material_count}): {raw_names} (prefixes: {sorted(set(raw_valid_pfx))})\n"
-                f"  Quick Reports ({qr_count}): {qr_names} (prefixes: {sorted(set(qr_valid_pfx))})",
+                f"  Raw Materials ({raw_material_count}): {raw_names} (prefixes: {sorted(set(raw_prefixes))})\n"
+                f"  Quick Reports ({qr_count}): {qr_names} (prefixes: {sorted(set(qr_prefixes))})",
                 date_folder=date_str,
                 quick_report_count=qr_count,
                 testsheet_count=ts_count,

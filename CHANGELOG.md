@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **33kV Post-Processing Edge-Case Resilience & Prefix Hardening (`src/postprocessing/converters.py`, `src/workflows/postprocessing_preflight.py`, `src/workflows/replace_signatures.py`)**:
+  - Enhanced `replace_pce_images` with regex-based placeholder detection allowing flexible whitespace (`{{ signvendor }}`, `{{ signtnb }}`) and directory discovery supporting `.jpg`/`.jpeg` signatures alongside `.png`.
+  - Hardened `classify_sheet_layout` with whitespace collapsing and prioritized visual inspection matching, preventing sheets like `33kV Visual Inspec.` or `Visual  Inspection` from misclassifying as switchgear or unknown.
+  - Added whitespace and naming resilience to `select_and_sort_sheets`, correctly capturing variations (`33kV  (Main)`, `11kV  (Main)`, `33kV (Extra) 2`) without dropping sheets, and updated `_extract_extra_index` for non-parenthesized suffixes.
+  - Enforced strict pre-flight validation in `validate_postprocessing_preflight` rejecting missing and duplicate numerical prefixes across quick reports, testsheets, and raw material folders.
+  - Updated `FakeDocumentConverter` to filter unpopulated extra template sheets by checking empty B15/C15 values.
+
 ## [1.26.1] - 2026-10-15
 
 ### Fixed

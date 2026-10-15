@@ -599,3 +599,168 @@ class TestDeliverableStitching33kV:
         # Page 3: Visual Inspec. -> Portrait (h > w)
         p3 = reader.pages[3]
         assert float(p3.mediabox.height) > float(p3.mediabox.width)
+
+
+# ==============================================================================
+# 7. Edge Cases & Robustness Probes (Step 2 - Break It)
+# ==============================================================================
+
+
+class TestEdgeCasesAndRobustnessProbes33kV:
+    """Rigorous probes covering placeholder spacing, jpg directory signatures, naming resilience, and preflight prefixes."""
+
+    def test_replace_signatures_with_whitespace_in_placeholders(
+        self, tmp_path: Path, sample_sig_png: Path
+    ) -> None:
+        """Placeholders containing spaces (e.g. {{ signvendor }} or {{ signtnb }}) must be recognized and replaced."""
+        xlsx_file = tmp_path / "whitespace_placeholders.xlsx"
+        wb = create_ppu_testsheet_workbook(
+            path=xlsx_file,
+            has_33kv=True,
+            has_11kv=False,
+            include_tx_sheet=False,
+            include_signature_placeholders=False,
+        )
+        ws = wb["33kV (Main)"]
+        ws["E77"] = "  {{ signvendor }}  "
+        ws["L77"] = "{{   signtnb   }}"
+        wb.save(xlsx_file)
+        wb.close()
+
+        out_file = tmp_path / "whitespace_signed.xlsx"
+        replace_pce_images(
+            xlsx_file,
+            photo1_path=sample_sig_png,
+            photo2_path=sample_sig_png,
+            output_path=out_file,
+            mode="placeholder",
+        )
+
+        wb_res = openpyxl.load_workbook(out_file)
+        ws_res = wb_res["33kV (Main)"]
+        assert ws_res["E77"].value is None
+        assert ws_res["L77"].value is None
+        assert len(ws_res._images) == 2
+        wb_res.close()
+
+    def test_replace_signatures_loads_jpg_from_directory(
+        self, tmp_path: Path
+    ) -> None:
+        """Directories containing .jpg or .jpeg signature files must be supported."""
+        sig_dir = tmp_path / "jpg_signatures"
+        sig_dir.mkdir()
+        jpg_path = sig_dir / "tested_by.jpg"
+        img = PILImage.new("RGB", (100, 50), color=(255, 0, 0))
+        img.save(jpg_path)
+
+        xlsx_file = tmp_path / "test_jpg_sig.xlsx"
+        create_ppu_testsheet_workbook(
+            path=xlsx_file,
+            has_33kv=True,
+            has_11kv=False,
+            include_tx_sheet=False,
+            include_signature_placeholders=True,
+        )
+
+        out_file = tmp_path / "test_jpg_sig_out.xlsx"
+        replace_pce_images(
+            xlsx_file,
+            photo1_path=sig_dir,
+            photo2_path=sig_dir,
+            output_path=out_file,
+            mode="placeholder",
+        )
+
+        wb_res = openpyxl.load_workbook(out_file)
+        ws_res = wb_res["33kV (Main)"]
+        assert len(ws_res._images) == 2
+        assert ws_res._images[0].format == "jpeg"
+        wb_res.close()
+
+    def test_classify_sheet_layout_naming_resilience(self) -> None:
+        """Visual inspection sheets named '33kV Visual Inspec.' or with multiple spaces must not be classified as switchgear or unknown."""
+        assert classify_sheet_layout("33kV Visual Inspec.") == "visual_inspection"
+        assert classify_sheet_layout("33kV Visual Inspection") == "visual_inspection"
+        assert classify_sheet_layout("Visual  Inspection") == "visual_inspection"
+        assert classify_sheet_layout("Visual   Inspec.") == "visual_inspection"
+        assert classify_sheet_layout("33kV  (Main)") == "switchgear"
+        assert classify_sheet_layout("11kV  (Extra)") == "switchgear"
+
+    def test_select_and_sort_sheets_whitespace_and_extra_numbering_resilience(self) -> None:
+        """Sheet selection and sorting handles multiple spaces and non-parenthesized extra numbering (e.g. '33kV (Extra) 2')."""
+        sheets = [
+            "Visual  Inspection",
+            "33kV (Extra) 2",
+            "11kV  (Main)",
+            "33kV  (Main)",
+            "TX",
+            "33kV (Extra)",
+            "RAW DATA",
+        ]
+        sorted_sheets = select_and_sort_sheets(sheets)
+        assert sorted_sheets == [
+            "33kV  (Main)",
+            "33kV (Extra)",
+            "33kV (Extra) 2",
+            "11kV  (Main)",
+            "TX",
+            "Visual  Inspection",
+        ]
+
+    def test_preflight_validation_rejects_missing_numerical_prefix(
+        self, mock_env_33kv: ProjectEnvironment
+    ) -> None:
+        """Pre-flight validation fails when files in date folder lack numerical prefixes."""
+        date_str = "09-10-2026"
+        qr_dir = mock_env_33kv.get_quick_report_dir() / date_str
+        ts_dir = mock_env_33kv.get_testsheet_dir() / date_str
+        qr_dir.mkdir(parents=True)
+        ts_dir.mkdir(parents=True)
+
+        (qr_dir / "PPU SEMAMBU YARD 33-11kV.docx").write_text("docx")
+        (ts_dir / "PPU SEMAMBU YARD 33-11kV.xlsx").write_text("xlsx")
+
+        with pytest.raises(PreFlightValidationError) as exc_info:
+            validate_postprocessing_preflight(mock_env_33kv, date_str)
+        assert "missing numerical prefix" in str(exc_info.value).lower()
+
+    def test_preflight_validation_rejects_duplicate_numerical_prefixes(
+        self, mock_env_33kv: ProjectEnvironment
+    ) -> None:
+        """Pre-flight validation fails when multiple files share the same numerical prefix."""
+        date_str = "10-10-2026"
+        qr_dir = mock_env_33kv.get_quick_report_dir() / date_str
+        ts_dir = mock_env_33kv.get_testsheet_dir() / date_str
+        qr_dir.mkdir(parents=True)
+        ts_dir.mkdir(parents=True)
+
+        (qr_dir / "01. PPU ALPHA.docx").write_text("docx")
+        (qr_dir / "01. PPU BETA.docx").write_text("docx")
+        (ts_dir / "01. PPU ALPHA.xlsx").write_text("xlsx")
+        (ts_dir / "01. PPU BETA.xlsx").write_text("xlsx")
+
+        with pytest.raises(PreFlightValidationError) as exc_info:
+            validate_postprocessing_preflight(mock_env_33kv, date_str)
+        assert "duplicate numerical prefix" in str(exc_info.value).lower()
+
+    def test_fake_document_converter_filters_unpopulated_extra_sheets(
+        self, tmp_path: Path
+    ) -> None:
+        """FakeDocumentConverter strictly excludes unpopulated extra template sheets from generated PDF."""
+        xlsx_file = tmp_path / "33kv_unpopulated_extra.xlsx"
+        create_ppu_testsheet_workbook(
+            path=xlsx_file,
+            has_33kv=True,
+            has_11kv=False,
+            extra_panels_33kv=([],),  # 33kV (Extra) sheet exists but has 0 panels (unpopulated B15/C15)
+            include_tx_sheet=True,
+        )
+
+        converter = FakeDocumentConverter()
+        pdf_file = tmp_path / "out.pdf"
+        converter.convert_testsheet_to_pdf(xlsx_file, pdf_file)
+
+        reader = PdfReader(str(pdf_file))
+        # Expected sheets: 33kV (Main), TX, Visual Inspec. (total 3 pages, NOT 4 pages)
+        assert len(reader.pages) == 3
+

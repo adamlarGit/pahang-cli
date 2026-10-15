@@ -52,10 +52,11 @@ def replace_pce_images(
 
     def get_img_file(path_arg: Path) -> Path:
         if path_arg.is_dir():
-            png_files = [f for f in path_arg.iterdir() if f.is_file() and f.suffix.lower() == ".png"]
-            if not png_files:
-                raise FileNotFoundError(f"No .png files found inside directory: {path_arg}")
-            return random.choice(png_files)
+            valid_exts = {".png", ".jpg", ".jpeg"}
+            img_files = [f for f in path_arg.iterdir() if f.is_file() and f.suffix.lower() in valid_exts]
+            if not img_files:
+                raise FileNotFoundError(f"No image files (.png, .jpg, .jpeg) found inside directory: {path_arg}")
+            return random.choice(img_files)
         return path_arg
 
     def get_format(img_path: Path) -> str:
@@ -76,8 +77,8 @@ def replace_pce_images(
                     if isinstance(cell, MergedCell) or not cell.value or not isinstance(cell.value, str):
                         continue
                     val_lower = cell.value.lower()
-                    has_vendor = "{{signvendor}}" in val_lower
-                    has_tnb = "{{signtnb}}" in val_lower
+                    has_vendor = bool(re.search(r"\{\{\s*signvendor\s*\}\}", val_lower))
+                    has_tnb = bool(re.search(r"\{\{\s*signtnb\s*\}\}", val_lower))
 
                     if not has_vendor and not has_tnb:
                         continue

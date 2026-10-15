@@ -39,14 +39,14 @@ def _is_pce_vi_sheet(ws_name: str) -> bool:
 
 def classify_sheet_layout(sheet_name: str) -> str:
     """Classify worksheet name into layout keys: switchgear, transformer, visual_inspection, pce_testsheet, pce_vi."""
-    s = str(sheet_name).strip().lower()
+    s = re.sub(r"\s+", " ", str(sheet_name).strip().lower())
     if _is_pce_testsheet_sheet(s):
         return "pce_testsheet"
     if _is_pce_vi_sheet(s):
         return "pce_vi"
     if s == "tx" or s.startswith("tx ") or s.startswith("tx(") or s.startswith("tx-") or s.startswith("tx_"):
         return "transformer"
-    if s.startswith("visual inspec"):
+    if "visual inspec" in s or "visual inspection" in s or s.startswith("vi") or s == "vi":
         return "visual_inspection"
     if s.startswith("33kv") or s.startswith("11kv") or "33kv" in s or "11kv" in s:
         return "switchgear"
@@ -56,11 +56,15 @@ def classify_sheet_layout(sheet_name: str) -> str:
 def _is_33kv_workbook(worksheet_names: Sequence[str]) -> bool:
     """Return True if workbook contains 33kV-family sheets."""
     for ws_name in worksheet_names:
-        name = ws_name.strip().lower()
+        name = re.sub(r"\s+", " ", ws_name.strip().lower())
         if (
             name.startswith("33kv")
             or name.startswith("11kv (main)")
             or name.startswith("11kv (extra)")
+            or name == "11kv main"
+            or name.startswith("11kv main ")
+            or name == "11kv extra"
+            or name.startswith("11kv extra ")
             or name == "tx"
             or name.startswith("tx ")
         ):
@@ -70,9 +74,13 @@ def _is_33kv_workbook(worksheet_names: Sequence[str]) -> bool:
 
 def _extract_extra_index(sheet_name: str) -> int:
     """Extract sequential numbering from extra switchgear sheet name (e.g. 33kV (Extra) (2) -> 2)."""
-    m = re.search(r"\((\d+)\)\s*$", sheet_name.strip())
+    clean = re.sub(r"\s+", " ", sheet_name.strip())
+    m = re.search(r"\((\d+)\)\s*$", clean)
     if m:
         return int(m.group(1))
+    m2 = re.search(r"(?:extra|\))\s*[-_]?\s*(\d+)\s*$", clean, re.IGNORECASE)
+    if m2:
+        return int(m2.group(1))
     return 1
 
 
@@ -107,7 +115,7 @@ def select_and_sort_sheets(
         vi_sheets: list[str] = []
 
         for name in worksheet_names:
-            s_clean = name.strip()
+            s_clean = re.sub(r"\s+", " ", name.strip())
             s_lower = s_clean.lower()
 
             # Strictly exclude RAW DATA
@@ -120,13 +128,23 @@ def select_and_sort_sheets(
 
             layout = classify_sheet_layout(s_clean)
             if layout == "switchgear":
-                if s_lower.startswith("33kv (main)") or s_lower == "33kv (main)":
+                if (
+                    s_lower.startswith("33kv (main)")
+                    or s_lower == "33kv (main)"
+                    or s_lower == "33kv main"
+                    or s_lower.startswith("33kv main ")
+                ):
                     main_33.append(name)
-                elif s_lower.startswith("33kv (extra)"):
+                elif s_lower.startswith("33kv (extra)") or s_lower.startswith("33kv extra"):
                     extra_33.append(name)
-                elif s_lower.startswith("11kv (main)") or s_lower == "11kv (main)":
+                elif (
+                    s_lower.startswith("11kv (main)")
+                    or s_lower == "11kv (main)"
+                    or s_lower == "11kv main"
+                    or s_lower.startswith("11kv main ")
+                ):
                     main_11.append(name)
-                elif s_lower.startswith("11kv (extra)"):
+                elif s_lower.startswith("11kv (extra)") or s_lower.startswith("11kv extra"):
                     extra_11.append(name)
             elif layout == "transformer":
                 tx_sheets.append(name)
@@ -767,8 +785,19 @@ class FakeDocumentConverter(DocumentConverter):
         if selected_sheets is None and xlsx_path.exists():
             try:
                 import openpyxl
-                wb = openpyxl.load_workbook(xlsx_path, read_only=True)
-                selected_sheets = select_and_sort_sheets(wb.sheetnames)
+                wb = openpyxl.load_workbook(xlsx_path, data_only=True)
+                raw_selected = select_and_sort_sheets(wb.sheetnames)
+                filtered_sheets = []
+                for sname in raw_selected:
+                    s_lower = sname.strip().lower()
+                    if "extra" in s_lower and sname in wb.sheetnames:
+                        ws = wb[sname]
+                        b15 = ws["B15"].value
+                        c15 = ws["C15"].value
+                        if (b15 is None or str(b15).strip() == "") and (c15 is None or str(c15).strip() == ""):
+                            continue
+                    filtered_sheets.append(sname)
+                selected_sheets = filtered_sheets
                 wb.close()
             except Exception:
                 selected_sheets = None
