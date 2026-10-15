@@ -57,7 +57,7 @@ graph TD
     T91["#91: TestsheetParserStrategy seam + PceTestsheetParser refactor - Closed"]
     T92["#92: PpuTestsheetParser (metadata, 6-row SWG, TX, VI) - Closed"]
     T93["#93: Power Transformer domain model & TX parsing - Closed"]
-    T94["#94: Contract 750-39 storage + Qr02Cba33kVTransaction"]
+    T94["#94: Contract 750-39 storage + Qr02Cba33kVTransaction - Closed"]
     T95["#95: Raw material sorting & US+TEV pairing"]
     T96["#96: PPU condition builder & Quick Report plan"]
     T97["#97: 33kV Post-processing (Signatures, Diagonals, per-sheet PageSetup PDF export, stitching)"]
@@ -116,7 +116,7 @@ graph TD
 - **Delivers**: `PowerTransformerSpec` model for $\ge 5$ MVA units with auxiliary thermals (`Marshalling Kiosk`, `Conservator Tank`, `Body`, `Cooling Fin`), TX sheet parser in `PpuTestsheetParser`, and transformer classification with warning on out-of-range ratings.
 
 ### #94: feat(33kv-master): Contract 750-39 storage resolution and Qr02Cba33kVTransaction
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#94](https://github.com/adamlarGit/pahang-cli/issues/94)
 - **Blocked by**: None (can start immediately, independent of #91/#92)
 - **Ticket File**: [tickets/094-master-engr-750-39-and-qr02-transaction.md](./tickets/094-master-engr-750-39-and-qr02-transaction.md)

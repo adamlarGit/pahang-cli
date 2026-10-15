@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 Part of #90
 Specification: [spec.md](../spec.md)
 
@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** closed
 
 ## Detailed Design & Architecture
 
@@ -53,14 +53,14 @@ Specification: [spec.md](../spec.md)
 
 ## Acceptance Criteria Checklist
 
-- [ ] Update `WorkspaceStorage.get_engr_cba_path()` for 33kV to strictly resolve `ENGR-750-39 -CBA-PAHANG - {year}.xlsx` without globbing.
-- [ ] Implement two-tier FL resolution logic in `UpdateQr02CbaTransformer` (testsheet `D7` $\to$ `TOTAL PE.xlsx` $\to$ `ValueError`).
-- [ ] Implement `Qr02Cba33kVTransaction` in `src/master/qr02.py`:
-  - [ ] Index Column G (`FUNCTIONAL LOCATION`).
-  - [ ] Support new row creation (Cols G–J).
-  - [ ] Populate Cycle 4 Date (Col Q) and Vendor `"EET"` (Col R).
-  - [ ] Strictly omit GPS, Site Name, and Building Type writes.
-- [ ] Wire `create_qr02_transaction` and update `LocalExcelQr02Repository` to dispatch based on `voltage_type`.
-- [ ] Add unit and transaction tests in `tests/test_qr02_33kv.py` testing FL index matching, TOTAL PE fallback lookup, Cycle 4 upsert, and atomic save.
-- [ ] Verify `MasterQr03DefectRepository` against 750-39 defect sheets.
-- [ ] Verify full test suite passes with 0 regressions.
+- [x] Update `WorkspaceStorage.get_engr_cba_path()` for 33kV to strictly resolve `ENGR-750-39 -CBA-PAHANG - {year}.xlsx` without globbing.
+- [x] Implement two-tier FL resolution logic in `UpdateQr02CbaTransformer` (testsheet `D7` $\to$ `TOTAL PE.xlsx` $\to$ `ValueError`).
+- [x] Implement `Qr02Cba33kVTransaction` in `src/master/qr02.py`:
+  - [x] Index Column G (`FUNCTIONAL LOCATION`).
+  - [x] Support new row creation (Cols G–J).
+  - [x] Populate Cycle 4 Date (Col Q) and Vendor `"EET"` (Col R).
+  - [x] Strictly omit GPS, Site Name, and Building Type writes.
+- [x] Wire `create_qr02_transaction` and update `LocalExcelQr02Repository` to dispatch based on `voltage_type`.
+- [x] Add unit and transaction tests in `tests/test_qr02_33kv.py` testing FL index matching, TOTAL PE fallback lookup, Cycle 4 upsert, and atomic save.
+- [x] Verify `MasterQr03DefectRepository` against 750-39 defect sheets.
+- [x] Verify full test suite passes with 0 regressions.
