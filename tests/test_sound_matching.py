@@ -15,7 +15,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import pytest
-import fitz
+try:
+    import pymupdf as fitz
+except ImportError:
+    import fitz
 
 from src.postprocessing.sound_embedder import (
     find_sound_clip_anchor,

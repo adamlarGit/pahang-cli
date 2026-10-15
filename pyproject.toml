@@ -1,6 +1,6 @@
 [project]
 name = "pahang-cli"
-version = "1.25.0"
+version = "1.26.0"
 description = "Pahang Area - Interactive CLI for PE inspection workflows"
 
 
@@ -17,6 +17,7 @@ dependencies = [
     "docxtpl>=0.16.0",
     "docxcompose>=1.4.0",
     "pywin32>=305",
+    "pymupdf>=1.26.0",
 ]
 
 [project.scripts]
