@@ -15,6 +15,7 @@ htmlcov/
 .active_project.json
 diff*.txt
 scratch/
+.scratch/
 .serena/
 .tmp/
 .temp/

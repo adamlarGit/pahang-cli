@@ -15,7 +15,10 @@ from pathlib import Path
 import time
 from typing import Any, Callable, Literal, Sequence
 
-import fitz
+try:
+    import pymupdf as fitz
+except ImportError:
+    import fitz
 
 from src.cli_selectors import (
     SelectOption,
