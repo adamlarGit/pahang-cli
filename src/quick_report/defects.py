@@ -147,6 +147,7 @@ class MasterQr03DefectRepository:
         engr_dir: Path | str | None = None,
         storage: WorkspaceStorage | None = None,
         environment: ProjectEnvironment | None = None,
+        voltage_type: str | None = None,
     ) -> None:
         if engr_dir:
             self.engr_dir = Path(engr_dir)
@@ -159,6 +160,10 @@ class MasterQr03DefectRepository:
                 "Must provide either engr_dir, storage, or environment to resolve ENGR folder."
             )
 
+        self.voltage_type = voltage_type or (
+            getattr(environment, "voltage_type", None)
+            or getattr(storage, "voltage_type", None)
+        )
         self._file_cache: dict[
             Path,
             tuple[list[tuple[pd.DataFrame, str]], list[tuple[pd.DataFrame, str]]],
@@ -324,6 +329,13 @@ class MasterQr03DefectRepository:
             Otherwise, returns (all_engr_files, False).
         """
         all_files = self._get_engr_files()
+        if self.voltage_type == "33kV":
+            files_33kv = [f for f in all_files if "750-39" in f.name]
+            if not files_33kv:
+                raise FileNotFoundError(
+                    f"No contract 750-39 master ENGR workbook found in '{self.engr_dir}'"
+                )
+            return files_33kv, True
         if station:
             station_code = resolve_station_code(station)
             if station_code:

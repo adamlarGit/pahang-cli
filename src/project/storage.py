@@ -188,8 +188,12 @@ class WorkspaceStorage(ABC):
         """Ensure a directory and its parents exist and return as Path."""
 
     @abstractmethod
-    def get_engr_cba_path(self, station: str, year: str) -> Path:
+    def get_engr_cba_path(self, station: str, year: str, voltage_type: str = "11kV") -> Path:
         """Return the ENGR CBA workbook path for a specific station and year."""
+
+    @abstractmethod
+    def get_engr_33kv_cba_path(self, year: str) -> Path:
+        """Return the statewide ENGR-750-39 CBA workbook path for 33kV."""
 
     @abstractmethod
     def resolve_template_path(self, key: str) -> Path:
@@ -213,12 +217,18 @@ class WorkspaceStorage(ABC):
 class LocalWorkspaceStorage(WorkspaceStorage):
     """Workspace storage resolved on the local filesystem."""
 
-    def __init__(self, root_path: Path | str, templates_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        root_path: Path | str,
+        templates_dir: Path | None = None,
+        voltage_type: str = "11kV",
+    ) -> None:
         self._root_path = Path(root_path)
         if templates_dir is None:
             self._templates_dir = self._root_path / "templates"
         else:
             self._templates_dir = Path(templates_dir)
+        self.voltage_type = voltage_type
 
     @property
     def root_path(self) -> Path:
@@ -424,11 +434,25 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         p.mkdir(parents=True, exist_ok=True)
         return p
 
-    def get_engr_cba_path(self, station: str, year: str) -> Path:
-        """Resolve per-station ENGR CBA workbook path.
+    def get_engr_33kv_cba_path(self, year: str) -> Path:
+        """Strictly resolve statewide contract 750-39 workbook path without globbing.
 
-        Pattern: PYTHON/ENGR FROM DRIVE/ENGR-750-36-CBA-{STATION_CODE}-{YEAR}.xlsx
+        Pattern: PYTHON/ENGR FROM DRIVE/ENGR-750-39 -CBA-PAHANG - {year}.xlsx
         """
+        return self.get_engr_folder() / f"ENGR-750-39 -CBA-PAHANG - {year}.xlsx"
+
+    def get_engr_cba_path(self, station: str, year: str, voltage_type: str | None = None) -> Path:
+        """Resolve per-station or statewide ENGR CBA workbook path.
+
+        - 33kV: Strictly resolve to statewide contract 750-39:
+          PYTHON/ENGR FROM DRIVE/ENGR-750-39 -CBA-PAHANG - {year}.xlsx
+        - 11kV: Resolve per-station contract 750-36:
+          PYTHON/ENGR FROM DRIVE/ENGR-750-36-CBA-{STATION_CODE}-{year}.xlsx
+        """
+        eff_voltage = voltage_type or getattr(self, "voltage_type", "11kV")
+        if eff_voltage == "33kV" or str(station).strip().upper() in ("33KV", "750-39", "ENGR-750-39"):
+            return self.get_engr_33kv_cba_path(year)
+
         station_upper = station.strip().upper()
         if station_upper not in config.ENGR_STATION_CODES:
             raise ValueError(

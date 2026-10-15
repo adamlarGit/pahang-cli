@@ -325,24 +325,235 @@ class LocalExcelQr02Transaction(Qr02Transaction):
         return updated_count
 
 
+class Qr02Cba33kVTransaction(LocalExcelQr02Transaction):
+    """Excel COM-backed transaction for 33kV QR02 CBA workbook updates (Contract 750-39)."""
+
+    def __init__(
+        self,
+        cba_path: Path | str,
+        cycle: int = 4,
+        vendor: str = "EET",
+        on_commit: Callable[[], None] | None = None,
+    ) -> None:
+        super().__init__(cba_path=cba_path, on_commit=on_commit)
+        self.cycle = cycle
+        self.vendor = vendor
+
+    def _is_header_row_33kv(self, val_g: Any, val_h: Any) -> bool:
+        headers = {
+            "FL",
+            "FL ERMS",
+            "FUNCTION LOCATION",
+            "FUNCTIONAL LOCATION",
+            "NAME",
+            "SUBSTATION NAME",
+            "ERMS NAME",
+            "STATION NAME",
+            "NO.",
+            "PE NAME",
+        }
+        s_g = str(val_g).strip().upper() if val_g is not None else ""
+        s_h = str(val_h).strip().upper() if val_h is not None else ""
+        return s_g in headers or s_h in headers
+
+    def _build_index(self) -> None:
+        self.fl_to_row.clear()
+        if self.ws is None:
+            return
+
+        used_range = self.ws.UsedRange
+        self._last_data_row = 2
+
+        vals = used_range.Value
+        if vals is None:
+            return
+
+        if not isinstance(vals, tuple):
+            vals = ((vals,),)
+        elif vals and not isinstance(vals[0], tuple):
+            vals = (vals,)
+
+        start_r = used_range.Row
+        start_c = used_range.Column
+
+        col_g_offset = 7 - start_c
+        col_h_offset = 8 - start_c
+
+        for i, row_vals in enumerate(vals):
+            r = start_r + i
+            val_g = row_vals[col_g_offset] if 0 <= col_g_offset < len(row_vals) else None
+            val_h = row_vals[col_h_offset] if 0 <= col_h_offset < len(row_vals) else None
+
+            if r <= 2 or (r <= 5 and self._is_header_row_33kv(val_g, val_h)):
+                continue
+
+            if (val_g is not None and str(val_g).strip()) or (val_h is not None and str(val_h).strip()):
+                if r > self._last_data_row:
+                    self._last_data_row = r
+
+            fl_norm = normalize_fl_erms(val_g)
+            if fl_norm and fl_norm.lower() != "n/a" and fl_norm not in self.fl_to_row:
+                self.fl_to_row[fl_norm] = r
+
+    def upsert_qr02_cba_records(self, records: Sequence[Any]) -> int:
+        if self.ws is None:
+            raise RuntimeError("Transaction is not active. Must be used as context manager.")
+
+        table = None
+        if self.ws.ListObjects.Count > 0:
+            table = self.ws.ListObjects(1)
+
+        updated_count = 0
+        for rec in records:
+            rec_fl = normalize_fl_erms(_get_field(rec, "fl_erms", "fl_site", "fl", default=""))
+            rec_name = str(
+                _get_field(
+                    rec,
+                    "substation_name_site",
+                    "substation_name_erms",
+                    "station_name",
+                    "name",
+                    default="",
+                )
+            ).strip()
+
+            target_row: int | None = None
+            is_new_row = False
+
+            if rec_fl and rec_fl in self.fl_to_row:
+                target_row = self.fl_to_row[rec_fl]
+            else:
+                is_new_row = True
+                if table is not None:
+                    new_list_row = table.ListRows.Add()
+                    target_row = new_list_row.Range.Row
+                else:
+                    target_row = self._last_data_row + 1
+
+                self._last_data_row = target_row
+
+            # If NEW row, populate Columns G through J:
+            # Col G (7): Functional Location
+            # Col H (8): Substation Name
+            # Col I (9): Type (PPU / SSU / MPPU)
+            # Col J (10): System (default "33/11")
+            if is_new_row:
+                if rec_fl:
+                    self.ws.Cells(target_row, 7).Value = rec_fl
+                if rec_name:
+                    self.ws.Cells(target_row, 8).Value = rec_name
+
+                raw_type = _get_field(rec, "substation_type", "type", default="")
+                cleaned_type = clean_val(raw_type) if raw_type else ""
+                self.ws.Cells(target_row, 9).Value = cleaned_type
+
+                system_val = _get_field(rec, "system", default=None)
+                if not system_val:
+                    system_val = "33/11"
+                self.ws.Cells(target_row, 10).Value = str(system_val).strip()
+
+            # Inspection record update:
+            # Col Q (17) for Cycle 4 Date formatted as YYYY-MM-DD (NumberFormat = "d-mmm-yy")
+            # Col R (18) for Cycle 4 Vendor populated with "EET"
+            date_col = 11 + 2 * (self.cycle - 1)
+            vendor_col = date_col + 1
+
+            rec_cycle = _get_field(
+                rec,
+                f"cycle_{self.cycle}",
+                f"cycle{self.cycle}",
+                "cycle_4",
+                "cycle4",
+                "cycle_1",
+                "cycle1",
+                "date",
+                default=None,
+            )
+            dt_cycle = None
+            if rec_cycle is not None:
+                dt_cycle = to_excel_date(rec_cycle)
+            if dt_cycle is None:
+                date_str = _get_field(rec, "date_str", default=None)
+                if date_str:
+                    dt_cycle = to_excel_date(date_str)
+
+            if dt_cycle is not None:
+                cell_date = self.ws.Cells(target_row, date_col)
+                cell_date.Value = dt_cycle.strftime("%Y-%m-%d")
+                cell_date.NumberFormat = "d-mmm-yy"
+
+            self.ws.Cells(target_row, vendor_col).Value = self.vendor
+
+            # Strictly omit writing to GPS, Site Name, and Building Type columns
+
+            # Update index for subsequent records in the transaction
+            if rec_fl:
+                self.fl_to_row[rec_fl] = target_row
+
+            updated_count += 1
+
+        return updated_count
+
+
+def create_qr02_transaction(
+    workbook_path: Path | str,
+    voltage_type: str = "11kV",
+    cycle: int = 4,
+    vendor: str = "EET",
+    on_commit: Callable[[], None] | None = None,
+) -> Qr02Transaction:
+    """Factory to instantiate voltage-appropriate QR02 transaction.
+
+    - 33kV: Returns Qr02Cba33kVTransaction targeting Columns G-R on sheet 'QR02 CBA'.
+    - 11kV: Returns LocalExcelQr02Transaction targeting Columns I-P.
+    """
+    if voltage_type == "33kV":
+        return Qr02Cba33kVTransaction(
+            cba_path=workbook_path,
+            cycle=cycle,
+            vendor=vendor,
+            on_commit=on_commit,
+        )
+    return LocalExcelQr02Transaction(
+        cba_path=workbook_path,
+        on_commit=on_commit,
+    )
+
+
 class LocalExcelQr02Repository(Qr02Repository):
     """Excel-backed repository resolving per-station ENGR CBA workbooks."""
 
-    def __init__(self, storage: WorkspaceStorage, station: str, year: str) -> None:
+    def __init__(
+        self,
+        storage: WorkspaceStorage,
+        station: str,
+        year: str,
+        voltage_type: str = "11kV",
+        cycle: int = 4,
+        vendor: str = "EET",
+    ) -> None:
         self.storage = storage
         self.station = station
         self.year = year
+        self.voltage_type = voltage_type
+        self.cycle = cycle
+        self.vendor = vendor
 
     def _get_cba_path(self) -> Path:
-        return self.storage.get_engr_cba_path(self.station, self.year)
+        return self.storage.get_engr_cba_path(
+            self.station, self.year, voltage_type=self.voltage_type
+        )
 
     def invalidate_caches(self) -> None:
         """Callback for post-transaction cleanup."""
         pass
 
     def transaction(self) -> Qr02Transaction:
-        return LocalExcelQr02Transaction(
-            cba_path=self._get_cba_path(),
+        return create_qr02_transaction(
+            workbook_path=self._get_cba_path(),
+            voltage_type=self.voltage_type,
+            cycle=self.cycle,
+            vendor=self.vendor,
             on_commit=self.invalidate_caches,
         )
 

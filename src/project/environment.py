@@ -25,6 +25,8 @@ class ProjectEnvironment:
             raise TypeError("ProjectEnvironment requires explicitly injected ProjectMetadata and WorkspaceStorage instances.")
         self.metadata = metadata
         self.storage = storage
+        if hasattr(storage, "voltage_type") and getattr(metadata, "voltage_type", None):
+            storage.voltage_type = metadata.voltage_type
         self._repository = repository
 
     @property

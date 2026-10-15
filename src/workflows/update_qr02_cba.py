@@ -4,14 +4,18 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
+import re
 from typing import Any
+import openpyxl
 
 from src.master.qr02 import LocalExcelQr02Repository, Qr02Repository
 from src.project.environment import ProjectEnvironment
 from src.project.storage import WorkspaceStorage
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import SubstationTestsheetPackage, TestsheetData
+from src.testsheet.parsers.common import normalize_fl_erms
 from src.testsheet.repository import SubstationTestsheetRepository
 from src.workflows.history import ProcessingHistoryStore, format_package_history_key
 from src.workflows.models import (
@@ -19,6 +23,62 @@ from src.workflows.models import (
     UpdateQr02CbaRequest,
     UpdateQr02CbaResult,
 )
+
+
+def _is_valid_fl(fl: str | None) -> bool:
+    """Return True if fl string is valid (not empty, None, N/A, -, etc.)."""
+    if not fl:
+        return False
+    norm = normalize_fl_erms(str(fl))
+    if not norm:
+        return False
+    return norm.strip().upper() not in ("", "-", "N/A", "NONE", "NULL", "#REF!", "NAN")
+
+
+def _load_total_pe_fl_map(total_pe_path: Path | str | None) -> dict[int, str]:
+    """Load substation_number -> FL mapping from TOTAL PE.xlsx DataCycle1 sheet."""
+    if not total_pe_path:
+        return {}
+    p = Path(total_pe_path)
+    if not p.is_file():
+        return {}
+    wb = openpyxl.load_workbook(p, data_only=True, read_only=True)
+    if "DataCycle1" not in wb.sheetnames:
+        wb.close()
+        raise RuntimeError(f"'DataCycle1' sheet missing in TOTAL PE workbook: {p}")
+    ws = wb["DataCycle1"]
+    rows = ws.iter_rows(values_only=True)
+    header = next(rows, None)
+    if not header:
+        wb.close()
+        return {}
+
+    pe_col = 0
+    fl_col = 1
+    for idx, cell in enumerate(header):
+        if cell is None:
+            continue
+        c_upper = str(cell).strip().upper()
+        if "PE" in c_upper and "NO" in c_upper:
+            pe_col = idx
+        elif "FL" in c_upper or "FUNCTIONAL" in c_upper:
+            fl_col = idx
+
+    fl_map: dict[int, str] = {}
+    for row in rows:
+        if not row or len(row) <= max(pe_col, fl_col):
+            continue
+        pe_val = row[pe_col]
+        fl_val = row[fl_col]
+        if pe_val is None or fl_val is None:
+            continue
+        match = re.search(r"\d+", str(pe_val))
+        if match:
+            pe_num = int(match.group(0))
+            if _is_valid_fl(str(fl_val)):
+                fl_map[pe_num] = normalize_fl_erms(str(fl_val))
+    wb.close()
+    return fl_map
 
 
 def get_package_key(pkg: SubstationTestsheetPackage) -> str:
@@ -84,7 +144,8 @@ class UpdateQr02CbaPreflightGuard:
     ) -> None:
         """Validate target QR02 CBA workbook exists for the specified station."""
         if repository_factory is None:
-            cba_path = environment.storage.get_engr_cba_path(station, year)
+            voltage = getattr(environment, "voltage_type", "11kV")
+            cba_path = environment.storage.get_engr_cba_path(station, year, voltage_type=voltage)
             if not cba_path.exists():
                 raise FileNotFoundError(
                     f"Target QR02 CBA workbook not found for station '{station}' at '{cba_path}'"
@@ -215,8 +276,13 @@ class UpdateQr02CbaTransformer:
         filtered_packages: list[SubstationTestsheetPackage],
         records_map: dict[str, list[TestsheetData]],
         extraction_warnings: list[str],
+        total_pe_path: Path | str | None = None,
+        voltage_type: str = "11kV",
     ) -> UpdateQr02CbaPlan:
         """Build execution plan by grouping filtered packages into station plans."""
+        if voltage_type == "33kV":
+            records_map = self._resolve_fl_for_33kv(records_map, total_pe_path)
+
         station_groups = self._group_packages_by_station(filtered_packages)
         station_plans: list[UpdateQr02StationPlan] = []
 
@@ -226,6 +292,50 @@ class UpdateQr02CbaTransformer:
                 station_plans.append(station_plan)
 
         return UpdateQr02CbaPlan(station_plans=station_plans, warnings=extraction_warnings)
+
+    def _resolve_fl_for_33kv(
+        self,
+        records_map: dict[str, list[TestsheetData]],
+        total_pe_path: Path | str | None,
+    ) -> dict[str, list[TestsheetData]]:
+        total_pe_map: dict[int, str] | None = None
+        resolved_records_map: dict[str, list[TestsheetData]] = {}
+
+        for key, records in records_map.items():
+            resolved_records: list[TestsheetData] = []
+            for rec in records:
+                # 1. Primary: Cell D7 on testsheet
+                candidate_fl = rec.fl_site or rec.fl_erms
+                if _is_valid_fl(candidate_fl):
+                    resolved_fl = normalize_fl_erms(candidate_fl)
+                    if rec.fl_erms != resolved_fl:
+                        rec = replace(rec, fl_erms=resolved_fl)
+                    resolved_records.append(rec)
+                    continue
+
+                # 2. Fallback: Query PYTHON/TOTAL PE.xlsx (DataCycle1 sheet)
+                if total_pe_map is None:
+                    total_pe_map = _load_total_pe_fl_map(total_pe_path)
+
+                fallback_fl = total_pe_map.get(rec.substation_number)
+                if fallback_fl and _is_valid_fl(fallback_fl):
+                    rec = replace(rec, fl_erms=fallback_fl, fl_site=fallback_fl)
+                    resolved_records.append(rec)
+                    continue
+
+                # 3. Fail fast
+                name = (
+                    rec.substation_name_site
+                    or rec.substation_name_erms
+                    or rec.station_name
+                    or f"PE {rec.substation_number}"
+                )
+                raise ValueError(
+                    f"Cannot resolve Functional Location for substation {rec.substation_number} ({name}) from testsheet or TOTAL PE.xlsx"
+                )
+            resolved_records_map[key] = resolved_records
+
+        return resolved_records_map
 
     def _group_packages_by_station(
         self, packages: list[SubstationTestsheetPackage]
@@ -311,7 +421,8 @@ class UpdateQr02CbaLoader:
         """Instantiate Qr02Repository via factory or default LocalExcelQr02Repository."""
         if repository_factory is not None:
             return repository_factory(environment.storage, station, year)
-        return LocalExcelQr02Repository(environment.storage, station, year)
+        voltage = getattr(environment, "voltage_type", "11kV")
+        return LocalExcelQr02Repository(environment.storage, station, year, voltage_type=voltage)
 
 
 class UpdateQr02CbaAuditor:
@@ -420,7 +531,17 @@ class UpdateQr02CbaWorkflow:
                 request.progress_sink(warn_msg)
 
         # 4. Transformer (Transform into load plan)
-        plan = self.transformer.transform(filtered_packages, records_map, extraction_warnings)
+        total_pe_path = None
+        if hasattr(environment.storage, "get_total_pe_path"):
+            total_pe_path = environment.storage.get_total_pe_path()
+        voltage = getattr(environment, "voltage_type", "11kV")
+        plan = self.transformer.transform(
+            filtered_packages,
+            records_map,
+            extraction_warnings,
+            total_pe_path=total_pe_path,
+            voltage_type=voltage,
+        )
 
         # 5. Loader (Write to target)
         if request.progress_sink:
