@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 from pathlib import Path
 import re
 from typing import ClassVar, Sequence
@@ -17,12 +18,16 @@ from src.core.normalizers import (
     parse_background_temp,
 )
 from src.testsheet.models import (
+    LVDBSpec,
     PhotoRange,
+    PowerTransformerSpec,
     RawPhotoRanges,
     SubstationEquipmentPackage,
     SwitchgearPanelSpec,
     SwitchgearSpec,
     TestsheetData,
+    ThermalReadingSpec,
+    TransformerSpec,
     VisualInspectionFinding,
 )
 from src.testsheet.parsers.base import TestsheetParserStrategy
@@ -36,6 +41,88 @@ from src.testsheet.parsers.common import (
     parse_range_val,
     to_excel_date,
 )
+
+logger = logging.getLogger(__name__)
+
+
+def classify_transformer_rating(
+    rating: object,
+    tx_id: str = "",
+    unit_hint: str = "",
+) -> bool:
+    """Classify whether a transformer is a PowerTransformerSpec (True) or TransformerSpec (False).
+
+    Returns:
+        True if rating >= 5 MVA (PowerTransformerSpec).
+        False if rating in 100-1000 kVA, labeled LOCAL TX, or out-of-range / ambiguous (standard TransformerSpec).
+    """
+    if "LOCAL" in tx_id.upper():
+        return False
+
+    raw_str = str(rating).strip() if rating is not None else ""
+    if not raw_str or raw_str.upper() in ("-", "NONE", "N/A", "NAN"):
+        logger.warning(
+            "Empty or missing rating for transformer '%s'; defaulting to standard TransformerSpec",
+            tx_id or "unnamed",
+        )
+        return False
+
+    s_upper = raw_str.upper()
+
+    m = re.search(r"(\d+(?:\.\d+)?)", s_upper)
+    if not m:
+        logger.warning(
+            "Unrecognized transformer rating '%s' for '%s'; defaulting to standard TransformerSpec",
+            raw_str,
+            tx_id or "unnamed",
+        )
+        return False
+
+    val = float(m.group(1))
+
+    has_mva = "MVA" in s_upper or ("KVA" not in s_upper and unit_hint.upper() == "MVA")
+    has_kva = "KVA" in s_upper or ("MVA" not in s_upper and unit_hint.upper() in ("KVA", "VA"))
+
+    if not has_mva and not has_kva:
+        if 5.0 <= val < 100.0:
+            has_mva = True
+        elif 100.0 <= val <= 1000.0:
+            has_kva = True
+        elif val >= 5000.0:
+            return True
+        else:
+            logger.warning(
+                "Ambiguous transformer rating '%s' without unit for '%s'; defaulting to standard TransformerSpec",
+                raw_str,
+                tx_id or "unnamed",
+            )
+            return False
+
+    if has_mva:
+        if val >= 5.0:
+            return True
+        else:
+            logger.warning(
+                "Out-of-range Power Transformer rating '%s' (< 5 MVA) for '%s'; defaulting to standard TransformerSpec",
+                raw_str,
+                tx_id or "unnamed",
+            )
+            return False
+
+    if has_kva:
+        if 100.0 <= val <= 1000.0:
+            return False
+        elif val >= 5000.0:
+            return True
+        else:
+            logger.warning(
+                "Out-of-range transformer rating '%s' (not in 100-1000 kVA or >= 5 MVA) for '%s'; defaulting to standard TransformerSpec",
+                raw_str,
+                tx_id or "unnamed",
+            )
+            return False
+
+    return False
 
 
 class PpuTestsheetParser(TestsheetParserStrategy):
@@ -193,12 +280,18 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                     f"No populated 33kV or 11kV switchgear lineups found in {path.name}"
                 )
 
-            # 4. Visual Inspection findings
+            # 4. Transformers and LVDB extraction (TX sheet)
+            transformers: list[TransformerSpec] = []
+            lvdb_specs: list[LVDBSpec] = []
+            if "TX" in wb.sheetnames:
+                transformers, lvdb_specs = self._extract_tx_sheet(wb["TX"])
+
+            # 5. Visual Inspection findings
             visual_findings: list[VisualInspectionFinding] = []
             if ws_vi is not None:
                 visual_findings = self._parse_visual_inspection_findings(ws_vi)
 
-            # 5. Photo range bounds
+            # 6. Photo range bounds
             photo_ranges = RawPhotoRanges()
             if "RAW DATA" in wb.sheetnames:
                 photo_ranges = self._parse_raw_data_sheet(wb["RAW DATA"])
@@ -208,6 +301,8 @@ class PpuTestsheetParser(TestsheetParserStrategy):
 
         equipment = SubstationEquipmentPackage(
             switchgears=tuple(switchgears),
+            transformers=tuple(transformers),
+            lvdb_specs=tuple(lvdb_specs),
         )
 
         return TestsheetData(
@@ -743,3 +838,285 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             ir=PhotoRange(start_num=ir_start, end_num=ir_end),
             dg=PhotoRange(start_num=dg_start, end_num=dg_end),
         )
+
+    def _extract_tx_sheet(
+        self,
+        ws: Worksheet,
+    ) -> tuple[list[TransformerSpec], list[LVDBSpec]]:
+        """Parse TX sheet into unified PowerTransformerSpec / TransformerSpec and LVDBSpec."""
+        slots = [
+            {"slot_id": 1, "default_tx_id": "TX 1", "cols": ("G", "H", "I", "J"), "part1_row": 14, "part2_row": 33, "unit_hint": "MVA"},
+            {"slot_id": 2, "default_tx_id": "TX 2", "cols": ("K", "L", "M"), "part1_row": 17, "part2_row": 36, "unit_hint": "MVA"},
+            {"slot_id": 3, "default_tx_id": "TX 3", "cols": ("N", "O", "P"), "part1_row": 20, "part2_row": 39, "unit_hint": "MVA"},
+            {"slot_id": 4, "default_tx_id": "TX 4", "cols": ("Q", "R", "S"), "part1_row": 23, "part2_row": 42, "unit_hint": "MVA"},
+            {"slot_id": 5, "default_tx_id": "LOCAL TX", "cols": ("T", "U", "V"), "part1_row": 26, "part2_row": 45, "unit_hint": "KVA"},
+        ]
+
+        transformers: list[TransformerSpec] = []
+        for slot in slots:
+            tx = self._extract_tx_slot(ws, slot)
+            if tx is not None:
+                transformers.append(tx)
+
+        lvdb_specs = self._extract_station_service_lvdb(ws)
+        return transformers, lvdb_specs
+
+    def _extract_tx_slot(
+        self,
+        ws: Worksheet,
+        slot: Mapping[str, Any],
+    ) -> TransformerSpec | None:
+        """Extract a single transformer slot into PowerTransformerSpec or TransformerSpec."""
+        default_id = slot["default_tx_id"]
+        cols = slot["cols"]
+        part1_row = slot["part1_row"]
+        part2_row = slot["part2_row"]
+        unit_hint = slot["unit_hint"]
+
+        # 1. Header metadata (Rows 6-9)
+        mfg = self._get_tx_meta_val(ws, 7, cols, r"(?:2\.1\s*)?Manufacturer\s*[:.]*")
+        rating = self._get_tx_meta_val(ws, 8, cols, r"(?:2\.2\s*)?Rating\s*(?:\([^\)]*\))?\s*[:.]*")
+        sn = self._get_tx_meta_val(ws, 9, cols, r"(?:2\.3\s*)?Serial\s*No\.?\s*[:.]*")
+        model = self._get_tx_model(ws, cols)
+
+        p1_name = clean_val(ws[f"C{part1_row}"].value) if part1_row <= ws.max_row else None
+        p2_name = clean_val(ws[f"C{part2_row}"].value) if part2_row <= ws.max_row else None
+        header_name = clean_val(ws[f"{cols[0]}6"].value)
+        tx_name = p1_name or p2_name or (header_name if header_name and "TX" in header_name.upper() else default_id)
+
+        # 2. Part 1: Primary terminations, load, cable, ultrasound, cable thermals
+        load_amp = ""
+        cable_type = ""
+        hv_ultrasound = ""
+        hv_ultrasound_char = ""
+        hv_ultrasound_file = ""
+        lv_ultrasound = ""
+        lv_ultrasound_char = ""
+        lv_ultrasound_file = ""
+        hv_cable_photo: int | None = None
+        lv_cable_photo: int | None = None
+        hv_cable_thermal = ThermalReadingSpec()
+        lv_cable_thermal = ThermalReadingSpec()
+        all_unit_photos: list[int] = []
+
+        if part1_row <= ws.max_row:
+            load_amp = clean_val(ws[f"F{part1_row}"].value) or ""
+            cable_type = clean_val(ws[f"H{part1_row}"].value) or ""
+            hv_ultrasound = clean_val(ws[f"J{part1_row}"].value) or ""
+            hv_ultrasound_char = clean_val(ws[f"K{part1_row}"].value) or ""
+            hv_ultrasound_file = clean_val(ws[f"M{part1_row}"].value) or ""
+            lv_ultrasound = clean_val(ws[f"N{part1_row}"].value) or ""
+            lv_ultrasound_char = clean_val(ws[f"O{part1_row}"].value) or ""
+            lv_ultrasound_file = clean_val(ws[f"Q{part1_row}"].value) or ""
+
+            hv_cable_thermal = self._extract_th_reading(ws, ("R", "S", "T", "U"), part1_row)
+            lv_cable_thermal = self._extract_th_reading(ws, ("W", "X", "Y", "Z"), part1_row)
+
+            for col in ("V", "AA"):
+                photos = parse_photo_numbers(ws[f"{col}{part1_row}"].value)
+                if photos:
+                    if col == "V" and hv_cable_photo is None:
+                        hv_cable_photo = photos[0]
+                    elif col == "AA" and lv_cable_photo is None:
+                        lv_cable_photo = photos[0]
+                    for p in photos:
+                        if p not in all_unit_photos:
+                            all_unit_photos.append(p)
+
+        # 3. Part 2: Auxiliary component thermals
+        mk_thermal = ThermalReadingSpec()
+        ct_thermal = ThermalReadingSpec()
+        body_thermal = ThermalReadingSpec()
+        cf_thermal = ThermalReadingSpec()
+        remarks = ""
+        mk_photo: int | None = None
+        ct_photo: int | None = None
+        body_photo: int | None = None
+        cf_photo: int | None = None
+
+        if part2_row <= ws.max_row:
+            mk_thermal = self._extract_th_reading(ws, ("F", "G", "H", "I"), part2_row)
+            ct_thermal = self._extract_th_reading(ws, ("L", "M", "N", "O"), part2_row)
+            body_thermal = self._extract_th_reading(ws, ("R", "S", "T", "U"), part2_row)
+            cf_thermal = self._extract_th_reading(ws, ("X", "Y", "Z", "AA"), part2_row)
+            remarks = clean_val(ws[f"AC{part2_row}"].value) or ""
+
+            for col in ("J", "P", "V", "AB"):
+                photos = parse_photo_numbers(ws[f"{col}{part2_row}"].value)
+                if photos:
+                    if col == "J" and mk_photo is None:
+                        mk_photo = photos[0]
+                    elif col == "P" and ct_photo is None:
+                        ct_photo = photos[0]
+                    elif col == "V" and body_photo is None:
+                        body_photo = photos[0]
+                    elif col == "AB" and cf_photo is None:
+                        cf_photo = photos[0]
+                    for p in photos:
+                        if p not in all_unit_photos:
+                            all_unit_photos.append(p)
+
+        has_electrical_or_thermal_data = bool(
+            all_unit_photos
+            or load_amp
+            or cable_type
+            or hv_ultrasound
+            or lv_ultrasound
+            or hv_cable_thermal != ThermalReadingSpec()
+            or lv_cable_thermal != ThermalReadingSpec()
+            or body_thermal != ThermalReadingSpec()
+            or mk_thermal != ThermalReadingSpec()
+            or ct_thermal != ThermalReadingSpec()
+            or cf_thermal != ThermalReadingSpec()
+            or remarks
+        )
+        has_nameplate_data = bool(rating or sn)
+
+        if not (has_electrical_or_thermal_data or has_nameplate_data):
+            return None
+
+        is_power_tx = classify_transformer_rating(rating, tx_id=tx_name, unit_hint=unit_hint)
+
+        if is_power_tx:
+            return PowerTransformerSpec(
+                tx_id=tx_name,
+                rating_kva=rating,
+                manufacturer=mfg,
+                model=model,
+                serial_no=sn,
+                hv_cable_type=cable_type,
+                lv_cable_type=cable_type,
+                load_amp=load_amp,
+                remarks=remarks,
+                hv_ultrasound=hv_ultrasound,
+                hv_ultrasound_char=hv_ultrasound_char,
+                hv_ultrasound_file=hv_ultrasound_file,
+                lv_ultrasound=lv_ultrasound,
+                lv_ultrasound_char=lv_ultrasound_char,
+                lv_ultrasound_file=lv_ultrasound_file,
+                hv_cable_thermal=hv_cable_thermal,
+                lv_cable_thermal=lv_cable_thermal,
+                marshalling_kiosk_temp=mk_thermal,
+                conservator_temp=ct_thermal,
+                body_temp=body_thermal,
+                cooling_fin_temp=cf_thermal,
+                marshalling_kiosk_photo=mk_photo,
+                conservator_photo=ct_photo,
+                body_photo=body_photo,
+                cooling_fin_photo=cf_photo,
+                hv_cable_photo=hv_cable_photo,
+                lv_cable_photo=lv_cable_photo,
+                photo_numbers=tuple(all_unit_photos),
+            )
+        else:
+            return TransformerSpec(
+                tx_id=tx_name,
+                rating_kva=rating,
+                manufacturer=mfg,
+                model=model,
+                serial_no=sn,
+                hv_cable_type=cable_type,
+                lv_cable_type=cable_type,
+                load_amp=load_amp,
+                remarks=remarks,
+                us_reading=hv_ultrasound or lv_ultrasound,
+                us_char=hv_ultrasound_char or lv_ultrasound_char,
+                hv_cable_thermal=hv_cable_thermal,
+                lv_cable_thermal=lv_cable_thermal,
+                body_thermal=body_thermal,
+                photo_numbers=tuple(all_unit_photos),
+            )
+
+    @staticmethod
+    def _extract_station_service_lvdb(ws: Worksheet) -> list[LVDBSpec]:
+        """Extract station service LVDB from Rows 49-54."""
+        lvdb_specs: list[LVDBSpec] = []
+        if ws.max_row >= 51:
+            lvdb_rating = clean_val(ws["D51"].value) or ""
+            lvdb_photos = parse_photo_numbers(ws["G51"].value)
+            lvdb_sn = clean_val(ws["D52"].value) or "" if ws.max_row >= 52 else ""
+            lvdb_model = clean_val(ws["D53"].value) or "" if ws.max_row >= 53 else ""
+            lvdb_mfg = clean_val(ws["D54"].value) or "" if ws.max_row >= 54 else ""
+
+            if lvdb_rating or lvdb_photos or lvdb_sn or lvdb_model or lvdb_mfg:
+                lvdb_specs.append(
+                    LVDBSpec(
+                        name="LVDB 1",
+                        label="LVDB",
+                        source="LOCAL TX",
+                        manufacturer=lvdb_mfg,
+                        model=lvdb_model,
+                        serial_no=lvdb_sn,
+                        rating=lvdb_rating,
+                        photo_numbers=lvdb_photos,
+                    )
+                )
+        return lvdb_specs
+
+    @staticmethod
+    def _extract_th_reading(
+        ws: Worksheet,
+        cols: tuple[str, str, str, str],
+        row: int,
+    ) -> ThermalReadingSpec:
+        """Extract ThermalReadingSpec from 4 temperature column coordinates (ref, max, delta, avg)."""
+        ref_col, max_col, del_col, avg_col = cols
+
+        def _clean_temp(val: object) -> str:
+            if val is None:
+                return ""
+            if isinstance(val, float):
+                return f"{round(val, 2):g}"
+            s = str(val).replace("\t", "").strip()
+            return "" if s in ("-", "None", "NONE", "N/A", "#REF!", "nan") else s
+
+        return ThermalReadingSpec(
+            tmin=_clean_temp(ws[f"{ref_col}{row}"].value),
+            tmax=_clean_temp(ws[f"{max_col}{row}"].value),
+            delta_t=_clean_temp(ws[f"{del_col}{row}"].value),
+            avg=_clean_temp(ws[f"{avg_col}{row}"].value),
+        )
+
+    @staticmethod
+    def _get_tx_meta_val(
+        ws: Worksheet,
+        row_idx: int,
+        cols: Sequence[str],
+        label_pat: str,
+    ) -> str:
+        """Extract metadata value within a column block matching a label pattern."""
+        for idx, col in enumerate(cols):
+            val = clean_val(ws[f"{col}{row_idx}"].value)
+            if val and re.search(label_pat, val, re.IGNORECASE):
+                sub = re.sub(label_pat, "", val, flags=re.IGNORECASE).strip(" :-\t.")
+                if sub:
+                    return sub
+                for next_col in cols[idx + 1:]:
+                    n_val = clean_val(ws[f"{next_col}{row_idx}"].value)
+                    if n_val and not re.search(r"^\d\.\d", n_val) and not re.search(label_pat, n_val, re.IGNORECASE):
+                        return n_val
+        for col in cols:
+            val = clean_val(ws[f"{col}{row_idx}"].value)
+            if val and not re.search(label_pat, val, re.IGNORECASE) and not re.search(r"^\d\.\d", val):
+                return val
+        return ""
+
+    @staticmethod
+    def _get_tx_model(ws: Worksheet, cols: Sequence[str]) -> str:
+        """Extract Model specification within a column block on Row 6."""
+        for idx, col in enumerate(cols):
+            val = clean_val(ws[f"{col}6"].value)
+            if val and re.search(r"model", val, re.IGNORECASE):
+                sub = re.sub(r"model\s*[:.]*", "", val, flags=re.IGNORECASE).strip()
+                if sub:
+                    return sub
+                for next_col in cols[idx + 1:]:
+                    n_val = clean_val(ws[f"{next_col}6"].value)
+                    if n_val and not re.search(r"^model\s*[:.]*$", n_val, re.IGNORECASE):
+                        return n_val
+        # If no explicit "Model" label, check last column in block on Row 6 if not slot name or label
+        for col in reversed(cols):
+            val = clean_val(ws[f"{col}6"].value)
+            if val and not re.search(r"^(?:model|tx|local)\b", val, re.IGNORECASE):
+                return val
+        return ""

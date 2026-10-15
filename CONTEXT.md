@@ -384,6 +384,11 @@ The two-tier resolution policy decoupling switchgear panel identification from `
 ### AtomicPdfSavePolicy
 The in-place deliverable PDF replacement pattern enforced during retroactive sound embedding. Ensures context-managed document handle closure (`with fitz.open(...) as doc:`), performs pre-flight removal of any stale temporary files (`.tmp_sound_{pdf.name}`), writes updated PDF contents to a temporary sibling file, and atomically replaces the original deliverable via `os.replace` within guarded `try...finally` blocks to guarantee file lock release and crash resilience on Windows.
 
+### PowerTransformerSpec & TransformerClassificationPolicy
+The domain model and classification policy governing transformers on 33kV testsheet `TX` worksheets (`src/testsheet/models.py`, `src/testsheet/parsers/ppu.py`).
+- **PowerTransformerSpec**: Subclass of `TransformerSpec` representing high-voltage power transformers ($\ge 5$ MVA). Captures auxiliary component thermals (`marshalling_kiosk_temp`, `conservator_temp`, `body_temp`, `cooling_fin_temp`), auxiliary photo numbers (`marshalling_kiosk_photo`, `conservator_photo`, `body_photo`, `cooling_fin_photo`, `hv_cable_photo`, `lv_cable_photo`), and dual-side ultrasound measurements (`hv_ultrasound`, `hv_ultrasound_char`, `hv_ultrasound_file`, `lv_ultrasound`, `lv_ultrasound_char`, `lv_ultrasound_file`). Ensures 100% polymorphic backward compatibility with all downstream consumers expecting `TransformerSpec`.
+- **Classification Gate**: Units with rating $\ge 5$ MVA (e.g. `5MVA`, `10MVA`, `15MVA`, `30MVA`) instantiate `PowerTransformerSpec`. Units with rating $100 - 1000$ kVA or labeled `LOCAL TX` instantiate standard distribution `TransformerSpec`. Out-of-range or ambiguous ratings log a non-fatal warning and default to standard `TransformerSpec` without halting the pipeline. SSU stations with absent or empty `TX` sheets produce empty transformer packages (`transformers = ()`).
+
 
 
 

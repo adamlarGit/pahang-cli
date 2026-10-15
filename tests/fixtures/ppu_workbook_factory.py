@@ -43,6 +43,9 @@ def create_ppu_testsheet_workbook(
     tx_sheet_name: str = "TX",
     vi_sheet_name: str = "Visual Inspec.",
     transformer_ratings: Sequence[str] = (),
+    transformers: Sequence[Mapping[str, Any]] | None = None,
+    local_tx: Mapping[str, Any] | None = None,
+    lvdb_details: Mapping[str, Any] | None = None,
 ) -> openpyxl.Workbook:
     """Build a synthetic PPU 33kV/11kV openpyxl workbook for testing."""
     wb = openpyxl.Workbook()
@@ -272,11 +275,252 @@ def create_ppu_testsheet_workbook(
     # 5. TX sheet
     if include_tx_sheet:
         ws_tx = wb.create_sheet(title=tx_sheet_name)
-        tx_cols = ["G", "K", "N", "Q"]
-        for t_idx, rating in enumerate(transformer_ratings):
-            col = tx_cols[t_idx % len(tx_cols)]
-            ws_tx[f"{col}8"] = rating
-            ws_tx[f"F{14 + t_idx * 3}"] = "100A"
+        # Header labels
+        ws_tx["B5"] = "1. Substation Details:"
+        ws_tx["D6"] = substation_name
+        ws_tx["G5"] = "2. Transformer Details:"
+
+        # Column blocks for slots 1..5
+        # Slot 1: TX 1
+        ws_tx["G6"] = "TX 1"
+        ws_tx["I6"] = "Model:"
+        ws_tx["G7"] = "2.1 Manufacturer:"
+        ws_tx["G8"] = "2.2 Rating (MVA):"
+        ws_tx["G9"] = "2.3 Serial No. :"
+
+        # Slot 2: TX 2
+        ws_tx["K6"] = "TX 2"
+        ws_tx["L6"] = "Model:"
+        ws_tx["K7"] = "2.1 Manufacturer:"
+        ws_tx["K8"] = "2.2 Rating (MVA):"
+        ws_tx["K9"] = "2.3 Serial No. :"
+
+        # Slot 3: TX 3
+        ws_tx["N6"] = "TX 3"
+        ws_tx["O6"] = "Model:"
+        ws_tx["N7"] = "2.1 Manufacturer:"
+        ws_tx["N8"] = "2.2 Rating (MVA):"
+        ws_tx["N9"] = "2.3 Serial No. :"
+
+        # Slot 4: TX 4
+        ws_tx["Q6"] = "TX 4"
+        ws_tx["R6"] = "Model:"
+        ws_tx["Q7"] = "2.1 Manufacturer:"
+        ws_tx["Q8"] = "2.2 Rating (KVA):"
+        ws_tx["Q9"] = "2.3 Serial No. :"
+
+        # Slot 5: LOCAL TX
+        ws_tx["T6"] = "LOCAL TX"
+        ws_tx["U6"] = "Model:"
+        ws_tx["T7"] = "2.1 Manufacturer:"
+        ws_tx["T8"] = "2.2 Rating (KVA):"
+        ws_tx["T9"] = "2.3 Serial No. :"
+
+        # Part 1 and Part 2 section headers
+        ws_tx["B10"] = "TRANSFORMER"
+        ws_tx["B11"] = "DETAILS"
+        ws_tx["J11"] = "ULTRASOUND"
+        ws_tx["R11"] = "THERMOGRAPHY"
+        ws_tx["B12"] = "No."
+        ws_tx["C12"] = "TX No."
+        ws_tx["F12"] = "Load ( A) "
+        ws_tx["H12"] = "Cable Type"
+        ws_tx["J12"] = "HV Cable"
+        ws_tx["N12"] = "LV Cable"
+        ws_tx["R12"] = "HV Cable"
+        ws_tx["W12"] = "LV Cable"
+
+        ws_tx["B30"] = "DETAILS"
+        ws_tx["F30"] = "THERMOGRAPHY"
+        ws_tx["B31"] = "No"
+        ws_tx["C31"] = "TX No"
+        ws_tx["F31"] = "Marshalling Kiosk"
+        ws_tx["L31"] = "Conservator Tank"
+        ws_tx["R31"] = "Body"
+        ws_tx["X31"] = "Cooling Fin"
+        ws_tx["AC31"] = "Remarks"
+
+        # Resolve transformers list
+        tx_list: list[Mapping[str, Any]] = []
+        if transformers is not None:
+            tx_list = list(transformers)
+        elif transformer_ratings:
+            tx_list = [
+                {
+                    "slot_id": i + 1,
+                    "tx_id": f"TX {i + 1}",
+                    "rating": r,
+                    "model": "15-201",
+                    "manufacturer": "MTM",
+                    "serial_no": f"SN-TX-{i + 1}",
+                    "load_amp": f"{100 + i * 20}A",
+                    "cable_type": "XLPE",
+                    "hv_ultrasound": "0",
+                    "lv_ultrasound": "0",
+                    "hv_photo": 560 + i * 15,
+                    "lv_photo": 554 + i * 15,
+                    "mk_photo": 550 + i * 15,
+                    "ct_photo": 547 + i * 15,
+                    "body_photo": 555 + i * 15,
+                    "cf_photo": f"{546 + i * 15}/{548 + i * 15}",
+                    "hv_cable_thermal": {"tmin": "36.4", "tmax": "37.2", "delta_t": "0.8", "avg": "36.8"},
+                    "lv_cable_thermal": {"tmin": "36.0", "tmax": "36.1", "delta_t": "0.1", "avg": "36.05"},
+                    "marshalling_kiosk_temp": {"tmin": "35.8", "tmax": "36.0", "delta_t": "0.2", "avg": "35.9"},
+                    "conservator_temp": {"tmin": "41.0", "tmax": "41.5", "delta_t": "0.5", "avg": "41.25"},
+                    "body_temp": {"tmin": "43.0", "tmax": "43.9", "delta_t": "0.9", "avg": "43.45"},
+                    "cooling_fin_temp": {"tmin": "43.3", "tmax": "43.7", "delta_t": "0.4", "avg": "43.5"},
+                }
+                for i, r in enumerate(transformer_ratings)
+            ]
+
+        slot_configs = [
+            {"slot": 1, "default_id": "TX 1", "model_col": "J", "mfg_col": "I", "rating_header": "G8", "rating_col": "I8", "sn_col": "I", "p1_row": 14, "p2_row": 33},
+            {"slot": 2, "default_id": "TX 2", "model_col": "M", "mfg_col": "L", "rating_header": "K8", "rating_col": "L8", "sn_col": "L", "p1_row": 17, "p2_row": 36},
+            {"slot": 3, "default_id": "TX 3", "model_col": "P", "mfg_col": "O", "rating_header": "N8", "rating_col": "O8", "sn_col": "O", "p1_row": 20, "p2_row": 39},
+            {"slot": 4, "default_id": "TX 4", "model_col": "S", "mfg_col": "R", "rating_header": "Q8", "rating_col": "R8", "sn_col": "R", "p1_row": 23, "p2_row": 42},
+        ]
+
+        for idx, t in enumerate(tx_list):
+            if idx >= len(slot_configs):
+                break
+            cfg = slot_configs[idx]
+            p1_r = cfg["p1_row"]
+            p2_r = cfg["p2_row"]
+            tx_name = t.get("tx_id", cfg["default_id"])
+
+            # Header metadata
+            if "model" in t:
+                ws_tx[f"{cfg['model_col']}6"] = t["model"]
+            if "manufacturer" in t:
+                ws_tx[f"{cfg['mfg_col']}7"] = t["manufacturer"]
+            if "rating" in t:
+                ws_tx[cfg["rating_header"]] = t["rating"]
+                ws_tx[cfg["rating_col"]] = t["rating"]
+            if "serial_no" in t:
+                ws_tx[f"{cfg['sn_col']}9"] = t["serial_no"]
+
+            # Part 1: Rows 14..28
+            ws_tx[f"B{p1_r}"] = idx + 1
+            ws_tx[f"C{p1_r}"] = tx_name
+            ws_tx[f"F{p1_r}"] = t.get("load_amp", "")
+            ws_tx[f"H{p1_r}"] = t.get("cable_type", "")
+            ws_tx[f"J{p1_r}"] = t.get("hv_ultrasound", "")
+            ws_tx[f"N{p1_r}"] = t.get("lv_ultrasound", "")
+
+            hv_th = t.get("hv_cable_thermal", {})
+            ws_tx[f"R{p1_r}"] = hv_th.get("tmin", "")
+            ws_tx[f"S{p1_r}"] = hv_th.get("tmax", "")
+            ws_tx[f"T{p1_r}"] = hv_th.get("delta_t", "")
+            ws_tx[f"U{p1_r}"] = hv_th.get("avg", "")
+            if "hv_photo" in t and t["hv_photo"] is not None:
+                ws_tx[f"V{p1_r}"] = t["hv_photo"]
+
+            lv_th = t.get("lv_cable_thermal", {})
+            ws_tx[f"W{p1_r}"] = lv_th.get("tmin", "")
+            ws_tx[f"X{p1_r}"] = lv_th.get("tmax", "")
+            ws_tx[f"Y{p1_r}"] = lv_th.get("delta_t", "")
+            ws_tx[f"Z{p1_r}"] = lv_th.get("avg", "")
+            if "lv_photo" in t and t["lv_photo"] is not None:
+                ws_tx[f"AA{p1_r}"] = t["lv_photo"]
+
+            # Part 2: Rows 33..48
+            ws_tx[f"B{p2_r}"] = idx + 1
+            ws_tx[f"C{p2_r}"] = tx_name
+
+            mk_th = t.get("marshalling_kiosk_temp", {})
+            ws_tx[f"F{p2_r}"] = mk_th.get("tmin", "")
+            ws_tx[f"G{p2_r}"] = mk_th.get("tmax", "")
+            ws_tx[f"H{p2_r}"] = mk_th.get("delta_t", "")
+            ws_tx[f"I{p2_r}"] = mk_th.get("avg", "")
+            if "mk_photo" in t and t["mk_photo"] is not None:
+                ws_tx[f"J{p2_r}"] = t["mk_photo"]
+
+            ct_th = t.get("conservator_temp", {})
+            ws_tx[f"L{p2_r}"] = ct_th.get("tmin", "")
+            ws_tx[f"M{p2_r}"] = ct_th.get("tmax", "")
+            ws_tx[f"N{p2_r}"] = ct_th.get("delta_t", "")
+            ws_tx[f"O{p2_r}"] = ct_th.get("avg", "")
+            if "ct_photo" in t and t["ct_photo"] is not None:
+                ws_tx[f"P{p2_r}"] = t["ct_photo"]
+
+            b_th = t.get("body_temp", {})
+            ws_tx[f"R{p2_r}"] = b_th.get("tmin", "")
+            ws_tx[f"S{p2_r}"] = b_th.get("tmax", "")
+            ws_tx[f"T{p2_r}"] = b_th.get("delta_t", "")
+            ws_tx[f"U{p2_r}"] = b_th.get("avg", "")
+            if "body_photo" in t and t["body_photo"] is not None:
+                ws_tx[f"V{p2_r}"] = t["body_photo"]
+
+            cf_th = t.get("cooling_fin_temp", {})
+            ws_tx[f"X{p2_r}"] = cf_th.get("tmin", "")
+            ws_tx[f"Y{p2_r}"] = cf_th.get("tmax", "")
+            ws_tx[f"Z{p2_r}"] = cf_th.get("delta_t", "")
+            ws_tx[f"AA{p2_r}"] = cf_th.get("avg", "")
+            if "cf_photo" in t and t["cf_photo"] is not None:
+                ws_tx[f"AB{p2_r}"] = t["cf_photo"]
+
+            if "remarks" in t:
+                ws_tx[f"AC{p2_r}"] = t["remarks"]
+
+        # Local TX (Slot 5: Row 26 & Row 45)
+        if local_tx is not None:
+            ltx = local_tx
+            if "model" in ltx:
+                ws_tx["V6"] = ltx["model"]
+            if "manufacturer" in ltx:
+                ws_tx["U7"] = ltx["manufacturer"]
+            if "rating" in ltx:
+                ws_tx["T8"] = ltx["rating"]
+                ws_tx["U8"] = ltx["rating"]
+            if "serial_no" in ltx:
+                ws_tx["U9"] = ltx["serial_no"]
+
+            # Part 1 (Row 26)
+            ws_tx["B26"] = 5
+            ws_tx["C26"] = ltx.get("tx_id", "Local TX")
+            ws_tx["F26"] = ltx.get("load_amp", "")
+            ws_tx["H26"] = ltx.get("cable_type", "")
+            ws_tx["J26"] = ltx.get("hv_ultrasound", "")
+            hv_th = ltx.get("hv_cable_thermal", {})
+            ws_tx["R26"] = hv_th.get("tmin", "")
+            ws_tx["S26"] = hv_th.get("tmax", "")
+            ws_tx["T26"] = hv_th.get("delta_t", "")
+            ws_tx["U26"] = hv_th.get("avg", "")
+            if "hv_photo" in ltx and ltx["hv_photo"] is not None:
+                ws_tx["V26"] = ltx["hv_photo"]
+
+            lv_th = ltx.get("lv_cable_thermal", {})
+            ws_tx["W26"] = lv_th.get("tmin", "")
+            ws_tx["X26"] = lv_th.get("tmax", "")
+            ws_tx["Y26"] = lv_th.get("delta_t", "")
+            ws_tx["Z26"] = lv_th.get("avg", "")
+            if "lv_photo" in ltx and ltx["lv_photo"] is not None:
+                ws_tx["AA26"] = ltx["lv_photo"]
+
+            # Part 2 (Row 45)
+            ws_tx["B45"] = 5
+            ws_tx["C45"] = ltx.get("tx_id", "LOCAL TX")
+            b_th = ltx.get("body_temp", {})
+            ws_tx["R45"] = b_th.get("tmin", "")
+            ws_tx["S45"] = b_th.get("tmax", "")
+            ws_tx["T45"] = b_th.get("delta_t", "")
+            ws_tx["U45"] = b_th.get("avg", "")
+            if "body_photo" in ltx and ltx["body_photo"] is not None:
+                ws_tx["V45"] = ltx["body_photo"]
+
+        # Station Service LVDB (Rows 49..54)
+        if lvdb_details is not None:
+            ws_tx["B49"] = "LV DISTRIBUTION BOARD/FEEDER PILLAR/OTHERS"
+            ws_tx["B51"] = "Rating (A):"
+            ws_tx["D51"] = lvdb_details.get("rating", "")
+            if "photo" in lvdb_details and lvdb_details["photo"] is not None:
+                ws_tx["G51"] = f"IR: {lvdb_details['photo']}" if isinstance(lvdb_details['photo'], int) else str(lvdb_details['photo'])
+            ws_tx["B52"] = "Serial No.: "
+            ws_tx["D52"] = lvdb_details.get("serial_no", "")
+            ws_tx["B53"] = "Type:"
+            ws_tx["D53"] = lvdb_details.get("model", "")
+            ws_tx["B54"] = "Manufacturer:"
+            ws_tx["D54"] = lvdb_details.get("manufacturer", "")
 
     # Remove the initial blank sheet
     if default_sheet in wb.worksheets:

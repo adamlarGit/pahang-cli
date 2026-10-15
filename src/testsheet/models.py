@@ -136,10 +136,45 @@ class TransformerSpec:
     lv_bushing_thermal: ThermalReadingSpec = ThermalReadingSpec()
     body_thermal: ThermalReadingSpec = ThermalReadingSpec()
     photo_numbers: tuple[int, ...] = ()
+    load_amp: str = ""
+    remarks: str = ""
 
     def __post_init__(self) -> None:
         if not self.model and self.type:
             object.__setattr__(self, "model", normalize_tx_model(self.type))
+
+
+@dataclass(frozen=True)
+class PowerTransformerSpec(TransformerSpec):
+    """Specification for a high-voltage Power Transformer (>= 5 MVA)."""
+
+    marshalling_kiosk_temp: ThermalReadingSpec = ThermalReadingSpec()
+    conservator_temp: ThermalReadingSpec = ThermalReadingSpec()
+    body_temp: ThermalReadingSpec = ThermalReadingSpec()
+    cooling_fin_temp: ThermalReadingSpec = ThermalReadingSpec()
+    marshalling_kiosk_photo: int | None = None
+    conservator_photo: int | None = None
+    body_photo: int | None = None
+    cooling_fin_photo: int | None = None
+    hv_cable_photo: int | None = None
+    lv_cable_photo: int | None = None
+    hv_ultrasound: str = ""
+    hv_ultrasound_char: str = ""
+    hv_ultrasound_file: str = ""
+    lv_ultrasound: str = ""
+    lv_ultrasound_char: str = ""
+    lv_ultrasound_file: str = ""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.body_thermal == ThermalReadingSpec() and self.body_temp != ThermalReadingSpec():
+            object.__setattr__(self, "body_thermal", self.body_temp)
+        elif self.body_temp == ThermalReadingSpec() and self.body_thermal != ThermalReadingSpec():
+            object.__setattr__(self, "body_temp", self.body_thermal)
+        if not self.us_reading and (self.hv_ultrasound or self.lv_ultrasound):
+            object.__setattr__(self, "us_reading", self.hv_ultrasound or self.lv_ultrasound)
+        if not self.us_char and (self.hv_ultrasound_char or self.lv_ultrasound_char):
+            object.__setattr__(self, "us_char", self.hv_ultrasound_char or self.lv_ultrasound_char)
 
 
 

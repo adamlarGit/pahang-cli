@@ -34,6 +34,7 @@ from src.testsheet.models import (
     TestsheetData,
     ThermalReadingSpec,
     TransformerSpec,
+    PowerTransformerSpec,
     VisualInspectionFinding,
 )
 from src.testsheet.repository import SubstationTestsheetRepository
@@ -45,6 +46,7 @@ __all__ = [
     "LVDBFeederSpec",
     "LVDBSpec",
     "PhotoRange",
+    "PowerTransformerSpec",
     "RawPhotoRanges",
     "SubstationEquipmentPackage",
     "SubstationTestsheetPackage",
