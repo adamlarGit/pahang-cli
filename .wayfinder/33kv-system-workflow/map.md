@@ -55,7 +55,7 @@ The authoritative specification for this effort is documented in [spec.md](./spe
 ```mermaid
 graph TD
     T91["#91: TestsheetParserStrategy seam + PceTestsheetParser refactor - Closed"]
-    T92["#92: PpuTestsheetParser (metadata, 6-row SWG, TX, VI)"]
+    T92["#92: PpuTestsheetParser (metadata, 6-row SWG, TX, VI) - Closed"]
     T93["#93: Power Transformer domain model & TX parsing"]
     T94["#94: Contract 750-39 storage + Qr02Cba33kVTransaction"]
     T95["#95: Raw material sorting & US+TEV pairing"]
@@ -102,7 +102,7 @@ graph TD
 - **Delivers**: Abstract `TestsheetParserStrategy` interface, refactored `PceTestsheetParser` wrapping all existing 11kV parsing logic with 100% backward compatibility, and voltage-routed parser factory.
 
 ### #92: feat(33kv-testsheet): PpuTestsheetParser for 33kV/11kV multi-sheet workbooks
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#92](https://github.com/adamlarGit/pahang-cli/issues/92)
 - **Blocked by**: #91
 - **Ticket File**: [tickets/092-ppu-testsheet-parser.md](./tickets/092-ppu-testsheet-parser.md)

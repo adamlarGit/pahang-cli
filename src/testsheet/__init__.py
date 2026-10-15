@@ -34,6 +34,7 @@ from src.testsheet.models import (
     TestsheetData,
     ThermalReadingSpec,
     TransformerSpec,
+    VisualInspectionFinding,
 )
 from src.testsheet.repository import SubstationTestsheetRepository
 
@@ -52,6 +53,7 @@ __all__ = [
     "TestsheetData",
     "ThermalReadingSpec",
     "TransformerSpec",
+    "VisualInspectionFinding",
     "TestsheetExtractor",
     "parse_photo_numbers",
     "parse_secondary_photo",

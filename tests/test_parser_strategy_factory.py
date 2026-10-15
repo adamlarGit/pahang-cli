@@ -87,17 +87,17 @@ def test_ppu_parser_can_handle_sheets():
     assert parser.can_handle_sheets(["Other"]) is False
 
 
-def test_ppu_parser_placeholder_raises_not_implemented(tmp_path: Path):
+def test_ppu_parser_raises_for_missing_file(tmp_path: Path):
     parser = PpuTestsheetParser()
     dummy_path = tmp_path / "dummy.xlsx"
 
-    with pytest.raises(NotImplementedError, match="PpuTestsheetParser will be implemented in Ticket #92"):
+    with pytest.raises(FileNotFoundError, match="Testsheet workbook not found"):
         parser.extract_testsheet_data(dummy_path)
 
-    with pytest.raises(NotImplementedError, match="PpuTestsheetParser will be implemented in Ticket #92"):
+    with pytest.raises(FileNotFoundError, match="Testsheet workbook not found"):
         parser.extract_testsheet_metadata(dummy_path)
 
-    with pytest.raises(NotImplementedError, match="PpuTestsheetParser will be implemented in Ticket #92"):
+    with pytest.raises(FileNotFoundError, match="Testsheet workbook not found"):
         parser.extract_photo_ranges(dummy_path)
 
 

@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 Part of #90
 Specification: [spec.md](../spec.md)
 
@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #91
 
-**Status:** ready-for-agent
+**Status:** closed
 
 ## Detailed Design & Architecture
 
@@ -81,17 +81,17 @@ Specification: [spec.md](../spec.md)
 
 ## Acceptance Criteria Checklist
 
-- [ ] Extend `SwitchgearPanelSpec` with `cable_entry_photo` and `link_box_photo`.
-- [ ] Define `VisualInspectionFinding` dataclass and add `visual_findings` to `TestsheetData`.
-- [ ] Implement `PpuTestsheetParser`:
-  - [ ] Implement `substation_number` resolution (`V2` on 33kV $\to$ `V2` on 11kV $\to$ filename digits $\to$ `ValueError`).
-  - [ ] Implement metadata header extraction from `33kV (Main)` with fallback to `11kV (Main)`.
-  - [ ] Implement 6-row switchgear panel stride parsing (Breaker, Cable, Busbar, PT, Cable Entry, Link Box).
-  - [ ] Implement Column Q `SP:` regex parsing for `secondary_photo`.
-  - [ ] Implement RHS and LHS overview extraction (storing in `SwitchgearSpec.photo_numbers` and prepending synthetic panels).
-  - [ ] Implement dual-voltage, 33kV-only, and 11kV-only switchgear board construction.
-  - [ ] Implement `Visual Inspec.` findings parsing (checklist defects + Category 8 other findings).
-  - [ ] Implement `RAW DATA` photo bounds extraction.
-- [ ] Create shared PPU fixture factory in `tests/fixtures/ppu_workbook_factory.py`.
-- [ ] Add unit tests in `tests/test_ppu_testsheet_parser.py` testing dual-voltage, 11kV-only, overview bays, `SP:` extraction, and fail-fast validation.
-- [ ] Run full test suite verifying 0 regressions.
+- [x] Extend `SwitchgearPanelSpec` with `cable_entry_photo` and `link_box_photo`.
+- [x] Define `VisualInspectionFinding` dataclass and add `visual_findings` to `TestsheetData`.
+- [x] Implement `PpuTestsheetParser`:
+  - [x] Implement `substation_number` resolution (`V2` on 33kV $\to$ `V2` on 11kV $\to$ filename digits $\to$ `ValueError`).
+  - [x] Implement metadata header extraction from `33kV (Main)` with fallback to `11kV (Main)`.
+  - [x] Implement 6-row switchgear panel stride parsing (Breaker, Cable, Busbar, PT, Cable Entry, Link Box).
+  - [x] Implement Column Q `SP:` regex parsing for `secondary_photo`.
+  - [x] Implement RHS and LHS overview extraction (storing in `SwitchgearSpec.photo_numbers` and prepending synthetic panels).
+  - [x] Implement dual-voltage, 33kV-only, and 11kV-only switchgear board construction.
+  - [x] Implement `Visual Inspec.` findings parsing (checklist defects + Category 8 other findings).
+  - [x] Implement `RAW DATA` photo bounds extraction.
+- [x] Create shared PPU fixture factory in `tests/fixtures/ppu_workbook_factory.py`.
+- [x] Add unit tests in `tests/test_ppu_testsheet_parser.py` testing dual-voltage, 11kV-only, overview bays, `SP:` extraction, and fail-fast validation.
+- [x] Run full test suite verifying 0 regressions.

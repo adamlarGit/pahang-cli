@@ -135,3 +135,33 @@ def parse_secondary_photo(val: object) -> int | None:
         return int(bare_m.group(1))
 
     return None
+
+
+def parse_int_safe(val: object) -> int | None:
+    """Safely convert a cell value or string into an integer."""
+    if val is None or val == "":
+        return None
+    match = re.search(r"(\d+)", str(val))
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def parse_range_val(val: str) -> tuple[int | None, int | None]:
+    """Parse start and end photo integers from range string."""
+    if not val:
+        return None, None
+    nums = [int(m) for m in re.findall(r"\d+", val)]
+    if len(nums) >= 2:
+        return nums[0], nums[1]
+    elif len(nums) == 1:
+        return nums[0], None
+    return None, None
+
+
+def find_next_val(row: list[str], idx: int) -> str:
+    """Find the next non-empty string in row after idx."""
+    for c in row[idx + 1 :]:
+        if c:
+            return c
+    return ""

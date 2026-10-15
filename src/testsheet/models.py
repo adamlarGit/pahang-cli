@@ -66,6 +66,8 @@ class SwitchgearPanelSpec:
     secondary_photo: int | None = None
     busbar_photo: int | None = None
     pt_photo: int | None = None
+    cable_entry_photo: int | None = None
+    link_box_photo: int | None = None
     has_pt_measurement: bool = False
 
     @property
@@ -239,6 +241,17 @@ class SubstationEquipmentPackage:
 
 
 @dataclass(frozen=True)
+class VisualInspectionFinding:
+    """Finding from testsheet visual inspection checklist or other findings."""
+
+    category: str = ""
+    item_no: str = ""
+    description: str = ""
+    status: str = ""
+    remarks: str = ""
+
+
+@dataclass(frozen=True)
 class TestsheetData:
     """Extracted data from a substation testsheet Excel workbook."""
 
@@ -262,6 +275,7 @@ class TestsheetData:
     tev_background: str = "-"
     cycle_1: datetime | None = None
     equipment: SubstationEquipmentPackage = SubstationEquipmentPackage()
+    visual_findings: tuple[VisualInspectionFinding, ...] = ()
 
 
 @dataclass(frozen=True)
