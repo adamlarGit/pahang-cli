@@ -186,6 +186,15 @@ def test_embed_sound_annotation_on_blank_page():
     assert reloaded_doc.xref_get_key(sound_xref, "B") == ("int", "16")
     assert reloaded_doc.xref_get_key(sound_xref, "E") == ("name", "/Signed")
 
+    # Verify Transparency (/CA 0.0, /Border [0 0 0], empty Form XObject /AP)
+    ca_key = reloaded_doc.xref_get_key(annot.xref, "CA")
+    assert ca_key[1] in ("0", "0.0")
+    border_key = reloaded_doc.xref_get_key(annot.xref, "Border")
+    assert border_key[1] == "[0 0 0]"
+    ap_key = reloaded_doc.xref_get_key(annot.xref, "AP")
+    assert ap_key[0] == "dict"
+    assert "/N" in ap_key[1]
+
     # Verify stream content
     stream_bytes = reloaded_doc.xref_stream(sound_xref)
     assert stream_bytes == pcm_bytes
@@ -193,7 +202,7 @@ def test_embed_sound_annotation_on_blank_page():
 
 
 def test_embed_sound_annotation_idempotency():
-    """Assert subsequent injections at intersecting rect update stream without duplicate annots."""
+    """Assert subsequent injections at intersecting rect or migrated coordinates update stream without duplicate annots."""
     # 1. Test in-memory update across successive calls on new document
     doc = fitz.open()
     page = doc.new_page(width=595, height=842)
@@ -221,7 +230,24 @@ def test_embed_sound_annotation_idempotency():
     sound_key = reloaded_doc.xref_get_key(xref_3, "Sound")
     sound_xref = int(sound_key[1].split()[0])
     assert reloaded_doc.xref_stream(sound_xref) == pcm_bytes_3
+
+    # 3. Test seamless migration from legacy [236, 254] to exact visible icon [201.30, 219.30]
+    new_rect = fitz.Rect(201.30, 595.47, 219.30, 613.47)
+    pcm_bytes_4 = b"\x07\x08" * 60
+    xref_4 = embed_sound_annotation(reloaded_doc, reloaded_page, new_rect, pcm_bytes_4, framerate=8000, channels=1)
+    assert xref_4 == xref_1
+    assert len(list(reloaded_page.annots())) == 1
+
+    migrated_bytes = reloaded_doc.tobytes()
     reloaded_doc.close()
+
+    check_doc = fitz.open("pdf", migrated_bytes)
+    check_page = check_doc[0]
+    annots = list(check_page.annots())
+    assert len(annots) == 1
+    assert abs(annots[0].rect.x0 - 201.30) < 1e-2
+    assert abs(annots[0].rect.x1 - 219.30) < 1e-2
+    check_doc.close()
 
 
 
