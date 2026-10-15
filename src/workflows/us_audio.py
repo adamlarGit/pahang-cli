@@ -29,6 +29,7 @@ from src.cli_selectors import (
 )
 from src.core.normalizers import format_month_folder
 from src.postprocessing.sound_embedder import (
+    TRANSFORMER_HV_SIDE_KEYWORDS,
     convert_24bit_wav_to_16bit_pcm,
     embed_sound_annotation,
     export_16bit_wav,
@@ -158,10 +159,53 @@ def export_substation_16bit_wavs(
     return exported_paths
 
 
+def _auto_discover_testsheet_data(pdf_path: Path) -> Any | None:
+    """Auto-discover and parse testsheet workbook adjacent or via WorkspaceStorage."""
+    from src.project.storage import LocalWorkspaceStorage
+    from src.testsheet.extractor import TestsheetExtractor
+
+    pe_num = None
+    try:
+        pe_num = extract_numerical_prefix(pdf_path.stem)
+    except ValueError:
+        pass
+
+    ts_file: Path | None = None
+    parts = list(pdf_path.parts)
+    for i, p in enumerate(parts):
+        if p.upper() in ("FULL REPORT", "QUICK REPORT") and i >= 1 and i + 3 < len(parts):
+            root = Path(*parts[:i])
+            station = parts[i + 1]
+            month = parts[i + 2]
+            date_str = parts[i + 3]
+            storage = LocalWorkspaceStorage(root)
+            if pe_num is not None:
+                ts_file = storage.get_substation_testsheet_path(
+                    station, month, date_str, pe_num, stem=pdf_path.stem
+                )
+            break
+
+    # Sibling directory fallback if not in structured workspace
+    if ts_file is None:
+        for f in sorted(pdf_path.parent.glob("*.xlsx")):
+            if f.name.startswith(("~$", ".")):
+                continue
+            if (pe_num is not None and str(pe_num) in f.stem) or (pdf_path.stem.upper() in f.stem.upper()):
+                ts_file = f
+                break
+
+    if ts_file and ts_file.is_file():
+        try:
+            return TestsheetExtractor().extract_testsheet_data(ts_file)
+        except Exception as exc:
+            logger.debug("Failed parsing auto-discovered testsheet %s: %s", ts_file, exc)
+    return None
+
+
 def embed_survey_ultrasound_into_pdf(
     pdf_path: Path | str,
     survey_root: Path | str | None,
-    package: SubstationTestsheetPackage | SubstationPackage | None = None,
+    package: SubstationTestsheetPackage | SubstationPackage | Any = None,
 ) -> int:
     """Retroactively embed ultrasound sound annotations into an existing deliverable PDF.
 
@@ -169,6 +213,7 @@ def embed_survey_ultrasound_into_pdf(
     Pre-flight unlinks any stale .tmp_sound_{pdf.name} in pdf_path.parent.
     Uses context-managed PyMuPDF session (with fitz.open(pdf_path) as doc:) to guarantee handle closure:
       - Caches discovered US measurements for survey_root.
+      - Auto-discovers testsheet data if package is None.
       - Iterates pages:
         - Finds "Sound clip" anchor using find_sound_clip_anchor(page) (centered in Column 2).
         - If found, extracts context using extract_page_equipment_context(page, package=package).
@@ -222,6 +267,9 @@ def embed_survey_ultrasound_into_pdf(
         )
         return 0
 
+    if package is None:
+        package = _auto_discover_testsheet_data(target_pdf)
+
     tmp_path = target_pdf.parent / f".tmp_sound_{target_pdf.name}"
 
     # Pre-flight: unlink any stale temp file
@@ -240,6 +288,7 @@ def embed_survey_ultrasound_into_pdf(
                     continue
 
                 page_ctx = extract_page_equipment_context(page, package=package)
+
                 wav_file = resolve_measurement_audio_for_page(
                     survey_path, us_measurements, page_ctx
                 )

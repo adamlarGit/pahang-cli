@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.2] - 2026-10-15
+
+### Fixed
+- **Full Report Switchgear Panel Sound Embedding & Workspace Seam Resolution (`src/workflows/full_report_postprocessing.py`, `src/postprocessing/sound_embedder.py`, `src/project/storage.py`, `src/workflows/us_audio.py`)**:
+  - Fixed switchgear panels in Full Report deliverables missing ultrasound audio annotations by resolving `TestsheetData` via `storage.get_substation_testsheet_path` and passing `package=ts_pkg` into `embed_survey_ultrasound_into_pdf`.
+  - Enhanced `TwoTierPanelMatchingPolicy` in `extract_page_equipment_context` to resolve equipment switchgear catalogs strictly in-memory from pre-hydrated models (`package.equipment`, `package.data.equipment`, `package.switchgears`), eliminating per-page on-the-fly workbook parsing and disk I/O.
+  - Added `get_substation_testsheet_path` method to `WorkspaceStorage` and `LocalWorkspaceStorage`, establishing an authoritative seam for testsheet workbook discovery and removing ad-hoc path slicing across workflows.
+  - Removed speculative sequential panel index tracking from `embed_survey_ultrasound_into_pdf`, keeping panel matching strictly deterministic via catalog feeder tags or Tier 2 directory matching.
+
 ## [1.26.1] - 2026-10-15
 
 ### Fixed

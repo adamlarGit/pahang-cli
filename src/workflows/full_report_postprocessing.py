@@ -752,12 +752,64 @@ class FullReportPostProcessingWorkflow:
 
                 survey_root = discover_ultratev_survey_dir(raw_dir)
                 if survey_root is not None and survey_root.exists():
-                    count = embed_survey_ultrasound_into_pdf(out_pdf, survey_root=survey_root)
+                    ts_pkg = self._resolve_testsheet_data_for_group(group, environment, testsheet_pdf_path=ts_pdf)
+                    count = embed_survey_ultrasound_into_pdf(out_pdf, survey_root=survey_root, package=ts_pkg)
                     logger.info("[FULL REPORT] Embedded %d ultrasound sounds into %s", count, out_pdf.name)
                 else:
                     logger.info("[FULL REPORT] No US+TEV raw data found for %s; skipping sound embedding", stem)
             except Exception as exc:
                 logger.warning("[WARN] Sound embedding failed for %s: %s; keeping original PDF", out_pdf.name, exc)
+
+    def _resolve_testsheet_data_for_group(
+        self,
+        group: PostProcessingTargetGroup,
+        environment: ProjectEnvironment,
+        testsheet_pdf_path: Path | None = None,
+    ) -> Any | None:
+        """Resolve TestsheetData for switchgear catalog matching during sound embedding."""
+        from src.testsheet.extractor import TestsheetExtractor
+
+        doc_p = group.primary_docx_path.resolve()
+        stem = group.stem
+        date_str = doc_p.parent.name
+        month = doc_p.parent.parent.name
+        station = doc_p.parent.parent.parent.name
+
+        pe_num = None
+        try:
+            pe_num = extract_numerical_prefix(stem)
+        except ValueError:
+            pass
+
+        # 1. Authoritative seam: Use workspace storage
+        xlsx_file = None
+        if pe_num is not None and hasattr(environment, "storage") and hasattr(environment.storage, "get_substation_testsheet_path"):
+            xlsx_file = environment.storage.get_substation_testsheet_path(
+                station, month, date_str, pe_num, stem=stem
+            )
+
+        # 2. Fallback to testsheet_pdf_path sibling directory if available
+        if xlsx_file is None and testsheet_pdf_path is not None and testsheet_pdf_path.exists():
+            ts_dir = testsheet_pdf_path.parent
+            if ts_dir.name.lower() in ("pdf", "processed_testsheet"):
+                ts_dir = ts_dir.parent
+            for candidate in (ts_dir, ts_dir / "processed_testsheet"):
+                if candidate.is_dir():
+                    for f in sorted(candidate.glob("*.xlsx")):
+                        if not f.name.startswith(("~$", ".")):
+                            if (pe_num is not None and str(pe_num) in f.stem) or (stem.upper() in f.stem.upper()):
+                                xlsx_file = f
+                                break
+                    if xlsx_file:
+                        break
+
+        if xlsx_file and xlsx_file.is_file():
+            try:
+                return TestsheetExtractor().extract_testsheet_data(xlsx_file)
+            except Exception as e:
+                logger.debug("Failed extracting testsheet data from %s: %s", xlsx_file, e)
+
+        return None
 
     def _establish_batch_session(self, explicit_session: Any) -> Any:
         """Establish single BatchComSession context across batch conversions."""
