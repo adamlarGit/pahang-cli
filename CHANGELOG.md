@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.26.0] - 2026-10-15
+## [1.26.1] - 2026-10-15
+
+### Fixed
+- **Ultrasound Sound Annotation Exact Icon Superimposition & Universal Transparency (`src/postprocessing/sound_embedder.py`)**:
+  - Enhanced `find_sound_clip_anchor` to discover the exact coordinates of Word's visible speaker icon image in Column 2 (`page.get_images()` and `page.get_image_rects(img[0])` where $180 \le x_0 \le 250$ pt and within $\pm 15$ pt of the `"Sound clip"` label) and place an 18x18 pt hit target directly superimposed on top of the visible icon.
+  - Implemented dynamic fallback to canonical Column 2 center coordinates ($c_x = 210.30$ pt, $c_y = (inst.y_0 + inst.y_1) / 2.0$) when rendering on synthetic or image-free test sheets.
+  - Added full opacity 0 transparency (`/CA 0.0`, `/Border [0 0 0]`, and an empty Form XObject appearance `/AP`) so PDF readers activate audio without rendering duplicate or misaligned visual boxes.
+  - Enhanced `IdempotentSoundEmbeddingPolicy` in `_find_existing_sound_annot` and `embed_sound_annotation` to detect existing sound annotations in that Column 2 row ($170 \le x_0 \le 270$ pt within $\pm 20$ pt) and seamlessly migrate legacy offset hit boxes in-place without duplicating annotations.
 
 ### Added
 - **Ultrasound Audio Embedding & In-Memory 16-Bit Conversion Engine (`src/postprocessing/sound_embedder.py`, `src/workflows/us_audio.py`, `docs/adr/0007-ultrasound-audio-embedding-and-conversion.md`, `CONTEXT.md`)**:

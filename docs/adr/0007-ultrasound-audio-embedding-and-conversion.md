@@ -34,13 +34,15 @@ The system implements an end-to-end automated ultrasound audio conversion and PD
   - Annotation Xref: `/Type /Annot /Subtype /Sound /Rect [...] /Sound <xref> 0 R /C [1, 0, 0] /Contents (Ultrasound Audio Recording)`.
 - **Indirect `/Annots` Resolution**: Safely resolves whether `page.xref` contains a direct `/Annots [...]` array or points to an indirect `/Annots <ref> 0 R` object, appending new sound annotations without corrupting existing drawing or link annotations.
 
-### 4. Template Anchor & Centering Policy (`SoundClipAnchorPolicy`)
+### 4. Template Anchor & Superimposition Policy (`SoundClipAnchorPolicy`)
 - Scans target PDF pages for `"Sound clip"` key text within inspection table cells (Row 31 of `swg-panel.docx` and `tx-hv-sides.docx`).
-- Places the speaker icon rectangle centered in Column 2 (`fitz.Rect(236.0, inst.y0 - 2, 254.0, inst.y1 + 2)`), vertically aligned with ultrasound measurement rows.
+- Detects the exact position of the visible speaker icon image embedded in Column 2 (`180 <= x <= 250` pt, aligned vertically within $\pm 15$ pt of the label) and centers an 18x18 pt hit target directly superimposed over the visible image (falling back to Column 2 center $c_x = 210.30$ pt if no image is present).
+- Configures full transparency (`/CA 0.0`, `/Border [0 0 0]`, and an empty Form XObject appearance `/AP`) so PDF viewers seamlessly activate audio upon clicking the visible Word document icon without rendering duplicate or misaligned visual boxes.
 
 ### 5. Idempotent Sound Embedding (`IdempotentSoundEmbeddingPolicy`)
-- Before creating a new annotation, inspects existing page annotations. If an existing sound annotation intersects the target anchor coordinates:
+- Before creating a new annotation, inspects existing page annotations. If an existing sound annotation exists in that row (intersecting or matching Column 2 within $\pm 20$ pt):
   - Updates the sound stream in-place via low-level xref replacement.
+  - Updates `/Rect`, `/CA 0.0`, `/Border [0 0 0]`, and `/AP` in-place, seamlessly migrating any legacy offset hit boxes.
   - Prevents duplicate stacked speaker icons and unreferenced xref table bloat during repeated post-processing runs.
 
 ### 6. Physical Compartment & Equipment Attribution Engines
