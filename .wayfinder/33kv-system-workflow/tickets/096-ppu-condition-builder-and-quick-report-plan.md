@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 Part of #90
 Specification: [spec.md](../spec.md)
 
@@ -8,7 +8,7 @@ Specification: [spec.md](../spec.md)
 
 **Blocked by:** #93, #94, #95
 
-**Status:** ready-for-agent
+**Status:** closed
 
 ## Detailed Design & Architecture
 
@@ -53,14 +53,14 @@ Specification: [spec.md](../spec.md)
 
 ## Acceptance Criteria Checklist
 
-- [ ] Implement `PpuSubstationConditionPairBuilderPolicy` in `src/quick_report/substation_condition.py` following the 33kV on-site layout (`SUBSTATION OVERVIEW`, `SWITCHGEAR 33kV/11kV`, `POWER TX1/2`, `LOCAL TX`, `CONTROL PANEL 33kV/11kV`, `NER`, `CABLE CELLAR`).
-- [ ] Connect `build_substation_condition_pairs` to dispatch to `PpuSubstationConditionPairBuilderPolicy` when `voltage_type == "33kV"`.
-- [ ] Update `QuickReportTransformer`, `CbmDefectPlanner`, `cbm_render.py`, and `cbm_summary.py` to iterate `equipment.switchgears` (plural) and display appropriate voltage classes.
-- [ ] Update `QuickReportTransformer._calculate_suffix()` / filename generator to format 2-digit prefixes (`f"{pe_number:02d}."`) for 33kV and 3-digit prefixes for 11kV.
-- [ ] Verify VI defect fetching strictly resolves against master ENGR workbook `QR03 VI`.
-- [ ] Add unit tests in `tests/test_quick_report_33kv.py` covering:
-  - [ ] PPU condition pair generation with dual-voltage switchgear, power transformers, and NER.
-  - [ ] SSU condition pair generation (0 TX, single-voltage switchgear).
-  - [ ] Dual-voltage CBM defect attribution and header rendering.
-  - [ ] 2-digit output filename generation.
-- [ ] Verify full test suite passes with 0 regressions.
+- [x] Implement `PpuSubstationConditionPairBuilderPolicy` in `src/quick_report/substation_condition.py` following the 33kV on-site layout (`SUBSTATION OVERVIEW`, `SWITCHGEAR 33kV/11kV`, `POWER TX1/2`, `LOCAL TX`, `CONTROL PANEL 33kV/11kV`, `NER`, `CABLE CELLAR`).
+- [x] Connect `build_substation_condition_pairs` to dispatch to `PpuSubstationConditionPairBuilderPolicy` when `voltage_type == "33kV"`.
+- [x] Update `QuickReportTransformer`, `CbmDefectPlanner`, `cbm_render.py`, and `cbm_summary.py` to iterate `equipment.switchgears` (plural) and display appropriate voltage classes.
+- [x] Update `QuickReportTransformer._calculate_suffix()` / filename generator to format 2-digit prefixes (`f"{pe_number:02d}."`) for 33kV and 3-digit prefixes for 11kV.
+- [x] Verify VI defect fetching strictly resolves against master ENGR workbook `QR03 VI`.
+- [x] Add unit tests in `tests/test_quick_report_33kv.py` covering:
+  - [x] PPU condition pair generation with dual-voltage switchgear, power transformers, and NER.
+  - [x] SSU condition pair generation (0 TX, single-voltage switchgear).
+  - [x] Dual-voltage CBM defect attribution and header rendering.
+  - [x] 2-digit output filename generation.
+- [x] Verify full test suite passes with 0 regressions.

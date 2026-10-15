@@ -116,12 +116,21 @@ class QuickReportTransformer:
         )
 
         suffix, suffix_parts = self._calculate_suffix(cbm_defects, vi_defects)
-        output_filename = f"{pe_number:03d}. {sanitized_name}{suffix}.docx"
+
+        voltage_type = getattr(environment, "voltage_type", None) or getattr(
+            getattr(environment, "metadata", None), "voltage_type", "11kV"
+        )
+        if voltage_type == "33kV":
+            output_filename = f"{pe_number:02d}. {sanitized_name}{suffix}.docx"
+        else:
+            output_filename = f"{pe_number:03d}. {sanitized_name}{suffix}.docx"
 
         output_dir = self._resolve_output_dir(environment, pkg)
         final_output_path = output_dir / output_filename
 
-        condition_pairs = tuple(self._build_substation_condition_pairs(pkg))
+        condition_pairs = tuple(
+            self._build_substation_condition_pairs(pkg, environment=environment)
+        )
 
         # Resolve required template paths
         front_page_template = environment.get_vi_front_page_template()
@@ -185,7 +194,10 @@ class QuickReportTransformer:
         return suffix_str, suffix_parts
 
     def _build_substation_condition_pairs(
-        self, pkg: SubstationTestsheetPackage | None = None
+        self,
+        pkg: SubstationTestsheetPackage | None = None,
+        environment: ProjectEnvironment | None = None,
+        voltage_type: str | None = None,
     ) -> list[tuple[str, str]]:
         """Build active 2-column pairs for the substation condition page."""
-        return build_substation_condition_pairs(pkg)
+        return build_substation_condition_pairs(pkg, environment=environment, voltage_type=voltage_type)

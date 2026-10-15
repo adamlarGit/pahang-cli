@@ -14,11 +14,196 @@ from docxcompose.composer import Composer as DocxComposer
 from docxtpl import DocxTemplate
 
 from src.quick_report.utils import clear_cell_text, set_cell_no_borders
-from src.testsheet.models import SubstationEquipmentPackage, SubstationTestsheetPackage
+from src.testsheet.models import (
+    PowerTransformerSpec,
+    SubstationEquipmentPackage,
+    SubstationTestsheetPackage,
+    SwitchgearSpec,
+    TransformerSpec,
+)
 
 
-def build_substation_condition_pairs(pkg: SubstationTestsheetPackage | None = None) -> list[tuple[str, str]]:
+class PpuSubstationConditionPairBuilderPolicy:
+    """Builder policy generating canonical 2-column condition photo pairs for 33kV PPU/SSU substations."""
+
+    @classmethod
+    def build(
+        cls,
+        pkg: SubstationTestsheetPackage | None = None,
+        *,
+        has_ner: bool | None = None,
+        has_control_panel: bool | None = None,
+        has_cable_cellar: bool | None = None,
+    ) -> list[tuple[str, str]]:
+        """Construct canonical 2-column condition photo slot pairs for 33kV PPU/SSU substations."""
+        if not pkg or not getattr(pkg, "data", None):
+            return [("SUBSTATION OVERVIEW", "SIGNBOARD")]
+
+        data = pkg.data
+        eq = getattr(data, "equipment", None)
+        if not isinstance(eq, SubstationEquipmentPackage):
+            eq = SubstationEquipmentPackage()
+
+        pairs: list[tuple[str, str]] = [("SUBSTATION OVERVIEW", "SIGNBOARD")]
+
+        # Determine switchgear presence
+        swg_33_present = False
+        swg_11_present = False
+
+        if len(eq.switchgears) == 1:
+            s0 = eq.switchgears[0]
+            text0 = f"{s0.switchgear_type} {s0.model} {s0.rating} {s0.serial_no}".upper()
+            has_11_hint = "11" in text0 or any(p.panel_feeder_no.upper().startswith("1K") for p in s0.panels)
+            has_33_hint = "33" in text0 or "GIS" in text0 or any(p.panel_feeder_no.upper().startswith(("3P", "3K", "3T")) for p in s0.panels)
+            if has_11_hint and not has_33_hint:
+                swg_11_present = True
+            else:
+                swg_33_present = True
+        elif len(eq.switchgears) >= 2:
+            swg_33_present = True
+            swg_11_present = True
+
+        # Page 1: Switchgear
+        if swg_33_present:
+            pairs.append(("SWITCHGEAR 33kV", "SWITCHGEAR 33kV NAMEPLATE"))
+        if swg_11_present:
+            pairs.append(("SWITCHGEAR 11kV", "SWITCHGEAR 11kV NAMEPLATE"))
+
+        # Page 2: Transformers
+        from src.testsheet.parsers.ppu import classify_transformer_rating
+
+        def _is_power_tx(tx: TransformerSpec) -> bool:
+            if isinstance(tx, PowerTransformerSpec):
+                return True
+            if tx.rating_kva:
+                try:
+                    return classify_transformer_rating(tx.rating_kva, tx_id=tx.tx_id)
+                except Exception:
+                    pass
+            return False
+
+        power_txs: list[TransformerSpec] = []
+        local_txs: list[TransformerSpec] = []
+
+        for tx in eq.transformers:
+            tx_id_upper = (tx.tx_id or "").upper()
+            if "LOCAL" in tx_id_upper:
+                local_txs.append(tx)
+            elif _is_power_tx(tx):
+                power_txs.append(tx)
+            else:
+                local_txs.append(tx)
+
+        # Power TX1 & TX2
+        if len(power_txs) >= 1:
+            pairs.append(("POWER TX1", "POWER TX1 NAMEPLATE"))
+        if len(power_txs) >= 2:
+            pairs.append(("POWER TX2", "POWER TX2 NAMEPLATE"))
+
+        # Local TX
+        if local_txs:
+            pairs.append(("LOCAL TX", "LOCAL TX NAMEPLATE"))
+
+        # Page 3: Feeder Pillar / LVDB
+        if eq.lvdb_specs:
+            first_lvdb = eq.lvdb_specs[0]
+            label = (
+                "FEEDER PILLAR"
+                if (first_lvdb.label or "").upper() == "FP"
+                or "FEEDER" in (first_lvdb.name or "").upper()
+                else "LVDB"
+            )
+            pairs.append((label, f"{label} NAMEPLATE"))
+
+        # Control Panel & NER
+        effective_has_cp = has_control_panel
+        if effective_has_cp is None:
+            effective_has_cp = getattr(eq, "has_control_panel", False) or (swg_33_present and swg_11_present)
+
+        effective_has_ner = has_ner
+        if effective_has_ner is None:
+            effective_has_ner = getattr(eq, "has_ner", False)
+            if not effective_has_ner and pkg and pkg.data:
+                for vf in getattr(pkg.data, "visual_findings", ()):
+                    v_desc = (vf.description or "").upper()
+                    if "NER" in v_desc or "NEUTRAL EARTHING" in v_desc:
+                        effective_has_ner = True
+                        break
+                if not effective_has_ner:
+                    for tx in eq.transformers:
+                        if "NER" in (tx.remarks or "").upper():
+                            effective_has_ner = True
+                            break
+
+        ner_unpaired = False
+        if swg_33_present and swg_11_present and effective_has_cp:
+            pairs.append(("CONTROL PANEL 33kV", "CONTROL PANEL 11kV"))
+            if effective_has_ner:
+                ner_unpaired = True
+        elif effective_has_cp and effective_has_ner:
+            pairs.append(("CONTROL PANEL", "NER"))
+        elif effective_has_cp:
+            pairs.append(("CONTROL PANEL", ""))
+        elif effective_has_ner:
+            ner_unpaired = True
+
+        # Fire Extinguisher
+        fe = getattr(eq, "fire_extinguisher", None)
+        if fe and (fe.has_fire_extinguisher or bool(fe.status) or bool(fe.expiry_date)):
+            pairs.append(("FIRE EXTINGUISHER", "FIRE EXTINGUISHER EXPIRY DATE"))
+
+        # Page 4: Unpaired NER & Cable Cellars
+        if ner_unpaired:
+            pairs.append(("NER", ""))
+
+        effective_has_cc = has_cable_cellar
+        if effective_has_cc is None:
+            effective_has_cc = getattr(eq, "has_cable_cellar", False)
+            if not effective_has_cc and (swg_33_present or swg_11_present):
+                for s in eq.switchgears:
+                    for p in s.panels:
+                        p_comb = f"{p.name} {p.panel_feeder_no}".upper()
+                        if "CELLAR" in p_comb:
+                            effective_has_cc = True
+                            break
+
+        if effective_has_cc:
+            if swg_33_present and swg_11_present:
+                pairs.append(("33kV CABLE CELLAR", "11kV CABLE CELLAR"))
+            elif swg_33_present:
+                pairs.append(("33kV CABLE CELLAR", ""))
+            elif swg_11_present:
+                pairs.append(("11kV CABLE CELLAR", ""))
+
+        return pairs
+
+
+def build_substation_condition_pairs(
+    pkg: SubstationTestsheetPackage | None = None,
+    environment: Any = None,
+    voltage_type: str | None = None,
+) -> list[tuple[str, str]]:
     """Build active 2-column pairs for the substation condition page based on substation technology and equipment inventory."""
+    eff_voltage = voltage_type or (
+        getattr(environment, "voltage_type", None)
+        or getattr(getattr(environment, "metadata", None), "voltage_type", None)
+    )
+
+    if eff_voltage is None and pkg and getattr(pkg, "data", None):
+        data = pkg.data
+        if getattr(data, "voltage_type", None) == "33kV":
+            eff_voltage = "33kV"
+        elif any(
+            "33KV" in str(s).upper()
+            for s in (data.substation_name_site, data.substation_name_erms)
+            if s
+        ):
+            eff_voltage = "33kV"
+        elif any(isinstance(t, PowerTransformerSpec) for t in getattr(data.equipment, "transformers", ())):
+            eff_voltage = "33kV"
+
+    if eff_voltage == "33kV":
+        return PpuSubstationConditionPairBuilderPolicy.build(pkg)
     if not pkg or not getattr(pkg, "data", None):
         return [("SUBSTATION OVERVIEW", "SIGNBOARD")]
 

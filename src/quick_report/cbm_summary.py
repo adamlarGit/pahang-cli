@@ -63,6 +63,50 @@ def format_summary_equipment(
 
     # 1. Switchgear family (RMU SF6, RMU OIL, VCB, MRMU, CABLE SWG, EARTHING, SWITCHGEAR, GIS)
     if any(k in eq_upper for k in ("RMU", "VCB", "SWG", "SWITCHGEAR", "GIS", "MRMU", "EARTHING")):
+        equipment_pkg = None
+        if pe_info:
+            for key in ("equipment_specs", "equipment_package", "equipment"):
+                val = pe_info.get(key)
+                if val is not None and hasattr(val, "switchgears"):
+                    equipment_pkg = val
+                    break
+
+        swg_spec = None
+        matched_panel = None
+        if equipment_pkg and equipment_pkg.switchgears:
+            from src.quick_report.cbm_render import _find_matching_switchgear_panel
+
+            all_panels = [p for s in equipment_pkg.switchgears for p in s.panels]
+            if raw_id:
+                matched_panel = _find_matching_switchgear_panel(all_panels, raw_id)
+            if matched_panel:
+                for s in equipment_pkg.switchgears:
+                    if matched_panel in s.panels:
+                        swg_spec = s
+                        break
+            if not swg_spec:
+                target_str = f"{equip} {raw_id} {record.hv_lv}".upper()
+                for s in equipment_pkg.switchgears:
+                    s_str = f"{s.switchgear_type} {s.model} {s.rating}".upper()
+                    if ("33KV" in target_str or "33" in target_str) and (
+                        "33KV" in s_str
+                        or "33" in s_str
+                        or any("3P" in p.panel_feeder_no.upper() for p in s.panels)
+                    ):
+                        swg_spec = s
+                        break
+                    elif ("11KV" in target_str or "11" in target_str) and (
+                        "11KV" in s_str
+                        or "11" in s_str
+                        or any("1K" in p.panel_feeder_no.upper() for p in s.panels)
+                    ):
+                        swg_spec = s
+                        break
+
+        if swg_spec and swg_spec.switchgear_type:
+            if equip.upper() in ("SWITCHGEAR", "SWG", "GIS", "VCB"):
+                equip = swg_spec.switchgear_type
+
         if raw_id:
             if " - " in raw_id:
                 p_feeder, p_name = raw_id.split(" - ", 1)
@@ -70,10 +114,11 @@ def format_summary_equipment(
                 p_name = p_name.strip()
                 p_feeder_line = p_feeder if p_feeder.upper().startswith("PANEL") else f"PANEL {p_feeder}"
                 return f"{equip}\n{p_feeder_line}\n{p_name}"
-            elif raw_id.upper().startswith("PANEL"):
-                return f"{equip}\n{raw_id}"
             else:
-                return f"{equip}\nPANEL {raw_id}"
+                p_feeder_line = raw_id if raw_id.upper().startswith("PANEL") else f"PANEL {raw_id}"
+                if matched_panel and matched_panel.name:
+                    return f"{equip}\n{p_feeder_line}\n{matched_panel.name}"
+                return f"{equip}\n{p_feeder_line}"
         return equip
 
     # 2. Transformer family (CABLE LTX/DTX, LTX/DTX, PTX, CABLE PTX, TRANSFORMER)
@@ -173,12 +218,67 @@ def prepare_tech_summary_rows(
             if norm_char not in ("-", "NORMAL"):
                 severity = norm_char
 
+        brand_val = (record.brand or "").strip()
+        model_val = (record.model or "").strip()
+        rating_val = (record.rating or "").strip()
+
+        # Attribute missing brand/model/rating from matched equipment
+        equipment_pkg = None
+        if pe_info:
+            for ep_key in ("equipment_specs", "equipment_package", "equipment"):
+                val = pe_info.get(ep_key)
+                if val is not None and hasattr(val, "switchgears"):
+                    equipment_pkg = val
+                    break
+
+        if equipment_pkg and any(
+            k in record.equipment.upper()
+            for k in ("RMU", "VCB", "SWG", "SWITCHGEAR", "GIS", "MRMU", "EARTHING")
+        ):
+            from src.quick_report.cbm_render import _find_matching_switchgear_panel
+
+            all_panels = [p for s in equipment_pkg.switchgears for p in s.panels]
+            matched_panel = _find_matching_switchgear_panel(
+                all_panels, record.equipment_id or record.equipment
+            )
+            swg_spec = None
+            if matched_panel:
+                for s in equipment_pkg.switchgears:
+                    if matched_panel in s.panels:
+                        swg_spec = s
+                        break
+            if not swg_spec:
+                target_str = f"{record.equipment} {record.equipment_id} {record.hv_lv}".upper()
+                for s in equipment_pkg.switchgears:
+                    s_str = f"{s.switchgear_type} {s.model} {s.rating}".upper()
+                    if ("33KV" in target_str or "33" in target_str) and (
+                        "33KV" in s_str
+                        or "33" in s_str
+                        or any("3P" in p.panel_feeder_no.upper() for p in s.panels)
+                    ):
+                        swg_spec = s
+                        break
+                    elif ("11KV" in target_str or "11" in target_str) and (
+                        "11KV" in s_str
+                        or "11" in s_str
+                        or any("1K" in p.panel_feeder_no.upper() for p in s.panels)
+                    ):
+                        swg_spec = s
+                        break
+            if swg_spec:
+                if not brand_val and swg_spec.manufacturer:
+                    brand_val = swg_spec.manufacturer.strip()
+                if not model_val and swg_spec.model:
+                    model_val = swg_spec.model.strip()
+                if not rating_val and swg_spec.rating:
+                    rating_val = swg_spec.rating.strip()
+
         if key not in paired:
             paired[key] = {
                 "equipment": equip,
-                "brand": (record.brand or "").strip(),
-                "model": (record.model or "").strip(),
-                "rating": (record.rating or "").strip(),
+                "brand": brand_val,
+                "model": model_val,
+                "rating": rating_val,
                 "defect_area": area_combined,
                 "remarks": remarks,
                 "ir_abs": ir_read_str,

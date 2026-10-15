@@ -59,7 +59,7 @@ graph TD
     T93["#93: Power Transformer domain model & TX parsing - Closed"]
     T94["#94: Contract 750-39 storage + Qr02Cba33kVTransaction - Closed"]
     T95["#95: Raw material sorting & US+TEV pairing - Closed"]
-    T96["#96: PPU condition builder & Quick Report plan"]
+    T96["#96: PPU condition builder & Quick Report plan - Closed"]
     T97["#97: 33kV Post-processing (Signatures, Diagonals, per-sheet PageSetup PDF export, stitching)"]
     T98["#98: 33kV Populate TOTAL PE from testsheets"]
     T99["#99: 33kV WhatsApp daily report generation"]
@@ -130,7 +130,7 @@ graph TD
 - **Delivers**: Substation directory stem matching for PPU/PMU/SSU naming conventions (in `src/project/storage.py`), IR/DG photo range copying from 33kV `RAW DATA` sheet, and US+TEV archive discovery for multi-board cubicles.
 
 ### #96: feat(33kv-quick-report): PPU/SSU condition photo pairing and multi-voltage Quick Report plan
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#96](https://github.com/adamlarGit/pahang-cli/issues/96)
 - **Blocked by**: #93, #94, #95
 - **Ticket File**: [tickets/096-ppu-condition-builder-and-quick-report-plan.md](./tickets/096-ppu-condition-builder-and-quick-report-plan.md)

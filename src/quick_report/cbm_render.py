@@ -323,6 +323,17 @@ def _find_matching_switchgear_panel(
         if t in (f"PANEL {p_no_str}", f"P{p_no_str}", f"PANEL {p_feeder}", f"P{p_feeder}"):
             return p
 
+    # 2b. Hyphen-separated token match (e.g. "GIS 33kV - PANEL 1P5")
+    if " - " in t:
+        parts = [part.strip() for part in t.split(" - ")]
+        for part in parts:
+            for p in panels:
+                p_no_str = str(p.panel_no)
+                p_feeder = p.panel_feeder_no.strip().upper()
+                p_name = p.name.strip().upper()
+                if part in (p_feeder, p_name, f"PANEL {p_no_str}", f"P{p_no_str}", f"PANEL {p_feeder}", f"P{p_feeder}"):
+                    return p
+
     # 3. Numeric digit extraction matching
     t_digits = re.findall(r"\d+", t)
     if t_digits:
@@ -585,15 +596,31 @@ def _build_swg_render_context(
 
     # Match switchgear for this panel if multiple switchgears exist
     if equipment_pkg and equipment_pkg.switchgears:
+        matched_from_panel = False
         for s in equipment_pkg.switchgears:
             if matched_panel and matched_panel in s.panels:
                 swg_spec = s
+                matched_from_panel = True
                 break
+        if not matched_from_panel:
+            target_str = f"{equipment} {panel_match_target} {record.hv_lv}".upper()
+            for s in equipment_pkg.switchgears:
+                s_str = f"{s.switchgear_type} {s.model} {s.rating}".upper()
+                if ("33KV" in target_str or "33" in target_str) and (
+                    "33KV" in s_str or "33" in s_str or any("3P" in p.panel_feeder_no.upper() for p in s.panels)
+                ):
+                    swg_spec = s
+                    break
+                elif ("11KV" in target_str or "11" in target_str) and (
+                    "11KV" in s_str or "11" in s_str or any("1K" in p.panel_feeder_no.upper() for p in s.panels)
+                ):
+                    swg_spec = s
+                    break
 
     # SWG header fields
     swg_manufacturer = (swg_spec.manufacturer if swg_spec and swg_spec.manufacturer else "") or _text_or_empty(record.brand)
-    swg_model = _text_or_empty(record.model) or (swg_spec.model if swg_spec else "")
-    swg_rating = _text_or_empty(record.rating) or (swg_spec.rating if swg_spec else "")
+    swg_model = (swg_spec.model if swg_spec and swg_spec.model else "") or _text_or_empty(record.model)
+    swg_rating = (swg_spec.rating if swg_spec and swg_spec.rating else "") or _text_or_empty(record.rating)
     swg_serial = swg_spec.serial_no if swg_spec else ""
     swg_type = (swg_spec.switchgear_type if swg_spec and swg_spec.switchgear_type else "") or equipment
 
@@ -622,8 +649,12 @@ def _build_swg_render_context(
 
     if " - " in panel_match_target:
         parts = panel_match_target.split(" - ", 1)
-        panel_linknumber = parts[0].strip()
-        panel_name = parts[1].strip()
+        if parts[0].strip().upper().startswith(("GIS", "VCB", "SWG", "SWITCHGEAR", "RMU")):
+            panel_linknumber = parts[1].strip()
+            panel_name = matched_panel.name if matched_panel and matched_panel.name else parts[1].strip()
+        else:
+            panel_linknumber = parts[0].strip()
+            panel_name = parts[1].strip()
     else:
         panel_name = panel_match_target
         panel_linknumber = panel_match_target

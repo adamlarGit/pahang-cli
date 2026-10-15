@@ -253,6 +253,9 @@ class SubstationEquipmentPackage:
     has_rtu: bool = False
     has_sf6: bool = False
     has_efi: bool = False
+    has_ner: bool = False
+    has_control_panel: bool = False
+    has_cable_cellar: bool = False
 
     @property
     def switchgear(self) -> SwitchgearSpec:
