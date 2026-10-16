@@ -150,20 +150,38 @@ def extract_page_equipment_context(
         )
         if m_tier1:
             panel_no = int(m_tier1.group(1))
-        elif package is not None:
-            # Tier 2: Check package switchgear panel catalog fallback
-            eq = getattr(package, "equipment", package)
-            swgs = getattr(eq, "switchgears", ())
-            if swgs:
-                primary_swg = swgs[0]
-                for p in getattr(primary_swg, "panels", ()):
-                    feeder_tag = getattr(p, "panel_feeder_no", "") or ""
-                    p_name = getattr(p, "name", "") or ""
-                    if (feeder_tag and feeder_tag.strip().upper() == raw_panel_no.upper()) or (
-                        panel_name and p_name and p_name.strip().upper() == panel_name.upper()
-                    ):
-                        panel_no = getattr(p, "panel_no", None)
-                        break
+
+    if panel_no is None and package is not None:
+        # Tier 2: Check package switchgear panel catalog fallback
+        eq = getattr(package, "equipment", None)
+        if eq is None and hasattr(package, "data") and getattr(package, "data", None) is not None:
+            eq = getattr(package.data, "equipment", None)
+        elif eq is None and hasattr(package, "switchgears"):
+            eq = package
+
+        swgs = getattr(eq, "switchgears", ()) if eq is not None else ()
+        clean_raw_panel = raw_panel_no.strip().upper()
+        clean_panel_name = panel_name.strip().upper()
+
+        for swg in swgs:
+            for p in getattr(swg, "panels", ()):
+                feeder_tag = (getattr(p, "panel_feeder_no", "") or "").strip().upper()
+                p_name = (getattr(p, "name", "") or "").strip().upper()
+                matched = False
+                if feeder_tag and clean_raw_panel and feeder_tag == clean_raw_panel:
+                    matched = True
+                elif feeder_tag and clean_panel_name and feeder_tag == clean_panel_name:
+                    matched = True
+                elif p_name and clean_panel_name and p_name == clean_panel_name:
+                    matched = True
+                elif p_name and clean_raw_panel and p_name == clean_raw_panel:
+                    matched = True
+
+                if matched:
+                    panel_no = getattr(p, "panel_no", None)
+                    break
+            if panel_no is not None:
+                break
 
     return {
         "panel_no": panel_no,

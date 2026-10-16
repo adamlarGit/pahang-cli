@@ -268,6 +268,17 @@ class WorkspaceStorage(ABC):
     ) -> Path | None:
         """Return the RAW DATA directory path for a specific substation package."""
 
+    @abstractmethod
+    def get_substation_testsheet_path(
+        self,
+        station: str,
+        month: str | None,
+        date_str: str | None,
+        substation_number: int,
+        stem: str = "",
+    ) -> Path | None:
+        """Return the testsheet (.xlsx) path for a specific substation package."""
+
 
 class LocalWorkspaceStorage(WorkspaceStorage):
     """Workspace storage resolved on the local filesystem."""
@@ -666,6 +677,49 @@ class LocalWorkspaceStorage(WorkspaceStorage):
                     or (child / "DG").exists()
                 ):
                     return child
+
+        return None
+
+    def get_substation_testsheet_path(
+        self,
+        station: str,
+        month: str | None,
+        date_str: str | None,
+        substation_number: int,
+        stem: str = "",
+    ) -> Path | None:
+        """Resolve testsheet (.xlsx) workbook for a substation package across candidate directories."""
+        ts_root = self.get_testsheet_dir()
+        month_folder = format_month_folder(month) or format_month_folder(date_str) or "01. JANUARY"
+
+        candidate_dirs = [
+            ts_root / (station or "UNASSIGNED") / month_folder / (date_str or "01-01-2026"),
+            ts_root / (station or "UNASSIGNED") / (date_str or "01-01-2026"),
+            ts_root / (date_str or "01-01-2026"),
+            ts_root / (station or "UNASSIGNED") / month_folder / (date_str or "01-01-2026") / "processed_testsheet",
+        ]
+
+        clean_stem = stem.strip().upper()
+
+        for d in candidate_dirs:
+            if not d.is_dir():
+                continue
+            for f in sorted(d.glob("*.xlsx")):
+                if f.name.startswith(("~$", ".")):
+                    continue
+                matched = False
+                try:
+                    f_num = extract_numerical_prefix(f.stem)
+                    if f_num == substation_number:
+                        matched = True
+                except ValueError:
+                    pass
+
+                if not matched and clean_stem and (clean_stem in f.stem.upper() or f.stem.upper() in clean_stem):
+                    matched = True
+
+                if matched:
+                    return f
 
         return None
 
