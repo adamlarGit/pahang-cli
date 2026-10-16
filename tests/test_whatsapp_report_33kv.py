@@ -37,17 +37,17 @@ from src.workflows.whatsapp import (
 
 
 def _create_33kv_total_pe(total_pe_path: Path) -> None:
-    """Create synthetic 33kV TOTAL PE workbook with DataCycle1."""
+    """Create synthetic 33kV TOTAL PE workbook with DataCycle1 matching production schema."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "DataCycle1"
     ws.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
     ws.append([1, "CGBG/PPU/G00001", "PPU APMM 33/11kV", datetime(2026, 10, 7), "PPU", "W1616898", "FULL"])
-    ws.append([2, "CGBG/SSU/G00002", "SSU LYNAS 33kV", datetime(2026, 10, 7), "SSU", "W1616922", "FULL"])
-    ws.append([3, "CGBG/SSU/G00003", "SSU FERRO MANGANESE 33kV", datetime(2026, 10, 7), "SSU", "W1616924", "FULL"])
-    ws.append([4, "CKTN/SSU/G00004", "SSU KIIP (SSU CAMEL POWER) 33kV", datetime(2026, 10, 7), "SSU", "W1616956", "FULL"])
+    ws.append([2, "CKTN/SSU/G00006", "SSU KIIP (SSU CAMEL POWER) 33kV", datetime(2026, 10, 7), "SSU", "W1616956", "FULL"])
+    ws.append([3, "CGBG/SSU/G00003", "SSU LYNAS 33kV", datetime(2026, 10, 7), "SSU", "W1616922", "FULL"])
+    ws.append([4, "CGBG/SSU/G00005", "SSU FERRO MANGANESE 33kV", datetime(2026, 10, 7), "SSU", "W1616924", "FULL"])
     # Row with float PE number and missing WO
-    ws.append([5.0, "CGBG/SSU/G00005", "SSU KPC GEBENG 33kV", datetime(2026, 10, 8), "SSU", None, "FULL"])
+    ws.append([5.0, "CGBG/SSU/G00006", "SSU KPC GEBENG 33kV", datetime(2026, 10, 8), "SSU", None, "FULL"])
     wb.save(total_pe_path)
     wb.close()
 
@@ -68,6 +68,13 @@ def test_qualifying_docx_pattern_internal_parentheses() -> None:
     assert m2.group(2) == "SSU KIIP (SSU CAMEL POWER) 33kV"
     assert m2.group(3) is None
 
+    # Multiple parenthesized tokens in name with defect suffix
+    m_nested = QUALIFYING_DOCX_PATTERN.match("02. SSU KIIP (SSU CAMEL POWER) (PHASE 1) (VI).docx")
+    assert m_nested is not None
+    assert m_nested.group(1) == "02"
+    assert m_nested.group(2) == "SSU KIIP (SSU CAMEL POWER) (PHASE 1)"
+    assert m_nested.group(3) == "VI"
+
     # Multi-technology defect suffix
     m3 = QUALIFYING_DOCX_PATTERN.match("01. PPU APMM 33/11kV (US+VI).docx")
     assert m3 is not None
@@ -81,6 +88,10 @@ def test_qualifying_docx_pattern_internal_parentheses() -> None:
     assert m4.group(2) == "SSU FERRO MANGANESE 33kV"
     assert m4.group(3) == "IR+VI"
 
+    m_all = QUALIFYING_DOCX_PATTERN.match("04. SSU FERRO MANGANESE 33kV (IR+US+TEV+VI).docx")
+    assert m_all is not None
+    assert m_all.group(3) == "IR+US+TEV+VI"
+
     # Non-docx files should not match
     assert QUALIFYING_DOCX_PATTERN.match("01. PPU APMM.pdf") is None
     assert QUALIFYING_DOCX_PATTERN.match("desktop.ini") is None
@@ -91,17 +102,17 @@ def test_cross_station_date_folder_discovery_and_sorting(tmp_path: Path) -> None
     qr_dir = tmp_path / "QUICK REPORT"
     date_str = "07-10-2026"
     
-    # Station 1: GEBENG (PE 1, 3, 2)
+    # Interleaved multi-station layout: GEBENG (PE 1, 3, 4) and KUANTAN (PE 2)
     gebeng_dir = qr_dir / "GEBENG" / "10. OCTOBER" / date_str
     gebeng_dir.mkdir(parents=True)
     (gebeng_dir / "01. PPU APMM 33-11kV (VI).docx").write_bytes(b"dummy")
-    (gebeng_dir / "03. SSU FERRO MANGANESE 33kV (VI).docx").write_bytes(b"dummy")
-    (gebeng_dir / "02. SSU LYNAS 33kV (VI).docx").write_bytes(b"dummy")
+    (gebeng_dir / "04. SSU FERRO MANGANESE 33kV (VI).docx").write_bytes(b"dummy")
+    (gebeng_dir / "03. SSU LYNAS 33kV (VI).docx").write_bytes(b"dummy")
 
-    # Station 2: KUANTAN (PE 4)
+    # Station 2: KUANTAN (PE 2)
     kuantan_dir = qr_dir / "KUANTAN" / "10. OCTOBER" / date_str
     kuantan_dir.mkdir(parents=True)
-    (kuantan_dir / "04. SSU KIIP (SSU CAMEL POWER) 33kV (VI).docx").write_bytes(b"dummy")
+    (kuantan_dir / "02. SSU KIIP (SSU CAMEL POWER) 33kV (VI).docx").write_bytes(b"dummy")
 
     # Other date: should be excluded
     other_date_dir = qr_dir / "GEBENG" / "10. OCTOBER" / "08-10-2026"
@@ -140,31 +151,36 @@ def test_cross_station_date_folder_discovery_and_sorting(tmp_path: Path) -> None
     request = WhatsAppReportRequest(report_dir=gebeng_dir)
     raw = extractor.extract(env, request)
 
-    # 4 files discovered across GEBENG and KUANTAN, 08-10-2026 excluded
+    # 4 files discovered across GEBENG and KUANTAN, 08-10-2026 excluded, sorted by PE integer
     assert len(raw.substation_docx_files) == 4
     file_names = [p.name for p in raw.substation_docx_files]
     assert file_names == [
         "01. PPU APMM 33-11kV (VI).docx",
-        "02. SSU LYNAS 33kV (VI).docx",
-        "03. SSU FERRO MANGANESE 33kV (VI).docx",
-        "04. SSU KIIP (SSU CAMEL POWER) 33kV (VI).docx",
+        "02. SSU KIIP (SSU CAMEL POWER) 33kV (VI).docx",
+        "03. SSU LYNAS 33kV (VI).docx",
+        "04. SSU FERRO MANGANESE 33kV (VI).docx",
     ]
     assert raw.station_hints[raw.substation_docx_files[0]] == "GEBENG"
-    assert raw.station_hints[raw.substation_docx_files[3]] == "KUANTAN"
+    assert raw.station_hints[raw.substation_docx_files[1]] == "KUANTAN"
+    assert raw.station_hints[raw.substation_docx_files[2]] == "GEBENG"
+    assert raw.station_hints[raw.substation_docx_files[3]] == "GEBENG"
 
 
 def test_whatsapp_filter_33kv() -> None:
-    """Verify WhatsAppReportFilter extracts PE integer, WONUM, and defect suffix."""
+    """Verify WhatsAppReportFilter extracts PE integer, WONUM, defect suffix, handles non-defect parens and date fallback."""
     df = pd.DataFrame([
         {"PE NO": 1, "SUBSTATION NAME": "PPU APMM", "WO": "W1616898", "DATE": datetime(2026, 10, 7), "FL NUMBER": "CGBG/PPU/G00001"},
         {"PE NO": "2.0", "SUBSTATION NAME": "SSU LYNAS", "WO": 40012345.0, "DATE": datetime(2026, 10, 7), "FL NUMBER": "CGBG/SSU/G00002"},
         {"PE NO": 3, "SUBSTATION NAME": "SSU FERRO", "WO": None, "DATE": datetime(2026, 10, 7), "FL NUMBER": "CGBG/SSU/G00003"},
+        # PE 4 has unpopulated DATE in TOTAL PE, should fallback to folder_date
+        {"PE NO": 4, "SUBSTATION NAME": None, "WO": "W1616956", "DATE": None, "FL NUMBER": "CKTN/SSU/G00004"},
     ])
     raw = WhatsAppRawTuple(
         substation_docx_files=[
             Path("01. PPU APMM (VI).docx"),
             Path("02. SSU LYNAS (US+VI).docx"),
             Path("03. SSU FERRO.docx"),
+            Path("04. SSU KULIM (OLD).docx"),  # Non-defect trailing parens
         ],
         total_pe_df=df,
         resources=WhatsAppReportResources(
@@ -172,20 +188,22 @@ def test_whatsapp_filter_33kv() -> None:
             save_dir=Path("/save"),
             template_path=Path("/template.docx"),
             total_pe_path=Path("/total_pe.xlsx"),
-            station_mapping={"CGBG": "GEBENG"},
+            station_mapping={"CGBG": "GEBENG", "CKTN": "KUANTAN"},
             voltage_type="33kV",
         ),
         station_hints={
             Path("01. PPU APMM (VI).docx"): "GEBENG",
             Path("02. SSU LYNAS (US+VI).docx"): "GEBENG",
             Path("03. SSU FERRO.docx"): "GEBENG",
+            Path("04. SSU KULIM (OLD).docx"): "KUANTAN",
         },
+        folder_date="07-10-2026",
     )
 
     stage = WhatsAppReportFilter()
     targets = stage.filter(raw)
 
-    assert len(targets) == 3
+    assert len(targets) == 4
     # PE 1
     assert targets[0].substation_number == 1
     assert targets[0].substation_name == "PPU APMM"
@@ -203,9 +221,17 @@ def test_whatsapp_filter_33kv() -> None:
     assert targets[2].defect == "-"
     assert targets[2].msms == "-"
 
+    # PE 4: (OLD) is not a defect -> retained in substation name, defect="-", date falls back to folder_date
+    assert targets[3].substation_number == 4
+    assert targets[3].substation_name == "SSU KULIM (OLD)"
+    assert targets[3].defect == "-"
+    assert targets[3].raw_date == "07-10-2026"
+    assert targets[3].station == "KUANTAN"
+
 
 def test_whatsapp_transformer_multi_station_grouping_and_links() -> None:
-    """Verify multi-station grouping header, subheadings, continuous indexing, and 33kV links."""
+    """Verify multi-station grouping header, subheadings, continuous indexing, and 33kV links even with interleaved targets."""
+    # Interleaved input: PE 1 (GEBENG), PE 2 (KUANTAN), PE 3 (GEBENG), PE 4 (GEBENG)
     targets = [
         WhatsAppTargetEntity(
             substation_number=1,
@@ -218,6 +244,15 @@ def test_whatsapp_transformer_multi_station_grouping_and_links() -> None:
         ),
         WhatsAppTargetEntity(
             substation_number=2,
+            substation_name="SSU KIIP (SSU CAMEL POWER) 33kV",
+            defect="VI",
+            msms="W1616956",
+            raw_date=datetime(2026, 10, 7),
+            fl_number="CKTN/SSU/G00004",
+            station="KUANTAN",
+        ),
+        WhatsAppTargetEntity(
+            substation_number=3,
             substation_name="SSU LYNAS 33kV",
             defect="VI",
             msms="W1616922",
@@ -226,13 +261,13 @@ def test_whatsapp_transformer_multi_station_grouping_and_links() -> None:
             station="GEBENG",
         ),
         WhatsAppTargetEntity(
-            substation_number=3,
-            substation_name="SSU KIIP (SSU CAMEL POWER) 33kV",
+            substation_number=4,
+            substation_name="SSU FERRO MANGANESE 33kV",
             defect="VI",
-            msms="W1616956",
+            msms="W1616924",
             raw_date=datetime(2026, 10, 7),
-            fl_number="CKTN/SSU/G00004",
-            station="KUANTAN",
+            fl_number="CGBG/SSU/G00003",
+            station="GEBENG",
         ),
     ]
 
@@ -260,15 +295,32 @@ def test_whatsapp_transformer_multi_station_grouping_and_links() -> None:
     assert ctx["link_laporan"] == WHATSAPP_LINKS_33KV["laporan"]
     assert ctx["link_engr"] == WHATSAPP_LINKS_33KV["engr"]
 
-    # Continuous 1-based sequential numbering
+    # Verify grouping: all GEBENG items grouped together first (items 1, 2, 3), then KUANTAN (item 4)
     items = ctx["items"]
-    assert len(items) == 3
+    assert len(items) == 4
+    # Item 1: GEBENG (PE 1)
     assert items[0]["index"] == 1
+    assert items[0]["name"] == "PPU APMM 33/11kV"
     assert items[0]["station_header"] == "GEBENG"
+    # Item 2: GEBENG (PE 3)
     assert items[1]["index"] == 2
+    assert items[1]["name"] == "SSU LYNAS 33kV"
     assert items[1]["station_header"] is None
+    # Item 3: GEBENG (PE 4)
     assert items[2]["index"] == 3
-    assert items[2]["station_header"] == "KUANTAN"
+    assert items[2]["name"] == "SSU FERRO MANGANESE 33kV"
+    assert items[2]["station_header"] is None
+    # Item 4: KUANTAN (PE 2)
+    assert items[3]["index"] == 4
+    assert items[3]["name"] == "SSU KIIP (SSU CAMEL POWER) 33kV"
+    assert items[3]["station_header"] == "KUANTAN"
+
+    # Verify station_groups structure
+    assert len(ctx["station_groups"]) == 2
+    assert ctx["station_groups"][0]["station"] == "GEBENG"
+    assert len(ctx["station_groups"][0]["items"]) == 3
+    assert ctx["station_groups"][1]["station"] == "KUANTAN"
+    assert len(ctx["station_groups"][1]["items"]) == 1
 
 
 def test_whatsapp_transformer_single_station_no_subheadings() -> None:
@@ -426,7 +478,7 @@ def test_e2e_generate_whatsapp_report_33kv(tmp_path: Path) -> None:
     python_dir = root_path / "PYTHON"
     target_date = "07-10-2026"
 
-    # Multi-station layout: GEBENG (PE 1, 2, 3) and KUANTAN (PE 4)
+    # Multi-station layout with interleaved PE numbers: GEBENG (PE 1, 3, 4) and KUANTAN (PE 2)
     gebeng_dir = qr_dir / "GEBENG" / "10. OCTOBER" / target_date
     kuantan_dir = qr_dir / "KUANTAN" / "10. OCTOBER" / target_date
     gebeng_dir.mkdir(parents=True)
@@ -434,9 +486,9 @@ def test_e2e_generate_whatsapp_report_33kv(tmp_path: Path) -> None:
     python_dir.mkdir(parents=True)
 
     (gebeng_dir / "01. PPU APMM 33-11kV (VI).docx").write_bytes(b"dummy")
-    (gebeng_dir / "02. SSU LYNAS 33kV (VI).docx").write_bytes(b"dummy")
-    (gebeng_dir / "03. SSU FERRO MANGANESE 33kV (VI).docx").write_bytes(b"dummy")
-    (kuantan_dir / "04. SSU KIIP (SSU CAMEL POWER) 33kV (VI).docx").write_bytes(b"dummy")
+    (gebeng_dir / "03. SSU LYNAS 33kV (VI).docx").write_bytes(b"dummy")
+    (gebeng_dir / "04. SSU FERRO MANGANESE 33kV (VI).docx").write_bytes(b"dummy")
+    (kuantan_dir / "02. SSU KIIP (SSU CAMEL POWER) 33kV (VI).docx").write_bytes(b"dummy")
 
     total_pe_path = python_dir / "TOTAL PE.xlsx"
     _create_33kv_total_pe(total_pe_path)
@@ -487,6 +539,8 @@ def test_e2e_generate_whatsapp_report_33kv(tmp_path: Path) -> None:
     assert "PENYELIA : *ZULHUSNI*" in doc_text
 
     # Grouping subheadings and continuous sequential numbering
+    assert doc_text.count("*GEBENG*") == 1
+    assert doc_text.count("*KUANTAN*") == 1
     assert "*GEBENG*" in doc_text
     assert "1. PPU APMM 33/11kV" in doc_text
     assert "2. SSU LYNAS 33kV" in doc_text
@@ -504,3 +558,68 @@ def test_e2e_generate_whatsapp_report_33kv(tmp_path: Path) -> None:
     assert WHATSAPP_LINKS_33KV["laporan"] in doc_text
     assert "Link ENGR:" in doc_text
     assert WHATSAPP_LINKS_33KV["engr"] in doc_text
+
+
+def test_whatsapp_date_normalization() -> None:
+    """Verify _normalize_date_str correctly normalizes date strings with slashes, dashes, backslashes, and directory paths."""
+    assert WhatsAppReportPreflightGuard._normalize_date_str("07/10/2026") == "07-10-2026"
+    assert WhatsAppReportPreflightGuard._normalize_date_str(r"07\10\2026") == "07-10-2026"
+    assert WhatsAppReportPreflightGuard._normalize_date_str(Path("07/10/2026")) == "07-10-2026"
+    assert WhatsAppReportPreflightGuard._normalize_date_str("07-10-2026") == "07-10-2026"
+    assert WhatsAppReportPreflightGuard._normalize_date_str("QUICK REPORT/GEBENG/10. OCTOBER/07-10-2026") == "07-10-2026"
+    assert WhatsAppReportPreflightGuard._normalize_date_str("C:/path/to/07-10-2026") == "07-10-2026"
+
+
+def test_whatsapp_url_xml_escaping_idempotent(tmp_path: Path) -> None:
+    """Verify WhatsAppReportLoader handles XML entity escaping idempotently without double-escaping."""
+    template_path = tmp_path / "template.docx"
+    doc = docx.Document()
+    doc.add_paragraph("Laporan: {{link_laporan}}")
+    doc.add_paragraph("ENGR: {{link_engr}}")
+    doc.save(template_path)
+
+    save_dir = tmp_path / "save"
+    loader = WhatsAppReportLoader()
+
+    # Pass pre-escaped and unescaped URLs
+    plan = WhatsAppReportPlan(
+        template_path=template_path,
+        save_dir=save_dir,
+        context={
+            "link_laporan": "https://test.com/view?a=1&amp;b=2",
+            "link_engr": "https://test.com/view?c=3&d=4",
+        },
+        substations_count=0,
+        station_name="TEST",
+        report_date="07/10/2026",
+        voltage_type="33kV",
+    )
+    out_path = loader.load(plan)
+    rendered_doc = docx.Document(out_path)
+    full_text = "\n".join(p.text for p in rendered_doc.paragraphs)
+
+    assert "https://test.com/view?a=1&b=2" in full_text
+    assert "&amp;" not in full_text
+    assert "https://test.com/view?c=3&d=4" in full_text
+
+
+def test_whatsapp_station_resolution_all_districts(tmp_path: Path) -> None:
+    """Verify discovery extracts station names for all Pahang districts including Cameron Highland and Lipis alias."""
+    qr_dir = tmp_path / "QUICK REPORT"
+    date_str = "16-10-2026"
+
+    chl_dir = qr_dir / "CAMERON HIGHLAND" / "10. OCTOBER" / date_str
+    chl_dir.mkdir(parents=True)
+    (chl_dir / "26. MINI PPU TELANOK 33-11kV (US+VI).docx").write_bytes(b"dummy")
+
+    lipis_dir = qr_dir / "LIPIS" / "10. OCTOBER" / date_str
+    lipis_dir.mkdir(parents=True)
+    (lipis_dir / "27. PMU BENTA 132-11kV (VI).docx").write_bytes(b"dummy")
+
+    extractor = WhatsAppReportExtractor()
+    files, hints = extractor._scan_qualifying_docx_files_33kv(qr_dir, date_str)
+
+    assert len(files) == 2
+    assert hints[files[0]] == "CAMERON HIGHLAND"
+    assert hints[files[1]] == "KUALA LIPIS"
+

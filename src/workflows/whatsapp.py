@@ -21,6 +21,11 @@ QUALIFYING_DOCX_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+DEFECT_SUFFIX_PATTERN = re.compile(
+    r"^(?:IR|US|TEV|VI)(?:\+(?:IR|US|TEV|VI))*$",
+    re.IGNORECASE,
+)
+
 WHATSAPP_ACTIVITY_11KV = "CBM 11kV"
 WHATSAPP_ACTIVITY_33KV = "CBM 33KV"
 
@@ -62,6 +67,7 @@ class WhatsAppRawTuple:
     total_pe_df: pd.DataFrame
     resources: WhatsAppReportResources
     station_hints: dict[Path, str] = field(default_factory=dict)
+    folder_date: str | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +99,15 @@ class WhatsAppReportPlan:
 class WhatsAppReportPreflightGuard:
     """Pre-flight validation stage for WhatsApp report workflow."""
 
+    @staticmethod
+    def _normalize_date_str(date_input: str) -> str:
+        s = str(date_input).strip()
+        m = re.match(r"^(\d{2})[/\\-](\d{2})[/\\-](\d{4})$", s)
+        if m:
+            return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+        p = Path(s)
+        return p.name.replace("/", "-")
+
     def validate(self, env: ProjectEnvironment, request: WhatsAppReportRequest) -> None:
         report_dir = request.report_dir
         if report_dir is None:
@@ -103,7 +118,7 @@ class WhatsAppReportPreflightGuard:
         voltage_type = getattr(env, "voltage_type", "11kV") or "11kV"
 
         if voltage_type == "33kV":
-            target_date = report_dir_path.name
+            target_date = self._normalize_date_str(str(report_dir))
             matching_files = self._find_qualifying_33kv(
                 resources.quick_report_dir, target_date, report_dir_path
             )
@@ -151,13 +166,24 @@ class WhatsAppReportPreflightGuard:
         self, quick_report_dir: Path, target_date: str, provided_dir: Path | None = None
     ) -> list[Path]:
         clean_date = target_date.replace("/", "-")
-        candidate_dirs = set()
-        if provided_dir and provided_dir.exists() and provided_dir.is_dir():
-            candidate_dirs.add(provided_dir)
+        candidate_dirs: list[Path] = []
+        seen_dirs: set[Path] = set()
+
+        if provided_dir:
+            p_dir = Path(provided_dir)
+            if p_dir.exists() and p_dir.is_dir():
+                resolved = p_dir.resolve()
+                if resolved not in seen_dirs:
+                    seen_dirs.add(resolved)
+                    candidate_dirs.append(p_dir)
+
         if quick_report_dir.exists():
             for d in quick_report_dir.rglob(clean_date):
                 if d.is_dir():
-                    candidate_dirs.add(d)
+                    resolved = d.resolve()
+                    if resolved not in seen_dirs:
+                        seen_dirs.add(resolved)
+                        candidate_dirs.append(d)
 
         qualifying = []
         for d in candidate_dirs:
@@ -177,13 +203,19 @@ class WhatsAppReportExtractor:
         voltage_type = getattr(env, "voltage_type", "11kV") or "11kV"
 
         if voltage_type == "33kV":
-            target_date = report_dir_path.name
+            target_date = WhatsAppReportPreflightGuard._normalize_date_str(str(request.report_dir))
             substation_docx_files, station_hints = self._scan_qualifying_docx_files_33kv(
                 resources.quick_report_dir, target_date, report_dir_path
             )
+            folder_date = target_date
         else:
             substation_docx_files = self._scan_qualifying_docx_files(report_dir_path)
             station_hints = {}
+            folder_date = (
+                report_dir_path.name
+                if re.match(r"^\d{2}[/-]\d{2}[/-]\d{4}$", report_dir_path.name)
+                else None
+            )
 
         total_pe_df = self._load_total_pe_dataframe(resources.total_pe_path)
 
@@ -192,6 +224,7 @@ class WhatsAppReportExtractor:
             total_pe_df=total_pe_df,
             resources=resources,
             station_hints=station_hints,
+            folder_date=folder_date,
         )
 
     def _scan_qualifying_docx_files(self, report_dir_path: Path) -> list[Path]:
@@ -210,37 +243,54 @@ class WhatsAppReportExtractor:
         self, quick_report_dir: Path, target_date: str, provided_dir: Path | None = None
     ) -> tuple[list[Path], dict[Path, str]]:
         clean_date = target_date.replace("/", "-")
-        candidate_dirs = set()
-        if provided_dir and provided_dir.exists() and provided_dir.is_dir():
-            candidate_dirs.add(provided_dir)
+        candidate_dirs: list[Path] = []
+        seen_dirs: set[Path] = set()
+
+        if provided_dir:
+            p_dir = Path(provided_dir)
+            if p_dir.exists() and p_dir.is_dir():
+                resolved = p_dir.resolve()
+                if resolved not in seen_dirs:
+                    seen_dirs.add(resolved)
+                    candidate_dirs.append(p_dir)
+
         if quick_report_dir.exists():
             for d in quick_report_dir.rglob(clean_date):
                 if d.is_dir():
-                    candidate_dirs.add(d)
+                    resolved = d.resolve()
+                    if resolved not in seen_dirs:
+                        seen_dirs.add(resolved)
+                        candidate_dirs.append(d)
 
         discovered: list[tuple[int, Path, str]] = []
         station_hints: dict[Path, str] = {}
         seen_paths: set[Path] = set()
 
+        known_stations = {
+            "GEBENG", "KUANTAN", "MARAN", "TEMERLOH", "PEKAN",
+            "ROMPIN", "BENTONG", "RAUB", "JERANTUT", "KUALA LIPIS",
+            "LIPIS", "JENGKA", "CAMERON HIGHLAND", "MUADZAM SHAH", "TRIANG",
+        }
+
         for d in candidate_dirs:
             station_name = ""
-            if quick_report_dir.exists() and d.is_relative_to(quick_report_dir):
-                rel = d.relative_to(quick_report_dir)
-                if len(rel.parts) > 1:
-                    station_name = rel.parts[0]
+            try:
+                if quick_report_dir.exists() and d.resolve().is_relative_to(quick_report_dir.resolve()):
+                    rel = d.resolve().relative_to(quick_report_dir.resolve())
+                    if len(rel.parts) > 1:
+                        station_name = rel.parts[0].upper().strip()
+            except Exception:
+                pass
 
-            if not station_name and len(d.parts) >= 2:
-                parent = d.parent
-                if parent.name.upper() in [
-                    "GEBENG", "KUANTAN", "MARAN", "TEMERLOH", "PEKAN",
-                    "ROMPIN", "BENTONG", "RAUB", "JERANTUT", "KUALA LIPIS", "LIPIS", "JENGKA",
-                ]:
-                    station_name = parent.name.upper()
-                elif parent.parent.name.upper() in [
-                    "GEBENG", "KUANTAN", "MARAN", "TEMERLOH", "PEKAN",
-                    "ROMPIN", "BENTONG", "RAUB", "JERANTUT", "KUALA LIPIS", "LIPIS", "JENGKA",
-                ]:
-                    station_name = parent.parent.name.upper()
+            if not station_name:
+                for part in reversed(d.parts[:-1]):
+                    p_upper = part.upper().strip()
+                    if p_upper in known_stations:
+                        station_name = p_upper
+                        break
+
+            if station_name == "LIPIS":
+                station_name = "KUALA LIPIS"
 
             for child in d.iterdir():
                 if child.is_file() and child.suffix.lower() == ".docx":
@@ -283,11 +333,20 @@ class WhatsAppReportFilter:
                 raw.total_pe_df, substation_number, stem_name
             )
 
-            # Determine station from hints or FL number
-            station = station_hints.get(docx_path, "")
-            if not station and fl_num:
+            # Fallback to folder date if raw_date is unpopulated in TOTAL PE
+            if raw_date is None and raw.folder_date:
+                raw_date = raw.folder_date
+
+            # Determine station: prefer authoritative FL number code mapping, then station hints
+            station = ""
+            if fl_num:
                 station_code = fl_num[:4] if len(fl_num) >= 4 else fl_num
                 station = station_mapping.get(station_code, "")
+            if not station:
+                station = station_hints.get(docx_path, "")
+            if station.upper() == "LIPIS":
+                station = "KUALA LIPIS"
+            station = station.strip().upper()
 
             targets.append(
                 WhatsAppTargetEntity(
@@ -313,8 +372,21 @@ class WhatsAppReportFilter:
 
         prefix_str, stem_name, suffix_str = match.groups()
         substation_number = int(prefix_str)
-        defect_val = suffix_str.strip() if (suffix_str and suffix_str.strip()) else "-"
-        return substation_number, stem_name, defect_val
+        stem = stem_name.strip() if stem_name else ""
+
+        if suffix_str and suffix_str.strip():
+            candidate = suffix_str.strip()
+            if DEFECT_SUFFIX_PATTERN.match(candidate):
+                defect_val = candidate.upper()
+            else:
+                # Suffix inside parentheses is not a defect indicator (e.g. "(SSU CAMEL POWER)", "(OLD)")
+                # Retain it as part of the substation name stem
+                stem = f"{stem} ({candidate})" if stem else f"({candidate})"
+                defect_val = "-"
+        else:
+            defect_val = "-"
+
+        return substation_number, stem, defect_val
 
     def _lookup_substation_row(
         self, total_pe_df: pd.DataFrame, substation_number: int, stem_name: str
@@ -327,20 +399,26 @@ class WhatsAppReportFilter:
             except (ValueError, TypeError):
                 return -1
 
+        pe_col = next((c for c in total_pe_df.columns if str(c).strip().upper() in ["PE NO", "PE_NO", "PE NO.", "PE"]), "PE NO")
+        name_col = next((c for c in total_pe_df.columns if str(c).strip().upper() in ["SUBSTATION NAME", "STATION NAME", "NAMA PE"]), "SUBSTATION NAME")
+        wo_col = next((c for c in total_pe_df.columns if str(c).strip().upper() in ["WO", "WONUM", "WORK ORDER"]), "WO")
+        date_col = next((c for c in total_pe_df.columns if str(c).strip().upper() in ["DATE", "TARIKH"]), "DATE")
+        fl_col = next((c for c in total_pe_df.columns if str(c).strip().upper() in ["FL NUMBER", "FL_NUMBER", "FL"]), "FL NUMBER")
+
         substation_matches = total_pe_df[
-            total_pe_df["PE NO"].apply(_parse_pe_int) == substation_number
+            total_pe_df[pe_col].apply(_parse_pe_int) == substation_number
         ]
 
         if not substation_matches.empty:
             row = substation_matches.iloc[0]
             sub_name = (
-                str(row["SUBSTATION NAME"])
-                if pd.notna(row["SUBSTATION NAME"]) and str(row["SUBSTATION NAME"]).strip()
+                str(row[name_col])
+                if pd.notna(row[name_col]) and str(row[name_col]).strip()
                 else stem_name.strip()
             )
-            wo_val = normalize_for_report(row["WO"])
-            raw_date = row["DATE"] if pd.notna(row["DATE"]) else None
-            fl_num = str(row["FL NUMBER"]).strip() if pd.notna(row["FL NUMBER"]) else ""
+            wo_val = normalize_for_report(row[wo_col])
+            raw_date = row[date_col] if pd.notna(row[date_col]) else None
+            fl_num = str(row[fl_col]).strip() if pd.notna(row[fl_col]) else ""
         else:
             sub_name = stem_name.strip() if stem_name and stem_name.strip() else f"PE {substation_number}"
             wo_val = "-"
@@ -372,19 +450,19 @@ class WhatsAppReportTransformer:
 
         # 2. Resolve stations for targets
         station_mapping = resources.station_mapping if resources else {}
-        target_stations = []
+        target_station_pairs: list[tuple[WhatsAppTargetEntity, str]] = []
         for t in targets:
-            st = t.station.strip() if t.station else ""
+            st = t.station.strip().upper() if t.station else ""
             if not st and t.fl_number:
                 code = t.fl_number[:4] if len(t.fl_number) >= 4 else t.fl_number
                 st = station_mapping.get(code, f"UNKNOWN ({code})" if code else "UNKNOWN STATION")
             if not st:
                 st = "UNKNOWN STATION"
-            target_stations.append(st)
+            target_station_pairs.append((t, st))
 
-        # 3. Distinct stations in order of appearance
-        distinct_stations = []
-        for st in target_stations:
+        # 3. Distinct stations in order of appearance (ordered by earliest PE number)
+        distinct_stations: list[str] = []
+        for _, st in target_station_pairs:
             if st not in distinct_stations:
                 distinct_stations.append(st)
 
@@ -408,36 +486,35 @@ class WhatsAppReportTransformer:
             link_laporan = WHATSAPP_LINKS_11KV["laporan"]
             link_engr = WHATSAPP_LINKS_11KV["engr"]
 
-        # 5. Build items and station_groups with continuous 1-based sequential numbering
-        items = []
-        station_groups = []
-        current_st = None
-        current_group = None
+        # 5. Group items by station with continuous 1-based sequential numbering
+        station_groups: list[dict[str, Any]] = []
+        items: list[dict[str, Any]] = []
+        item_counter = 1
 
-        for idx, (t, st) in enumerate(zip(targets, target_stations), start=1):
-            is_first_of_st = (st != current_st)
-            current_st = st
+        for st in distinct_stations:
+            st_targets = [t for t, t_st in target_station_pairs if t_st == st]
+            st_targets.sort(key=lambda t: t.substation_number)
 
-            item_data = {
-                "name": t.substation_name,
-                "defect": t.defect,
-                "msms": t.msms,
-                "index": idx,
+            group_data: dict[str, Any] = {
                 "station": st,
-                "station_header": st if (is_multi_station and is_first_of_st) else None,
+                "substations": [],
+                "items": [],
             }
-            items.append(item_data)
+            station_groups.append(group_data)
 
-            if current_group is None or current_group["station"] != st:
-                current_group = {
+            for i, t in enumerate(st_targets):
+                item_data = {
+                    "name": t.substation_name,
+                    "defect": t.defect,
+                    "msms": t.msms,
+                    "index": item_counter,
                     "station": st,
-                    "substations": [],
-                    "items": [],
+                    "station_header": st if (is_multi_station and i == 0) else None,
                 }
-                station_groups.append(current_group)
-
-            current_group["substations"].append(item_data)
-            current_group["items"].append(item_data)
+                items.append(item_data)
+                group_data["substations"].append(item_data)
+                group_data["items"].append(item_data)
+                item_counter += 1
 
         context = {
             "activity": activity,
@@ -471,10 +548,11 @@ class WhatsAppReportLoader:
         
         # Prepare render context with XML-safe URLs for docxtpl
         render_context = dict(plan.context)
-        if "link_laporan" in render_context and isinstance(render_context["link_laporan"], str):
-            render_context["link_laporan"] = render_context["link_laporan"].replace("&", "&amp;")
-        if "link_engr" in render_context and isinstance(render_context["link_engr"], str):
-            render_context["link_engr"] = render_context["link_engr"].replace("&", "&amp;")
+        for link_key in ("link_laporan", "link_engr"):
+            if link_key in render_context and isinstance(render_context[link_key], str):
+                val = render_context[link_key]
+                val = val.replace("&amp;", "&").replace("&", "&amp;")
+                render_context[link_key] = val
         doc.render(render_context)
 
         # Update underlying hyperlink relationships if present
