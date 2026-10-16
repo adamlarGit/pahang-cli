@@ -62,7 +62,7 @@ graph TD
     T96["#96: PPU condition builder & Quick Report plan - Closed"]
     T97["#97: 33kV Post-processing (Signatures, Diagonals, per-sheet PageSetup PDF export, stitching) - Closed"]
     T98["#98: 33kV Populate TOTAL PE from testsheets - Closed"]
-    T99["#99: 33kV WhatsApp daily report generation"]
+    T99["#99: 33kV WhatsApp daily report generation - Closed"]
     T100["#100: 33kV MSMS pipeline (Consolidate, Enrich, Propagate, Ingest, Mapper T1SUB33)"]
     T101["#101: 33kV Full Report generation (MultiPartPartitionPolicy for dual-voltage VCB/GIS)"]
     T102["#102: 33kV Full Report post-processing (Stitching + testsheet merge)"]
@@ -151,7 +151,7 @@ graph TD
 - **Delivers**: Voltage-aware `LocalExcelTotalPeRepository` adapter supporting 33kV testsheet packages extracted via `PpuTestsheetParser`, populating `DataCycle1` (`PE NO`, `FL NUMBER`, `SUBSTATION NAME`, `DATE`, `TYPE`, `WO`) with master `QR02 CBA` enrichment (Cols H & I), 2-digit/FL lookup keys, and 100% 11kV row-update parity.
 
 ### #99: feat(33kv-whatsapp): 33kV WhatsApp Daily Report generation
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#99](https://github.com/adamlarGit/pahang-cli/issues/99)
 - **Blocked by**: #96, #98
 - **Ticket File**: [tickets/099-33kv-whatsapp-report.md](./tickets/099-33kv-whatsapp-report.md)
