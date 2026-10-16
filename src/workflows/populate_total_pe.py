@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Sequence
 
 from src.core.normalizers import normalize_date_str
-from src.master.total_pe import LocalExcelTotalPeRepository, TotalPeRepository
+from src.master.total_pe import (
+    generate_candidate_pe_keys,
+    LocalExcelTotalPeRepository,
+    TotalPeRepository,
+)
 from src.project.environment import ProjectEnvironment
 from src.testsheet.models import SubstationTestsheetPackage
 from src.testsheet.parsers.common import normalize_fl_erms
@@ -384,45 +388,37 @@ class PopulateTotalPeFilter:
         if not keys:
             return False
 
-        raw_date = pkg.date_str or (pkg.data.date_str if pkg.data else "")
-        norm_date = normalize_date_str(raw_date)
-        dates_to_check = {d for d in (raw_date, norm_date) if d}
-
-        sub_nums_to_check: set[str] = set()
-        for sn in (pkg.substation_number, pkg.data.substation_number if pkg.data else None):
-            if sn is not None and str(sn).strip():
-                s_str = str(sn).strip()
-                sub_nums_to_check.add(s_str)
-                try:
-                    sn_int = int(s_str)
-                    sub_nums_to_check.add(str(sn_int))
-                    sub_nums_to_check.add(f"{sn_int:02d}")
-                    sub_nums_to_check.add(f"{sn_int:03d}")
-                except (ValueError, TypeError):
-                    pass
-
-        fl_erms = (
-            pkg.data.fl_erms.upper().strip()
-            if (pkg.data and pkg.data.fl_erms)
-            else ""
+        pkg_date = pkg.date_str or (pkg.data.date_str if pkg.data else None)
+        pe_candidates = (
+            pkg.substation_number,
+            pkg.data.substation_number if pkg.data else None,
         )
-        norm_fl = normalize_fl_erms(fl_erms) if fl_erms else ""
-        clean_fl = fl_erms.replace("/", "") if fl_erms else ""
-        erms_name = (
-            pkg.data.substation_name_erms.upper().strip()
-            if (pkg.data and pkg.data.substation_name_erms)
+        fl_cand = (
+            (pkg.data.fl_erms or pkg.data.fl_site) if pkg.data else None
+        )
+        sub_cand = (
+            (pkg.data.substation_name_erms or pkg.data.substation_name_site)
+            if pkg.data
             else None
         )
 
+        candidate_keys = generate_candidate_pe_keys(
+            pe_no=pe_candidates,
+            fl=fl_cand,
+            sub_name=sub_cand,
+            date_val=pkg_date,
+        )
+
+        if any(k in keys for k in candidate_keys):
+            return True
+
+        dates_to_check = {k[1] for k in candidate_keys}
+        idents_to_check = {k[0] for k in candidate_keys}
         for str_id, key_dt in keys:
-            norm_key_dt = normalize_date_str(key_dt)
-            if key_dt in dates_to_check or norm_key_dt in dates_to_check:
-                if str_id in sub_nums_to_check:
-                    return True
-                if fl_erms and str_id in (fl_erms, norm_fl, clean_fl):
-                    return True
-                if erms_name and str_id == erms_name:
-                    return True
+            if str_id in idents_to_check and (
+                key_dt in dates_to_check or normalize_date_str(key_dt) in dates_to_check
+            ):
+                return True
 
         return False
 

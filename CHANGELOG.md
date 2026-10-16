@@ -7,10 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-10-17
+
 ### Added
 - **33kV TOTAL PE Population & QR02 CBA Enrichment (`feat(33kv-total-pe)`, `src/workflows/populate_total_pe.py`, `src/master/total_pe.py`, `src/testsheet/parsers/ppu.py`, `src/project/storage.py`, `src/testsheet/repository.py`, `src/testsheet/parsers/common.py`)**:
   - Implemented 33kV testsheet package metadata extraction in `PpuTestsheetParser` populating canonical fields (`substation_number`, `fl_erms`, `date`, `substation_name_erms`, `substation_type`).
-  - Hardened substation prefix resolution in `PpuTestsheetParser` and `SubstationTestsheetRepository` to ignore parent date folders (`DD-MM-YYYY`), preventing unnumbered testsheets from adopting inspection days as substation numbers.
+  - Hardened substation prefix resolution in `PpuTestsheetParser` and `SubstationTestsheetRepository` to ignore parent date folders (`DD-MM-YYYY` and ISO `YYYY-MM-DD`), preventing unnumbered testsheets from adopting inspection days as substation numbers.
   - Added statewide master `QR02 CBA` metadata enrichment in `PopulateTotalPeExtractor` indexing Column G (`FUNCTIONAL LOCATION`) and enriching Column H (`SUBSTATION NAME`) and Column I (`TYPE`) with graceful fallback to cell D6 and stem tokens, sanitizing sentinel placeholder values (`-`, `None`, `N/A`).
   - Extended row lookup dictionary in `LocalExcelTotalPeRepository.upsert_packages` supporting 2-digit zero-padded keys `(f"{pe_no:02d}", dt_str)` and Functional Location keys `(fl_num, dt_str)` and normalized variants.
   - Ensured safe writes into `TOTAL PE.xlsx` (`DataCycle1` Columns A-F) preserving Col G+ untouched, preserving existing Work Orders when incoming package WO is empty, retaining row-level formulas and static cells during multi-row sorting in `_sort_datacycle_sheet`, and sanitizing ghost formatting.
@@ -21,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added per-sheet PageSetup PDF export preserving landscape orientation, scaling, and print properties for switchgear, transformer, and visual inspection sheets.
   - Added automated signature replacement and alignment across vendor and TNB signature placeholders.
   - Added multi-source deliverable stitching binding quick reports and testsheet PDFs into unified substation final deliverables.
+
+### Refactored
+- **Repository Seam & Key Generation Consolidation (`src/master/total_pe.py`, `src/workflows/populate_total_pe.py`)**:
+  - Eliminated layer inversion and dead repository CBA lookup in `LocalExcelTotalPeRepository.upsert_packages`, delegating master CBA enrichment exclusively to `PopulateTotalPeExtractor` upstream.
+  - Consolidated candidate key generation into a shared pure helper `generate_candidate_pe_keys` in `src/master/total_pe.py`, removing triplicated key variant expansion logic across `get_existing_auto_keys`, `upsert_packages`, and `PopulateTotalPeFilter._is_package_in_keys`.
+  - Hardened parent date folder guards across `PpuTestsheetParser` and `SubstationTestsheetRepository` to match ISO `YYYY-MM-DD` alongside `DD-MM-YYYY`.
 
 ### Fixed
 - **33kV Post-Processing Edge-Case Resilience & Prefix Hardening (`src/postprocessing/converters.py`, `src/workflows/postprocessing_preflight.py`, `src/workflows/replace_signatures.py`)**:

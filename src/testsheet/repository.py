@@ -38,7 +38,7 @@ class SubstationTestsheetRepository:
             return []
 
         date_folders: list[Path] = []
-        if re.match(r"^\d{2}-\d{2}-\d{4}$", root.name) and root.is_dir():
+        if re.match(r"^(?:\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})$", root.name) and root.is_dir():
             date_folders.append(root)
         else:
             date_folders = self._find_date_folders(root)
@@ -76,7 +76,7 @@ class SubstationTestsheetRepository:
                 match = re.match(r"^(\d+)", xlsx_path.name)
                 if match:
                     substation_number = int(match.group(1))
-                elif xlsx_path.parent and not re.match(r"^\d{1,2}-\d{1,2}-\d{4}$", xlsx_path.parent.name):
+                elif xlsx_path.parent and not re.match(r"^(?:\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})$", xlsx_path.parent.name):
                     match_p = re.match(r"^(\d+)", xlsx_path.parent.name)
                     if match_p:
                         substation_number = int(match_p.group(1))
@@ -107,10 +107,10 @@ class SubstationTestsheetRepository:
         return packages
 
     def _find_date_folders(self, directory: Path) -> list[Path]:
-        """Find all date-formatted directories (DD-MM-YYYY) recursively under directory."""
+        """Find all date-formatted directories (DD-MM-YYYY or ISO YYYY-MM-DD) recursively under directory."""
         date_folders: list[Path] = []
         for p in directory.rglob("*"):
-            if p.is_dir() and re.match(r"^\d{2}-\d{2}-\d{4}$", p.name):
+            if p.is_dir() and re.match(r"^(?:\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})$", p.name):
                 date_folders.append(p)
         date_folders.sort(key=lambda d: d.name, reverse=True)
         return date_folders

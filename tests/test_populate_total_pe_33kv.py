@@ -388,8 +388,8 @@ def test_upsert_packages_fl_key_lookup(tmp_path: Path) -> None:
     wb.close()
 
 
-def test_upsert_packages_with_cba_enrichment(tmp_path: Path) -> None:
-    """Verify upsert_packages with cba_path enriches name and type during upsert."""
+def test_upsert_packages_with_enriched_metadata(tmp_path: Path) -> None:
+    """Verify upsert_packages stores metadata enriched from CBA into TOTAL PE."""
     repo = LocalExcelTotalPeRepository()
     total_pe_file = tmp_path / "TOTAL PE.xlsx"
     cba_file = tmp_path / "ENGR-750-39 -CBA-PAHANG - 2026.xlsx"
@@ -414,7 +414,9 @@ def test_upsert_packages_with_cba_enrichment(tmp_path: Path) -> None:
         ),
     )
 
-    new_cnt, upd_cnt = repo.upsert_packages(total_pe_file, [pkg], cba_path=cba_file)
+    extractor = PopulateTotalPeExtractor()
+    enriched = extractor.enrich_packages_with_cba([pkg], cba_path=cba_file)
+    new_cnt, upd_cnt = repo.upsert_packages(total_pe_file, enriched)
     assert new_cnt == 1
 
     wb = openpyxl.load_workbook(total_pe_file)
@@ -555,6 +557,54 @@ def test_ppu_metadata_extraction_date_parent_folder_not_matched_as_substation(tm
     # Should raise ValueError because neither cell V2, nor filename, nor parent (date folder) has a valid substation prefix
     with pytest.raises(ValueError, match="Unable to determine substation number"):
         parser.extract_testsheet_metadata(ts_file)
+
+
+def test_ppu_metadata_extraction_iso_date_parent_folder_not_matched_as_substation(tmp_path: Path) -> None:
+    """Verify parent folder formatted as ISO date (YYYY-MM-DD) is NOT treated as a numeric substation prefix (e.g. 2026)."""
+    date_folder = tmp_path / "2026-10-07"
+    date_folder.mkdir(parents=True)
+    ts_file = date_folder / "Testsheet.xlsx"
+
+    wb = create_ppu_testsheet_workbook(
+        path=ts_file,
+        substation_number=None,
+        substation_name="PPU UNPREFIXED",
+        fl_number="CGBG/PPU/G00007",
+        date_val="2026-10-07",
+        v2_substation_num_33kv=None,
+        v2_substation_num_11kv=None,
+    )
+    wb.save(ts_file)
+    wb.close()
+
+    parser = PpuTestsheetParser()
+    with pytest.raises(ValueError, match="Unable to determine substation number"):
+        parser.extract_testsheet_metadata(ts_file)
+
+
+def test_repository_discovery_iso_date_parent_folder_default_substation_number(tmp_path: Path) -> None:
+    """Verify SubstationTestsheetRepository does not treat ISO date parent folder (2026-10-07) as substation number 2026."""
+    date_folder = tmp_path / "KUANTAN" / "10. OCTOBER" / "2026-10-07"
+    date_folder.mkdir(parents=True)
+    (date_folder / "UNSORTED RAW DATA").mkdir()
+    ts_file = date_folder / "Testsheet.xlsx"
+
+    wb = create_ppu_testsheet_workbook(
+        path=ts_file,
+        substation_number=None,
+        substation_name="PPU UNPREFIXED",
+        fl_number="CGBG/PPU/G00007",
+        date_val="2026-10-07",
+        v2_substation_num_33kv=None,
+        v2_substation_num_11kv=None,
+    )
+    wb.save(ts_file)
+    wb.close()
+
+    repo = SubstationTestsheetRepository()
+    pkgs = repo.discover_packages(tmp_path / "KUANTAN")
+    assert len(pkgs) == 1
+    assert pkgs[0].substation_number == 1  # Default fallback 1, NOT 2026!
 
 
 def test_ppu_metadata_extraction_date_formats_and_malaysian_fallback(tmp_path: Path) -> None:

@@ -1,6 +1,6 @@
 # Project & Utility Automation CLI (`pahang-cli`)
 
-A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.26.3`).
+A unified, interactive Command Line Interface (CLI) for automating Pahang area PE inspection workflows, multi-project workspace management, testsheet parsing, dynamic Quick Report compilation, 1-Click post-processing, and MSMS data pipelines (`v1.27.0`).
 
 ---
 
@@ -14,7 +14,7 @@ To keep this landing page concise and maintainable as the suite scales, detailed
 - **[CBM Analysis & Recommendation Specification](file:///docs/cbm_analysis_recommendation_spec.md)** — Specification for pure-domain programmatic analysis and recommendation generation across all equipment families.
 - **[PRPD Graph Generation Guide](file:///docs/prpd_graph_generation_guide.md)** — Pure-Python PRPD decoders (UE01 FlatBuffers & JSON), 4-tier repetition density scatter bins, and dynamic CBM defect page embedding.
 - **[Utility Actions Guide](file:///docs/workflows/utility_actions.md)** — Deep dive into standalone tools (batch PDF conversions, diagonal borders, signature replacement, and separator PDF merging).
-- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.26.3`) following [Keep a Changelog](https://keepachangelog.com/).
+- **[Changelog & Version History](file:///CHANGELOG.md)** — Chronological release notes (`v1.0.0` → `v1.27.0`) following [Keep a Changelog](https://keepachangelog.com/).
 
 
 ---
@@ -114,7 +114,7 @@ Automates end-to-end engineering tasks against the currently active workspace.
 | # | Action Label | Core Description & Automation Summary |
 | :-: | :--- | :--- |
 | **1** | **Generate TESTSHEET Folder Structure** | Interactively select or provision target station and month hierarchies (with sequential `01.`..`12.` prefixing) and batch provision inspection date folders (`<DATE>/UNSORTED RAW DATA/` with `DG/`, `IR/`, and `US+TEV/`). |
-| **2** | **Populate TOTAL PE (from testsheets)** | Scans daily `TESTSHEET/` input folders (`<STATION>/<MONTH>/<DD-MM-YYYY>/`), validates testsheets, updates `TOTAL PE.xlsx` (`DataCycle1` sheet), enforces duplicate PE protection, and sorts records numerically by `PE NO`. |
+| **2** | **Populate TOTAL PE (from testsheets)** | Scans daily `TESTSHEET/` input folders (`<STATION>/<MONTH>/<DD-MM-YYYY>/`), validates testsheets (supporting both 11kV distribution and 33kV transmission/PPU/SSU workbooks), enriches statewide master `QR02 CBA` metadata, updates `TOTAL PE.xlsx` (`DataCycle1` sheet), enforces duplicate PE protection, and sorts records numerically by `PE NO`. |
 | **3** | **Automate Raw Material Creation & Sorting (from Testsheets)** | Validates `TOTAL PE.xlsx` pre-checks, provisions `RAW MATERIAL/` destination folder hierarchies, copies `IR`/`DG` photos using testsheet bounds, and extracts `US+TEV` survey `.zip` archives into counterpart PE raw data directories. |
 | **4** | **Update QR02 CBA (from testsheets)** | Extracts testsheet metadata (`PCE Testsheet`, `PCE VI`) and upserts per-station ENGR `QR02 CBA` Excel worksheets with atomic transactions, exact FL matching, and ghost cell sanitization. |
 | **5** | **Generate Quick Report** | Deep module (`generate`/`inspect`) compiling 7-part docx quick reports from inspection date folders (`<STATION>/<MONTH>/<DATE>/`) or manual FLs (single or comma-separated). Features multi-date selection (`Browse Date Folders` interactive checklist with 'a' toggle-all and zero-selection fallback, or `Enter Target Date(s)` with range syntax `..` / `to`), batch multi-date sequential compilation with date-aware progress telemetry, multi-station checkbox pre-selection, batch Word COM session reuse (`WordComDocumentCompiler`), fresh OLE ActiveX container isolation (ADR 0002), table escape paragraphs, retry paste, preflight template fail-fast guards, pure-Python PRPD rendering with non-TEV/US compartment skipping, dynamic multi-technology template resolution (`DEFECT IR`, `DEFECT IR US`, `DEFECT IR US TEV`) with dynamic OpenXML US and TEV cell blanking for switchgear panels, canonical `(IR+US+TEV+VI)` defect suffixes, and pure-domain programmatic CBM defect analysis and recommendation generation across LVDB/FP, Switchgear, and Transformers with dynamic phrasing registries, pure-domain contract scoping (`src/core/contract.py`), and overview table status cell shading. |
