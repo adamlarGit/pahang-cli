@@ -953,12 +953,27 @@ class FullReportPostProcessingWorkflow:
 
         full_report_dir = environment.get_full_report_dir() if hasattr(environment, "get_full_report_dir") else environment.base_path / "FULL REPORT"
 
+        def _expand_multipart_siblings(p: Path) -> list[Path]:
+            """Expand a multi-part .docx path to all its ordered siblings sharing the same stem."""
+            m = MULTIPART_DOCX_PATTERN.match(p.stem)
+            if m:
+                stem = m.group("stem").strip()
+                siblings = [
+                    f.resolve()
+                    for f in p.parent.glob("*.docx")
+                    if not f.name.startswith("~$") and not f.name.startswith(".")
+                ]
+                groups = [g for g in self._group_multipart_targets(siblings) if g.stem == stem]
+                if groups:
+                    return list(groups[0].docx_paths)
+            return [p.resolve()]
+
         # Case 1: Direct .docx path
         if isinstance(target, Path) and target.is_file() and target.suffix.lower() == ".docx":
             if not target.exists():
                 errors.append(f"Target file does not exist: {target}")
                 return [], warnings, errors
-            return [target.resolve()], warnings, errors
+            return _expand_multipart_siblings(target), warnings, errors
 
         # Case 2: Direct path to directory
         if isinstance(target, Path) and target.is_dir():
@@ -973,26 +988,47 @@ class FullReportPostProcessingWorkflow:
         # Case 3: Sequence of paths
         if isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
             collected: list[Path] = []
+            seen_multipart_stems: set[tuple[Path, str]] = set()
             for item in target:
                 p = Path(item)
                 if p.is_file() and p.suffix.lower() == ".docx" and p.exists():
-                    collected.append(p.resolve())
+                    p_res = p.resolve()
+                    m = MULTIPART_DOCX_PATTERN.match(p_res.stem)
+                    if m:
+                        stem = m.group("stem").strip()
+                        key = (p_res.parent, stem)
+                        if key in seen_multipart_stems:
+                            continue
+                        seen_multipart_stems.add(key)
+                        for expanded_p in _expand_multipart_siblings(p_res):
+                            if expanded_p not in collected:
+                                collected.append(expanded_p)
+                        continue
+                    if p_res not in collected:
+                        collected.append(p_res)
                 elif p.is_dir():
                     for f in sorted(p.glob("*.docx")):
                         if not f.name.startswith("~$") and not f.name.startswith("."):
-                            collected.append(f.resolve())
+                            if f.resolve() not in collected:
+                                collected.append(f.resolve())
                 elif isinstance(item, str) and DAILY_DATE_FOLDER_PATTERN.match(item.strip()):
                     date_files = self._find_docx_by_date(full_report_dir, item.strip())
-                    collected.extend(date_files)
+                    for df in date_files:
+                        if df not in collected:
+                            collected.append(df)
             if station:
                 collected = [p for p in collected if self._matches_station(p, station)]
             return collected, warnings, errors
 
-        # Case 4: Target is date string or folder name
+        # Case 4: Target is date string, file path, or folder name
         if isinstance(target, str):
             clean_tgt = target.strip()
-            # If path to existing directory
             p_tgt = Path(clean_tgt)
+            # If path to existing .docx file
+            if p_tgt.is_file() and p_tgt.suffix.lower() == ".docx":
+                return _expand_multipart_siblings(p_tgt), warnings, errors
+
+            # If path to existing directory
             if p_tgt.is_dir():
                 files = [
                     p.resolve()

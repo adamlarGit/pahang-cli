@@ -754,5 +754,33 @@ class TestMultipartPostProcessingExecution:
         assert len(fake_converter.merge_pdfs_calls) == 1
         assert p1.exists() and p2.exists()
 
+    def test_process_with_single_multipart_path_auto_expands_siblings(self, tmp_path: Path) -> None:
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+
+        stem = "005. TALAPIA (IR+VI)"
+        p1 = _create_mock_docx(fr_dir / f"{stem} - Part 01 - Summary.docx")
+        p2 = _create_mock_docx(fr_dir / f"{stem} - Part 02 - Panel 1.docx")
+        ts = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem}.pdf"
+        _create_mock_pdf(ts, page_count=2)
+
+        fake_converter = FakeDocumentConverter()
+        workflow = FullReportPostProcessingWorkflow(converter=fake_converter)
+
+        # Call process with only Part 01 in a list
+        result = workflow.process([p1], env)
+
+        assert result.is_success
+        assert result.total_reports == 1
+        assert result.succeeded_count == 1
+        assert (fr_dir / f"{stem}.pdf") in result.deliverables
+        # Both parts must be converted
+        assert len(fake_converter.convert_docx_calls) == 2
+        assert len(fake_converter.merge_pdfs_batch_calls) == 1
+        assert len(fake_converter.merge_pdfs_calls) == 1
+
 
 
