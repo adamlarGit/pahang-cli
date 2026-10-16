@@ -63,7 +63,7 @@ graph TD
     T97["#97: 33kV Post-processing (Signatures, Diagonals, per-sheet PageSetup PDF export, stitching) - Closed"]
     T98["#98: 33kV Populate TOTAL PE from testsheets - Closed"]
     T99["#99: 33kV WhatsApp daily report generation - Closed"]
-    T100["#100: 33kV MSMS pipeline (Consolidate, Enrich, Propagate, Ingest, Mapper T1SUB33)"]
+    T100["#100: 33kV MSMS pipeline (Consolidate, Enrich, Propagate, Ingest, Mapper T1SUB33) - Closed"]
     T101["#101: 33kV Full Report generation (MultiPartPartitionPolicy for dual-voltage VCB/GIS)"]
     T102["#102: 33kV Full Report post-processing (Stitching + testsheet merge)"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
@@ -158,7 +158,7 @@ graph TD
 - **Delivers**: Voltage-aware WhatsApp daily report pipeline consolidating Quick Reports across multiple station directories per date, matching `TOTAL PE.xlsx` (`DataCycle1`), programmatically setting URLs and activity headers, dynamic multi-station grouping, and rendering `{NN}. {DD-MM-YYYY}.docx` to `PYTHON/WHATSAPP/`.
 
 ### #100: feat(33kv-msms): 33kV MSMS pipeline and TestsheetReadingMapper for T1SUB33
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#100](https://github.com/adamlarGit/pahang-cli/issues/100)
 - **Blocked by**: #92, #98
 - **Ticket File**: [tickets/100-33kv-msms-pipeline.md](./tickets/100-33kv-msms-pipeline.md)
