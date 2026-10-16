@@ -12,9 +12,11 @@ import pytest
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
+import config
 from src.whatsapp.models import WhatsAppReportResources
 from src.workflows.models import WhatsAppReportRequest
 from src.workflows.whatsapp import (
+    DEFECT_SUFFIX_PATTERN,
     QUALIFYING_DOCX_PATTERN,
     WHATSAPP_ACTIVITY_11KV,
     WHATSAPP_ACTIVITY_33KV,
@@ -622,4 +624,343 @@ def test_whatsapp_station_resolution_all_districts(tmp_path: Path) -> None:
     assert len(files) == 2
     assert hints[files[0]] == "CAMERON HIGHLAND"
     assert hints[files[1]] == "KUALA LIPIS"
+
+
+def test_normalize_date_str_single_digit_and_preflight(tmp_path: Path) -> None:
+    """Verify single-digit date normalization and preflight guard directory discovery."""
+    guard = WhatsAppReportPreflightGuard()
+
+    # Single-digit day/month normalization and edge cases with spaces/slashes
+    assert guard._normalize_date_str("7/10/2026") == "07-10-2026"
+    assert guard._normalize_date_str(" 7 / 10 / 2026 ") == "07-10-2026"
+    assert guard._normalize_date_str("7/10/2026/") == "07-10-2026"
+    assert guard._normalize_date_str("7\\10\\2026\\") == "07-10-2026"
+    assert guard._normalize_date_str(" 7 \\ 10 \\ 2026 \\ ") == "07-10-2026"
+    assert guard._normalize_date_str("7/1/2026") == "07-01-2026"
+    assert guard._normalize_date_str("07-10-2026") == "07-10-2026"
+    assert guard._normalize_date_str("2026-10-07") == "07-10-2026"
+    assert guard._normalize_date_str("7-10-2026") == "07-10-2026"
+    assert guard._normalize_date_str("7\\10\\2026") == "07-10-2026"
+    assert guard._normalize_date_str(Path("C:/QUICK REPORT/GEBENG/7-10-2026")) == "07-10-2026"
+    assert guard._normalize_date_str(Path("C:/QUICK REPORT/GEBENG/10. OCTOBER/7-10-2026/")) == "07-10-2026"
+    assert guard._normalize_date_str(Path("C:/QUICK REPORT/GEBENG/10. OCTOBER/07-10-2026/01. PPU.docx")) == "07-10-2026"
+
+    # Preflight guard validate with single-digit date input string "7/10/2026"
+    qr_dir = tmp_path / "QUICK REPORT"
+    date_folder = qr_dir / "GEBENG" / "10. OCTOBER" / "07-10-2026"
+    date_folder.mkdir(parents=True)
+    (date_folder / "01. PPU APMM 33-11kV (VI).docx").write_bytes(b"dummy")
+
+    total_pe_path = tmp_path / "TOTAL PE.xlsx"
+    _create_33kv_total_pe(total_pe_path)
+
+    template_path = tmp_path / "TEMPLATE.docx"
+    template_path.write_bytes(b"dummy template")
+
+    metadata = ProjectMetadata(
+        key="pahang_33kv_2026",
+        name="Pahang 33kV 2026",
+        po_number="PO42394550",
+        state="Pahang",
+        voltage_type="33kV",
+        year="2026",
+        cycle="Cycle 1",
+        technologies=("IR", "US", "TEV"),
+        base_path=str(tmp_path),
+    )
+    storage = LocalWorkspaceStorage(tmp_path)
+    env = ProjectEnvironment(metadata=metadata, storage=storage)
+
+    resources = WhatsAppReportResources(
+        quick_report_dir=qr_dir,
+        save_dir=tmp_path / "PYTHON" / "WHATSAPP",
+        template_path=template_path,
+        total_pe_path=total_pe_path,
+        station_mapping={"CGBG": "GEBENG"},
+        voltage_type="33kV",
+    )
+    env.get_whatsapp_report_resources = lambda: resources
+
+    # Passing "7/10/2026", " 7 / 10 / 2026 ", and "7/10/2026/" must succeed without FileNotFoundError
+    guard.validate(env, WhatsAppReportRequest(report_dir="7/10/2026"))
+    guard.validate(env, WhatsAppReportRequest(report_dir=" 7 / 10 / 2026 "))
+    guard.validate(env, WhatsAppReportRequest(report_dir="7/10/2026/"))
+
+
+def test_defect_suffix_pattern_spaced_operators() -> None:
+    """Verify DEFECT_SUFFIX_PATTERN and filter stage support spaced defect operators without losing defects."""
+    # Pattern matching
+    assert DEFECT_SUFFIX_PATTERN.match("US + VI") is not None
+    assert DEFECT_SUFFIX_PATTERN.match("US+VI") is not None
+    assert DEFECT_SUFFIX_PATTERN.match("IR + US + TEV + VI") is not None
+    assert DEFECT_SUFFIX_PATTERN.match("TEV + VI") is not None
+    assert DEFECT_SUFFIX_PATTERN.match("US+ VI") is not None
+    assert DEFECT_SUFFIX_PATTERN.match("IR+US") is not None
+    assert DEFECT_SUFFIX_PATTERN.match("VI") is not None
+
+    # Non-defect suffixes
+    assert DEFECT_SUFFIX_PATTERN.match("SSU CAMEL POWER") is None
+    assert DEFECT_SUFFIX_PATTERN.match("OLD") is None
+    assert DEFECT_SUFFIX_PATTERN.match("PHASE 1") is None
+
+    stage = WhatsAppReportFilter()
+
+    # Spaced operator: (US + VI) -> defect="US+VI", clean stem
+    p1 = stage._parse_docx_target(Path("01. PPU APMM 33-11kV (US + VI).docx"))
+    assert p1 is not None
+    assert p1[0] == 1
+    assert p1[1] == "PPU APMM 33-11kV"
+    assert p1[2] == "US+VI"
+
+    # Multi-spaced: (IR + US + VI) -> defect="IR+US+VI", internal parens preserved
+    p2 = stage._parse_docx_target(Path("02. SSU KIIP (SSU CAMEL POWER) 33kV (IR + US + VI).docx"))
+    assert p2 is not None
+    assert p2[0] == 2
+    assert p2[1] == "SSU KIIP (SSU CAMEL POWER) 33kV"
+    assert p2[2] == "IR+US+VI"
+
+    # Non-defect parens: (OLD) -> defect="-", appended to stem
+    p3 = stage._parse_docx_target(Path("04. SSU KULIM (OLD).docx"))
+    assert p3 is not None
+    assert p3[0] == 4
+    assert p3[1] == "SSU KULIM (OLD)"
+    assert p3[2] == "-"
+
+
+def test_load_total_pe_resilient_date_columns(tmp_path: Path) -> None:
+    """Verify _load_total_pe_dataframe and _lookup_substation_row handle TARIKH and DATE with trailing space."""
+    # Workbook 1: Uses TARIKH instead of DATE
+    wb1 = openpyxl.Workbook()
+    ws1 = wb1.active
+    ws1.title = "DataCycle1"
+    ws1.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "TARIKH", "TYPE", "WO", "SCOPE"])
+    ws1.append([1, "CGBG/PPU/G00001", "PPU APMM 33/11kV", datetime(2026, 10, 7), "PPU", "W1616898", "FULL"])
+    wb1_path = tmp_path / "total_pe_tarikh.xlsx"
+    wb1.save(wb1_path)
+    wb1.close()
+
+    extractor = WhatsAppReportExtractor()
+    df1 = extractor._load_total_pe_dataframe(wb1_path)
+    assert not df1.empty
+    assert "TARIKH" in df1.columns
+
+    filter_stage = WhatsAppReportFilter()
+    sub_name, wo, raw_dt, fl = filter_stage._lookup_substation_row(df1, 1, "PPU APMM")
+    assert sub_name == "PPU APMM 33/11kV"
+    assert wo == "W1616898"
+    assert raw_dt is not None
+
+    # Workbook 2: Uses "DATE " with trailing space
+    wb2 = openpyxl.Workbook()
+    ws2 = wb2.active
+    ws2.title = "DataCycle1"
+    ws2.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE ", "TYPE", "WO", "SCOPE"])
+    ws2.append([2, "CKTN/SSU/G00002", "SSU KIIP", datetime(2026, 10, 7), "SSU", "W1616956", "FULL"])
+    wb2_path = tmp_path / "total_pe_trailing_space.xlsx"
+    wb2.save(wb2_path)
+    wb2.close()
+
+    df2 = extractor._load_total_pe_dataframe(wb2_path)
+    assert not df2.empty
+
+    sub_name2, wo2, raw_dt2, fl2 = filter_stage._lookup_substation_row(df2, 2, "SSU KIIP")
+    assert sub_name2 == "SSU KIIP"
+    assert wo2 == "W1616956"
+    assert raw_dt2 is not None
+
+
+def test_total_pe_empty_and_dash_dates_fallback_to_folder_date() -> None:
+    """Verify empty string, whitespace, dash, and unparseable date values in TOTAL PE fall back to folder_date."""
+    df = pd.DataFrame([
+        {"PE NO": 1, "SUBSTATION NAME": "PPU APMM", "WO": "W123", "DATE": "", "FL NUMBER": "CGBG/PPU/G00001"},
+        {"PE NO": 2, "SUBSTATION NAME": "SSU KIIP", "WO": "W124", "DATE": "-", "FL NUMBER": "CKTN/SSU/G00002"},
+        {"PE NO": 3, "SUBSTATION NAME": "SSU LYNAS", "WO": "W125", "DATE": "  ", "FL NUMBER": "CGBG/SSU/G00003"},
+        {"PE NO": 4, "SUBSTATION NAME": "SSU FERRO", "WO": "W126", "DATE": "N/A", "FL NUMBER": "CGBG/SSU/G00004"},
+    ])
+    filter_stage = WhatsAppReportFilter()
+    for pe_num in (1, 2, 3, 4):
+        _, _, raw_dt, _ = filter_stage._lookup_substation_row(df, pe_num, "STEM")
+        assert raw_dt is None
+
+    raw = WhatsAppRawTuple(
+        substation_docx_files=[
+            Path("01. PPU APMM (VI).docx"),
+            Path("02. SSU KIIP (VI).docx"),
+        ],
+        total_pe_df=df,
+        resources=WhatsAppReportResources(
+            quick_report_dir=Path("/qr"),
+            save_dir=Path("/save"),
+            template_path=Path("/template.docx"),
+            total_pe_path=Path("/total_pe.xlsx"),
+            station_mapping={"CGBG": "GEBENG", "CKTN": "KUANTAN"},
+            voltage_type="33kV",
+        ),
+        station_hints={},
+        folder_date="07-10-2026",
+    )
+    targets = filter_stage.filter(raw)
+    assert len(targets) == 2
+    assert targets[0].raw_date == "07-10-2026"
+    assert targets[1].raw_date == "07-10-2026"
+
+
+def test_scan_qualifying_docx_non_standard_folder_depth(tmp_path: Path) -> None:
+    """Verify _scan_qualifying_docx_files_33kv identifies known station despite non-standard folder depth."""
+    qr_dir = tmp_path / "QUICK REPORT"
+    date_str = "07-10-2026"
+
+    # Non-standard nested folder structure with "UNASSIGNED" prefix
+    nested_dir = qr_dir / "UNASSIGNED" / "GEBENG" / "10. OCTOBER" / date_str
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "01. PPU APMM 33-11kV (VI).docx").write_bytes(b"dummy")
+
+    extractor = WhatsAppReportExtractor()
+    files, hints = extractor._scan_qualifying_docx_files_33kv(qr_dir, date_str)
+
+    assert len(files) == 1
+    # station_hints must resolve to "GEBENG", NOT "UNASSIGNED"
+    assert hints[files[0]] == "GEBENG"
+
+
+def test_scan_qualifying_docx_nearest_ancestor_resolution(tmp_path: Path) -> None:
+    """Verify _scan_qualifying_docx_files_33kv resolves to the nearest ancestor station folder when parent folders also contain station names."""
+    qr_dir = tmp_path / "QUICK REPORT"
+    date_str = "07-10-2026"
+
+    # Nested folder where KUANTAN is an outer folder, but GEBENG is the actual station folder
+    nested_dir = qr_dir / "KUANTAN" / "BACKUP" / "GEBENG" / "10. OCTOBER" / date_str
+    nested_dir.mkdir(parents=True)
+    (nested_dir / "01. PPU APMM 33-11kV (VI).docx").write_bytes(b"dummy")
+
+    extractor = WhatsAppReportExtractor()
+    files, hints = extractor._scan_qualifying_docx_files_33kv(qr_dir, date_str)
+
+    assert len(files) == 1
+    assert hints[files[0]] == "GEBENG"
+
+
+def test_asymmetric_date_padding_discovery(tmp_path: Path) -> None:
+    """Verify _find_qualifying_33kv and _scan_qualifying_docx_files_33kv discover folders with asymmetric padding (07-1-2026 and 7-01-2026)."""
+    qr_dir = tmp_path / "QUICK REPORT"
+
+    # Station 1: padded day, unpadded month (07-1-2026)
+    dir1 = qr_dir / "GEBENG" / "01. JANUARY" / "07-1-2026"
+    dir1.mkdir(parents=True)
+    (dir1 / "01. PPU APMM 33-11kV (VI).docx").write_bytes(b"dummy")
+
+    # Station 2: unpadded day, padded month (7-01-2026)
+    dir2 = qr_dir / "KUANTAN" / "01. JANUARY" / "7-01-2026"
+    dir2.mkdir(parents=True)
+    (dir2 / "02. SSU KIIP (VI).docx").write_bytes(b"dummy")
+
+    guard = WhatsAppReportPreflightGuard()
+    extractor = WhatsAppReportExtractor()
+
+    # Query using normalized "07-01-2026"
+    files_guard = guard._find_qualifying_33kv(qr_dir, "07-01-2026")
+    assert len(files_guard) == 2
+
+    files_ext, hints = extractor._scan_qualifying_docx_files_33kv(qr_dir, "07-01-2026")
+    assert len(files_ext) == 2
+    assert hints[files_ext[0]] == "GEBENG"
+    assert hints[files_ext[1]] == "KUANTAN"
+
+
+def test_lowercase_fl_number_code_resolution() -> None:
+    """Verify lowercase FL number codes (e.g. cgbg/ppu/g00001) are resolved to stations in filter and transformer."""
+    targets = [
+        WhatsAppTargetEntity(
+            substation_number=1,
+            substation_name="PPU APMM",
+            defect="VI",
+            msms="W1616898",
+            raw_date=datetime(2026, 10, 7),
+            fl_number="cgbg/ppu/g00001",
+            station="",
+        )
+    ]
+    resources = WhatsAppReportResources(
+        quick_report_dir=Path("/qr"),
+        save_dir=Path("/save"),
+        template_path=Path("/template.docx"),
+        total_pe_path=Path("/total_pe.xlsx"),
+        station_mapping={"CGBG": "GEBENG"},
+        voltage_type="33kV",
+    )
+    transformer = WhatsAppReportTransformer()
+    plan = transformer.transform(targets, resources)
+    assert plan.station_name == "GEBENG"
+    assert plan.context["items"][0]["station"] == "GEBENG"
+
+
+def test_dynamic_known_stations_derivation(tmp_path: Path) -> None:
+    """Verify known_stations is dynamically derived from config.STATION_MAPPING and custom mappings."""
+    qr_dir = tmp_path / "QUICK REPORT"
+    date_str = "07-10-2026"
+
+    # Create folder for TEMERLOH (from config.STATION_MAPPING) and CUSTOM_STATION (from station_mapping)
+    temerloh_dir = qr_dir / "TEMERLOH" / "10. OCTOBER" / date_str
+    temerloh_dir.mkdir(parents=True)
+    (temerloh_dir / "10. SSU TEMERLOH (VI).docx").write_bytes(b"dummy")
+
+    custom_dir = qr_dir / "CUSTOM_AREA" / "10. OCTOBER" / date_str
+    custom_dir.mkdir(parents=True)
+    (custom_dir / "11. SSU SPECIAL (VI).docx").write_bytes(b"dummy")
+
+    extractor = WhatsAppReportExtractor()
+    custom_mapping = {"CCST": "CUSTOM_AREA"}
+
+    files, hints = extractor._scan_qualifying_docx_files_33kv(
+        qr_dir, date_str, station_mapping=custom_mapping
+    )
+
+    assert len(files) == 2
+    # TEMERLOH derived from config.STATION_MAPPING
+    assert hints[files[0]] == "TEMERLOH"
+    # CUSTOM_AREA derived from station_mapping
+    assert hints[files[1]] == "CUSTOM_AREA"
+
+
+def test_preflight_guard_rejects_loose_file_matching_date_pattern(tmp_path: Path) -> None:
+    """Verify preflight guard raises FileNotFoundError when a date pattern matches a file instead of a directory."""
+    qr_dir = tmp_path / "QUICK REPORT"
+    qr_dir.mkdir(parents=True)
+    # Create a loose file named "07-10-2026" inside QUICK REPORT
+    (qr_dir / "07-10-2026").write_bytes(b"not a directory")
+
+    total_pe_path = tmp_path / "TOTAL PE.xlsx"
+    _create_33kv_total_pe(total_pe_path)
+    template_path = tmp_path / "TEMPLATE.docx"
+    template_path.write_bytes(b"dummy")
+
+    metadata = ProjectMetadata(
+        key="pahang_33kv_2026",
+        name="Pahang 33kV 2026",
+        po_number="PO42394550",
+        state="Pahang",
+        voltage_type="33kV",
+        year="2026",
+        cycle="Cycle 1",
+        technologies=("IR", "VI"),
+        base_path=str(tmp_path),
+    )
+    storage = LocalWorkspaceStorage(tmp_path)
+    env = ProjectEnvironment(metadata=metadata, storage=storage)
+    resources = WhatsAppReportResources(
+        quick_report_dir=qr_dir,
+        save_dir=tmp_path / "PYTHON" / "WHATSAPP",
+        template_path=template_path,
+        total_pe_path=total_pe_path,
+        station_mapping={"CGBG": "GEBENG"},
+        voltage_type="33kV",
+    )
+    env.get_whatsapp_report_resources = lambda: resources
+
+    guard = WhatsAppReportPreflightGuard()
+    with pytest.raises(FileNotFoundError, match="Directory not found"):
+        guard.validate(env, WhatsAppReportRequest(report_dir="07-10-2026"))
+
+
+
 

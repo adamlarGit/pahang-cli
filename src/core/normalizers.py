@@ -142,8 +142,10 @@ def normalize_date_str(date_input: object) -> str:
         return ""
     if isinstance(date_input, (datetime, date)):
         return date_input.strftime("%d-%m-%Y")
-    s = str(date_input).strip().replace("/", "-")
-    match_iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    s = str(date_input).strip().replace("\\", "/")
+    s = s.rstrip("/-").strip()
+    s = re.sub(r"\s*([/-])\s*", r"\1", s).replace("/", "-")
+    match_iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", s)
     if match_iso:
         year, month, day = int(match_iso.group(1)), int(match_iso.group(2)), int(match_iso.group(3))
         return f"{day:02d}-{month:02d}-{year:04d}"
