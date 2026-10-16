@@ -145,11 +145,11 @@ def normalize_date_str(date_input: object) -> str:
     s = str(date_input).strip().replace("\\", "/")
     s = s.rstrip("/-").strip()
     s = re.sub(r"\s*([/-])\s*", r"\1", s).replace("/", "-")
-    match_iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", s)
+    match_iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT].*)?$", s)
     if match_iso:
         year, month, day = int(match_iso.group(1)), int(match_iso.group(2)), int(match_iso.group(3))
         return f"{day:02d}-{month:02d}-{year:04d}"
-    match = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})$", s)
+    match = re.match(r"^(\d{1,2})-(\d{1,2})-(\d{4})(?:[\sT].*)?$", s)
     if match:
         day, month, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
         return f"{day:02d}-{month:02d}-{year:04d}"
@@ -394,7 +394,7 @@ def _is_null_or_empty(val: Any) -> bool:
     return False
 
 
-def normalize_for_csv(val: Any) -> str:
+def normalize_for_csv(val: Any, decimals: int = 1) -> str:
     """Sanitize and normalize value for CSV ingestion target.
     
     Returns clean string representation or empty string "" for missing/empty/NaN values.
@@ -406,9 +406,17 @@ def normalize_for_csv(val: Any) -> str:
         return str(val)
     if isinstance(val, int):
         return str(val)
-    if isinstance(val, float):
-        d = Decimal(str(round(val, 6)))
-        return str(d.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+    if isinstance(val, (float, Decimal)):
+        d = Decimal(str(round(float(val), 6)))
+        if decimals == 0:
+            quantum = Decimal("1")
+        elif decimals == 1:
+            quantum = Decimal("0.1")
+        elif decimals == 2:
+            quantum = Decimal("0.01")
+        else:
+            quantum = Decimal(f"1e-{decimals}")
+        return str(d.quantize(quantum, rounding=ROUND_HALF_UP))
     if isinstance(val, (datetime, date)):
         return format_iso8601(val)
     s = str(val).strip()
@@ -874,6 +882,11 @@ def format_load_amp(val: Any) -> str:
     if not s or s.lower() in _NULL_SENTINELS:
         return "-"
 
+    # Support measured/rated format (e.g. '119/600', '0/600')
+    m_ratio = re.match(r"^(\d+(?:\.\d+)?)\s*/\s*\d+", s)
+    if m_ratio:
+        s = m_ratio.group(1)
+
     clean = re.sub(r"[Aa]\s*$", "", s).strip()
     if not clean or clean.lower() in _NULL_SENTINELS:
         return "-"
@@ -882,6 +895,63 @@ def format_load_amp(val: Any) -> str:
         return _quantize_whole(float(clean))
     except (ValueError, InvalidOperation):
         return "-"
+
+
+def extract_gas_pressure(val: Any) -> float | None:
+    """Extract numeric gas pressure from testsheet cell (e.g. 'B: 1.41 Bar', 'S: 6.0 Bar', 1.41)."""
+    if val is None or isinstance(val, bool):
+        return None
+    if isinstance(val, (int, float, Decimal)):
+        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+            return None
+        return float(val)
+    s = str(val).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return None
+
+    # First attempt: anchor to pressure units (Bar, kg/cm², kg/cm2, MPa, kPa, psi)
+    m_unit = re.search(r"(\d+(?:\.\d+)?)\s*(?:bar|kg/cm[²2^]|kg/cm\^2|mpa|kpa|psi)\b", s, re.IGNORECASE)
+    if m_unit:
+        try:
+            return float(m_unit.group(1))
+        except ValueError:
+            pass
+
+    # Fallback: strip label/equipment/voltage/gas/busbar tokens to prevent digit collisions
+    # Handles SF6, SF-6, 33kV, 11kV, CB1, CB-1, CB#1, GIS1, GIS-1, BB1, BB-1, MBB1, RBB1, BUS 1, PHASE 1, etc.
+    cleaned = re.sub(
+        r"(?i)\b(?:SF[-_\s]*6|\d+[-_\s]*KV|(?:CB|GIS|SWG|BAY|PANEL|FEEDER|BUSBAR|BUS|MBB|RBB|BB|PHASE|PH)(?:[-_\s#]*\d+)?)\b",
+        " ",
+        s,
+    )
+
+    m = re.search(r"(\d+(?:\.\d+)?)", cleaned)
+    if m:
+        try:
+            return float(m.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def extract_heater_amp(val: Any) -> float | None:
+    """Extract numeric ampere reading from heater cell, returning None for text status like 'ON'/'OFF'."""
+    if val is None or isinstance(val, bool):
+        return None
+    if isinstance(val, (int, float, Decimal)):
+        if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+            return None
+        return float(val)
+    s = str(val).strip()
+    if s.upper() in ("ON", "OFF", "-", "NONE", "N/A", "NAN"):
+        return None
+    m = re.search(r"(?:^|ON:?\s*)(\d+(?:\.\d+)?)\s*[Aa]?$", s, re.IGNORECASE)
+    if m:
+        try:
+            return float(m.group(1))
+        except ValueError:
+            return None
+    return None
 
 
 def format_busbar_position(
@@ -1207,6 +1277,8 @@ __all__ = [
     "FL_PREFIX_TO_STATION",
     "STATION_NAME_TO_CODE",
     "extract_background_temperature",
+    "extract_gas_pressure",
+    "extract_heater_amp",
     "format_busbar_position",
     "format_cbm_reading",
     "format_date_cbm",

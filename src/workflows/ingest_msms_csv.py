@@ -97,6 +97,15 @@ class IngestMsmsCsvExtractor:
     """Reading and schema validation stage for Ingest MSMS CSV workflow."""
 
     REQUIRED_HEADERS = ("WONUM", "TNBLOCATION", "METERNAME")
+    T1SUB33_REQUIRED_HEADERS = (
+        "ACTFINISH",
+        "ACTSTART",
+        "JPNUM",
+        "WONUM",
+        "TNBLOCATION",
+        "METERNAME",
+        "TNBNEWREADING",
+    )
 
     def extract_files(self, source: Path | Sequence[Path]) -> list[Path]:
         """Discover and validate CSV schema for all files in source directory or sequence."""
@@ -120,12 +129,36 @@ class IngestMsmsCsvExtractor:
         headers = self._read_headers(filepath)
         normalized_headers = {h.strip().upper() for h in headers if h}
 
-        missing = [req for req in self.REQUIRED_HEADERS if req not in normalized_headers]
+        # Check if this is a T1SUB33 Maximo CSV file
+        is_t1sub33 = (
+            "T1SUB33" in filepath.name.upper()
+            or self._has_jobplan_marker(filepath, "T1SUB33")
+        )
+
+        expected_headers = self.T1SUB33_REQUIRED_HEADERS if is_t1sub33 else self.REQUIRED_HEADERS
+        missing = [req for req in expected_headers if req not in normalized_headers]
         if missing:
             raise ValueError(
                 f"Missing required CSV headers {missing} in file: {filepath.name}. "
-                f"Expected headers containing {list(self.REQUIRED_HEADERS)}, but found {headers}."
+                f"Expected headers containing {list(expected_headers)}, but found {headers}."
             )
+
+    def _has_jobplan_marker(self, filepath: Path, marker: str) -> bool:
+        """Check if any of the initial rows in the CSV contains the specified job plan marker."""
+        marker_upper = marker.upper()
+        for encoding in ("utf-8-sig", "utf-8", "latin-1"):
+            try:
+                with open(filepath, mode="r", encoding=encoding, newline="") as f:
+                    for _ in range(50):
+                        line = f.readline()
+                        if not line:
+                            break
+                        if marker_upper in line.upper():
+                            return True
+                return False
+            except UnicodeDecodeError:
+                continue
+        return False
 
     def _read_headers(self, filepath: Path) -> list[str]:
         """Read CSV headers with encoding fallback."""

@@ -12,7 +12,12 @@ from src.testsheet.parsers import (
     get_testsheet_parser,
 )
 from src.testsheet.mapper import (
+    PceReadingMapper,
+    PpuReadingMapper,
+    ReadingMapperStrategy,
     TestsheetReadingMapper,
+    build_ppu_bay_map,
+    extract_root_substation_token,
     get_sheet_name,
     parse_equipment_index,
 )
@@ -61,6 +66,11 @@ __all__ = [
     "parse_secondary_photo",
     "SubstationTestsheetRepository",
     "TestsheetReadingMapper",
+    "PceReadingMapper",
+    "PpuReadingMapper",
+    "ReadingMapperStrategy",
+    "build_ppu_bay_map",
+    "extract_root_substation_token",
     "get_sheet_name",
     "parse_equipment_index",
     "resolve_feeder_channel",

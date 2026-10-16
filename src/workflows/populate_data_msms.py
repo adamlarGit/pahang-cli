@@ -13,12 +13,16 @@ from datetime import datetime, time
 import logging
 from pathlib import Path
 import re
+import shutil
 from typing import Any, Sequence
 import openpyxl
 
 from src.core.normalizers import (
     _parse_date_object,
     extract_background_temperature,
+    extract_gas_pressure,
+    extract_heater_amp,
+    format_load_amp,
     normalize_date_str,
     normalize_for_csv,
 )
@@ -31,7 +35,14 @@ from src.testsheet.feeder_thermal import (
     parse_feeder_meter,
     synthesize_feeder_thermal_readings,
 )
-from src.testsheet.mapper import TestsheetReadingMapper, parse_equipment_index
+from src.testsheet.mapper import (
+    PceReadingMapper,
+    PpuReadingMapper,
+    TestsheetReadingMapper,
+    build_ppu_bay_map,
+    extract_root_substation_token,
+    parse_equipment_index,
+)
 from src.testsheet.models import SubstationTestsheetPackage
 from src.testsheet.repository import SubstationTestsheetRepository
 from src.workflows.models import (
@@ -457,6 +468,10 @@ class PopulateDataMsmsExtractor:
             if pkg_fl:
                 fl_to_package[pkg_fl] = pkg
                 fl_to_package[pkg_fl.replace("/", "")] = pkg
+                root_fl = extract_root_substation_token(pkg_fl)
+                if root_fl:
+                    fl_to_package[root_fl] = pkg
+                    fl_to_package[root_fl.replace("/", "")] = pkg
 
             if pkg_data and pkg_data.wo_number:
                 wo_to_package[pkg_data.wo_number] = pkg
@@ -464,7 +479,15 @@ class PopulateDataMsmsExtractor:
             # Match against TOTAL PE records
             for rec in pe_records:
                 matched = False
-                if pkg_fl and rec["fl_erms"] and (pkg_fl == rec["fl_erms"] or pkg_fl.replace("/", "") == rec["fl_erms"].replace("/", "")):
+                rec_fl = rec["fl_erms"]
+                rec_root = extract_root_substation_token(rec_fl) if rec_fl else ""
+                pkg_root = extract_root_substation_token(pkg_fl) if pkg_fl else ""
+
+                if pkg_fl and rec_fl and (
+                    pkg_fl == rec_fl
+                    or pkg_fl.replace("/", "") == rec_fl.replace("/", "")
+                    or (pkg_root and rec_root and pkg_root == rec_root)
+                ):
                     matched = True
                 elif pkg_pe and rec["pe_no"] and str(pkg_pe) == str(rec["pe_no"]) and pkg_date == rec["norm_date"]:
                     matched = True
@@ -555,6 +578,7 @@ class PopulateDataMsmsTransformer:
         """Transform CSV rows in place using extracted testsheets and defects."""
         wb_cache: dict[Path, openpyxl.Workbook] = {}
         vi_defects_cache: dict[str, list[ViDefectRecord]] = {}
+        bay_map_cache: dict[Path, dict[tuple[str, str], tuple[str, int]]] = {}
         transformations: list[CsvFileTransformation] = []
 
         try:
@@ -564,6 +588,7 @@ class PopulateDataMsmsTransformer:
                     extracted=extracted,
                     wb_cache=wb_cache,
                     vi_defects_cache=vi_defects_cache,
+                    bay_map_cache=bay_map_cache,
                     overwrite=overwrite,
                 )
                 transformations.append(trans)
@@ -579,6 +604,7 @@ class PopulateDataMsmsTransformer:
         extracted: PopulateDataMsmsExtractedData,
         wb_cache: dict[Path, openpyxl.Workbook],
         vi_defects_cache: dict[str, list[ViDefectRecord]],
+        bay_map_cache: dict[Path, dict[tuple[str, str], tuple[str, int]]],
         overwrite: bool,
     ) -> CsvFileTransformation:
         fieldnames, delimiter, lineterminator, raw_rows = self._read_csv_rows(csv_path)
@@ -590,6 +616,7 @@ class PopulateDataMsmsTransformer:
                 extracted=extracted,
                 wb_cache=wb_cache,
                 vi_defects_cache=vi_defects_cache,
+                bay_map_cache=bay_map_cache,
                 overwrite=overwrite,
             )
             evaluations.append(eval_res)
@@ -609,6 +636,7 @@ class PopulateDataMsmsTransformer:
         extracted: PopulateDataMsmsExtractedData,
         wb_cache: dict[Path, openpyxl.Workbook],
         vi_defects_cache: dict[str, list[ViDefectRecord]],
+        bay_map_cache: dict[Path, dict[tuple[str, str], tuple[str, int]]],
         overwrite: bool,
     ) -> CsvRowEvaluation:
         wo_num = str(row.get("WONUM") or "").strip()
@@ -629,12 +657,21 @@ class PopulateDataMsmsTransformer:
         # Match package
         pkg = extracted.wo_to_package.get(wo_num)
         if not pkg and tnb_loc:
-            # Fallback by location prefix
+            # Fallback by location prefix or root substation token
+            root_loc = extract_root_substation_token(tnb_loc)
             fl_prefix = tnb_loc.split("/")[0] if "/" in tnb_loc else tnb_loc
-            pkg = extracted.fl_to_package.get(fl_prefix) or extracted.fl_to_package.get(tnb_loc)
+            pkg = (
+                extracted.fl_to_package.get(root_loc)
+                or extracted.fl_to_package.get(root_loc.replace("/", ""))
+                or extracted.fl_to_package.get(fl_prefix)
+                or extracted.fl_to_package.get(tnb_loc)
+            )
         if not pkg and wo_num in extracted.wo_to_fl:
             fl_target = extracted.wo_to_fl[wo_num]
-            pkg = extracted.fl_to_package.get(fl_target)
+            pkg = (
+                extracted.fl_to_package.get(fl_target)
+                or extracted.fl_to_package.get(extract_root_substation_token(fl_target))
+            )
 
         if not pkg:
             return CsvRowEvaluation(
@@ -650,8 +687,16 @@ class PopulateDataMsmsTransformer:
         # Extract timestamps
         act_start, act_finish, reading_date = self._extract_timestamps(wb, pkg)
 
-        # 1. Visual Inspection (VI11_*)
-        if meter_name.upper().startswith("VI11_"):
+        # 1. Visual Inspection & Characteristic Meters
+        is_vi11 = meter_name.upper().startswith("VI11_")
+        is_char = (
+            is_vi11
+            or meter_name.upper().startswith("VI_")
+            or meter_name.upper() in ("HEATER_33KV_STATUS", "HEATER_11KV_STATUS")
+            or str(row.get("METERTYPE") or "").strip().upper() == "CHARACTERISTIC"
+        )
+
+        if is_vi11:
             defects = self._get_vi_defects(fl_erms, vi_defects_cache)
             matched_defect = match_vi_defect(meter_name, tnb_loc, defects)
             if matched_defect is not None:
@@ -664,7 +709,28 @@ class PopulateDataMsmsTransformer:
                     row["ACTFINISH"] = act_finish
                 return CsvRowEvaluation(row_dict=row, is_populated=True)
             else:
-                # No defect found: skip completely (leave untouched)
+                # No defect found: leave untouched
+                return CsvRowEvaluation(row_dict=row, is_populated=False)
+
+        if is_char:
+            has_defect, defect_comment = self._match_33kv_vi_defect(
+                meter_name=meter_name,
+                meter_desc=str(row.get("METER.DESCRIPTION") or row.get("DESCRIPTION") or "").strip(),
+                tnb_loc=tnb_loc,
+                pkg=pkg,
+                vi_defects_cache=vi_defects_cache,
+            )
+            if has_defect:
+                row["TNBNEWREADING"] = "YES"
+                row["TNBCOMMENTS"] = defect_comment
+                row["TNBNEWREADINGDATE"] = reading_date
+                if "ACTSTART" in row and act_start:
+                    row["ACTSTART"] = act_start
+                if "ACTFINISH" in row and act_finish:
+                    row["ACTFINISH"] = act_finish
+                return CsvRowEvaluation(row_dict=row, is_populated=True)
+            else:
+                # No defect found: leave untouched (default "NO" preserved)
                 return CsvRowEvaluation(row_dict=row, is_populated=False)
 
         # 2. Hardcoded / Special Meters
@@ -728,7 +794,13 @@ class PopulateDataMsmsTransformer:
             return CsvRowEvaluation(row_dict=row, is_populated=False)
 
         # 4. Numeric GAUGE meters
-        target = self.mapper.get_target(meter_name, tnb_loc)
+        bay_map = None
+        if "33kV (Main)" in wb.sheetnames or "11kV (Main)" in wb.sheetnames:
+            if pkg.testsheet_path not in bay_map_cache:
+                bay_map_cache[pkg.testsheet_path] = build_ppu_bay_map(wb)
+            bay_map = bay_map_cache.get(pkg.testsheet_path)
+
+        target = self.mapper.get_target(meter_name, tnb_loc, bay_map=bay_map)
         if target is None:
             # Stub meter (e.g. Earth meters or LV compartment)
             return CsvRowEvaluation(row_dict=row, is_unmapped_meter=True)
@@ -738,9 +810,20 @@ class PopulateDataMsmsTransformer:
             return CsvRowEvaluation(row_dict=row, is_unmapped_meter=True)
 
         cell_val = wb[sheet_name][cell_coord].value
-        if meter_name.upper() == "BG_ROOM_TEM":
+        m_upper = meter_name.upper()
+
+        if m_upper == "BG_ROOM_TEM" or "BG_TEM" in m_upper:
             extracted_temp = extract_background_temperature(cell_val)
             norm_val = normalize_for_csv(extracted_temp) if extracted_temp is not None else ""
+        elif "GIS_PRES" in m_upper:
+            extracted_pres = extract_gas_pressure(cell_val)
+            norm_val = normalize_for_csv(extracted_pres, decimals=2) if extracted_pres is not None else ""
+        elif "LOADING" in m_upper:
+            load_val = format_load_amp(cell_val)
+            norm_val = load_val if load_val != "-" else ""
+        elif m_upper.startswith("HEATER_") and "AMP" in m_upper:
+            extracted_amp = extract_heater_amp(cell_val)
+            norm_val = normalize_for_csv(extracted_amp, decimals=2) if extracted_amp is not None else ""
         else:
             norm_val = normalize_for_csv(cell_val)
 
@@ -754,6 +837,95 @@ class PopulateDataMsmsTransformer:
             return CsvRowEvaluation(row_dict=row, is_populated=True)
 
         return CsvRowEvaluation(row_dict=row, is_populated=False)
+
+    def _match_33kv_vi_defect(
+        self,
+        meter_name: str,
+        meter_desc: str,
+        tnb_loc: str,
+        pkg: SubstationTestsheetPackage,
+        vi_defects_cache: dict[str, list[ViDefectRecord]],
+    ) -> tuple[bool, str]:
+        """Check visual inspection defects for 33kV meters against testsheet visual_findings and QR03."""
+        m_upper = meter_name.upper()
+        loc_upper = tnb_loc.upper()
+        is_heater_status = "HEATER" in m_upper and "STATUS" in m_upper
+        is_33kv_target = "33KV" in m_upper or "/33KV/" in loc_upper
+        is_11kv_target = "11KV" in m_upper or "/11KV/" in loc_upper
+
+        # 1. Check testsheet visual findings (Visual Inspec. sheet)
+        if pkg.data and pkg.data.visual_findings:
+            meter_clean = m_upper.removeprefix("VI_")
+            meter_tokens = [tok for tok in meter_clean.split("_") if len(tok) >= 3 and not tok.isdigit()]
+            norm_desc = re.sub(r"[^\w\s]", "", meter_desc).strip().lower()
+
+            for vf in pkg.data.visual_findings:
+                status_clean = (vf.status or "").strip().upper()
+                remarks_clean = (vf.remarks or "").strip()
+                is_defect = (status_clean == "NO") or (status_clean != "YES" and bool(remarks_clean))
+                if not is_defect:
+                    continue
+
+                vf_cat = (vf.category or "").upper()
+                vf_desc = (vf.description or "").upper()
+                vf_rem = (vf.remarks or "").upper()
+                finding_search = f"{vf_cat} {vf_desc} {vf_rem}"
+
+                # Voltage disambiguation
+                if is_33kv_target and "11KV" in finding_search and "33KV" not in finding_search:
+                    continue
+                if is_11kv_target and "33KV" in finding_search and "11KV" not in finding_search:
+                    continue
+
+                if is_heater_status:
+                    if "HEATER" in vf_cat or "HEATER" in vf_desc or "HEATER" in vf_rem:
+                        return True, remarks_clean or vf_desc
+                    continue
+
+                norm_vf_desc = re.sub(r"[^\w\s]", "", vf.description or "").strip().lower()
+
+                # Rule A: Direct description match
+                if norm_desc and norm_vf_desc and (norm_desc == norm_vf_desc or norm_desc in norm_vf_desc or norm_vf_desc in norm_desc):
+                    return True, remarks_clean or vf_desc
+
+                # Rule B: Token match between meter name and finding
+                if meter_tokens:
+                    matches_all = all(
+                        (tok in vf_cat or tok in vf_desc or tok in vf_rem)
+                        for tok in meter_tokens
+                    )
+                    if matches_all:
+                        return True, remarks_clean or vf_desc
+
+        # 2. Check Master QR03 defect repository
+        fl_erms = (pkg.data.fl_erms if pkg.data else "").strip().upper()
+        if fl_erms and self.defect_repo:
+            qr03_defects = self._get_vi_defects(fl_erms, vi_defects_cache)
+            for d in qr03_defects:
+                eq_upper = d.equipment.strip().upper()
+                area_upper = d.defect_area.strip().upper()
+                rem_upper = d.additional_remarks.strip().upper()
+                search_space = f"{eq_upper} {area_upper} {rem_upper}"
+
+                # Voltage disambiguation
+                if is_33kv_target and "11KV" in search_space and "33KV" not in search_space:
+                    continue
+                if is_11kv_target and "33KV" in search_space and "11KV" not in search_space:
+                    continue
+
+                if is_heater_status:
+                    if "HEATER" in search_space:
+                        comment = d.additional_remarks or d.defect_area or d.equipment
+                        return True, comment
+                    continue
+
+                meter_clean = m_upper.removeprefix("VI_")
+                meter_tokens = [tok for tok in meter_clean.split("_") if len(tok) >= 3]
+                if meter_tokens and all(tok in search_space for tok in meter_tokens):
+                    comment = d.additional_remarks or d.defect_area or d.equipment
+                    return True, comment
+
+        return False, ""
 
     def _get_cached_workbook(
         self, path: Path, cache: dict[Path, openpyxl.Workbook]
@@ -787,12 +959,20 @@ class PopulateDataMsmsTransformer:
             p4_date = ws["P4"].value
             p5_time = ws["P5"].value
             s5_time = ws["S5"].value
+        elif "33kV (Main)" in wb.sheetnames:
+            ws = wb["33kV (Main)"]
+            p4_date = ws["D8"].value
+            p5_time = ws["D9"].value
+        elif "11kV (Main)" in wb.sheetnames:
+            ws = wb["11kV (Main)"]
+            p4_date = ws["D8"].value
+            p5_time = ws["D9"].value
 
         if not p4_date:
             p4_date = pkg.date_str
 
         act_start = parse_testsheet_datetime(p4_date, p5_time)
-        act_finish = parse_testsheet_datetime(p4_date, s5_time)
+        act_finish = parse_testsheet_datetime(p4_date, s5_time) if s5_time else act_start
         reading_date = act_start if act_start else parse_testsheet_datetime(p4_date, None)
 
         return act_start, act_finish, reading_date
@@ -831,8 +1011,13 @@ class PopulateDataMsmsTransformer:
 class PopulateDataMsmsLoader:
     """Loader stage executing in-place CSV updates."""
 
-    def load(self, transformations: Sequence[CsvFileTransformation]) -> None:
-        """Write modified CSV rows back to disk in place."""
+    def load(
+        self,
+        transformations: Sequence[CsvFileTransformation],
+        completed_dir: Path | None = None,
+    ) -> list[Path]:
+        """Write modified CSV rows back to disk in place, optionally moving to completed_dir."""
+        moved_files: list[Path] = []
         for trans in transformations:
             temp_path = trans.csv_path.with_suffix(".tmp")
             with open(temp_path, mode="w", encoding="utf-8", newline="") as f:
@@ -847,12 +1032,22 @@ class PopulateDataMsmsLoader:
 
             temp_path.replace(trans.csv_path)
 
+            if completed_dir is not None:
+                completed_dir.mkdir(parents=True, exist_ok=True)
+                dest = completed_dir / trans.csv_path.name
+                shutil.move(str(trans.csv_path), str(dest))
+                moved_files.append(dest)
+
+        return moved_files
+
 
 class PopulateDataMsmsAuditor:
     """Auditing stage calculating telemetry and verifying output."""
 
     def audit(
-        self, transformations: Sequence[CsvFileTransformation]
+        self,
+        transformations: Sequence[CsvFileTransformation],
+        files_moved: Sequence[Path] = (),
     ) -> PopulateDataMsmsResult:
         """Calculate and return PopulateDataMsmsResult telemetry."""
         csv_files_processed = len(transformations)
@@ -888,6 +1083,7 @@ class PopulateDataMsmsAuditor:
             unmapped_meters_count=unmapped_meters_count,
             warnings=tuple(warnings),
             errors=tuple(errors),
+            files_moved=tuple(files_moved),
         )
 
 
@@ -948,6 +1144,13 @@ class PopulateDataMsmsWorkflow:
         if req.progress_sink:
             req.progress_sink(f"Transforming and matching readings for {len(target_csvs)} CSV file(s)...")
 
+        # Wire voltage-aware mapper
+        if getattr(environment, "voltage_type", None) == "33kV":
+            if isinstance(self.transformer.mapper, TestsheetReadingMapper) and not isinstance(
+                self.transformer.mapper.strategy, PpuReadingMapper
+            ):
+                self.transformer.mapper = TestsheetReadingMapper(voltage_type="33kV")
+
         transformations = self.transformer.transform(
             extracted=extracted,
             csv_files=target_csvs,
@@ -957,9 +1160,10 @@ class PopulateDataMsmsWorkflow:
         if req.progress_sink:
             req.progress_sink("Writing updated CSV files in place...")
 
-        self.loader.load(transformations)
+        completed_dir = environment.storage.get_msms_completed_dir() if req.move_to_completed else None
+        files_moved = self.loader.load(transformations, completed_dir=completed_dir)
 
-        result = self.auditor.audit(transformations)
+        result = self.auditor.audit(transformations, files_moved=files_moved)
 
         if req.progress_sink:
             req.progress_sink(

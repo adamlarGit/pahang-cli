@@ -224,6 +224,7 @@ class PopulateDataMsmsRequest:
     target_folder_names: Sequence[str] = ()
     overwrite: bool = False
     progress_sink: ProgressSink | None = None
+    move_to_completed: bool = False
 
 
 @dataclass(frozen=True)
@@ -238,6 +239,7 @@ class PopulateDataMsmsResult:
     unmapped_meters_count: int = 0
     warnings: Sequence[str] = ()
     errors: Sequence[str] = ()
+    files_moved: Sequence[Path] = ()
 
 
 @dataclass(frozen=True)
