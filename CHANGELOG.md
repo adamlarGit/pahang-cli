@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.3] - 2026-10-16
+
+### Fixed
+- **Multi-Part Full Report CLI Post-Processing Action & Sibling Discovery (`src/project_workflow_actions.py`, `src/workflows/full_report_postprocessing.py`)**:
+  - Fixed workflow 14 dropping modular parts beyond Part 01 when post-processing multi-part Full Report deliverables (e.g. VCB/GIS substations), which caused missing panel/TX pages and prevented ultrasound audio embedding on panel pages (closes #104).
+  - Updated `postprocess_full_reports_action` to inspect `target_item.is_multipart` and unpack all `target_item.part_docx_paths` into `target_docs` for downstream batch PDF conversion and stitching.
+  - Enhanced `select_substations_interactive` title formatting in postprocessing action to clearly display multi-part stems and part counts (`{stem} [{count} docx parts -> 1 pdf deliverable] [{status}]`).
+  - Added defense-in-depth sibling part auto-expansion in `_discover_docx_files` (`_expand_multipart_siblings`) across direct paths, sequences, and path strings, ensuring individual multi-part docx files automatically resolve all sibling parts in the same directory while caching stems to prevent redundant globbing.
+
 ## [1.26.2] - 2026-10-15
 
 ### Fixed
