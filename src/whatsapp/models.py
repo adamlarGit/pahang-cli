@@ -15,3 +15,4 @@ class WhatsAppReportResources:
     template_path: Path
     total_pe_path: Path
     station_mapping: dict[str, str]
+    voltage_type: str = "11kV"

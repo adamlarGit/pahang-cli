@@ -164,7 +164,12 @@ class PostProcessingPipelineWorkflow:
         # Stage 3: WhatsApp Reporting (BY_DATE mode only)
         if req.mode == PostProcessingMode.BY_DATE and req.generate_whatsapp:
             qr_date_dirs = {pkg.quick_report_docx.parent for pkg in target_packages if pkg.quick_report_docx.parent.exists()}
+            processed_dates = set()
             for qr_dir in sorted(qr_date_dirs, key=lambda p: str(p)):
+                if getattr(env, "voltage_type", "11kV") == "33kV":
+                    if qr_dir.name in processed_dates:
+                        continue
+                    processed_dates.add(qr_dir.name)
                 try:
                     sink(f"Generating WhatsApp daily report for date folder '{qr_dir.name}'...")
                     wa_result = run_generate_whatsapp_report(env, qr_dir)

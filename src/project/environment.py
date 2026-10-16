@@ -150,6 +150,7 @@ class ProjectEnvironment:
             template_path=self.get_whatsapp_template(),
             total_pe_path=self.get_total_pe_path(),
             station_mapping=self.get_station_mapping(),
+            voltage_type=self.voltage_type,
         )
 
     def get_vi_front_page_template(self) -> Path:

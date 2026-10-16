@@ -39,6 +39,18 @@ def test_qualifying_docx_pattern_matching() -> None:
     assert m3.group(2) == "MARAN"
     assert m3.group(3) == "IR+US+VI"
 
+    m4 = QUALIFYING_DOCX_PATTERN.match("02. SSU KIIP (SSU CAMEL POWER) 33kV (VI).docx")
+    assert m4 is not None
+    assert m4.group(1) == "02"
+    assert m4.group(2) == "SSU KIIP (SSU CAMEL POWER) 33kV"
+    assert m4.group(3) == "VI"
+
+    m5 = QUALIFYING_DOCX_PATTERN.match("02. SSU KIIP (SSU CAMEL POWER) 33kV.docx")
+    assert m5 is not None
+    assert m5.group(1) == "02"
+    assert m5.group(2) == "SSU KIIP (SSU CAMEL POWER) 33kV"
+    assert m5.group(3) is None
+
     assert QUALIFYING_DOCX_PATTERN.match("random_file.txt") is None
     assert QUALIFYING_DOCX_PATTERN.match("summary.pdf") is None
 

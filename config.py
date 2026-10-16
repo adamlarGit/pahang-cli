@@ -13,6 +13,7 @@ STATION_MAPPING: dict[str, str] = {
     "CBMS": "MUADZAM SHAH",
     "CBTG": "BENTONG",
     "CBGB": "GEBENG",
+    "CGBG": "GEBENG",
     "CROM": "ROMPIN",
     "CTML": "TEMERLOH",
     "CPEK": "PEKAN",
