@@ -7,6 +7,16 @@ import math
 import re
 
 
+DATE_FOLDER_PATTERN = re.compile(
+    r"^(?:\d{1,2}[-_./]\d{1,2}[-_./]\d{4}|\d{4}[-_./]\d{1,2}[-_./]\d{1,2})$"
+)
+
+
+def is_date_folder_name(name: str) -> bool:
+    """Return True if name matches a date directory format (DD-MM-YYYY or ISO YYYY-MM-DD with -, _, ., /)."""
+    return bool(DATE_FOLDER_PATTERN.match(name.strip()))
+
+
 def normalize_fl_erms(val: object) -> str:
     """Strip whitespace, handle .0 float suffix from FL ERMS values."""
     if val is None:

@@ -10,7 +10,11 @@ import openpyxl
 import pandas as pd
 from openpyxl.utils import column_index_from_string
 
-from src.core.normalizers import normalize_date_str, normalize_for_excel
+from src.core.normalizers import (
+    _parse_date_object,
+    normalize_date_str,
+    normalize_for_excel,
+)
 from src.testsheet.extractor import to_excel_date
 from src.testsheet.models import SubstationTestsheetPackage
 from src.testsheet.parsers.common import normalize_fl_erms
@@ -28,17 +32,17 @@ def write_cell(ws: Any, row: int, col_letter: str, value: Any) -> None:
 
 def generate_candidate_pe_keys(
     pe_no: Any | Sequence[Any] = None,
-    fl: Any = None,
-    sub_name: Any = None,
+    fl: Any | Sequence[Any] = None,
+    sub_name: Any | Sequence[Any] = None,
     date_val: Any | Sequence[Any] = None,
 ) -> set[tuple[str, str]]:
     """Generate normalized candidate (identifier, date) lookup keys.
 
     Produces the cartesian product of expanded identifiers:
-    - PE / substation numbers (raw str, int str, 2-digit zero-padded, 3-digit zero-padded)
+    - PE / substation numbers (raw str, upper str, int str, 2-digit zero-padded, 3-digit zero-padded)
     - Functional locations (raw uppercase, normalized via normalize_fl_erms, without slashes)
     - Substation names (raw uppercase stripped)
-    paired with normalized date variants (raw string and normalize_date_str).
+    paired with normalized date variants (raw string, normalize_date_str, and ISO/DD-MM-YYYY).
     """
     dates: set[str] = set()
     date_inputs = date_val if isinstance(date_val, (list, tuple, set)) else [date_val]
@@ -51,6 +55,10 @@ def generate_candidate_pe_keys(
         norm_str = normalize_date_str(d)
         if norm_str:
             dates.add(norm_str)
+        parsed_dt = _parse_date_object(d)
+        if parsed_dt is not None:
+            dates.add(parsed_dt.strftime("%d-%m-%Y"))
+            dates.add(parsed_dt.strftime("%Y-%m-%d"))
 
     if not dates:
         return set()
@@ -65,6 +73,7 @@ def generate_candidate_pe_keys(
         if not p_str or p_str.lower() in ("none", "nan", "-"):
             continue
         idents.add(p_str)
+        idents.add(p_str.upper())
         try:
             p_int = int(float(p_str))
             idents.add(str(p_int))
@@ -73,8 +82,11 @@ def generate_candidate_pe_keys(
         except (ValueError, TypeError):
             pass
 
-    if fl is not None:
-        fl_str = str(fl).strip().upper()
+    fl_inputs = fl if isinstance(fl, (list, tuple, set)) else [fl]
+    for f in fl_inputs:
+        if f is None:
+            continue
+        fl_str = str(f).strip().upper()
         if fl_str and fl_str.lower() not in ("none", "nan", "-"):
             idents.add(fl_str)
             norm_fl = normalize_fl_erms(fl_str)
@@ -84,8 +96,11 @@ def generate_candidate_pe_keys(
             if clean_fl:
                 idents.add(clean_fl)
 
-    if sub_name is not None:
-        sub_str = str(sub_name).strip().upper()
+    sub_inputs = sub_name if isinstance(sub_name, (list, tuple, set)) else [sub_name]
+    for s in sub_inputs:
+        if s is None:
+            continue
+        sub_str = str(s).strip().upper()
         if sub_str and sub_str.lower() not in ("none", "nan", "-"):
             idents.add(sub_str)
 
@@ -122,6 +137,15 @@ class TotalPeRepository(ABC):
 
 class LocalExcelTotalPeRepository(TotalPeRepository):
     """Excel-backed repository for TOTAL PE workbook management."""
+
+    @staticmethod
+    def _is_row_empty(ws: openpyxl.worksheet.worksheet.Worksheet, row_idx: int) -> bool:
+        """Return True if row has no meaningful content in columns 1..6."""
+        for c in range(1, 7):
+            val = ws.cell(row=row_idx, column=c).value
+            if val is not None and str(val).strip() not in ("", "None", "nan"):
+                return False
+        return True
 
     @staticmethod
     def _get_real_dimensions(ws: openpyxl.worksheet.worksheet.Worksheet) -> tuple[int, int]:
@@ -195,7 +219,8 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                 existing_val = ws.cell(row=idx, column=c).value
                 if isinstance(existing_val, str) and existing_val.startswith("="):
                     continue
-                cell = ws.cell(row=idx, column=c, value=val)
+                cell = ws.cell(row=idx, column=c)
+                cell.value = val
                 if c == 1 and val is not None:
                     try:
                         cell.value = int(float(str(val).strip()))
@@ -274,10 +299,20 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
             if data is None:
                 continue
 
-            pe_no = normalize_for_excel(data.substation_number)
+            pe_candidate_num = (
+                data.substation_number
+                if (data.substation_number is not None and str(data.substation_number).strip() not in ("", "0", "None", "nan"))
+                else pkg.substation_number
+            )
+            pe_no = normalize_for_excel(pe_candidate_num)
             fl_candidate = (data.fl_erms or data.fl_site or "").strip()
             fl_num = normalize_for_excel(fl_candidate or data.fl_erms)
-            sub_name = normalize_for_excel(data.substation_name_erms)
+            sub_name_cand = (
+                data.substation_name_erms
+                or data.substation_name_site
+                or (pkg.substation_name if pkg else None)
+            )
+            sub_name = normalize_for_excel(sub_name_cand)
             dt_str = data.date_str or pkg.date_str
             norm_pkg_dt = normalize_date_str(dt_str)
             type_c = normalize_for_excel(data.substation_type)
@@ -294,10 +329,10 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                 date_cell_val = norm_pkg_dt
 
             candidate_keys = generate_candidate_pe_keys(
-                pe_no=pe_no,
-                fl=fl_candidate or data.fl_erms,
-                sub_name=sub_name,
-                date_val=(dt_str, norm_pkg_dt),
+                pe_no=(pe_no, data.substation_number, pkg.substation_number),
+                fl=(fl_candidate, data.fl_erms, data.fl_site),
+                sub_name=(sub_name, sub_name_cand, data.substation_name_erms, data.substation_name_site),
+                date_val=(dt_str, norm_pkg_dt, date_cell_val, data.cycle_1),
             )
 
             target_row = None
@@ -307,12 +342,16 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                     break
 
             if target_row is not None:
-                ws.cell(target_row, 1, pe_no)
-                ws.cell(target_row, 2, fl_num)
-                ws.cell(target_row, 3, sub_name)
+                if pe_no is not None and str(pe_no).strip() not in ("", "None", "nan"):
+                    ws.cell(target_row, 1, pe_no)
+                if fl_num is not None and str(fl_num).strip() not in ("", "None", "nan"):
+                    ws.cell(target_row, 2, fl_num)
+                if sub_name is not None and str(sub_name).strip() not in ("", "None", "nan"):
+                    ws.cell(target_row, 3, sub_name)
                 c_dt = ws.cell(target_row, 4, date_cell_val)
                 c_dt.number_format = "DD-MMM-YYYY"
-                ws.cell(target_row, 5, type_c)
+                if type_c is not None and str(type_c).strip() not in ("", "None", "nan"):
+                    ws.cell(target_row, 5, type_c)
                 if wo is not None and str(wo).strip() != "":
                     ws.cell(target_row, 6, wo)
                 elif ws.cell(target_row, 6).value is None or str(ws.cell(target_row, 6).value).strip() in ("", "None", "nan"):
@@ -320,7 +359,7 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                 updated_count += 1
             else:
                 next_row = 2
-                while ws.cell(next_row, 1).value is not None and str(ws.cell(next_row, 1).value).strip() != "":
+                while not self._is_row_empty(ws, next_row):
                     next_row += 1
 
                 ws.cell(next_row, 1, pe_no)

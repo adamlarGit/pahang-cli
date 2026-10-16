@@ -34,7 +34,7 @@ import openpyxl
 import pytest
 
 from src.core.normalizers import normalize_date_str
-from src.master.total_pe import LocalExcelTotalPeRepository
+from src.master.total_pe import LocalExcelTotalPeRepository, generate_candidate_pe_keys
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
@@ -862,4 +862,132 @@ def test_populate_total_pe_workflow_all_and_specific_folders_33kv(
     assert ws.cell(2, 1).value == 1
     assert ws.cell(3, 1).value == 2
     wb.close()
+
+
+def test_upsert_packages_does_not_overwrite_blank_pe_row(tmp_path: Path) -> None:
+    """Verify upserting a new package does not overwrite an existing 33kV row with blank PE NO."""
+    repo = LocalExcelTotalPeRepository()
+    total_pe_file = tmp_path / "TOTAL PE.xlsx"
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "DataCycle1"
+    ws.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    # Existing row 2 has no PE number (e.g. 33kV transmission station)
+    ws.append([None, "CGBG/PPU/G00007", "PPU GEBENG", "07-10-2026", "PPU", None, None])
+    wb.save(total_pe_file)
+    wb.close()
+
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=tmp_path / "dummy.xlsx",
+        unsorted_raw_data_dir=tmp_path,
+        station="KUANTAN",
+        month="10. OCTOBER",
+        date_str="07-10-2026",
+        substation_number=2,
+        data=TestsheetData(
+            substation_number=2,
+            substation_name_erms="PE DUA",
+            fl_erms="CGBG/PE/002",
+            date_str="07-10-2026",
+        ),
+    )
+
+    new_cnt, upd_cnt = repo.upsert_packages(total_pe_file, [pkg])
+    assert new_cnt == 1
+    assert upd_cnt == 0
+
+    wb2 = openpyxl.load_workbook(total_pe_file)
+    ws2 = wb2["DataCycle1"]
+    assert ws2.max_row == 3
+
+    # Row 2 should be the numeric PE (sorted first)
+    assert ws2.cell(2, 1).value == 2
+    assert ws2.cell(2, 2).value == "CGBG/PE/002"
+    assert ws2.cell(2, 3).value == "PE DUA"
+
+    # Row 3 should be the existing 33kV PPU row (preserved untouched!)
+    assert ws2.cell(3, 1).value is None
+    assert ws2.cell(3, 2).value == "CGBG/PPU/G00007"
+    assert ws2.cell(3, 3).value == "PPU GEBENG"
+    assert ws2.cell(3, 5).value == "PPU"
+    wb2.close()
+
+
+def test_ppu_metadata_extraction_dot_and_underscore_iso_date_folders(tmp_path: Path) -> None:
+    """Verify parent folders with dots or underscores (e.g. 2026.10.07, 2026_10_07) are NOT matched as substation numbers."""
+    parser = PpuTestsheetParser()
+    for folder_name in ("2026.10.07", "2026_10_07", "07.10.2026"):
+        date_folder = tmp_path / folder_name
+        date_folder.mkdir(parents=True, exist_ok=True)
+        ts_file = date_folder / "Testsheet.xlsx"
+
+        wb = create_ppu_testsheet_workbook(
+            path=ts_file,
+            substation_number=None,
+            substation_name="PPU UNPREFIXED",
+            fl_number="CGBG/PPU/G00007",
+            date_val="2026-10-07",
+            v2_substation_num_33kv=None,
+            v2_substation_num_11kv=None,
+        )
+        wb.save(ts_file)
+        wb.close()
+
+        with pytest.raises(ValueError, match="Unable to determine substation number"):
+            parser.extract_testsheet_metadata(ts_file)
+
+
+def test_repository_discovery_handles_dot_underscore_and_single_digit_dates(tmp_path: Path) -> None:
+    """Verify SubstationTestsheetRepository discovers folders with single-digit dates, dots, or underscores."""
+    repo = SubstationTestsheetRepository()
+    test_folders = ["7-10-2026", "2026.10.07", "2026_10_07"]
+    for folder_name in test_folders:
+        d_dir = tmp_path / "KUANTAN" / "10. OCTOBER" / folder_name
+        d_dir.mkdir(parents=True, exist_ok=True)
+        (d_dir / "UNSORTED RAW DATA").mkdir(exist_ok=True)
+        ts = d_dir / "Testsheet.xlsx"
+        wb = create_ppu_testsheet_workbook(
+            path=ts,
+            substation_number=None,
+            substation_name="PPU UNPREFIXED",
+            fl_number="CGBG/PPU/G00007",
+            date_val="2026-10-07",
+            v2_substation_num_33kv=None,
+            v2_substation_num_11kv=None,
+        )
+        wb.save(ts)
+        wb.close()
+
+    pkgs = repo.discover_packages(tmp_path / "KUANTAN")
+    assert len(pkgs) == 3
+    for pkg in pkgs:
+        assert pkg.substation_number == 1  # Default fallback 1, NOT 2026 or 7!
+
+
+def test_generate_candidate_pe_keys_comprehensive() -> None:
+    """Verify generate_candidate_pe_keys handles casing, month names, and cycle_1 datetimes."""
+    # 1. Lowercase string PE number matches uppercase
+    keys_lower = generate_candidate_pe_keys(pe_no="pe 01", date_val="07-10-2026")
+    keys_upper = generate_candidate_pe_keys(pe_no="PE 01", date_val="07-10-2026")
+    assert ("PE 01", "07-10-2026") in keys_lower
+    assert ("PE 01", "07-10-2026") in keys_upper
+
+    # 2. Named month format parses into canonical date variants
+    keys_month = generate_candidate_pe_keys(pe_no=1, date_val="07-Oct-2026")
+    assert ("1", "07-10-2026") in keys_month
+    assert ("1", "2026-10-07") in keys_month
+    assert ("01", "07-10-2026") in keys_month
+
+    # 3. Sequence of FLs and Station Names
+    keys_seq = generate_candidate_pe_keys(
+        pe_no=1,
+        fl=("CGBG/PPU/001", "CGBG/PPU/002"),
+        sub_name=("PPU GEBENG", "PPU GEBENG 2"),
+        date_val=datetime(2026, 10, 7, 10, 30),
+    )
+    assert ("CGBG/PPU/001", "07-10-2026") in keys_seq
+    assert ("CGBG/PPU/002", "07-10-2026") in keys_seq
+    assert ("PPU GEBENG", "07-10-2026") in keys_seq
+    assert ("PPU GEBENG 2", "07-10-2026") in keys_seq
+
 

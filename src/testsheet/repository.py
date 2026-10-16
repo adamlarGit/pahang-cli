@@ -9,6 +9,7 @@ from src.core.normalizers import format_month_folder
 from src.project.storage import extract_numerical_prefix
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
+from src.testsheet.parsers.common import is_date_folder_name
 
 
 class SubstationTestsheetRepository:
@@ -38,7 +39,7 @@ class SubstationTestsheetRepository:
             return []
 
         date_folders: list[Path] = []
-        if re.match(r"^(?:\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})$", root.name) and root.is_dir():
+        if is_date_folder_name(root.name) and root.is_dir():
             date_folders.append(root)
         else:
             date_folders = self._find_date_folders(root)
@@ -76,7 +77,7 @@ class SubstationTestsheetRepository:
                 match = re.match(r"^(\d+)", xlsx_path.name)
                 if match:
                     substation_number = int(match.group(1))
-                elif xlsx_path.parent and not re.match(r"^(?:\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})$", xlsx_path.parent.name):
+                elif xlsx_path.parent and not is_date_folder_name(xlsx_path.parent.name):
                     match_p = re.match(r"^(\d+)", xlsx_path.parent.name)
                     if match_p:
                         substation_number = int(match_p.group(1))
@@ -110,7 +111,7 @@ class SubstationTestsheetRepository:
         """Find all date-formatted directories (DD-MM-YYYY or ISO YYYY-MM-DD) recursively under directory."""
         date_folders: list[Path] = []
         for p in directory.rglob("*"):
-            if p.is_dir() and re.match(r"^(?:\d{2}-\d{2}-\d{4}|\d{4}-\d{2}-\d{2})$", p.name):
+            if p.is_dir() and is_date_folder_name(p.name):
                 date_folders.append(p)
         date_folders.sort(key=lambda d: d.name, reverse=True)
         return date_folders

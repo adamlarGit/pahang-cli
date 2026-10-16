@@ -34,6 +34,7 @@ from src.testsheet.parsers.base import TestsheetParserStrategy
 from src.testsheet.parsers.common import (
     clean_val,
     find_next_val,
+    is_date_folder_name,
     is_marked,
     normalize_fl_erms,
     parse_int_safe,
@@ -350,7 +351,7 @@ class PpuTestsheetParser(TestsheetParserStrategy):
 
         # 3. Filename or parent folder leading numeric prefix
         m = re.match(r"^(\d+)", path.name)
-        if not m and path.parent and not re.match(r"^(?:\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})$", path.parent.name):
+        if not m and path.parent and not is_date_folder_name(path.parent.name):
             m = re.match(r"^(\d+)", path.parent.name)
         if m:
             num = int(m.group(1))

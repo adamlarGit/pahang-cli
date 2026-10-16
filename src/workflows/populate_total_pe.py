@@ -388,25 +388,29 @@ class PopulateTotalPeFilter:
         if not keys:
             return False
 
-        pkg_date = pkg.date_str or (pkg.data.date_str if pkg.data else None)
+        pkg_dates = (
+            pkg.date_str,
+            pkg.data.date_str if pkg.data else None,
+            pkg.data.cycle_1 if pkg.data else None,
+        )
         pe_candidates = (
-            pkg.substation_number,
-            pkg.data.substation_number if pkg.data else None,
+            pkg.substation_number if pkg.substation_number > 0 else None,
+            pkg.data.substation_number if (pkg.data and pkg.data.substation_number and pkg.data.substation_number > 0) else None,
         )
         fl_cand = (
-            (pkg.data.fl_erms or pkg.data.fl_site) if pkg.data else None
+            (pkg.data.fl_erms, pkg.data.fl_site) if pkg.data else None
         )
         sub_cand = (
-            (pkg.data.substation_name_erms or pkg.data.substation_name_site)
+            (pkg.data.substation_name_erms, pkg.data.substation_name_site, pkg.substation_name)
             if pkg.data
-            else None
+            else (pkg.substation_name if pkg else None)
         )
 
         candidate_keys = generate_candidate_pe_keys(
             pe_no=pe_candidates,
             fl=fl_cand,
             sub_name=sub_cand,
-            date_val=pkg_date,
+            date_val=pkg_dates,
         )
 
         if any(k in keys for k in candidate_keys):
