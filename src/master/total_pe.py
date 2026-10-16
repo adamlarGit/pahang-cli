@@ -114,10 +114,7 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
             vals = []
             for c in range(1, real_max_col + 1):
                 val = ws.cell(row=r, column=c).value
-                if isinstance(val, str) and val.startswith("="):
-                    vals.append(None)
-                else:
-                    vals.append(val)
+                vals.append(val)
             substation_val = vals[0]
             try:
                 substation_key = int(float(str(substation_val).strip())) if substation_val is not None and str(substation_val).strip() != "" else 999999
@@ -157,8 +154,9 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                 pe_val = str(row[0] or "").strip() if len(row) > 0 and row[0] is not None else ""
                 fl_val = str(row[1] or "").strip().upper() if len(row) > 1 and row[1] is not None else ""
                 sub_val = str(row[2] or "").strip().upper() if len(row) > 2 and row[2] is not None else ""
-                dt_val = str(row[3] or "").strip() if len(row) > 3 and row[3] is not None else ""
-                norm_dt = normalize_date_str(dt_val)
+                raw_cell_date = row[3] if len(row) > 3 else None
+                dt_val = str(raw_cell_date or "").strip() if raw_cell_date is not None else ""
+                norm_dt = normalize_date_str(raw_cell_date) if raw_cell_date is not None else ""
 
                 for d in (dt_val, norm_dt):
                     if not d:
@@ -213,8 +211,9 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
             pe_val_raw = str(ws.cell(r_idx, 1).value or "").strip()
             fl_val_raw = str(ws.cell(r_idx, 2).value or "").strip().upper()
             sub_val = str(ws.cell(r_idx, 3).value or "").strip().upper()
-            date_val = str(ws.cell(r_idx, 4).value or "").strip()
-            norm_dt = normalize_date_str(date_val)
+            raw_cell_date = ws.cell(r_idx, 4).value
+            date_val = str(raw_cell_date or "").strip()
+            norm_dt = normalize_date_str(raw_cell_date)
 
             for d in (date_val, norm_dt):
                 if not d:
@@ -260,10 +259,12 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                     or cba_index.get(fl_candidate.upper().replace("/", ""))
                 )
                 if cba_entry:
-                    if cba_entry.get("substation_name"):
-                        sub_name_cand = cba_entry["substation_name"]
-                    if cba_entry.get("substation_type"):
-                        sub_type_cand = cba_entry["substation_type"]
+                    cba_name = cba_entry.get("substation_name", "")
+                    cba_type = cba_entry.get("substation_type", "")
+                    if cba_name and cba_name.lower() not in ("none", "-", "n/a", "nan"):
+                        sub_name_cand = cba_name
+                    if cba_type and cba_type.lower() not in ("none", "-", "n/a", "nan"):
+                        sub_type_cand = cba_type
 
             pe_no = normalize_for_excel(data.substation_number)
             fl_num = normalize_for_excel(fl_candidate or data.fl_erms)
@@ -276,47 +277,47 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
             dt_obj = to_excel_date(dt_str)
             if dt_obj is not None:
                 date_cell_val = dt_obj.date()
-            elif data.cycle_1 is not None and hasattr(data.cycle_1, "date"):
+            elif isinstance(data.cycle_1, datetime):
                 date_cell_val = data.cycle_1.date()
+            elif isinstance(data.cycle_1, date):
+                date_cell_val = data.cycle_1
             else:
                 date_cell_val = norm_pkg_dt
 
-            lookup_key = (str(pe_no), dt_str)
-            norm_lookup_key = (str(pe_no), norm_pkg_dt)
-            padded_2d_key = (f"{pe_no:02d}" if isinstance(pe_no, int) else str(pe_no), dt_str)
-            norm_padded_2d_key = (f"{pe_no:02d}" if isinstance(pe_no, int) else str(pe_no), norm_pkg_dt)
-            padded_key = (f"{pe_no:03d}" if isinstance(pe_no, int) else str(pe_no), dt_str)
-            norm_padded_key = (f"{pe_no:03d}" if isinstance(pe_no, int) else str(pe_no), norm_pkg_dt)
+            # Build candidate lookup keys
+            candidate_keys: list[tuple[str, str] | None] = []
+
+            pe_keys: set[str] = set()
+            if pe_no is not None:
+                pe_keys.add(str(pe_no).strip())
+                try:
+                    pe_int = int(str(pe_no).strip())
+                    pe_keys.add(str(pe_int))
+                    pe_keys.add(f"{pe_int:02d}")
+                    pe_keys.add(f"{pe_int:03d}")
+                except (ValueError, TypeError):
+                    pass
+            for pk in pe_keys:
+                candidate_keys.append((pk, dt_str))
+                candidate_keys.append((pk, norm_pkg_dt))
 
             fl_str = str(fl_num).strip().upper() if fl_num else ""
-            fl_key = (fl_str, dt_str) if fl_str else None
-            norm_fl_key = (fl_str, norm_pkg_dt) if fl_str else None
-            normed_fl = normalize_fl_erms(fl_str) if fl_str else ""
-            normed_fl_key = (normed_fl, dt_str) if normed_fl else None
-            normed_fl_norm_dt_key = (normed_fl, norm_pkg_dt) if normed_fl else None
-            clean_fl = fl_str.replace("/", "") if fl_str else ""
-            clean_fl_key = (clean_fl, dt_str) if clean_fl else None
-            clean_fl_norm_dt_key = (clean_fl, norm_pkg_dt) if clean_fl else None
+            if fl_str:
+                candidate_keys.append((fl_str, dt_str))
+                candidate_keys.append((fl_str, norm_pkg_dt))
+                normed_fl = normalize_fl_erms(fl_str)
+                if normed_fl:
+                    candidate_keys.append((normed_fl, dt_str))
+                    candidate_keys.append((normed_fl, norm_pkg_dt))
+                clean_fl = fl_str.replace("/", "")
+                if clean_fl:
+                    candidate_keys.append((clean_fl, dt_str))
+                    candidate_keys.append((clean_fl, norm_pkg_dt))
 
-            sub_key = (str(sub_name).upper() if sub_name else "", dt_str)
-            norm_sub_key = (str(sub_name).upper() if sub_name else "", norm_pkg_dt)
-
-            candidate_keys = [
-                lookup_key,
-                norm_lookup_key,
-                padded_2d_key,
-                norm_padded_2d_key,
-                padded_key,
-                norm_padded_key,
-                fl_key,
-                norm_fl_key,
-                normed_fl_key,
-                normed_fl_norm_dt_key,
-                clean_fl_key,
-                clean_fl_norm_dt_key,
-                sub_key,
-                norm_sub_key,
-            ]
+            if sub_name:
+                sub_str = str(sub_name).strip().upper()
+                candidate_keys.append((sub_str, dt_str))
+                candidate_keys.append((sub_str, norm_pkg_dt))
 
             target_row = None
             for ck in candidate_keys:
@@ -331,7 +332,10 @@ class LocalExcelTotalPeRepository(TotalPeRepository):
                 c_dt = ws.cell(target_row, 4, date_cell_val)
                 c_dt.number_format = "DD-MMM-YYYY"
                 ws.cell(target_row, 5, type_c)
-                ws.cell(target_row, 6, wo)
+                if wo is not None and str(wo).strip() != "":
+                    ws.cell(target_row, 6, wo)
+                elif ws.cell(target_row, 6).value is None or str(ws.cell(target_row, 6).value).strip() in ("", "None", "nan"):
+                    ws.cell(target_row, 6, wo)
                 updated_count += 1
             else:
                 next_row = 2

@@ -571,7 +571,10 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         exact = self.get_engr_folder() / f"ENGR-750-39 -CBA-PAHANG - {eff_year}.xlsx"
         if exact.exists():
             return exact
-        candidates = list(self.get_engr_folder().glob("ENGR-750-39 -CBA-PAHANG - *.xlsx"))
+        candidates = [
+            c for c in self.get_engr_folder().glob("ENGR-750-39 -CBA-PAHANG - *.xlsx")
+            if not c.name.startswith("~$")
+        ]
         if len(candidates) == 1:
             return candidates[0]
         elif len(candidates) > 1:

@@ -76,7 +76,7 @@ class SubstationTestsheetRepository:
                 match = re.match(r"^(\d+)", xlsx_path.name)
                 if match:
                     substation_number = int(match.group(1))
-                elif xlsx_path.parent:
+                elif xlsx_path.parent and not re.match(r"^\d{1,2}-\d{1,2}-\d{4}$", xlsx_path.parent.name):
                     match_p = re.match(r"^(\d+)", xlsx_path.parent.name)
                     if match_p:
                         substation_number = int(match_p.group(1))
@@ -87,6 +87,9 @@ class SubstationTestsheetRepository:
                         data = self.extractor.extract_testsheet_data(
                             xlsx_path, station_hint=station, date_hint=date_str
                         )
+                        if data and getattr(data, "substation_number", None):
+                            if isinstance(data.substation_number, int) and data.substation_number > 0:
+                                substation_number = data.substation_number
                     except Exception:
                         pass
 

@@ -62,7 +62,17 @@ def to_excel_date(val: object) -> datetime | None:
     s = str(val).strip()
     if not s or s in ("-", "None", "N/A"):
         return None
-    for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d.%m.%Y", "%d %b %Y", "%d-%b-%Y"):
+    for fmt in (
+        "%d/%m/%Y",
+        "%d-%m-%Y",
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%d.%m.%Y",
+        "%d %b %Y",
+        "%d-%b-%Y",
+        "%d %B %Y",
+        "%d-%B-%Y",
+    ):
         try:
             return datetime.strptime(s, fmt)
         except ValueError:

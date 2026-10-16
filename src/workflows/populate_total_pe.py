@@ -61,6 +61,10 @@ def load_qr02_cba_33kv_metadata(cba_path: Path) -> dict[str, dict[str, str]]:
 
                 name_val = str(row[7]).strip() if len(row) > 7 and row[7] is not None else ""
                 type_val = str(row[8]).strip() if len(row) > 8 and row[8] is not None else ""
+                if name_val.lower() in ("none", "-", "n/a", "nan"):
+                    name_val = ""
+                if type_val.lower() in ("none", "-", "n/a", "nan"):
+                    type_val = ""
 
                 entry = {"substation_name": name_val, "substation_type": type_val}
                 mapping[norm_fl] = entry
@@ -283,7 +287,15 @@ class PopulateTotalPeExtractor:
 
         for pkg in packages:
             if pkg.data is not None:
-                hydrated.append(pkg)
+                sub_num = (
+                    pkg.data.substation_number
+                    if (getattr(pkg.data, "substation_number", None) and isinstance(pkg.data.substation_number, int) and pkg.data.substation_number > 0)
+                    else pkg.substation_number
+                )
+                if sub_num != pkg.substation_number:
+                    hydrated.append(dataclasses.replace(pkg, substation_number=sub_num))
+                else:
+                    hydrated.append(pkg)
                 continue
 
             if extractor is not None:
@@ -300,7 +312,12 @@ class PopulateTotalPeExtractor:
                             station_hint=pkg.station,
                             date_hint=pkg.date_str,
                         )
-                    hydrated.append(dataclasses.replace(pkg, data=data))
+                    sub_num = (
+                        data.substation_number
+                        if (data and getattr(data, "substation_number", None) and isinstance(data.substation_number, int) and data.substation_number > 0)
+                        else pkg.substation_number
+                    )
+                    hydrated.append(dataclasses.replace(pkg, data=data, substation_number=sub_num))
                     continue
                 except Exception:
                     pass
@@ -364,22 +381,35 @@ class PopulateTotalPeFilter:
         self, pkg: SubstationTestsheetPackage, keys: set[tuple[str, str]]
     ) -> bool:
         """Check if package matches any existing key in TOTAL PE."""
-        raw_date = pkg.date_str
-        norm_date = normalize_date_str(raw_date)
-        dates_to_check = {raw_date, norm_date}
+        if not keys:
+            return False
 
-        str_sub_num = str(pkg.substation_number)
-        padded_2d_num = f"{pkg.substation_number:02d}"
-        padded_sub_num = f"{pkg.substation_number:03d}"
+        raw_date = pkg.date_str or (pkg.data.date_str if pkg.data else "")
+        norm_date = normalize_date_str(raw_date)
+        dates_to_check = {d for d in (raw_date, norm_date) if d}
+
+        sub_nums_to_check: set[str] = set()
+        for sn in (pkg.substation_number, pkg.data.substation_number if pkg.data else None):
+            if sn is not None and str(sn).strip():
+                s_str = str(sn).strip()
+                sub_nums_to_check.add(s_str)
+                try:
+                    sn_int = int(s_str)
+                    sub_nums_to_check.add(str(sn_int))
+                    sub_nums_to_check.add(f"{sn_int:02d}")
+                    sub_nums_to_check.add(f"{sn_int:03d}")
+                except (ValueError, TypeError):
+                    pass
+
         fl_erms = (
-            pkg.data.fl_erms.upper()
+            pkg.data.fl_erms.upper().strip()
             if (pkg.data and pkg.data.fl_erms)
             else ""
         )
         norm_fl = normalize_fl_erms(fl_erms) if fl_erms else ""
         clean_fl = fl_erms.replace("/", "") if fl_erms else ""
         erms_name = (
-            pkg.data.substation_name_erms.upper()
+            pkg.data.substation_name_erms.upper().strip()
             if (pkg.data and pkg.data.substation_name_erms)
             else None
         )
@@ -387,7 +417,7 @@ class PopulateTotalPeFilter:
         for str_id, key_dt in keys:
             norm_key_dt = normalize_date_str(key_dt)
             if key_dt in dates_to_check or norm_key_dt in dates_to_check:
-                if str_id in (str_sub_num, padded_2d_num, padded_sub_num):
+                if str_id in sub_nums_to_check:
                     return True
                 if fl_erms and str_id in (fl_erms, norm_fl, clean_fl):
                     return True
@@ -488,6 +518,12 @@ class PopulateTotalPeWorkflow:
         if request.progress_sink:
             request.progress_sink(f"Scanning testsheet packages in {testsheet_dir}...")
 
+        if hasattr(environment, "voltage_type") and environment.voltage_type:
+            if getattr(self.repository, "voltage_type", None) is None:
+                self.repository.voltage_type = environment.voltage_type
+            if hasattr(self.repository, "extractor") and getattr(self.repository.extractor, "voltage_type", None) is None:
+                self.repository.extractor.voltage_type = environment.voltage_type
+
         packages = self.extractor.discover_packages(
             testsheet_dir=testsheet_dir,
             target_folder_names=request.target_folder_names,
@@ -510,12 +546,6 @@ class PopulateTotalPeWorkflow:
             if request.progress_sink:
                 request.progress_sink("No testsheet packages found to process.")
             return PopulateTotalPeResult(new_rows_added=0)
-
-        if hasattr(environment, "voltage_type") and environment.voltage_type:
-            if getattr(self.repository, "voltage_type", None) is None:
-                self.repository.voltage_type = environment.voltage_type
-            if hasattr(self.repository, "extractor") and getattr(self.repository.extractor, "voltage_type", None) is None:
-                self.repository.extractor.voltage_type = environment.voltage_type
 
         hydrated_packages = self.extractor.hydrate_packages_metadata(
             filtered_packages, environment=environment

@@ -531,3 +531,285 @@ def test_populate_total_pe_action_registration_and_execution(
 
     assert result is not None
     assert getattr(result, "new_rows_added", None) == 1
+
+
+def test_ppu_metadata_extraction_date_parent_folder_not_matched_as_substation(tmp_path: Path) -> None:
+    """Verify parent folder formatted as a date (DD-MM-YYYY) is NOT treated as a numeric substation prefix."""
+    date_folder = tmp_path / "07-10-2026"
+    date_folder.mkdir(parents=True)
+    ts_file = date_folder / "Testsheet.xlsx"
+
+    wb = create_ppu_testsheet_workbook(
+        path=ts_file,
+        substation_number=None,
+        substation_name="PPU UNPREFIXED",
+        fl_number="CGBG/PPU/G00007",
+        date_val="2026-10-07",
+        v2_substation_num_33kv=None,
+        v2_substation_num_11kv=None,
+    )
+    wb.save(ts_file)
+    wb.close()
+
+    parser = PpuTestsheetParser()
+    # Should raise ValueError because neither cell V2, nor filename, nor parent (date folder) has a valid substation prefix
+    with pytest.raises(ValueError, match="Unable to determine substation number"):
+        parser.extract_testsheet_metadata(ts_file)
+
+
+def test_ppu_metadata_extraction_date_formats_and_malaysian_fallback(tmp_path: Path) -> None:
+    """Verify various date formats in D8 parse cleanly or fall back without crashing."""
+    ts_file = tmp_path / "01. PPU DATES.xlsx"
+
+    # Case 1: Slash ISO date "2026/10/07"
+    wb1 = create_ppu_testsheet_workbook(
+        path=ts_file,
+        substation_number=1,
+        substation_name="PPU DATES",
+        fl_number="CGBG/PPU/G00001",
+        date_val="2026/10/07",
+        v2_substation_num_33kv=1,
+    )
+    wb1.save(ts_file)
+    wb1.close()
+
+    parser = PpuTestsheetParser()
+    data1 = parser.extract_testsheet_metadata(ts_file)
+    assert data1.date_str == "07-10-2026"
+
+    # Case 2: Malaysian irregular text date "7hb Oktober 2026"
+    wb2 = create_ppu_testsheet_workbook(
+        path=ts_file,
+        substation_number=1,
+        substation_name="PPU DATES",
+        fl_number="CGBG/PPU/G00001",
+        date_val="7hb Oktober 2026",
+        v2_substation_num_33kv=1,
+    )
+    wb2.save(ts_file)
+    wb2.close()
+
+    data2 = parser.extract_testsheet_metadata(ts_file)
+    assert data2.date_str == "7hb Oktober 2026"
+
+
+def test_upsert_packages_multirow_sort_and_formula_preservation(tmp_path: Path) -> None:
+    """Verify _sort_datacycle_sheet properly sorts multiple rows without losing static text or corrupting formulas."""
+    repo = LocalExcelTotalPeRepository()
+    total_pe_file = tmp_path / "TOTAL PE.xlsx"
+
+    # Row 2: PE 2, formula in Col H, static value in Col G
+    # Row 3: PE 1, formula in Col H, static value in Col G
+    _create_sample_total_pe(total_pe_file, [
+        [2, "CGBG/PPU/G00002", "PPU TWO", "07-10-2026", "PPU", "45000002", "SCOPE TWO", "=A2*10"],
+        [1, "CGBG/PPU/G00001", "PPU ONE", "07-10-2026", "PPU", "45000001", "SCOPE ONE", "=A3*10"],
+    ])
+
+    # Run sort by performing a no-op upsert of an existing row
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=Path("01. PPU ONE.xlsx"),
+        unsorted_raw_data_dir=Path("raw"),
+        station="KUANTAN",
+        month="10. OCTOBER",
+        date_str="07-10-2026",
+        substation_number=1,
+        data=TestsheetData(
+            substation_number=1,
+            fl_erms="CGBG/PPU/G00001",
+            substation_name_erms="PPU ONE UPDATED",
+            substation_type="PPU",
+            date_str="07-10-2026",
+            wo_number="45000001",
+        ),
+    )
+
+    new_cnt, upd_cnt = repo.upsert_packages(total_pe_file, [pkg])
+    assert new_cnt == 0
+    assert upd_cnt == 1
+
+    wb = openpyxl.load_workbook(total_pe_file)
+    ws = wb["DataCycle1"]
+    # Row 2 must now be PE 1 (sorted)
+    assert ws.cell(2, 1).value == 1
+    assert ws.cell(2, 2).value == "CGBG/PPU/G00001"
+    assert ws.cell(2, 3).value == "PPU ONE UPDATED"
+    assert ws.cell(2, 7).value == "SCOPE ONE"  # Preserved from PE 1 row!
+    assert ws.cell(2, 8).value == "=A2*10"    # Formula preserved on row 2
+
+    # Row 3 must now be PE 2 (sorted)
+    assert ws.cell(3, 1).value == 2
+    assert ws.cell(3, 2).value == "CGBG/PPU/G00002"
+    assert ws.cell(3, 3).value == "PPU TWO"
+    assert ws.cell(3, 7).value == "SCOPE TWO"  # Preserved from PE 2 row!
+    assert ws.cell(3, 8).value == "=A3*10"    # Formula preserved on row 3
+    wb.close()
+
+
+def test_upsert_packages_preserves_existing_work_order(tmp_path: Path) -> None:
+    """Verify upsert_packages preserves existing WO number in Col F if incoming package has empty WO."""
+    repo = LocalExcelTotalPeRepository()
+    total_pe_file = tmp_path / "TOTAL PE.xlsx"
+
+    _create_sample_total_pe(total_pe_file, [
+        [1, "CGBG/PPU/G00001", "PPU OLD", "07-10-2026", "PPU", "45009999", "FULL", None],
+    ])
+
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=Path("01. PPU APMM.xlsx"),
+        unsorted_raw_data_dir=Path("raw"),
+        station="KUANTAN",
+        month="10. OCTOBER",
+        date_str="07-10-2026",
+        substation_number=1,
+        data=TestsheetData(
+            substation_number=1,
+            fl_erms="CGBG/PPU/G00001",
+            substation_name_erms="PPU NEW NAME",
+            substation_type="PPU",
+            date_str="07-10-2026",
+            wo_number="",  # Empty WO in incoming package
+        ),
+    )
+
+    new_cnt, upd_cnt = repo.upsert_packages(total_pe_file, [pkg])
+    assert new_cnt == 0
+    assert upd_cnt == 1
+
+    wb = openpyxl.load_workbook(total_pe_file)
+    ws = wb["DataCycle1"]
+    assert ws.cell(2, 3).value == "PPU NEW NAME"
+    assert ws.cell(2, 6).value == "45009999"  # Preserved!
+    wb.close()
+
+
+def test_qr02_cba_sentinel_strings_fall_back_gracefully(mock_env_33kv: ProjectEnvironment) -> None:
+    """Verify CBA entries with sentinel values ('-', 'None', 'N/A') fall back to testsheet cell D6 and stem."""
+    cba_path = mock_env_33kv.storage.get_engr_33kv_cba_path("2026")
+    _create_sample_cba_33kv(cba_path, [
+        [1, "KUANTAN", "CGBG", "APMM", 4, "33kV", "CGBG/PPU/G00001", "-", "None", "33/11"],
+    ])
+
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=Path("dummy.xlsx"),
+        unsorted_raw_data_dir=Path("raw"),
+        station="KUANTAN",
+        month="10. OCTOBER",
+        date_str="07-10-2026",
+        substation_number=1,
+        data=TestsheetData(
+            substation_number=1,
+            fl_erms="CGBG/PPU/G00001",
+            substation_name_erms="PPU APMM D6 ORIGINAL",
+            substation_type="PPU",
+            date_str="07-10-2026",
+        ),
+    )
+
+    extractor = PopulateTotalPeExtractor()
+    enriched = extractor.enrich_packages_with_cba([pkg], environment=mock_env_33kv)
+
+    assert len(enriched) == 1
+    assert enriched[0].data is not None
+    assert enriched[0].data.substation_name_erms == "PPU APMM D6 ORIGINAL"
+    assert enriched[0].data.substation_type == "PPU"
+
+
+def test_auto_mode_deduplication_with_v2_substation_number(mock_env_33kv: ProjectEnvironment) -> None:
+    """Verify AUTO mode deduplication works when package initially lacks prefix but cell V2 specifies substation number."""
+    total_pe_path = mock_env_33kv.storage.get_total_pe_path()
+    # TOTAL PE already has PE 5 on 07-10-2026
+    _create_sample_total_pe(total_pe_path, [
+        [5, "CGBG/PPU/G00005", "PPU FIVE", "07-10-2026", "PPU", None, None, None],
+    ])
+
+    ts_dir = mock_env_33kv.storage.get_testsheet_dir() / "KUANTAN" / "10. OCTOBER" / "07-10-2026"
+    ts_dir.mkdir(parents=True)
+    (ts_dir / "UNSORTED RAW DATA").mkdir()
+
+    # File without numeric prefix in filename, but cell V2 = 5
+    ts_file = ts_dir / "PPU FIVE SPECIAL.xlsx"
+    wb_ppu = create_ppu_testsheet_workbook(
+        path=ts_file,
+        substation_number=None,
+        substation_name="PPU FIVE",
+        fl_number="CGBG/PPU/G00005",
+        date_val="2026-10-07",
+        v2_substation_num_33kv=5,
+    )
+    wb_ppu.save(ts_file)
+    wb_ppu.close()
+
+    workflow = PopulateTotalPeWorkflow()
+    req = PopulateTotalPeRequest(mode=PopulateMode.AUTO)
+    res = workflow.execute(mock_env_33kv, req)
+
+    # Must be deduplicated and not re-added
+    assert res.new_rows_added == 0
+
+
+def test_populate_total_pe_workflow_all_and_specific_folders_33kv(
+    mock_env_33kv: ProjectEnvironment,
+) -> None:
+    """Verify workflow execution in ALL mode and SPECIFIC_FOLDERS mode on 33kV workspace."""
+    total_pe_path = mock_env_33kv.storage.get_total_pe_path()
+    _create_sample_total_pe(total_pe_path, [])
+
+    # Setup two date folders
+    ts_dir_1 = mock_env_33kv.storage.get_testsheet_dir() / "KUANTAN" / "10. OCTOBER" / "07-10-2026"
+    ts_dir_1.mkdir(parents=True)
+    (ts_dir_1 / "UNSORTED RAW DATA").mkdir()
+
+    ts_file_1 = ts_dir_1 / "01. PPU APMM 33-11kV (VI).xlsx"
+    wb_1 = create_ppu_testsheet_workbook(
+        path=ts_file_1,
+        substation_number=1,
+        substation_name="PPU APMM",
+        fl_number="CGBG/PPU/G00001",
+        date_val="2026-10-07",
+    )
+    wb_1.save(ts_file_1)
+    wb_1.close()
+
+    ts_dir_2 = mock_env_33kv.storage.get_testsheet_dir() / "KUANTAN" / "10. OCTOBER" / "08-10-2026"
+    ts_dir_2.mkdir(parents=True)
+    (ts_dir_2 / "UNSORTED RAW DATA").mkdir()
+
+    ts_file_2 = ts_dir_2 / "02. SSU BASF (VI).xlsx"
+    wb_2 = create_ppu_testsheet_workbook(
+        path=ts_file_2,
+        substation_number=2,
+        substation_name="SSU BASF",
+        fl_number="CGBG/SSU/G00002",
+        date_val="2026-10-08",
+    )
+    wb_2.save(ts_file_2)
+    wb_2.close()
+
+    workflow = PopulateTotalPeWorkflow()
+
+    # 1. SPECIFIC_FOLDERS mode matching only 07-10-2026
+    req_spec = PopulateTotalPeRequest(
+        mode=PopulateMode.SPECIFIC_FOLDERS,
+        target_folder_names=["07-10-2026"],
+    )
+    res_spec = workflow.execute(mock_env_33kv, req_spec)
+    assert res_spec.new_rows_added == 1
+
+    wb = openpyxl.load_workbook(total_pe_path)
+    ws = wb["DataCycle1"]
+    assert ws.max_row == 2
+    assert ws.cell(2, 1).value == 1
+    wb.close()
+
+    # 2. ALL mode re-evaluates all packages and updates/adds remaining
+    req_all = PopulateTotalPeRequest(mode=PopulateMode.ALL)
+    res_all = workflow.execute(mock_env_33kv, req_all)
+    assert res_all.new_rows_added == 1  # SSU BASF added, PPU APMM updated
+
+    wb = openpyxl.load_workbook(total_pe_path)
+    ws = wb["DataCycle1"]
+    assert ws.max_row == 3
+    assert ws.cell(2, 1).value == 1
+    assert ws.cell(3, 1).value == 2
+    wb.close()
+
