@@ -5,6 +5,8 @@ from src.project.storage import (
     sanitize_filename,
     get_next_file_number,
     extract_numerical_prefix,
+    extract_prefix_safe,
+    repair_openpyxl_zip,
 )
 
 __all__ = [
@@ -13,4 +15,6 @@ __all__ = [
     "sanitize_filename",
     "get_next_file_number",
     "extract_numerical_prefix",
+    "extract_prefix_safe",
+    "repair_openpyxl_zip",
 ]

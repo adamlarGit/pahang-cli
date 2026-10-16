@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **33kV Post-Processing Pipeline & Deliverable Automation (`feat(33kv-postprocessing)`, `src/workflows/postprocessing_preflight.py`, `src/postprocessing/converters.py`, `src/workflows/replace_signatures.py`, `src/workflows/diagonal_borders.py`)**:
+  - Implemented 33kV pre-flight validation enforcing strict numerical prefix alignment and pairing between quick reports, testsheets, and raw material folders.
+  - Implemented 33kV sheet discovery and sorting (`select_and_sort_sheets`, `classify_sheet_layout`) enforcing canonical sheet order across 33kV (Main/Extra), 11kV (Main/Extra), TX, and Visual Inspection sheets while filtering unpopulated template sheets.
+  - Added per-sheet PageSetup PDF export preserving landscape orientation, scaling, and print properties for switchgear, transformer, and visual inspection sheets.
+  - Added automated signature replacement and alignment across vendor and TNB signature placeholders.
+  - Added multi-source deliverable stitching binding quick reports and testsheet PDFs into unified substation final deliverables.
+
 ### Fixed
 - **33kV Post-Processing Edge-Case Resilience & Prefix Hardening (`src/postprocessing/converters.py`, `src/workflows/postprocessing_preflight.py`, `src/workflows/replace_signatures.py`)**:
   - Enhanced `replace_pce_images` with regex-based placeholder detection allowing flexible whitespace (`{{ signvendor }}`, `{{ signtnb }}`) and directory discovery supporting `.jpg`/`.jpeg` signatures alongside `.png`.
@@ -32,7 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced `TwoTierPanelMatchingPolicy` in `extract_page_equipment_context` to resolve equipment switchgear catalogs strictly in-memory from pre-hydrated models (`package.equipment`, `package.data.equipment`, `package.switchgears`), eliminating per-page on-the-fly workbook parsing and disk I/O.
   - Added `get_substation_testsheet_path` method to `WorkspaceStorage` and `LocalWorkspaceStorage`, establishing an authoritative seam for testsheet workbook discovery and removing ad-hoc path slicing across workflows.
   - Removed speculative sequential panel index tracking from `embed_survey_ultrasound_into_pdf`, keeping panel matching strictly deterministic via catalog feeder tags or Tier 2 directory matching.
->>>>>>> main
 
 ## [1.26.1] - 2026-10-15
 

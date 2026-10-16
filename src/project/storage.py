@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import zipfile
 
 import config
 from src.core.normalizers import format_month_folder
@@ -101,6 +102,66 @@ def extract_numerical_prefix(filename: str, split_char: str | None = None) -> in
     if not match:
         raise ValueError(f"No numerical prefix found in {filename}")
     return int(match.group(1))
+
+
+def extract_prefix_safe(name: str | Path | None) -> int | None:
+    """Safely extract numerical prefix from filename or Path, trying dot and underscore separators."""
+    if name is None:
+        return None
+    raw_name = name.name if isinstance(name, Path) else str(name)
+    cleaned = raw_name.strip()
+    if not cleaned:
+        return None
+    try:
+        return extract_numerical_prefix(cleaned)
+    except ValueError:
+        try:
+            return extract_numerical_prefix(cleaned, split_char="_")
+        except ValueError:
+            return None
+
+
+def repair_openpyxl_zip(input_path: str | Path | None, output_path: str | Path | None) -> None:
+    """Repair openpyxl saved workbook by fixing table relationship target paths and restoring missing drawing parts."""
+    if not input_path or not output_path:
+        return
+    in_path = Path(input_path).expanduser().resolve()
+    out_path = Path(output_path).expanduser().resolve()
+
+    if not out_path.exists():
+        return
+
+    input_drawings: dict[str, bytes] = {}
+    if in_path.exists():
+        try:
+            with zipfile.ZipFile(in_path, "r") as z_in:
+                for name in z_in.namelist():
+                    if name.startswith("xl/drawings/"):
+                        input_drawings[name] = z_in.read(name)
+        except Exception:
+            pass
+
+    temp_repaired = out_path.with_suffix(".repaired.tmp")
+    try:
+        with zipfile.ZipFile(out_path, "r") as z_out, zipfile.ZipFile(temp_repaired, "w") as z_rep:
+            for item in z_out.infolist():
+                content = z_out.read(item.filename)
+                if item.filename.startswith("xl/worksheets/_rels/"):
+                    content_str = content.decode("utf-8", errors="ignore")
+                    fixed_str = re.sub(r'Target="/xl/tables/', 'Target="../tables/', content_str)
+                    fixed_str = re.sub(r'Target="/xl/drawings/', 'Target="../drawings/', fixed_str)
+                    content = fixed_str.encode("utf-8")
+                z_rep.writestr(item, content)
+
+            out_names = set(z_out.namelist())
+            for d_name, d_bytes in input_drawings.items():
+                if d_name not in out_names:
+                    z_rep.writestr(d_name, d_bytes)
+
+        shutil.move(temp_repaired, out_path)
+    except Exception:
+        if temp_repaired.exists():
+            temp_repaired.unlink(missing_ok=True)
 
 
 def is_canonical_msms_csv_name(filename: str) -> bool:

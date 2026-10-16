@@ -683,8 +683,25 @@ class TestEdgeCasesAndRobustnessProbes33kV:
         assert classify_sheet_layout("33kV Visual Inspection") == "visual_inspection"
         assert classify_sheet_layout("Visual  Inspection") == "visual_inspection"
         assert classify_sheet_layout("Visual   Inspec.") == "visual_inspection"
+        assert classify_sheet_layout("33kV VI") == "visual_inspection"
+        assert classify_sheet_layout("11kV VI") == "visual_inspection"
+        assert classify_sheet_layout("33 kV VI") == "visual_inspection"
+        assert classify_sheet_layout("11 kV VI") == "visual_inspection"
+        assert classify_sheet_layout("33kV VI (1)") == "visual_inspection"
+        assert classify_sheet_layout("11kV VI_2") == "visual_inspection"
+        assert classify_sheet_layout("VI") == "visual_inspection"
+        assert classify_sheet_layout("VI-01") == "visual_inspection"
+        assert classify_sheet_layout("VI/US") == "visual_inspection"
+        assert classify_sheet_layout("33kV VI/US") == "visual_inspection"
+        assert classify_sheet_layout("VI.01") == "visual_inspection"
+        assert classify_sheet_layout("VI1") == "visual_inspection"
+        assert classify_sheet_layout("Vibration") == "unknown"
+        assert classify_sheet_layout("33kV Vibration") == "switchgear"
+        assert classify_sheet_layout("33 kV Vibration") == "switchgear"
         assert classify_sheet_layout("33kV  (Main)") == "switchgear"
+        assert classify_sheet_layout("33 kV (Main)") == "switchgear"
         assert classify_sheet_layout("11kV  (Extra)") == "switchgear"
+        assert classify_sheet_layout("11 kV (Extra)") == "switchgear"
 
     def test_select_and_sort_sheets_whitespace_and_extra_numbering_resilience(self) -> None:
         """Sheet selection and sorting handles multiple spaces and non-parenthesized extra numbering (e.g. '33kV (Extra) 2')."""
@@ -705,6 +722,18 @@ class TestEdgeCasesAndRobustnessProbes33kV:
             "11kV  (Main)",
             "TX",
             "Visual  Inspection",
+        ]
+
+        # Space-separated voltage tokens and standalone switchgear sheets must not be dropped
+        assert select_and_sort_sheets(["33 kV (Main)", "33 kV VI", "TX"]) == [
+            "33 kV (Main)",
+            "TX",
+            "33 kV VI",
+        ]
+        assert select_and_sort_sheets(["33kV", "TX", "33kV VI"]) == [
+            "33kV",
+            "TX",
+            "33kV VI",
         ]
 
     def test_preflight_validation_rejects_missing_numerical_prefix(

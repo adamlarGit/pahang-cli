@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.project.storage import extract_numerical_prefix
+from src.project.storage import extract_prefix_safe
 
 
 @dataclass(frozen=True)
@@ -22,14 +22,7 @@ class RenameFilesSummary:
     renamed: tuple[RenamePair, ...]
 
 
-def _extract_prefix_safe(filename: str) -> int | None:
-    try:
-        return extract_numerical_prefix(filename)
-    except ValueError:
-        try:
-            return extract_numerical_prefix(filename, split_char="_")
-        except ValueError:
-            return None
+_extract_prefix_safe = extract_prefix_safe
 
 
 def rename_files_match(
@@ -48,7 +41,7 @@ def rename_files_match(
         raise FileNotFoundError(f"Output directory not found or not a directory: {output_dir}")
 
     def sort_key(filename: str) -> tuple[int, str]:
-        pfx = _extract_prefix_safe(filename)
+        pfx = extract_prefix_safe(filename)
         return (pfx if pfx is not None else 999999, filename.lower())
 
     norm_target = (target_type or "").strip().lower()
@@ -106,14 +99,14 @@ def rename_files_match(
 
     prefix_to_input: dict[int, str] = {}
     for inp in input_files:
-        pfx = _extract_prefix_safe(inp)
+        pfx = extract_prefix_safe(inp)
         if pfx is not None:
             prefix_to_input[pfx] = inp
 
     paired: list[tuple[str, str]] = []
     prefix_matched = True
     for out in output_items:
-        pfx = _extract_prefix_safe(out)
+        pfx = extract_prefix_safe(out)
         if pfx is not None and pfx in prefix_to_input:
             paired.append((out, prefix_to_input[pfx]))
         else:

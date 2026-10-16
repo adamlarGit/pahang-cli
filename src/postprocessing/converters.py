@@ -37,16 +37,35 @@ def _is_pce_vi_sheet(ws_name: str) -> bool:
     )
 
 
+def _is_visual_inspection_sheet(ws_name: str) -> bool:
+    """Return True if worksheet name represents a visual inspection sheet."""
+    s = ws_name.strip().lower()
+    if "visual inspec" in s or "visual inspection" in s:
+        return True
+    remainder = re.sub(r"^(?:33\s*kv|11\s*kv)[\s\-_.]*", "", s)
+    return (
+        remainder == "vi"
+        or remainder.startswith("vi ")
+        or remainder.startswith("vi(")
+        or remainder.startswith("vi-")
+        or remainder.startswith("vi_")
+        or remainder.startswith("vi/")
+        or remainder.startswith("vi.")
+        or bool(re.match(r"^vi\d", remainder))
+    )
+
+
 def classify_sheet_layout(sheet_name: str) -> str:
     """Classify worksheet name into layout keys: switchgear, transformer, visual_inspection, pce_testsheet, pce_vi."""
     s = re.sub(r"\s+", " ", str(sheet_name).strip().lower())
+    s = re.sub(r"\b(\d+)\s+kv\b", r"\1kv", s)
     if _is_pce_testsheet_sheet(s):
         return "pce_testsheet"
     if _is_pce_vi_sheet(s):
         return "pce_vi"
     if s == "tx" or s.startswith("tx ") or s.startswith("tx(") or s.startswith("tx-") or s.startswith("tx_"):
         return "transformer"
-    if "visual inspec" in s or "visual inspection" in s or s.startswith("vi") or s == "vi":
+    if _is_visual_inspection_sheet(s):
         return "visual_inspection"
     if s.startswith("33kv") or s.startswith("11kv") or "33kv" in s or "11kv" in s:
         return "switchgear"
@@ -57,6 +76,7 @@ def _is_33kv_workbook(worksheet_names: Sequence[str]) -> bool:
     """Return True if workbook contains 33kV-family sheets."""
     for ws_name in worksheet_names:
         name = re.sub(r"\s+", " ", ws_name.strip().lower())
+        name = re.sub(r"\b(\d+)\s+kv\b", r"\1kv", name)
         if (
             name.startswith("33kv")
             or name.startswith("11kv (main)")
@@ -116,7 +136,7 @@ def select_and_sort_sheets(
 
         for name in worksheet_names:
             s_clean = re.sub(r"\s+", " ", name.strip())
-            s_lower = s_clean.lower()
+            s_lower = re.sub(r"\b(\d+)\s+kv\b", r"\1kv", s_clean.lower())
 
             # Strictly exclude RAW DATA
             if s_lower == "raw data" or s_lower.startswith("raw data"):
@@ -146,6 +166,10 @@ def select_and_sort_sheets(
                     main_11.append(name)
                 elif s_lower.startswith("11kv (extra)") or s_lower.startswith("11kv extra"):
                     extra_11.append(name)
+                elif "33kv" in s_lower:
+                    main_33.append(name)
+                elif "11kv" in s_lower:
+                    main_11.append(name)
             elif layout == "transformer":
                 tx_sheets.append(name)
             elif layout == "visual_inspection":

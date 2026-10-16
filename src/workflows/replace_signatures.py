@@ -18,7 +18,7 @@ from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 
 from src import cli_selectors
 from src.postprocessing.converters import classify_sheet_layout
-from src.workflows.diagonal_borders import _repair_openpyxl_zip
+from src.project.storage import repair_openpyxl_zip
 
 
 @dataclass(frozen=True)
@@ -200,7 +200,7 @@ def replace_pce_images(
     save_target = str(output_path) if output_path else str(path)
     wb.save(save_target)
     wb.close()
-    _repair_openpyxl_zip(path, Path(save_target))
+    repair_openpyxl_zip(path, Path(save_target))
     print(f"Saved updated workbook to: {save_target}\n")
     return save_target
 

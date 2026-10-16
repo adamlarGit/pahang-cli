@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Sequence
 
-from src.project.storage import extract_numerical_prefix
+from src.project.storage import extract_prefix_safe
 
 if TYPE_CHECKING:
     from src.project.environment import ProjectEnvironment
@@ -64,22 +64,14 @@ class PreFlightValidationResult:
         return True
 
 
-def _extract_prefix_safe(name: str) -> int | None:
-    """Safely extract numerical prefix from filename, trying dot and underscore separators."""
-    try:
-        return extract_numerical_prefix(name)
-    except ValueError:
-        try:
-            return extract_numerical_prefix(name, split_char="_")
-        except ValueError:
-            return None
+_extract_prefix_safe = extract_prefix_safe
 
 
 def _sort_by_numerical_prefix(paths: Sequence[Path]) -> list[Path]:
     """Sort path items by leading numerical prefix or fallback to lowercase name."""
 
     def sort_key(p: Path) -> tuple[int, str]:
-        pfx = _extract_prefix_safe(p.name)
+        pfx = extract_prefix_safe(p.name)
         return (pfx if pfx is not None else 999999, p.name.lower())
 
     return sorted(paths, key=sort_key)
@@ -322,8 +314,8 @@ def validate_postprocessing_preflight(
         )
 
     # Prefix pairing validation: verify each quick report has a corresponding testsheet by numerical prefix
-    qr_prefixes = [_extract_prefix_safe(p.name) for p in quick_reports]
-    ts_prefixes = [_extract_prefix_safe(p.name) for p in testsheets]
+    qr_prefixes = [extract_prefix_safe(p.name) for p in quick_reports]
+    ts_prefixes = [extract_prefix_safe(p.name) for p in testsheets]
 
     missing_qr_pfx = [p.name for p, pfx in zip(quick_reports, qr_prefixes) if pfx is None]
     missing_ts_pfx = [p.name for p, pfx in zip(testsheets, ts_prefixes) if pfx is None]
@@ -402,7 +394,7 @@ def validate_postprocessing_preflight(
         )
 
     if raw_materials:
-        raw_prefixes = [_extract_prefix_safe(p.name) for p in raw_materials]
+        raw_prefixes = [extract_prefix_safe(p.name) for p in raw_materials]
         missing_raw_pfx = [p.name for p, pfx in zip(raw_materials, raw_prefixes) if pfx is None]
         if missing_raw_pfx:
             raise PreFlightValidationError(
