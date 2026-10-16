@@ -752,12 +752,64 @@ class FullReportPostProcessingWorkflow:
 
                 survey_root = discover_ultratev_survey_dir(raw_dir)
                 if survey_root is not None and survey_root.exists():
-                    count = embed_survey_ultrasound_into_pdf(out_pdf, survey_root=survey_root)
+                    ts_pkg = self._resolve_testsheet_data_for_group(group, environment, testsheet_pdf_path=ts_pdf)
+                    count = embed_survey_ultrasound_into_pdf(out_pdf, survey_root=survey_root, package=ts_pkg)
                     logger.info("[FULL REPORT] Embedded %d ultrasound sounds into %s", count, out_pdf.name)
                 else:
                     logger.info("[FULL REPORT] No US+TEV raw data found for %s; skipping sound embedding", stem)
             except Exception as exc:
                 logger.warning("[WARN] Sound embedding failed for %s: %s; keeping original PDF", out_pdf.name, exc)
+
+    def _resolve_testsheet_data_for_group(
+        self,
+        group: PostProcessingTargetGroup,
+        environment: ProjectEnvironment,
+        testsheet_pdf_path: Path | None = None,
+    ) -> Any | None:
+        """Resolve TestsheetData for switchgear catalog matching during sound embedding."""
+        from src.testsheet.extractor import TestsheetExtractor
+
+        doc_p = group.primary_docx_path.resolve()
+        stem = group.stem
+        date_str = doc_p.parent.name
+        month = doc_p.parent.parent.name
+        station = doc_p.parent.parent.parent.name
+
+        pe_num = None
+        try:
+            pe_num = extract_numerical_prefix(stem)
+        except ValueError:
+            pass
+
+        # 1. Authoritative seam: Use workspace storage
+        xlsx_file = None
+        if pe_num is not None and hasattr(environment, "storage") and hasattr(environment.storage, "get_substation_testsheet_path"):
+            xlsx_file = environment.storage.get_substation_testsheet_path(
+                station, month, date_str, pe_num, stem=stem
+            )
+
+        # 2. Fallback to testsheet_pdf_path sibling directory if available
+        if xlsx_file is None and testsheet_pdf_path is not None and testsheet_pdf_path.exists():
+            ts_dir = testsheet_pdf_path.parent
+            if ts_dir.name.lower() in ("pdf", "processed_testsheet"):
+                ts_dir = ts_dir.parent
+            for candidate in (ts_dir, ts_dir / "processed_testsheet"):
+                if candidate.is_dir():
+                    for f in sorted(candidate.glob("*.xlsx")):
+                        if not f.name.startswith(("~$", ".")):
+                            if (pe_num is not None and str(pe_num) in f.stem) or (stem.upper() in f.stem.upper()):
+                                xlsx_file = f
+                                break
+                    if xlsx_file:
+                        break
+
+        if xlsx_file and xlsx_file.is_file():
+            try:
+                return TestsheetExtractor().extract_testsheet_data(xlsx_file)
+            except Exception as e:
+                logger.debug("Failed extracting testsheet data from %s: %s", xlsx_file, e)
+
+        return None
 
     def _establish_batch_session(self, explicit_session: Any) -> Any:
         """Establish single BatchComSession context across batch conversions."""
@@ -901,12 +953,27 @@ class FullReportPostProcessingWorkflow:
 
         full_report_dir = environment.get_full_report_dir() if hasattr(environment, "get_full_report_dir") else environment.base_path / "FULL REPORT"
 
+        def _expand_multipart_siblings(p: Path) -> list[Path]:
+            """Expand a multi-part .docx path to all its ordered siblings sharing the same stem."""
+            m = MULTIPART_DOCX_PATTERN.match(p.stem)
+            if m:
+                stem = m.group("stem").strip()
+                siblings = [
+                    f.resolve()
+                    for f in p.parent.glob("*.docx")
+                    if not f.name.startswith("~$") and not f.name.startswith(".")
+                ]
+                groups = [g for g in self._group_multipart_targets(siblings) if g.stem == stem]
+                if groups:
+                    return list(groups[0].docx_paths)
+            return [p.resolve()]
+
         # Case 1: Direct .docx path
         if isinstance(target, Path) and target.is_file() and target.suffix.lower() == ".docx":
             if not target.exists():
                 errors.append(f"Target file does not exist: {target}")
                 return [], warnings, errors
-            return [target.resolve()], warnings, errors
+            return _expand_multipart_siblings(target), warnings, errors
 
         # Case 2: Direct path to directory
         if isinstance(target, Path) and target.is_dir():
@@ -921,26 +988,47 @@ class FullReportPostProcessingWorkflow:
         # Case 3: Sequence of paths
         if isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
             collected: list[Path] = []
+            seen_multipart_stems: set[tuple[Path, str]] = set()
             for item in target:
                 p = Path(item)
                 if p.is_file() and p.suffix.lower() == ".docx" and p.exists():
-                    collected.append(p.resolve())
+                    p_res = p.resolve()
+                    m = MULTIPART_DOCX_PATTERN.match(p_res.stem)
+                    if m:
+                        stem = m.group("stem").strip()
+                        key = (p_res.parent, stem)
+                        if key in seen_multipart_stems:
+                            continue
+                        seen_multipart_stems.add(key)
+                        for expanded_p in _expand_multipart_siblings(p_res):
+                            if expanded_p not in collected:
+                                collected.append(expanded_p)
+                        continue
+                    if p_res not in collected:
+                        collected.append(p_res)
                 elif p.is_dir():
                     for f in sorted(p.glob("*.docx")):
                         if not f.name.startswith("~$") and not f.name.startswith("."):
-                            collected.append(f.resolve())
+                            if f.resolve() not in collected:
+                                collected.append(f.resolve())
                 elif isinstance(item, str) and DAILY_DATE_FOLDER_PATTERN.match(item.strip()):
                     date_files = self._find_docx_by_date(full_report_dir, item.strip())
-                    collected.extend(date_files)
+                    for df in date_files:
+                        if df not in collected:
+                            collected.append(df)
             if station:
                 collected = [p for p in collected if self._matches_station(p, station)]
             return collected, warnings, errors
 
-        # Case 4: Target is date string or folder name
+        # Case 4: Target is date string, file path, or folder name
         if isinstance(target, str):
             clean_tgt = target.strip()
-            # If path to existing directory
             p_tgt = Path(clean_tgt)
+            # If path to existing .docx file
+            if p_tgt.is_file() and p_tgt.suffix.lower() == ".docx":
+                return _expand_multipart_siblings(p_tgt), warnings, errors
+
+            # If path to existing directory
             if p_tgt.is_dir():
                 files = [
                     p.resolve()

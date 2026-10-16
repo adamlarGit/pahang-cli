@@ -1043,10 +1043,20 @@ def postprocess_full_reports_action(
         print("No Full Report documents discovered for post-processing.")
         return None
 
+    def _format_postprocessing_target_title(item: FullReportPostProcessingTelemetry | Any) -> str:
+        """Format display title for substation selection checklist, highlighting multi-part parts."""
+        ready_str = "READY" if getattr(item, "is_ready", True) else "NOT READY"
+        if getattr(item, "is_multipart", False):
+            parts = getattr(item, "part_docx_paths", ())
+            stem = getattr(item, "stem", str(item))
+            return f"{stem} [{len(parts)} docx parts -> 1 pdf deliverable] [{ready_str}]"
+        doc_name = getattr(getattr(item, "docx_path", None), "name", str(item))
+        return f"{doc_name} [{ready_str}]"
+
     chosen_targets = cli_selectors.select_substations_interactive(
         inspection.targets,
         title="Select Full Report documents to post-process",
-        get_title=lambda item: f"{getattr(getattr(item, 'docx_path', None), 'name', str(item))} [{'READY' if getattr(item, 'is_ready', True) else 'NOT READY'}]",
+        get_title=_format_postprocessing_target_title,
         get_value=lambda item: item,
         is_checked=lambda item: getattr(item, "is_ready", True),
     )
@@ -1064,10 +1074,12 @@ def postprocess_full_reports_action(
 
     target_docs: list[Path] = []
     for target_item in chosen_targets:
-        if isinstance(target_item, Path):
-            target_docs.append(target_item)
+        if getattr(target_item, "is_multipart", False) and getattr(target_item, "part_docx_paths", None):
+            target_docs.extend(target_item.part_docx_paths)
         elif hasattr(target_item, "docx_path") and target_item.docx_path:
             target_docs.append(target_item.docx_path)
+        elif isinstance(target_item, Path):
+            target_docs.append(target_item)
         elif isinstance(target_item, str):
             target_docs.append(Path(target_item))
 

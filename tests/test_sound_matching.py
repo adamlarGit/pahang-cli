@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import pytest
+import wave
 try:
     import pymupdf as fitz
 except ImportError:
@@ -486,4 +487,178 @@ def test_mandatory_8k_wav_fail_loud_invariant(tmp_path: Path):
     ctx_cb = {"panel_no": 1, "panel_name": "", "raw_panel_no": "1", "area": "BREAKER COMPARTMENT"}
     with pytest.raises(FileNotFoundError, match="Mandatory 8k.wav is empty"):
         resolve_measurement_audio_for_page(survey_root, [meas_empty], ctx_cb)
+
+
+def test_extract_page_equipment_context_tier_2_substation_testsheet_package_data():
+    """Tier 2 resolves SCADA code via SubstationTestsheetPackage possessing .data.equipment."""
+    from src.testsheet.models import (
+        SwitchgearPanelSpec,
+        SubstationEquipmentPackage,
+        SubstationTestsheetPackage,
+        SwitchgearSpec,
+        TestsheetData,
+    )
+
+    text_blocks = [
+        (60.0, 100.0, "Panel No. : CKN05002"),
+        (60.0, 120.0, "Panel Name : KLG JLN IM 16/2 NO 1"),
+        (60.0, 140.0, "Area : CABLE COMPARTMENT Area"),
+    ]
+    doc = _create_synthetic_page(text_blocks)
+    page = doc[0]
+
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=Path("dummy.xlsx"),
+        unsorted_raw_data_dir=Path("."),
+        station="KUANTAN",
+        month="01. AUGUST",
+        date_str="11-08-2026",
+        substation_number=56,
+        data=TestsheetData(
+            substation_number=56,
+            substation_name_erms="CS KLG IM 16/2 NO 2",
+            equipment=SubstationEquipmentPackage(
+                switchgears=(
+                    SwitchgearSpec(
+                        panels=(
+                            SwitchgearPanelSpec(panel_no=1, panel_feeder_no="CKN05002", name="KLG JLN IM 16/2 NO 1"),
+                            SwitchgearPanelSpec(panel_no=2, panel_feeder_no="CKN05004", name="TX 1000KVA"),
+                            SwitchgearPanelSpec(panel_no=3, panel_feeder_no="CKN05003", name="IM 14 RESIDENCE"),
+                        )
+                    ),
+                )
+            ),
+        ),
+    )
+
+    ctx = extract_page_equipment_context(page, package=pkg)
+    assert ctx["panel_no"] == 1
+    assert ctx["raw_panel_no"] == "CKN05002"
+    assert ctx["panel_name"] == "KLG JLN IM 16/2 NO 1"
+
+
+def test_extract_page_equipment_context_tier_2_empty_raw_panel_matches_name():
+    """Tier 2 matches panel catalog via panel_name when raw_panel_no is empty or dash."""
+    from src.testsheet.models import (
+        SwitchgearPanelSpec,
+        SubstationEquipmentPackage,
+        SwitchgearSpec,
+        TestsheetData,
+    )
+
+    text_blocks = [
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TX 1000KVA"),
+        (60.0, 140.0, "Area : CABLE COMPARTMENT"),
+    ]
+    doc = _create_synthetic_page(text_blocks)
+    page = doc[0]
+
+    tdata = TestsheetData(
+        substation_number=56,
+        substation_name_erms="TEST SUB",
+        equipment=SubstationEquipmentPackage(
+            switchgears=(
+                SwitchgearSpec(
+                    panels=(
+                        SwitchgearPanelSpec(panel_no=1, panel_feeder_no="CKN05002", name="FEEDER 1"),
+                        SwitchgearPanelSpec(panel_no=2, panel_feeder_no="CKN05004", name="TX 1000KVA"),
+                    )
+                ),
+            )
+        ),
+    )
+
+    ctx = extract_page_equipment_context(page, package=tdata)
+    assert ctx["panel_no"] == 2
+    assert ctx["panel_name"] == "TX 1000KVA"
+
+
+def test_embed_survey_ultrasound_into_pdf_tier2_folder_name_matching_without_package(tmp_path: Path):
+    """When package is None, Tier 2 matches survey folder names directly via panel_name or raw_panel_no."""
+    from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
+
+    # Create synthetic survey directory with LINE_A and LINE_B
+    survey_dir = tmp_path / "survey"
+    survey_dir.mkdir()
+    f1_dir = survey_dir / "SWG" / "LINE_A"
+    f2_dir = survey_dir / "SWG" / "LINE_B"
+    m1 = _create_synthetic_meas(f1_dir / "us1", "SWG_LINE_A_CABLE_BOX_US", "SWG", "LINE_A", "$CABLE_BOX")
+    m2 = _create_synthetic_meas(f2_dir / "us2", "SWG_LINE_B_CABLE_BOX_US", "SWG", "LINE_B", "$CABLE_BOX")
+
+    # Create survey_summary.js manifest
+    manifest = {
+        "assets": [
+            {
+                "$ASSET_NAME": "SWG",
+                "$SUB_ASSETS": [
+                    {
+                        "$SUB_ASSET_NAME": "LINE_A",
+                        "$MEASURES": [
+                            {
+                                "$MEASURE_TYPE": "$ULTRA",
+                                "Data": "SWG/LINE_A/us1",
+                                "$COMPONENT": "$CABLE_BOX",
+                            }
+                        ],
+                    },
+                    {
+                        "$SUB_ASSET_NAME": "LINE_B",
+                        "$MEASURES": [
+                            {
+                                "$MEASURE_TYPE": "$ULTRA",
+                                "Data": "SWG/LINE_B/us2",
+                                "$COMPONENT": "$CABLE_BOX",
+                            }
+                        ],
+                    },
+                ],
+            }
+        ]
+    }
+    import json
+    (survey_dir / "survey_summary.js").write_text(
+        f"var survey_summary = {json.dumps(manifest)};\n", encoding="utf-8"
+    )
+
+    # Overwrite dummy 8k.wav with valid 24-bit RIFF WAV so wave.open succeeds
+    for m in (m1, m2):
+        wav_p = m.meas_dir / "8k.wav"
+        with wave.open(str(wav_p), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(3)
+            wf.setframerate(8000)
+            wf.setcomptype("NONE", "not compressed")
+            wf.writeframes(b"\x00\x00\x00" * 80)
+
+    # Create 2-page PDF deliverable with unnumbered utility codes (CKN05002, CKN05004) and panel names
+    doc = fitz.open()
+    # Page 1: Panel 1
+    p1 = doc.new_page(width=595.0, height=842.0)
+    p1.insert_text(fitz.Point(60.0, 100.0), "Panel No. : CKN05002", fontsize=10)
+    p1.insert_text(fitz.Point(60.0, 120.0), "Panel Name : LINE A", fontsize=10)
+    p1.insert_text(fitz.Point(60.0, 140.0), "Area : CABLE COMPARTMENT", fontsize=10)
+    p1.insert_text(fitz.Point(80.0, 650.0), "Sound clip", fontsize=10)
+
+    # Page 2: Panel 2
+    p2 = doc.new_page(width=595.0, height=842.0)
+    p2.insert_text(fitz.Point(60.0, 100.0), "Panel No. : CKN05004", fontsize=10)
+    p2.insert_text(fitz.Point(60.0, 120.0), "Panel Name : LINE B", fontsize=10)
+    p2.insert_text(fitz.Point(60.0, 140.0), "Area : CABLE COMPARTMENT", fontsize=10)
+    p2.insert_text(fitz.Point(80.0, 650.0), "Sound clip", fontsize=10)
+
+    target_pdf = tmp_path / "report.pdf"
+    doc.save(str(target_pdf))
+    doc.close()
+
+    # Embed with package=None
+    count = embed_survey_ultrasound_into_pdf(target_pdf, survey_root=survey_dir, package=None)
+    assert count == 2
+
+    # Verify both pages have sound annotations
+    reloaded = fitz.open(str(target_pdf))
+    assert len(list(reloaded[0].annots())) == 1
+    assert len(list(reloaded[1].annots())) == 1
+    reloaded.close()
+
 

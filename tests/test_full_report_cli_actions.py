@@ -414,6 +414,68 @@ def test_full_report_postprocessing_action_multi_document_and_summary(
         assert str(merged_pdf) in captured
 
 
+def test_full_report_postprocessing_action_multipart_substation_forwards_all_parts(
+    mock_env: MagicMock,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    mock_workflow = MagicMock(spec=FullReportPostProcessingWorkflow)
+
+    p1 = Path("C:/fake/157. PERPUSTAKAAN AWAM - Part 01 - Summary.docx")
+    p2 = Path("C:/fake/157. PERPUSTAKAAN AWAM - Part 02 - Panel 1.docx")
+    p3 = Path("C:/fake/157. PERPUSTAKAAN AWAM - Part 03 - Panel 2.docx")
+    ts_pdf = Path("C:/fake/157. PERPUSTAKAAN AWAM.pdf")
+
+    telem_multi = FullReportPostProcessingTelemetry(
+        docx_path=p1,
+        testsheet_pdf_path=ts_pdf,
+        target_pdf_path=Path("C:/fake/out.pdf"),
+        stem="157. PERPUSTAKAAN AWAM",
+        substation_name="PERPUSTAKAAN AWAM",
+        substation_number=157,
+        is_testsheet_pdf_valid=True,
+        validation_result=TestsheetPdfValidationResult(path=ts_pdf, is_valid=True, size_bytes=5000),
+        is_multipart=True,
+        part_docx_paths=(p1, p2, p3),
+    )
+    inspection = FullReportPostProcessingInspection(targets=(telem_multi,))
+    mock_workflow.inspect.return_value = inspection
+
+    out_deliverable = Path("C:/fake/out.pdf")
+    post_res = FullReportPostProcessingResult(
+        total_reports=1,
+        succeeded_count=1,
+        failed_count=0,
+        deliverables=(out_deliverable,),
+        telemetries=(telem_multi,),
+        duration_seconds=1.5,
+    )
+    mock_workflow.process.return_value = post_res
+
+    action = FullReportPostProcessingAction(workflow=mock_workflow)
+    date_dir = Path("C:/fake/project/FULL REPORT/KUANTAN/01. AUGUST/25-08-2026")
+
+    with patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
+         patch("src.project_workflow_actions.cli_selectors.select_substations_interactive") as mock_interactive, \
+         patch("src.project_workflow_actions.cli_selectors.confirm", return_value=True):
+
+        mock_interactive.return_value = [telem_multi]
+
+        result = action.execute(mock_env)
+        assert result == post_res
+
+        mock_interactive.assert_called_once()
+        # Verify checklist title formatter displays multipart stem and parts
+        get_title_fn = mock_interactive.call_args[1].get("get_title") or mock_interactive.call_args[0][1]
+        rendered_title = get_title_fn(telem_multi)
+        assert "157. PERPUSTAKAAN AWAM [3 docx parts -> 1 pdf deliverable] [READY]" in rendered_title
+
+        # Verify all 3 part docx files were forwarded to process()
+        mock_workflow.process.assert_called_once()
+        forwarded_docs = mock_workflow.process.call_args[0][0]
+        assert len(forwarded_docs) == 3
+        assert forwarded_docs == [p1, p2, p3]
+
+
 # ==============================================================================
 # 3. CLI Menu Integration & Registry Tests
 # ==============================================================================
