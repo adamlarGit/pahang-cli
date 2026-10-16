@@ -61,7 +61,7 @@ graph TD
     T95["#95: Raw material sorting & US+TEV pairing - Closed"]
     T96["#96: PPU condition builder & Quick Report plan - Closed"]
     T97["#97: 33kV Post-processing (Signatures, Diagonals, per-sheet PageSetup PDF export, stitching) - Closed"]
-    T98["#98: 33kV Populate TOTAL PE from testsheets"]
+    T98["#98: 33kV Populate TOTAL PE from testsheets - Closed"]
     T99["#99: 33kV WhatsApp daily report generation"]
     T100["#100: 33kV MSMS pipeline (Consolidate, Enrich, Propagate, Ingest, Mapper T1SUB33)"]
     T101["#101: 33kV Full Report generation (MultiPartPartitionPolicy for dual-voltage VCB/GIS)"]
@@ -144,7 +144,7 @@ graph TD
 - **Delivers**: 33kV pre-flight validation rules, 33kV signature image anchor coordinates for 3 sheet layouts (Switchgear/TX/VI), diagonal borders range enforcement in `diagonal_borders.py` (Switchgear Rows 15–62 Cols C–U, TX Rows 7–70 Cols C–AB, VI unslashed), programmatic per-sheet PageSetup in `ComDocumentConverter` (Landscape A4 1mm margins for Switchgear/TX; Portrait A4 standard margins for VI; RAW DATA excluded), and consolidated `<STEM>.pdf` deliverable compilation.
 
 ### #98: feat(33kv-total-pe): Populate TOTAL PE from 33kV testsheets
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#98](https://github.com/adamlarGit/pahang-cli/issues/98)
 - **Blocked by**: #92
 - **Ticket File**: [tickets/098-33kv-populate-total-pe.md](./tickets/098-33kv-populate-total-pe.md)

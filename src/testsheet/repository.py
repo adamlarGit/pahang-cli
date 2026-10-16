@@ -76,6 +76,10 @@ class SubstationTestsheetRepository:
                 match = re.match(r"^(\d+)", xlsx_path.name)
                 if match:
                     substation_number = int(match.group(1))
+                elif xlsx_path.parent:
+                    match_p = re.match(r"^(\d+)", xlsx_path.parent.name)
+                    if match_p:
+                        substation_number = int(match_p.group(1))
 
                 data = None
                 if eager_extract:

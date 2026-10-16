@@ -188,7 +188,9 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                 meta = self._extract_header_metadata(ws_header, station_hint, date_hint)
 
                 # Substation type
-                substation_type = self._resolve_substation_type(meta["substation_name_site"], path.name)
+                substation_type = self._resolve_substation_type(
+                    meta["substation_name_site"], path.name, meta["fl_erms"]
+                )
 
                 # GPS from Visual Inspec. sheet
                 gps_coordinate = ""
@@ -248,7 +250,9 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             meta = self._extract_header_metadata(ws_header, station_hint, date_hint)
 
             # Substation type
-            substation_type = self._resolve_substation_type(meta["substation_name_site"], path.name)
+            substation_type = self._resolve_substation_type(
+                meta["substation_name_site"], path.name, meta["fl_erms"]
+            )
 
             # GPS from Visual Inspec. sheet
             gps_coordinate = ""
@@ -344,8 +348,10 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             if num is not None:
                 return num
 
-        # 3. Filename leading numeric prefix
+        # 3. Filename or parent folder leading numeric prefix
         m = re.match(r"^(\d+)", path.name)
+        if not m and path.parent:
+            m = re.match(r"^(\d+)", path.parent.name)
         if m:
             num = int(m.group(1))
             if num > 0:
@@ -383,8 +389,13 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             fl_erms = normalize_fl_erms(raw_fl)
 
             cycle_1 = to_excel_date(ws_header["D8"].value)
-            if cycle_1 is not None and not date_str:
-                date_str = cycle_1.strftime("%d-%m-%Y")
+            if cycle_1 is not None:
+                if not date_str:
+                    date_str = cycle_1.strftime("%d-%m-%Y")
+            elif not date_str and ws_header["D8"].value is not None:
+                raw_d8 = str(ws_header["D8"].value).strip()
+                if raw_d8 and raw_d8.lower() not in ("none", "-", "n/a"):
+                    date_str = raw_d8
 
             time_str = format_testsheet_time(ws_header["D9"].value)
             ambient = parse_background_temp(ws_header["U6"].value)
@@ -439,12 +450,15 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             pass
         return None
 
-    def _resolve_substation_type(self, name: str, filename: str) -> str:
-        """Extract substation type (PPU, SSU, PMU, MPPU) from station name or filename."""
-        for candidate in (name, filename):
-            m = re.search(r"\b(PPU|SSU|PMU|MPPU)\b", candidate, re.IGNORECASE)
-            if m:
-                return m.group(1).upper()
+    def _resolve_substation_type(
+        self, name: str, filename: str, fl_erms: str = ""
+    ) -> str:
+        """Extract substation type (PPU, SSU, PMU, MPPU) from station name, filename, or FL token."""
+        for candidate in (name, filename, fl_erms):
+            if candidate:
+                m = re.search(r"\b(PPU|SSU|PMU|MPPU)\b", candidate, re.IGNORECASE)
+                if m:
+                    return m.group(1).upper()
         return ""
 
     def _find_vi_sheet(self, wb: openpyxl.Workbook) -> Worksheet | None:

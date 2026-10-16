@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **33kV TOTAL PE Population & QR02 CBA Enrichment (`feat(33kv-total-pe)`, `src/workflows/populate_total_pe.py`, `src/master/total_pe.py`, `src/testsheet/parsers/ppu.py`, `src/project/storage.py`)**:
+  - Implemented 33kV testsheet package metadata extraction in `PpuTestsheetParser` populating canonical fields (`substation_number`, `fl_erms`, `date`, `substation_name_erms`, `substation_type`).
+  - Added statewide master `QR02 CBA` metadata enrichment in `PopulateTotalPeExtractor` indexing Column G (`FUNCTIONAL LOCATION`) and enriching Column H (`SUBSTATION NAME`) and Column I (`TYPE`) with graceful fallback to cell D6 and stem tokens.
+  - Extended row lookup dictionary in `LocalExcelTotalPeRepository.upsert_packages` supporting 2-digit zero-padded keys `(f"{pe_no:02d}", dt_str)` and Functional Location keys `(fl_num, dt_str)` and normalized variants.
+  - Ensured safe writes into `TOTAL PE.xlsx` (`DataCycle1` Columns A-F) preserving Col G+ untouched, preserving formulas in `_sort_datacycle_sheet`, and sanitizing ghost formatting.
+  - Ensured `PopulateTotalPeAction` runs transparently for 33kV active project environments.
 - **33kV Post-Processing Pipeline & Deliverable Automation (`feat(33kv-postprocessing)`, `src/workflows/postprocessing_preflight.py`, `src/postprocessing/converters.py`, `src/workflows/replace_signatures.py`, `src/workflows/diagonal_borders.py`)**:
   - Implemented 33kV pre-flight validation enforcing strict numerical prefix alignment and pairing between quick reports, testsheets, and raw material folders.
   - Implemented 33kV sheet discovery and sorting (`select_and_sort_sheets`, `classify_sheet_layout`) enforcing canonical sheet order across 33kV (Main/Extra), 11kV (Main/Extra), TX, and Visual Inspection sheets while filtering unpopulated template sheets.

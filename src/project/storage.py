@@ -308,7 +308,7 @@ class WorkspaceStorage(ABC):
         """Return the ENGR CBA workbook path for a specific station and year."""
 
     @abstractmethod
-    def get_engr_33kv_cba_path(self, year: str) -> Path:
+    def get_engr_33kv_cba_path(self, year: str = "") -> Path:
         """Return the statewide ENGR-750-39 CBA workbook path for 33kV."""
 
     @abstractmethod
@@ -561,12 +561,22 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         p.mkdir(parents=True, exist_ok=True)
         return p
 
-    def get_engr_33kv_cba_path(self, year: str) -> Path:
-        """Strictly resolve statewide contract 750-39 workbook path without globbing.
+    def get_engr_33kv_cba_path(self, year: str = "") -> Path:
+        """Resolve statewide contract 750-39 workbook path.
 
+        Exact year match first, then single-candidate glob fallback, ValueError on ambiguous matches.
         Pattern: PYTHON/ENGR FROM DRIVE/ENGR-750-39 -CBA-PAHANG - {year}.xlsx
         """
-        return self.get_engr_folder() / f"ENGR-750-39 -CBA-PAHANG - {year}.xlsx"
+        eff_year = year or getattr(self, "year", None) or "2026"
+        exact = self.get_engr_folder() / f"ENGR-750-39 -CBA-PAHANG - {eff_year}.xlsx"
+        if exact.exists():
+            return exact
+        candidates = list(self.get_engr_folder().glob("ENGR-750-39 -CBA-PAHANG - *.xlsx"))
+        if len(candidates) == 1:
+            return candidates[0]
+        elif len(candidates) > 1:
+            raise ValueError(f"Ambiguous 33kV ENGR CBA workbooks found: {[c.name for c in candidates]}")
+        return exact
 
     def get_engr_cba_path(self, station: str, year: str, voltage_type: str | None = None) -> Path:
         """Resolve per-station or statewide ENGR CBA workbook path.
