@@ -64,7 +64,7 @@ graph TD
     T98["#98: 33kV Populate TOTAL PE from testsheets - Closed"]
     T99["#99: 33kV WhatsApp daily report generation - Closed"]
     T100["#100: 33kV MSMS pipeline (Consolidate, Enrich, Propagate, Ingest, Mapper T1SUB33) - Closed"]
-    T101["#101: 33kV Full Report generation (MultiPartPartitionPolicy for dual-voltage VCB/GIS)"]
+    T101["#101: 33kV Full Report generation (MultiPartPartitionPolicy for dual-voltage VCB/GIS) - Closed"]
     T102["#102: 33kV Full Report post-processing (Stitching + testsheet merge)"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
@@ -165,7 +165,7 @@ graph TD
 - **Delivers**: 33kV Maximo job plan `T1SUB33` support across MSMS pipeline, polymorphic `TestsheetReadingMapper` strategy (`PpuReadingMapper` across `33kV (Main)`, `11kV (Main)`, `TX`, `Visual Inspec.`), `TNBLOCATION` parent token resolution, and 100% parity with upstream consolidation, enrichment, and propagation.
 
 ### #101: feat(33kv-full-report): 33kV Full Report multi-part chunk generation
-- **Status**: Settled
+- **Status**: Closed
 - **GitHub Issue**: [#101](https://github.com/adamlarGit/pahang-cli/issues/101)
 - **Blocked by**: #93, #96
 - **Ticket File**: [tickets/101-33kv-full-report-multipart-generation.md](./tickets/101-33kv-full-report-multipart-generation.md)
