@@ -73,6 +73,7 @@ class InterleavedPart:
     scan_item: ScanRenderItem | None = None
     defect_metadata: CbmDefectSliceMetadata | None = None
     file_path: Path | None = None
+    equipment_id: str = ""
 
     @property
     def is_sliced(self) -> bool:
@@ -84,6 +85,27 @@ class InterleavedPart:
         if self.scan_item is not None:
             return self.scan_item.is_sliced
         return self.is_defect
+
+    @property
+    def panel_no(self) -> int | None:
+        """Resolve panel number for this interleaved part."""
+        if self.scan_item is not None:
+            p_no = getattr(self.scan_item, "panel_no", None)
+            if p_no is not None:
+                return p_no
+        if self.defect_metadata is not None:
+            seq = getattr(self.defect_metadata, "sequence", "")
+            if seq.lower().startswith("p") and len(seq) >= 3:
+                try:
+                    return int(seq[1:3])
+                except ValueError:
+                    pass
+        if self.sequence and self.sequence.lower().startswith("p") and len(self.sequence) >= 3:
+            try:
+                return int(self.sequence[1:3])
+            except ValueError:
+                pass
+        return None
 
 
 @dataclass
@@ -284,6 +306,7 @@ class DefectInterleavingPolicy:
                     component_name=item.component_name,
                     scan_item=item,
                     file_path=item.sliced_path if item.is_sliced else None,
+                    equipment_id=item.equipment_id,
                 )
                 for item in flattened_items
             )
@@ -335,9 +358,15 @@ class DefectInterleavingPolicy:
                         item, swg_defects, consumed_defects, actions, replaced_items, "SWG"
                     )
                     result_parts.append(part)
+                    item_id_clean = re.sub(r"[^A-Za-z0-9]", "", str(item.equipment_id or "")).lower()
                     for swg_d in swg_defects:
                         if swg_d.sequence == "p00" or swg_d.defect_area == "OVERVIEW":
-                            consumed_defects.add(swg_d.filename)
+                            if item_id_clean and swg_d.equipment_instance:
+                                d_inst_clean = re.sub(r"[^A-Za-z0-9]", "", str(swg_d.equipment_instance)).lower()
+                                if item_id_clean == d_inst_clean:
+                                    consumed_defects.add(swg_d.filename)
+                            elif not item_id_clean or not swg_d.equipment_instance:
+                                consumed_defects.add(swg_d.filename)
                     continue
 
                 # Panel item: look for matching panel defects
@@ -383,6 +412,7 @@ class DefectInterleavingPolicy:
                             action_type=InterleavingActionType.REPLACE,
                             defect_metadata=primary_ir,
                             file_path=primary_ir.slice_path,
+                            equipment_id=item.equipment_id,
                         )
                     )
 
@@ -409,6 +439,7 @@ class DefectInterleavingPolicy:
                                 action_type=InterleavingActionType.APPEND_AFTER,
                                 defect_metadata=sec_ir,
                                 file_path=sec_ir.slice_path,
+                                equipment_id=item.equipment_id,
                             )
                         )
                 else:
@@ -438,6 +469,7 @@ class DefectInterleavingPolicy:
                             action_type=InterleavingActionType.APPEND_AFTER,
                             defect_metadata=tev_d,
                             file_path=tev_d.slice_path,
+                            equipment_id=item.equipment_id,
                         )
                     )
 
@@ -450,9 +482,15 @@ class DefectInterleavingPolicy:
                         item, tx_defects, consumed_defects, actions, replaced_items, "Transformer"
                     )
                     result_parts.append(part)
+                    item_id_clean = re.sub(r"[^A-Za-z0-9]", "", str(item.equipment_id or "")).lower()
                     for tx_d in tx_defects:
                         if tx_d.sequence == "s00" or tx_d.defect_area == "OVERVIEW":
-                            consumed_defects.add(tx_d.filename)
+                            if item_id_clean and tx_d.equipment_instance:
+                                d_inst_clean = re.sub(r"[^A-Za-z0-9]", "", str(tx_d.equipment_instance)).lower()
+                                if item_id_clean == d_inst_clean:
+                                    consumed_defects.add(tx_d.filename)
+                            elif not item_id_clean or not tx_d.equipment_instance:
+                                consumed_defects.add(tx_d.filename)
                     continue
 
                 # Transformer component scan page always retained
@@ -482,6 +520,7 @@ class DefectInterleavingPolicy:
                             action_type=InterleavingActionType.INSERT_BEHIND,
                             defect_metadata=tx_d,
                             file_path=tx_d.slice_path,
+                            equipment_id=item.equipment_id,
                         )
                     )
 
@@ -494,9 +533,15 @@ class DefectInterleavingPolicy:
                         item, fp_defects, consumed_defects, actions, replaced_items, "Feeder Pillar"
                     )
                     result_parts.append(part)
+                    item_id_clean = re.sub(r"[^A-Za-z0-9]", "", str(item.equipment_id or "")).lower()
                     for fp_d in fp_defects:
                         if fp_d.sequence == "f00" or fp_d.defect_area == "OVERVIEW":
-                            consumed_defects.add(fp_d.filename)
+                            if item_id_clean and fp_d.equipment_instance:
+                                d_inst_clean = re.sub(r"[^A-Za-z0-9]", "", str(fp_d.equipment_instance)).lower()
+                                if item_id_clean == d_inst_clean:
+                                    consumed_defects.add(fp_d.filename)
+                            elif not item_id_clean or not fp_d.equipment_instance:
+                                consumed_defects.add(fp_d.filename)
 
                     # Collect all defects for this Feeder Pillar
                     matching_fp_defects = self._find_fp_defects(item, fp_defects, consumed_defects)
@@ -531,6 +576,7 @@ class DefectInterleavingPolicy:
                                 action_type=InterleavingActionType.APPEND_AFTER,
                                 defect_metadata=fp_d,
                                 file_path=fp_d.slice_path,
+                                equipment_id=item.equipment_id,
                             )
                         )
                 else:
@@ -568,6 +614,7 @@ class DefectInterleavingPolicy:
                             action_type=InterleavingActionType.APPEND_AFTER,
                             defect_metadata=batt_d,
                             file_path=batt_d.slice_path,
+                            equipment_id=item.equipment_id,
                         )
                     )
 
@@ -612,6 +659,7 @@ class DefectInterleavingPolicy:
                 action_type=InterleavingActionType.ORPHAN_APPEND,
                 defect_metadata=orphan_meta,
                 file_path=orphan_meta.slice_path,
+                equipment_id=orphan_meta.equipment_id,
             )
             orphans.append(orphan_part)
             result_parts.append(orphan_part)
@@ -721,6 +769,7 @@ class DefectInterleavingPolicy:
             component_name=item.component_name,
             scan_item=item,
             file_path=item.sliced_path if item.is_sliced else None,
+            equipment_id=item.equipment_id,
         )
 
     def _substitute_overview_part(
@@ -757,6 +806,7 @@ class DefectInterleavingPolicy:
                     action_type=InterleavingActionType.REPLACE,
                     defect_metadata=ov_match,
                     file_path=ov_match.slice_path,
+                    equipment_id=item.equipment_id,
                 )
         return self._item_to_part(item)
 
@@ -816,6 +866,18 @@ class DefectInterleavingPolicy:
                 continue
             if d.sequence == "p00" or d.defect_area == "OVERVIEW":
                 continue
+
+            # Check SWG instance (e.g. swg1 vs swg2) if item has equipment_id
+            if item.equipment_id and d.equipment_instance:
+                item_id_clean = re.sub(r"[^A-Za-z0-9]", "", str(item.equipment_id)).lower()
+                d_inst_clean = re.sub(r"[^A-Za-z0-9]", "", str(d.equipment_instance)).lower()
+                item_digits = re.findall(r"\d+", item_id_clean)
+                d_digits = re.findall(r"\d+", d_inst_clean)
+                if item_digits and d_digits:
+                    if item_digits[0] != d_digits[0]:
+                        continue
+                elif item_id_clean != d_inst_clean and (item_digits or d_digits):
+                    continue
 
             d_seq = d.sequence.lower()
             d_id = normalize_equipment_id(d.equipment_id)

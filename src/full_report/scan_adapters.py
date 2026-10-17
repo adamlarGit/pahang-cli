@@ -60,6 +60,7 @@ from src.quick_report.prpd import (
 from src.testsheet.models import (
     BatteryBankSpec,
     LVDBSpec,
+    PowerTransformerSpec,
     SubstationEquipmentPackage,
     SwitchgearSpec,
     TransformerSpec,
@@ -439,9 +440,13 @@ class SwitchgearScanAdapter:
         cbm_defects: Sequence[Any] | None = None,
         tev_background: str | int | None = None,
         project_technologies: Sequence[str] | set[str] | None = None,
+        swg_index: int = 1,
+        is_33kv: bool | None = None,
     ) -> None:
         self.swg = swg
         self.substation_info = substation_info or {}
+        self.swg_index = swg_index
+        self.equipment_id = f"swg{swg_index}"
         self.photo_resolver = photo_resolver
         self.survey_root = Path(survey_root) if survey_root else None
         self.prpd_catalog = prpd_catalog or {}
@@ -496,9 +501,22 @@ class SwitchgearScanAdapter:
             if mfg_upper == "INDKOM" and not model_str and not getattr(swg, "archetype", None):
                 self.archetype = SwitchgearArchetype.RMU_FUSE_CANISTER
 
+        if is_33kv is not None:
+            self.is_33kv = is_33kv or (self.voltage_class == VoltageClass.KV_33)
+        else:
+            self.is_33kv = (
+                self.voltage_class == VoltageClass.KV_33
+                or "33" in str(getattr(self.swg, "switchgear_type", "")).upper()
+                or "33" in str(getattr(self.swg, "rating", "")).upper()
+                or (
+                    self.voltage_class != VoltageClass.KV_11
+                    and self.substation_info.get("voltage_type") == "33kV"
+                )
+            )
+
         self.has_active_defect = _check_has_active_defect(
             category="swg",
-            equipment_id="swg1",
+            equipment_id=self.equipment_id,
             explicit_flag=has_active_defect,
             cbm_defects=self.cbm_defects,
         )
@@ -520,7 +538,7 @@ class SwitchgearScanAdapter:
         )
 
         # Check for D47 overview substitution
-        sliced_ov = find_sliced_overview_page("swg", "swg1", self.sliced_overview_pages)
+        sliced_ov = find_sliced_overview_page("swg", self.equipment_id, self.sliced_overview_pages)
         is_ov_substituted = self.has_active_defect and sliced_ov is not None
 
         if is_ov_substituted:
@@ -538,7 +556,7 @@ class SwitchgearScanAdapter:
                     is_sliced=True,
                     sliced_path=sliced_ov,
                     is_defective=True,
-                    equipment_id="swg1",
+                    equipment_id=self.equipment_id,
                 )
             )
             # Check if a secondary sliced overview page exists (e.g. OVERVIEW BOTTOM)
@@ -563,7 +581,7 @@ class SwitchgearScanAdapter:
                             is_sliced=True,
                             sliced_path=sliced_bottom,
                             is_defective=True,
-                            equipment_id="swg1",
+                            equipment_id=self.equipment_id,
                         )
                     )
         else:
@@ -625,7 +643,7 @@ class SwitchgearScanAdapter:
                         is_overview=True,
                         is_sliced=False,
                         is_defective=self.has_active_defect,
-                        equipment_id="swg1",
+                        equipment_id=self.equipment_id,
                     )
                 )
 
@@ -645,7 +663,12 @@ class SwitchgearScanAdapter:
             compartments = (
                 panel.compartments
                 if isinstance(panel, SwitchgearPanelScanSpec) and panel.compartments
-                else SwitchgearTopologyEngine.resolve_panel_compartments(archetype=self.archetype, panel=panel)
+                else SwitchgearTopologyEngine.resolve_panel_compartments(
+                    archetype=self.archetype,
+                    panel=panel,
+                    voltage_class=self.voltage_class,
+                    is_33kv=self.is_33kv,
+                )
             )
 
             for comp_idx, comp_name in enumerate(compartments):
@@ -662,6 +685,10 @@ class SwitchgearScanAdapter:
                         ir_num = panel.pt_photo
                     elif comp_name == "SECONDARY COMPARTMENT":
                         ir_num = panel.secondary_photo
+                    elif comp_name == "CABLE ENTRY":
+                        ir_num = getattr(panel, "cable_entry_photo", None)
+                    elif comp_name == "LINK BOX":
+                        ir_num = getattr(panel, "link_box_photo", None)
                     else:
                         ir_num = None
                 else:
@@ -806,13 +833,13 @@ class SwitchgearScanAdapter:
                         is_sliced=False,
                         is_defective=False,
                         panel_no=p_no,
-                        equipment_id="swg1",
+                        equipment_id=self.equipment_id,
                     )
                 )
 
         return ScanAdapterResult(
             equipment_category="swg",
-            equipment_id="swg1",
+            equipment_id=self.equipment_id,
             items=tuple(items),
             has_defect=self.has_active_defect,
             is_overview_substituted=is_ov_substituted,
@@ -919,16 +946,29 @@ class TransformerScanAdapter:
         items: list[ScanRenderItem] = []
         sub_ctx = _format_substation_context(self.substation_info)
 
-        # 7 canonical components per ADR 0004 & D31
-        components = [
-            ("OVERVIEW", "tx-overview.docx", "s00", True),
-            ("OVERVIEW TOP", "tx-overview.docx", "s01", True),
-            ("HV BUSHING", "tx-hv-sides.docx", "s02", False),
-            ("HV CABLE", "tx-hv-sides.docx", "s03", False),
-            ("HV CABLE SPLIT", "tx-hv-sides.docx", "s04", False),
-            ("LV BUSHING", "tx-lv-sides.docx", "s05", False),
-            ("LV CABLE", "tx-lv-sides.docx", "s06", False),
-        ]
+        # Canonical components (PowerTransformerSpec vs standard distribution TX per Decision Q75 / ADR 0004)
+        if isinstance(self.tx, PowerTransformerSpec):
+            components = [
+                ("OVERVIEW", "tx-overview.docx", "s00", True),
+                ("MARSHALLING KIOSK", "tx-overview.docx", "s01_mk", True),
+                ("CONSERVATOR TANK", "tx-overview.docx", "s01_ct", True),
+                ("COOLING FIN", "tx-overview.docx", "s01_cf", True),
+                ("HV BUSHING", "tx-hv-sides.docx", "s02", False),
+                ("HV CABLE", "tx-hv-sides.docx", "s03", False),
+                ("HV CABLE SPLIT", "tx-hv-sides.docx", "s04", False),
+                ("LV BUSHING", "tx-lv-sides.docx", "s05", False),
+                ("LV CABLE", "tx-lv-sides.docx", "s06", False),
+            ]
+        else:
+            components = [
+                ("OVERVIEW", "tx-overview.docx", "s00", True),
+                ("OVERVIEW TOP", "tx-overview.docx", "s01", True),
+                ("HV BUSHING", "tx-hv-sides.docx", "s02", False),
+                ("HV CABLE", "tx-hv-sides.docx", "s03", False),
+                ("HV CABLE SPLIT", "tx-hv-sides.docx", "s04", False),
+                ("LV BUSHING", "tx-lv-sides.docx", "s05", False),
+                ("LV CABLE", "tx-lv-sides.docx", "s06", False),
+            ]
         if not has_hv_cable_split(self.tx):
             components = [c for c in components if c[0] != "HV CABLE SPLIT"]
 
@@ -971,7 +1011,14 @@ class TransformerScanAdapter:
             ir_img, vis_img = self._resolve_photos_for_component(comp_name)
 
             # Location & Cable type
-            location = "HV SIDE" if "HV" in comp_name else ("LV SIDE" if "LV" in comp_name else "-")
+            if comp_name in ("MARSHALLING KIOSK", "CONSERVATOR TANK", "COOLING FIN"):
+                location = comp_name
+            elif "HV" in comp_name:
+                location = "HV SIDE"
+            elif "LV" in comp_name:
+                location = "LV SIDE"
+            else:
+                location = "-"
             cable_type = self.tx.hv_cable_type if "HV" in comp_name else (
                 self.tx.lv_cable_type if "LV" in comp_name else (self.tx.hv_cable_type or self.tx.lv_cable_type or "-")
             )
@@ -998,7 +1045,9 @@ class TransformerScanAdapter:
                 "recommendation": banner_rec,
             }
 
-            us_char_norm = normalize_us_characteristic(self.tx.us_char, default="NORMAL")
+            us_read = self.tx.hv_ultrasound if (isinstance(self.tx, PowerTransformerSpec) and self.tx.hv_ultrasound) else self.tx.us_reading
+            us_char = self.tx.hv_ultrasound_char if (isinstance(self.tx, PowerTransformerSpec) and self.tx.hv_ultrasound_char) else self.tx.us_char
+            us_char_norm = normalize_us_characteristic(us_char, default="NORMAL")
 
             ctx: dict[str, Any] = {
                 "substation": sub_ctx,
@@ -1024,7 +1073,7 @@ class TransformerScanAdapter:
 
             if "hv-sides" in tpl_name:
                 ctx["us"] = {
-                    "reading": format_db_int(self.tx.us_reading),
+                    "reading": format_db_int(us_read),
                     "char": us_char_norm,
                     "severity": "NORMAL",
                     "prpd": us_prpd,
@@ -1061,6 +1110,28 @@ class TransformerScanAdapter:
             return "", ""
 
         nums = self.tx.photo_numbers or ()
+        if isinstance(self.tx, PowerTransformerSpec):
+            if comp_name == "MARSHALLING KIOSK":
+                num = self.tx.marshalling_kiosk_photo
+            elif comp_name == "CONSERVATOR TANK":
+                num = self.tx.conservator_photo
+            elif comp_name == "COOLING FIN":
+                num = self.tx.cooling_fin_photo
+            elif comp_name == "OVERVIEW":
+                num = self.tx.body_photo if self.tx.body_photo is not None else (nums[0] if len(nums) > 0 else None)
+            elif comp_name == "HV CABLE":
+                num = self.tx.hv_cable_photo
+            elif comp_name == "LV CABLE":
+                num = self.tx.lv_cable_photo
+            else:
+                return "", ""
+
+            if num is None:
+                return "", ""
+            return (
+                self.photo_resolver.resolve_ir_photo(num),
+                self.photo_resolver.resolve_visual_photo(num),
+            )
 
         if comp_name == "OVERVIEW":
             num = nums[0] if len(nums) > 0 else None
@@ -1414,7 +1485,10 @@ def adapt_equipment_package(
     results: list[ScanAdapterResult] = []
 
     # 1. Switchgears
-    for swg in getattr(package, "switchgears", ()):
+    swgs = getattr(package, "switchgears", ())
+    if not swgs and getattr(package, "switchgear", None):
+        swgs = (package.switchgear,)
+    for swg in swgs:
         adapter = SwitchgearScanAdapter(
             swg=swg,
             substation_info=substation_info,
@@ -1430,7 +1504,10 @@ def adapt_equipment_package(
         results.append(adapter.adapt())
 
     # 2. Transformers
-    for tx_idx, tx in enumerate(getattr(package, "transformers", ()), 1):
+    txs = getattr(package, "transformers", ())
+    if not txs and getattr(package, "transformer", None):
+        txs = (package.transformer,)
+    for tx_idx, tx in enumerate(txs, 1):
         adapter = TransformerScanAdapter(
             tx=tx,
             substation_info=substation_info,

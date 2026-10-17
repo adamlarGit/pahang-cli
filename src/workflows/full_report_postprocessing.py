@@ -179,17 +179,18 @@ def _find_pdf_in_dirs(pdf_dirs: Sequence[Path], stem: str) -> Path | None:
         if exact_pdf.exists() and exact_pdf.is_file():
             return exact_pdf.resolve()
 
-    # Phase 2: Numerical prefix match (e.g. "005." or "5.")
+    # Phase 2: Numerical prefix match (e.g. "005.", "05.", or "5.")
     try:
         prefix_num = extract_numerical_prefix(stem)
         prefix_pattern1 = f"{prefix_num:03d}."
-        prefix_pattern2 = f"{prefix_num}."
+        prefix_pattern2 = f"{prefix_num:02d}."
+        prefix_pattern3 = f"{prefix_num}."
 
         for pdf_dir in pdf_dirs:
             for candidate in pdf_dir.glob("*.pdf"):
                 if candidate.name.startswith("~$") or candidate.name.startswith("."):
                     continue
-                if candidate.name.startswith(prefix_pattern1) or candidate.name.startswith(prefix_pattern2):
+                if candidate.name.startswith((prefix_pattern1, prefix_pattern2, prefix_pattern3)):
                     return candidate.resolve()
     except ValueError:
         pass

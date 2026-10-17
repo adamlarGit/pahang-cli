@@ -62,7 +62,9 @@ from src.quick_report.utils import (
     normalize_functional_location_input,
     sanitize_filename,
 )
+from src.core.topology import SwitchgearArchetype, VoltageClass
 from src.testsheet.models import (
+    PowerTransformerSpec,
     SubstationEquipmentPackage,
     SubstationTestsheetPackage,
 )
@@ -753,7 +755,9 @@ class FullReportWorkflow:
         cbm_defects, vi_defects = self._extract_defects_safe(pkg, environment)
         suffix = self._calculate_defect_suffix(cbm_defects, vi_defects)
         clean_name = sanitize_filename(st_name)
-        stem = f"{sub_num:03d}. {clean_name}{suffix}" if sub_num else f"{clean_name}{suffix}"
+        is_33kv = self._is_33kv_substation(pkg, environment)
+        prefix = f"{sub_num:02d}." if (sub_num and is_33kv) else (f"{sub_num:03d}." if sub_num else "")
+        stem = f"{prefix} {clean_name}{suffix}".strip() if prefix else f"{clean_name}{suffix}"
 
         out_path = self._resolve_target_output_path(environment, pkg, stem)
 
@@ -834,7 +838,9 @@ class FullReportWorkflow:
         suffix = self._calculate_defect_suffix(cbm_defects, vi_defects)
         clean_name = sanitize_filename(st_name)
         clean_date = sanitize_filename(date_str).replace(" ", "_")
-        stem = f"{sub_num:03d}. {clean_name}{suffix}" if sub_num else f"{clean_name}{suffix}"
+        is_33kv = self._is_33kv_substation(pkg, environment)
+        prefix = f"{sub_num:02d}." if (sub_num and is_33kv) else (f"{sub_num:03d}." if sub_num else "")
+        stem = f"{prefix} {clean_name}{suffix}".strip() if prefix else f"{clean_name}{suffix}"
 
         out_path = self._resolve_target_output_path(environment, pkg, stem, output_dir=output_dir)
 
@@ -979,6 +985,44 @@ class FullReportWorkflow:
 
         return base_full / station / month / date_str / filename
 
+    def _is_33kv_substation(self, pkg: Any, environment: ProjectEnvironment | None = None) -> bool:
+        """Determine whether a substation package or environment is 33kV."""
+        if environment is not None:
+            v_env = getattr(environment, "voltage_type", None) or getattr(getattr(environment, "metadata", None), "voltage_type", None)
+            if v_env == "33kV":
+                return True
+        st_name = self._resolve_substation_display_name(pkg).lower()
+        if "33kv" in st_name or "33 kv" in st_name:
+            return True
+        eq_pkg = self._resolve_equipment_package(pkg)
+        if getattr(eq_pkg, "voltage_class", None) == VoltageClass.KV_33:
+            return True
+        swgs = getattr(eq_pkg, "switchgears", ())
+        if not swgs and getattr(eq_pkg, "switchgear", None):
+            swgs = (eq_pkg.switchgear,)
+        for swg in swgs:
+            if getattr(swg, "voltage_class", None) == VoltageClass.KV_33:
+                return True
+            if getattr(swg, "archetype", None) == SwitchgearArchetype.GIS_CUBICLE:
+                return True
+            swg_type = getattr(swg, "switchgear_type", "").upper()
+            swg_rating = str(getattr(swg, "rating", "")).upper()
+            swg_model = str(getattr(swg, "model", "")).upper()
+            if (
+                "33" in swg_type
+                or "GIS" in swg_type
+                or "33" in swg_rating
+                or "33" in swg_model
+            ):
+                return True
+        txs = getattr(eq_pkg, "transformers", ())
+        if not txs and getattr(eq_pkg, "transformer", None):
+            txs = (eq_pkg.transformer,)
+        for tx in txs:
+            if isinstance(tx, PowerTransformerSpec):
+                return True
+        return False
+
     def _resolve_quick_report_path(
         self,
         environment: ProjectEnvironment,
@@ -1002,7 +1046,8 @@ class FullReportWorkflow:
 
         sub_num = pkg.substation_number
         num_prefix1 = f"{sub_num:03d}."
-        num_prefix2 = f"{sub_num}."
+        num_prefix2 = f"{sub_num:02d}."
+        num_prefix3 = f"{sub_num}."
 
         clean_sub_name = sanitize_filename(self._resolve_substation_display_name(pkg)).lower()
 
@@ -1013,7 +1058,7 @@ class FullReportWorkflow:
                 if docx_file.name.startswith("~$"):
                     continue
                 # Match by numerical prefix
-                if docx_file.name.startswith(num_prefix1) or docx_file.name.startswith(num_prefix2):
+                if docx_file.name.startswith((num_prefix1, num_prefix2, num_prefix3)):
                     return docx_file.resolve()
 
             # Match by name if prefix didn't match

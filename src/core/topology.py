@@ -155,7 +155,7 @@ def resolve_switchgear_archetype(
         return SwitchgearArchetype.VCB_CUBICLE
 
     # 2. GIS Priority
-    if "GIS" in type_upper or "GIS" in mfg_upper:
+    if "GIS" in type_upper or "GIS" in mfg_upper or "GIS" in model_upper:
         return SwitchgearArchetype.GIS_CUBICLE
 
     # 3. MRMU Priority (Motorized RMU / Modular RMU)
@@ -303,6 +303,8 @@ def resolve_panel_compartments(
     pt_photo: int | None = None,
     secondary_photo: int | None = None,
     has_pt_measurement: bool = False,
+    voltage_class: VoltageClass | str | None = None,
+    is_33kv: bool = False,
 ) -> tuple[str, ...]:
     """Resolve exact physical compartment name strings for a bay/panel.
 
@@ -355,6 +357,30 @@ def resolve_panel_compartments(
 
     # VCB / GIS Cubicle
     if archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
+        # 33kV switchgear bay cubicles contain all 6 physical compartment scans
+        # (BREAKER, CABLE, BUSBAR, PT, CABLE ENTRY, LINK BOX) + Column Q Secondary Compartment (Decisions Q74)
+        has_33kv_features = (
+            is_33kv
+            or voltage_class in (VoltageClass.KV_33, "33kV")
+            or (
+                panel is not None
+                and (
+                    getattr(panel, "cable_entry_photo", None) is not None
+                    or getattr(panel, "link_box_photo", None) is not None
+                )
+            )
+        )
+        if has_33kv_features:
+            return (
+                "BREAKER COMPARTMENT",
+                "CABLE COMPARTMENT",
+                "BUSBAR COMPARTMENT",
+                "PT COMPARTMENT",
+                "CABLE ENTRY",
+                "LINK BOX",
+                "SECONDARY COMPARTMENT",
+            )
+
         if bay_role == BayRole.TRANSITION:
             compartments = ["FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT"]
             if eval_secondary_gate(panel, secondary_photo=secondary_photo):
@@ -436,6 +462,16 @@ class SwitchgearTopologyEngine:
 
         archetype = resolve_switchgear_archetype(switchgear_type, manufacturer, model_resolved)
         voltage_class = classify_voltage_rating(rating)
+        if voltage_class == VoltageClass.KV_11 and ("33" in switchgear_type.upper() or "33" in rating.upper() or "33" in model_resolved.upper()):
+            voltage_class = VoltageClass.KV_33
+
+        if voltage_class == VoltageClass.KV_33 and "RMU" not in switchgear_type.upper():
+            if archetype not in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
+                if any(k in switchgear_type.upper() or k in model_resolved.upper() for k in ("GIS", "GV3")):
+                    archetype = SwitchgearArchetype.GIS_CUBICLE
+                else:
+                    archetype = SwitchgearArchetype.VCB_CUBICLE
+
         overview_compartments = resolve_overview_compartments(archetype, voltage_class)
 
         return BoardClassification(
@@ -456,6 +492,8 @@ class SwitchgearTopologyEngine:
         pt_photo: int | None = None,
         secondary_photo: int | None = None,
         has_pt_measurement: bool = False,
+        voltage_class: VoltageClass | str | None = None,
+        is_33kv: bool = False,
     ) -> tuple[str, ...]:
         """Resolve panel compartment name strings applying dynamic presence gates."""
         return resolve_panel_compartments(
@@ -468,6 +506,8 @@ class SwitchgearTopologyEngine:
             pt_photo=pt_photo,
             secondary_photo=secondary_photo,
             has_pt_measurement=has_pt_measurement,
+            voltage_class=voltage_class,
+            is_33kv=is_33kv,
         )
 
     @staticmethod

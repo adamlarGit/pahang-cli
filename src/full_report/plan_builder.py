@@ -27,7 +27,7 @@ from src.core.normalizers import (
     resolve_station_code,
     resolve_station_from_fl,
 )
-from src.core.topology import SwitchgearArchetype, SwitchgearTopologyEngine
+from src.core.topology import SwitchgearArchetype, SwitchgearTopologyEngine, VoltageClass
 from src.full_report.census import (
     CensusRowItem,
     ExecutiveSummaryCensusBuilder,
@@ -61,7 +61,7 @@ from src.full_report.slicer import (
 )
 from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
 from src.quick_report.utils import sanitize_filename
-from src.testsheet.models import SubstationEquipmentPackage
+from src.testsheet.models import PowerTransformerSpec, SubstationEquipmentPackage
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +103,7 @@ class PlanPartItem:
     is_overview: bool = False
     is_defective: bool = False
     _panel_no: int | None = None
+    equipment_id: str = ""
 
     @property
     def is_switchgear(self) -> bool:
@@ -191,6 +192,7 @@ class PlanPartItem:
             if src and src.exists():
                 if src.resolve() != out_p:
                     shutil.copy2(str(src), str(out_p))
+                self._postprocess_front_page_title(out_p)
                 return out_p
             # Stub fallback for testing if source is missing
             out_p.write_bytes(b"PK\x03\x04fake_sliced_docx")
@@ -227,6 +229,87 @@ class PlanPartItem:
         # Default fallback
         out_p.write_bytes(b"PK\x03\x04fake_docx_payload")
         return out_p
+
+    def _postprocess_front_page_title(self, docx_path: Path) -> None:
+        """Ensure title replacement 'QUICK SCANNING REPORT' -> 'FULL SCANNING REPORT' (Decision Q77)."""
+        if self.part_type != PlanPartType.FRONT_PAGE or not docx_path.is_file():
+            return
+        try:
+            import docx
+            doc = docx.Document(str(docx_path))
+            modified = False
+            for p in doc.paragraphs:
+                if _replace_text_in_paragraph_runs(p):
+                    modified = True
+            for tbl in doc.tables:
+                for row in tbl.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            if _replace_text_in_paragraph_runs(p):
+                                modified = True
+            if modified:
+                doc.save(str(docx_path))
+        except Exception as exc:
+            logger.debug("Front page title replacement note: %s", exc)
+
+
+def _replace_text_in_paragraph_runs(
+    p: Any,
+    find_text: str = "QUICK SCANNING REPORT",
+    replace_text: str = "FULL SCANNING REPORT",
+) -> bool:
+    """Replace find_text with replace_text while preserving run-level formatting across run boundaries."""
+    if find_text not in p.text:
+        return False
+
+    # 1. Single run match (fast path preserving formatting)
+    for run in p.runs:
+        if find_text in run.text:
+            run.text = run.text.replace(find_text, replace_text)
+            return True
+
+    # 2. Multi-run span match across consecutive runs
+    full_text = "".join(r.text for r in p.runs)
+    idx = full_text.find(find_text)
+    if idx == -1:
+        p.text = p.text.replace(find_text, replace_text)
+        return True
+
+    cur = 0
+    start_run_idx: int | None = None
+    start_char_offset = 0
+    end_run_idx: int | None = None
+    end_char_offset = 0
+
+    for r_i, r in enumerate(p.runs):
+        run_len = len(r.text)
+        if start_run_idx is None and cur + run_len > idx:
+            start_run_idx = r_i
+            start_char_offset = idx - cur
+        if cur + run_len >= idx + len(find_text):
+            end_run_idx = r_i
+            end_char_offset = (idx + len(find_text)) - cur
+            break
+        cur += run_len
+
+    if start_run_idx is not None and end_run_idx is not None:
+        if start_run_idx == end_run_idx:
+            r = p.runs[start_run_idx]
+            r.text = r.text[:start_char_offset] + replace_text + r.text[end_char_offset:]
+        else:
+            r_start = p.runs[start_run_idx]
+            r_end = p.runs[end_run_idx]
+            prefix = r_start.text[:start_char_offset]
+            suffix = r_end.text[end_char_offset:]
+            r_start.text = prefix + replace_text
+            r_end.text = suffix
+            for mid_i in range(start_run_idx + 1, end_run_idx):
+                p.runs[mid_i].text = ""
+        return True
+
+    # 3. Fallback
+    p.text = p.text.replace(find_text, replace_text)
+    return True
 
 
 @dataclass(frozen=True)
@@ -280,17 +363,42 @@ class MultiPartPartitionPolicy:
     @classmethod
     def resolve_archetype(
         cls,
-        target: FullReportStationPlan | SubstationEquipmentPackage,
+        target: FullReportStationPlan | SubstationEquipmentPackage | Any,
     ) -> SwitchgearArchetype:
         """Resolve the primary switchgear archetype from a plan or equipment package."""
         pkg = target.package if isinstance(target, FullReportStationPlan) else target
+        if hasattr(pkg, "data") and getattr(pkg, "data", None) is not None:
+            pkg = getattr(pkg.data, "equipment", pkg)
+        elif hasattr(pkg, "equipment"):
+            pkg = getattr(pkg, "equipment", pkg)
+
         swgs = getattr(pkg, "switchgears", ())
-        swg = swgs[0] if swgs else getattr(pkg, "switchgear", None)
-        if swg is not None:
+        if not swgs and getattr(pkg, "switchgear", None):
+            swgs = (pkg.switchgear,)
+
+        for swg in swgs:
+            arch = getattr(swg, "archetype", None)
+            if arch in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
+                return arch
+            board = SwitchgearTopologyEngine.classify_board(
+                switchgear_type=getattr(swg, "switchgear_type", ""),
+                manufacturer=getattr(swg, "manufacturer", ""),
+                model=getattr(swg, "model", ""),
+                rating=getattr(swg, "rating", ""),
+                swg=swg,
+            )
+            if board.archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
+                return board.archetype
+            if board.voltage_class == VoltageClass.KV_33 or "33" in str(getattr(swg, "rating", "")) or "33" in str(getattr(swg, "switchgear_type", "")):
+                if any(k in str(getattr(swg, "switchgear_type", "")).upper() or k in str(getattr(swg, "model", "")).upper() for k in ("GIS", "GV3")):
+                    return SwitchgearArchetype.GIS_CUBICLE
+                return SwitchgearArchetype.VCB_CUBICLE
+
+        if swgs:
+            swg = swgs[0]
             arch = getattr(swg, "archetype", None)
             if arch is not None:
                 return arch
-
             board = SwitchgearTopologyEngine.classify_board(
                 switchgear_type=getattr(swg, "switchgear_type", ""),
                 manufacturer=getattr(swg, "manufacturer", ""),
@@ -299,25 +407,47 @@ class MultiPartPartitionPolicy:
                 swg=swg,
             )
             return board.archetype
+
         return SwitchgearArchetype.RMU_STANDARD
 
     @classmethod
     def evaluate_package(
         cls,
-        pkg: SubstationEquipmentPackage,
+        pkg: SubstationEquipmentPackage | Any,
     ) -> tuple[bool, int]:
         """Evaluate if an equipment package requires multi-part partitioning and compute part count.
 
         Returns:
             (is_multipart, part_count)
         """
-        arch = cls.resolve_archetype(pkg)
+        if isinstance(pkg, FullReportStationPlan):
+            return pkg.is_multipart, len(pkg.chunks)
+
+        actual_pkg = pkg
+        if hasattr(pkg, "data") and getattr(pkg, "data", None) is not None:
+            actual_pkg = getattr(pkg.data, "equipment", pkg)
+        elif hasattr(pkg, "equipment"):
+            actual_pkg = getattr(pkg, "equipment", pkg)
+
+        arch = cls.resolve_archetype(actual_pkg)
         if arch in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
-            swgs = getattr(pkg, "switchgears", ())
-            swg = swgs[0] if swgs else getattr(pkg, "switchgear", None)
-            panels = getattr(swg, "panels", ()) if swg else ()
-            # Part 01 (Summary) + N bay files + Part N+2 (TX and Condition)
-            return True, len(panels) + 2
+            swgs = getattr(actual_pkg, "switchgears", ())
+            if not swgs and getattr(actual_pkg, "switchgear", None):
+                swgs = (actual_pkg.switchgear,)
+            total_panels = 0
+            for swg in swgs:
+                panels = getattr(swg, "panels", ())
+                total_panels += sum(1 for p in panels if getattr(p, "panel_no", 0) > 0)
+
+            # Check balance-of-plant assets per Decision Q76
+            has_bop = bool(
+                getattr(actual_pkg, "transformers", ())
+                or getattr(actual_pkg, "transformer", None)
+                or getattr(actual_pkg, "lvdb_specs", ())
+                or getattr(actual_pkg, "battery_banks", ())
+            )
+            bop_count = 1 if has_bop else 0
+            return True, 1 + total_panels + bop_count
         return False, 1
 
     @classmethod
@@ -326,7 +456,6 @@ class MultiPartPartitionPolicy:
         plan: FullReportStationPlan,
     ) -> SwitchgearArchetype:
         return cls.resolve_archetype(plan)
-
 
     @staticmethod
     def _partition_multipart(
@@ -369,41 +498,101 @@ class MultiPartPartitionPolicy:
             )
         )
 
-        # --- Chunks 2..N+1: Per-panel ---
-        # Identify panels from the primary switchgear
+        # --- Chunks 2..N+1: Per-panel across all switchgear lineups ---
         pkg = plan.package
+        if hasattr(pkg, "data") and getattr(pkg, "data", None) is not None:
+            pkg = getattr(pkg.data, "equipment", pkg)
+        elif hasattr(pkg, "equipment"):
+            pkg = getattr(pkg, "equipment", pkg)
+
         swgs = getattr(pkg, "switchgears", ())
-        if swgs:
-            panels = swgs[0].panels
-        elif getattr(pkg, "switchgear", None):
-            panels = getattr(pkg.switchgear, "panels", ())
-        else:
-            panels = ()
+        if not swgs and getattr(pkg, "switchgear", None):
+            swgs = (pkg.switchgear,)
 
-        for panel in panels:
-            chunk_idx += 1
-            panel_parts: list[PlanPartItem] = []
+        is_33kv = bool(
+            getattr(plan, "is_33kv", False)
+            or getattr(pkg, "voltage_class", None) == VoltageClass.KV_33
+            or any(
+                getattr(s, "voltage_class", None) == VoltageClass.KV_33
+                or getattr(s, "archetype", None) == SwitchgearArchetype.GIS_CUBICLE
+                or "33" in getattr(s, "switchgear_type", "")
+                or "33" in getattr(s, "rating", "")
+                for s in swgs
+            )
+        )
+        is_multi_lineup = len(swgs) > 1
+        include_voltage = is_multi_lineup or is_33kv
 
-            # Collect scan pages and CBM defects belonging to this panel
-            new_remaining: list[PlanPartItem] = []
-            for p in remaining_parts:
-                belongs_to_panel = False
-                if p.part_type in (PlanPartType.SCAN_PAGE, PlanPartType.CBM_DEFECT):
-                    if p.is_switchgear and p.panel_no == panel.panel_no:
-                        belongs_to_panel = True
-                if belongs_to_panel:
-                    panel_parts.append(p)
+        for swg_idx, swg in enumerate(swgs, 1):
+            swg_eq_id = f"swg{swg_idx}"
+            board = SwitchgearTopologyEngine.classify_board(
+                switchgear_type=getattr(swg, "switchgear_type", ""),
+                manufacturer=getattr(swg, "manufacturer", ""),
+                model=getattr(swg, "model", ""),
+                rating=getattr(swg, "rating", ""),
+                swg=swg,
+            )
+            v_cls = getattr(swg, "voltage_class", None) or board.voltage_class
+            voltage_str = v_cls.value if hasattr(v_cls, "value") else str(v_cls)
+            if not voltage_str or voltage_str == "None":
+                voltage_str = "33kV" if is_33kv else "11kV"
+
+            panels = getattr(swg, "panels", ())
+            for panel in panels:
+                if getattr(panel, "panel_no", 0) <= 0:
+                    continue
+
+                chunk_idx += 1
+                panel_parts: list[PlanPartItem] = []
+
+                # Collect scan pages and CBM defects belonging to this panel
+                new_remaining: list[PlanPartItem] = []
+                for p in remaining_parts:
+                    belongs_to_panel = False
+                    if p.part_type in (PlanPartType.SCAN_PAGE, PlanPartType.CBM_DEFECT):
+                        if p.is_switchgear and p.panel_no == panel.panel_no:
+                            p_eq_id = getattr(p, "equipment_id", "") or (p.scan_item.equipment_id if p.scan_item else "") or (p.interleaved_part.equipment_id if p.interleaved_part else "")
+                            if not p_eq_id or p_eq_id == swg_eq_id or len(swgs) == 1:
+                                belongs_to_panel = True
+                    if belongs_to_panel:
+                        panel_parts.append(p)
+                    else:
+                        new_remaining.append(p)
+                remaining_parts = new_remaining
+
+                raw_panel_name = getattr(panel, "name", "") or f"Panel {panel.panel_no}"
+                clean_panel_name = sanitize_filename(
+                    raw_panel_name.replace("/", "-").replace("\\", "-").replace(":", "-")
+                ).strip()
+                if not clean_panel_name:
+                    clean_panel_name = f"Panel {panel.panel_no}"
+
+                if include_voltage:
+                    v_clean = voltage_str.strip()
+                    if clean_panel_name.upper().startswith(v_clean.upper()):
+                        label = f"Part {chunk_idx:02d} - Panel {panel.panel_no} ({clean_panel_name})"
+                    else:
+                        label = f"Part {chunk_idx:02d} - Panel {panel.panel_no} ({v_clean} - {clean_panel_name})"
                 else:
-                    new_remaining.append(p)
-            remaining_parts = new_remaining
+                    label = f"Part {chunk_idx:02d} - Panel {panel.panel_no} ({clean_panel_name})"
 
-            raw_panel_name = getattr(panel, "name", "") or f"Panel {panel.panel_no}"
-            clean_panel_name = sanitize_filename(
-                raw_panel_name.replace("/", "-").replace("\\", "-").replace(":", "-")
-            ).strip()
-            if not clean_panel_name:
-                clean_panel_name = f"Panel {panel.panel_no}"
-            label = f"Part {chunk_idx:02d} - Panel {panel.panel_no} ({clean_panel_name})"
+                output_filename = f"{stem} - {label}.docx"
+                chunks.append(
+                    PlanDocumentChunk(
+                        chunk_index=chunk_idx,
+                        label=label,
+                        output_filename=output_filename,
+                        destination_path=dest_dir / output_filename,
+                        parts=tuple(panel_parts),
+                    )
+                )
+
+        # --- Chunk N+2: TX and Condition ---
+        # Everything remaining: TX, LVDB, Battery, Condition, VI Defects, Sticker
+        # Dynamically omitted if no remaining parts exist per Decision Q76
+        if remaining_parts:
+            chunk_idx += 1
+            label = f"Part {chunk_idx:02d} - TX and Condition"
             output_filename = f"{stem} - {label}.docx"
             chunks.append(
                 PlanDocumentChunk(
@@ -411,24 +600,9 @@ class MultiPartPartitionPolicy:
                     label=label,
                     output_filename=output_filename,
                     destination_path=dest_dir / output_filename,
-                    parts=tuple(panel_parts),
+                    parts=tuple(remaining_parts),
                 )
             )
-
-        # --- Chunk N+2: TX and Condition ---
-        # Everything remaining: TX, LVDB, Battery, Condition, VI Defects, Sticker
-        chunk_idx += 1
-        label = f"Part {chunk_idx:02d} - TX and Condition"
-        output_filename = f"{stem} - {label}.docx"
-        chunks.append(
-            PlanDocumentChunk(
-                chunk_index=chunk_idx,
-                label=label,
-                output_filename=output_filename,
-                destination_path=dest_dir / output_filename,
-                parts=tuple(remaining_parts),
-            )
-        )
 
         return tuple(chunks)
 
@@ -450,6 +624,7 @@ class FullReportStationPlan:
     cbm_defects: tuple[CbmDefectRecord, ...] = ()
     vi_defects: tuple[ViDefectRecord, ...] = ()
     has_vi_defects: bool = False
+    is_33kv: bool = False
     interleaving_result: InterleavingResult | None = None
     census_result: ExecutiveSummaryCensusResult | None = None
     _chunks: tuple[PlanDocumentChunk, ...] | None = None
@@ -466,7 +641,10 @@ class FullReportStationPlan:
     @property
     def pe_number(self) -> int:
         """Substation PE number from underlying package or 0."""
-        return getattr(self.package, "substation_number", 0)
+        num = getattr(self.package, "substation_number", 0)
+        if not num and hasattr(self.package, "data") and getattr(self.package, "data", None):
+            num = getattr(self.package.data, "substation_number", 0)
+        return num or 0
 
     @property
     def part_types(self) -> tuple[PlanPartType, ...]:
@@ -712,6 +890,42 @@ class FullReportPlanBuilder:
         else:
             vi_active = False
 
+        # Resolve equipment package for scanning equipment lists and census
+        actual_pkg = package
+        if hasattr(package, "data") and getattr(package, "data", None) is not None:
+            actual_pkg = getattr(package.data, "equipment", package)
+        elif hasattr(package, "equipment"):
+            actual_pkg = getattr(package.equipment, "equipment", package) if hasattr(getattr(package, "equipment", None), "equipment") else getattr(package, "equipment", package)
+
+        swgs_for_33 = getattr(actual_pkg, "switchgears", ())
+        if not swgs_for_33 and getattr(actual_pkg, "switchgear", None):
+            swgs_for_33 = (actual_pkg.switchgear,)
+        txs_for_33 = getattr(actual_pkg, "transformers", ())
+        if not txs_for_33 and getattr(actual_pkg, "transformer", None):
+            txs_for_33 = (actual_pkg.transformer,)
+
+        # Determine 33kV context (Decision Q78)
+        is_33kv = False
+        if getattr(actual_pkg, "voltage_class", None) == VoltageClass.KV_33:
+            is_33kv = True
+        elif "33kv" in st_name.lower() or "33 kv" in st_name.lower():
+            is_33kv = True
+        elif any(
+            getattr(s, "voltage_class", None) == VoltageClass.KV_33
+            or getattr(s, "archetype", None) == SwitchgearArchetype.GIS_CUBICLE
+            or "33" in str(getattr(s, "switchgear_type", "")).upper()
+            or "33" in str(getattr(s, "rating", "")).upper()
+            or "33" in str(getattr(s, "model", "")).upper()
+            or "GIS" in str(getattr(s, "switchgear_type", "")).upper()
+            for s in swgs_for_33
+        ):
+            is_33kv = True
+        elif any(
+            isinstance(t, PowerTransformerSpec)
+            for t in txs_for_33
+        ):
+            is_33kv = True
+
         # Calculate output filename strictly matching DefectStatusSuffix (IR+US+TEV+VI)
         if not output_filename:
             tech_set = {getattr(d, "technology", "").upper() for d in cbm_list}
@@ -736,7 +950,8 @@ class FullReportPlanBuilder:
                     sub_num = 0
 
             if sub_num:
-                output_filename = f"{sub_num:03d}. {st_name}{suffix_str}.docx"
+                prefix = f"{sub_num:02d}." if is_33kv else f"{sub_num:03d}."
+                output_filename = f"{prefix} {st_name}{suffix_str}.docx"
             else:
                 output_filename = f"{st_name}{suffix_str}.docx"
 
@@ -758,7 +973,7 @@ class FullReportPlanBuilder:
         # Part 2: Executive Summary Census
         sub_num_str = str(getattr(package, "substation_number", "") or info.get("pe_number", ""))
         census_ctx = eff_census_builder.build_context(
-            package,
+            actual_pkg,
             defects=cbm_list,
             substation_number=sub_num_str,
             station_name=st_name,
@@ -808,7 +1023,17 @@ class FullReportPlanBuilder:
             )
 
             adapted_items = []
-            for swg in getattr(package, "switchgears", ()):
+            swgs_to_adapt = getattr(actual_pkg, "switchgears", ())
+            if not swgs_to_adapt and getattr(actual_pkg, "switchgear", None):
+                swgs_to_adapt = (actual_pkg.switchgear,)
+            for swg_idx, swg in enumerate(swgs_to_adapt, 1):
+                swg_is_33kv = (
+                    getattr(swg, "voltage_class", None) == VoltageClass.KV_33
+                    or getattr(swg, "archetype", None) == SwitchgearArchetype.GIS_CUBICLE
+                    or "33" in str(getattr(swg, "rating", "")).upper()
+                    or "33" in str(getattr(swg, "switchgear_type", "")).upper()
+                    or "33" in str(getattr(swg, "model", "")).upper()
+                )
                 ad = SwitchgearScanAdapter(
                     swg=swg,
                     substation_info=info,
@@ -821,10 +1046,14 @@ class FullReportPlanBuilder:
                     sliced_overview_pages=pool_sliced_overviews,
                     has_active_defect=swg_active,
                     cbm_defects=cbm_list,
+                    swg_index=swg_idx,
+                    is_33kv=swg_is_33kv,
                 )
                 adapted_items.append(ad.adapt())
 
-            tx_list = list(getattr(package, "transformers", ()))
+            tx_list = list(getattr(actual_pkg, "transformers", ()))
+            if not tx_list and getattr(actual_pkg, "transformer", None):
+                tx_list = [actual_pkg.transformer]
             total_tx_count = len(tx_list)
             for tx_idx, tx in enumerate(tx_list, 1):
                 tx_id_str = f"tx{tx_idx}"
@@ -858,7 +1087,7 @@ class FullReportPlanBuilder:
                 )
                 adapted_items.append(ad.adapt())
 
-            lvdb_list = list(getattr(package, "lvdb_specs", ()))
+            lvdb_list = list(getattr(actual_pkg, "lvdb_specs", ()))
             total_fp_count = len(lvdb_list)
             for fp_idx, lvdb in enumerate(lvdb_list, 1):
                 fp_id_str = f"fp{fp_idx}"
@@ -887,7 +1116,7 @@ class FullReportPlanBuilder:
                 )
                 adapted_items.append(ad.adapt())
 
-            for bb in getattr(package, "battery_banks", ()):
+            for bb in getattr(actual_pkg, "battery_banks", ()):
                 ad = BatteryBankScanAdapter(
                     bb=bb,
                     substation_info=info,
@@ -926,6 +1155,7 @@ class FullReportPlanBuilder:
                         component_name=p.component_name,
                         sequence=p.sequence,
                         is_defective=True,
+                        equipment_id=getattr(p, "equipment_id", "") or (p.defect_metadata.equipment_id if p.defect_metadata else ""),
                     )
                 )
             else:
@@ -952,42 +1182,46 @@ class FullReportPlanBuilder:
                         sequence=p.sequence,
                         is_overview=is_ov,
                         is_defective=is_def,
+                        equipment_id=getattr(p, "equipment_id", "") or (scan_it.equipment_id if scan_it else ""),
                     )
                 )
 
         # Part 5: Substation Condition
         cond_path = resolved_sliced.condition_pages if resolved_sliced else None
-        parts.append(
-            PlanPartItem(
-                part_type=PlanPartType.CONDITION,
-                part_name="Substation Condition",
-                source_path=cond_path,
-                is_sliced=True,
-            )
-        )
-
-        # Part 6: Visual Defect Pages (if present per D39)
-        if vi_active:
-            vi_def_path = resolved_sliced.vi_defect_pages if resolved_sliced else None
+        if cond_path is not None:
             parts.append(
                 PlanPartItem(
-                    part_type=PlanPartType.VI_DEFECTS,
-                    part_name="Visual Defect Pages",
-                    source_path=vi_def_path,
+                    part_type=PlanPartType.CONDITION,
+                    part_name="Substation Condition",
+                    source_path=cond_path,
                     is_sliced=True,
                 )
             )
 
+        # Part 6: Visual Defect Pages (if present per D39)
+        if vi_active:
+            vi_def_path = resolved_sliced.vi_defect_pages if resolved_sliced else None
+            if vi_def_path is not None:
+                parts.append(
+                    PlanPartItem(
+                        part_type=PlanPartType.VI_DEFECTS,
+                        part_name="Visual Defect Pages",
+                        source_path=vi_def_path,
+                        is_sliced=True,
+                    )
+                )
+
         # Part 7: Sticker Page
         sticker_path = resolved_sliced.sticker_page if resolved_sliced else None
-        parts.append(
-            PlanPartItem(
-                part_type=PlanPartType.STICKER,
-                part_name="Sticker Page",
-                source_path=sticker_path,
-                is_sliced=True,
+        if sticker_path is not None:
+            parts.append(
+                PlanPartItem(
+                    part_type=PlanPartType.STICKER,
+                    part_name="Sticker Page",
+                    source_path=sticker_path,
+                    is_sliced=True,
+                )
             )
-        )
 
         return FullReportStationPlan(
             station=st_name,
@@ -1003,6 +1237,7 @@ class FullReportPlanBuilder:
             cbm_defects=cbm_list,
             vi_defects=vi_list,
             has_vi_defects=vi_active,
+            is_33kv=is_33kv,
             interleaving_result=interleaving_res,
         )
 
