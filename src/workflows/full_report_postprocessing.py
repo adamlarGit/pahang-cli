@@ -33,7 +33,7 @@ from src.postprocessing.converters import (
     batch_com_session,
     configure_uniform_printer,
 )
-from src.project.storage import extract_numerical_prefix
+from src.project.storage import extract_numerical_prefix, extract_prefix_safe
 from src.quick_report.extractor import DAILY_DATE_FOLDER_PATTERN
 from src.quick_report.prpd import discover_ultratev_survey_dir
 from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
@@ -179,6 +179,9 @@ def _find_pdf_in_dirs(pdf_dirs: Sequence[Path], stem: str) -> Path | None:
         if exact_pdf.exists() and exact_pdf.is_file():
             return exact_pdf.resolve()
 
+    clean_name_match = re.sub(r"^\d+\.\s*", "", stem).strip()
+    clean_name_match = re.sub(r"\s*\([^()]*\)$", "", clean_name_match).strip().lower()
+
     # Phase 2: Numerical prefix match (e.g. "005.", "05.", or "5.")
     try:
         prefix_num = extract_numerical_prefix(stem)
@@ -186,21 +189,32 @@ def _find_pdf_in_dirs(pdf_dirs: Sequence[Path], stem: str) -> Path | None:
         prefix_pattern2 = f"{prefix_num:02d}."
         prefix_pattern3 = f"{prefix_num}."
 
+        first_prefix_match: Path | None = None
         for pdf_dir in pdf_dirs:
-            for candidate in pdf_dir.glob("*.pdf"):
+            for candidate in sorted(pdf_dir.glob("*.pdf")):
                 if candidate.name.startswith("~$") or candidate.name.startswith("."):
                     continue
-                if candidate.name.startswith((prefix_pattern1, prefix_pattern2, prefix_pattern3)):
-                    return candidate.resolve()
+                cand_prefix = extract_prefix_safe(candidate.stem)
+                cand_matches_prefix = (
+                    candidate.name.startswith((prefix_pattern1, prefix_pattern2, prefix_pattern3))
+                    or cand_prefix == prefix_num
+                )
+                if cand_matches_prefix:
+                    # High-confidence: prefix matches AND clean substation name matches
+                    if clean_name_match and clean_name_match in candidate.name.lower():
+                        return candidate.resolve()
+                    if first_prefix_match is None:
+                        first_prefix_match = candidate.resolve()
+
+        if first_prefix_match is not None:
+            return first_prefix_match
     except ValueError:
         pass
 
     # Phase 3: Substation name match without defect suffix
-    clean_name_match = re.sub(r"^\d+\.\s*", "", stem).strip()
-    clean_name_match = re.sub(r"\s*\(.*?\)$", "", clean_name_match).strip().lower()
     if clean_name_match:
         for pdf_dir in pdf_dirs:
-            for candidate in pdf_dir.glob("*.pdf"):
+            for candidate in sorted(pdf_dir.glob("*.pdf")):
                 if candidate.name.startswith("~$") or candidate.name.startswith("."):
                     continue
                 if clean_name_match in candidate.name.lower():
@@ -652,13 +666,19 @@ class FullReportPostProcessingWorkflow:
         assert ts_pdf is not None
 
         out_p = Path(output_path).resolve() if output_path else doc_p.parent / f"{stem}.pdf"
-        self._compile_deliverable(
-            group=group,
-            testsheet_pdf_path=ts_pdf,
-            output_pdf_path=out_p,
-            environment=environment,
-            session=session,
-        )
+        session_cm = self._establish_batch_session(session)
+        with session_cm as active_session:
+            word_app = getattr(active_session, "word_app", None)
+            if word_app is not None:
+                configure_uniform_printer(word_app)
+            self._compile_deliverable(
+                group=group,
+                testsheet_pdf_path=ts_pdf,
+                output_pdf_path=out_p,
+                environment=environment,
+                word_app=word_app,
+                session=active_session,
+            )
 
         return out_p
 
@@ -792,21 +812,30 @@ class FullReportPostProcessingWorkflow:
         # 2. Fallback to testsheet_pdf_path sibling directory if available
         if xlsx_file is None and testsheet_pdf_path is not None and testsheet_pdf_path.exists():
             ts_dir = testsheet_pdf_path.parent
-            if ts_dir.name.lower() in ("pdf", "processed_testsheet"):
+            while ts_dir.parent != ts_dir and ts_dir.name.lower() in ("pdf", "processed_testsheet"):
                 ts_dir = ts_dir.parent
+            clean_sub_name = re.sub(r"^\d+\.\s*", "", stem)
+            clean_sub_name = re.sub(r"\s*\([^()]*\)$", "", clean_sub_name).strip().upper()
             for candidate in (ts_dir, ts_dir / "processed_testsheet"):
                 if candidate.is_dir():
+                    matched_fallback: Path | None = None
                     for f in sorted(candidate.glob("*.xlsx")):
                         if not f.name.startswith(("~$", ".")):
-                            if (pe_num is not None and str(pe_num) in f.stem) or (stem.upper() in f.stem.upper()):
-                                xlsx_file = f
-                                break
-                    if xlsx_file:
+                            f_prefix = extract_prefix_safe(f.stem)
+                            if (pe_num is not None and f_prefix == pe_num) or (stem.upper() in f.stem.upper()):
+                                if clean_sub_name and clean_sub_name in f.stem.upper():
+                                    xlsx_file = f
+                                    break
+                                if matched_fallback is None:
+                                    matched_fallback = f
+                    if xlsx_file or matched_fallback:
+                        xlsx_file = xlsx_file or matched_fallback
                         break
 
         if xlsx_file and xlsx_file.is_file():
             try:
-                return TestsheetExtractor().extract_testsheet_data(xlsx_file)
+                vtype = getattr(getattr(environment, "metadata", None), "voltage_type", None)
+                return TestsheetExtractor(voltage_type=vtype).extract_testsheet_data(xlsx_file)
             except Exception as e:
                 logger.debug("Failed extracting testsheet data from %s: %s", xlsx_file, e)
 
@@ -815,7 +844,7 @@ class FullReportPostProcessingWorkflow:
     def _establish_batch_session(self, explicit_session: Any) -> Any:
         """Establish single BatchComSession context across batch conversions."""
         if explicit_session is not None:
-            return explicit_session
+            return nullcontext(explicit_session)
 
         if isinstance(self._converter, ComDocumentConverter):
             # Only Word COM is required for Full Report post-processing; bypass Excel COM startup
@@ -848,21 +877,22 @@ class FullReportPostProcessingWorkflow:
                 if key not in multipart_buckets:
                     multipart_buckets[key] = []
                     groups_order.append((p_res.parent, extracted_stem, "multipart"))
-                multipart_buckets[key].append((part_idx, p_res))
+                if not any(existing_p == p_res for _, existing_p in multipart_buckets[key]):
+                    multipart_buckets[key].append((part_idx, p_res))
             else:
                 key = (p_res.parent, p_res.stem)
                 standalone_buckets[key] = p_res
                 groups_order.append((p_res.parent, p_res.stem, "standalone"))
 
         result: list[PostProcessingTargetGroup] = []
-        seen: set[tuple[Path, str, str]] = set()
+        seen: set[tuple[Path, str]] = set()
 
         for group_entry in groups_order:
-            if group_entry in seen:
-                continue
-            seen.add(group_entry)
             parent, stem, kind = group_entry
+            if (parent, stem) in seen:
+                continue
             if kind == "multipart":
+                seen.add((parent, stem))
                 parts_with_idx = multipart_buckets[(parent, stem)]
                 parts_with_idx.sort(key=lambda item: (item[0], item[1].name))
                 sorted_paths = tuple(p for _, p in parts_with_idx)
@@ -874,6 +904,9 @@ class FullReportPostProcessingWorkflow:
                     )
                 )
             elif kind == "standalone":
+                if (parent, stem) in multipart_buckets:
+                    continue
+                seen.add((parent, stem))
                 single_path = standalone_buckets[(parent, stem)]
                 result.append(
                     PostProcessingTargetGroup(
@@ -911,7 +944,7 @@ class FullReportPostProcessingWorkflow:
             pass
 
         clean_sub_name = re.sub(r"^\d+\.\s*", "", stem)
-        clean_sub_name = re.sub(r"\s*\(.*?\)$", "", clean_sub_name).strip()
+        clean_sub_name = re.sub(r"\s*\([^()]*\)$", "", clean_sub_name).strip()
 
         ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment, stem=stem)
         val_res = validate_processed_testsheet_pdf(ts_pdf, stem=stem, raise_on_error=False)
@@ -969,30 +1002,47 @@ class FullReportPostProcessingWorkflow:
                     return list(groups[0].docx_paths)
             return [p.resolve()]
 
-        # Case 1: Direct .docx path
-        if isinstance(target, Path) and target.is_file() and target.suffix.lower() == ".docx":
-            if not target.exists():
-                errors.append(f"Target file does not exist: {target}")
-                return [], warnings, errors
-            return _expand_multipart_siblings(target), warnings, errors
+        # Case 1 & 2 & 4: Direct single Path or string target
+        if isinstance(target, (Path, str)):
+            clean_str = str(target).strip()
+            p_tgt = Path(target) if isinstance(target, Path) else Path(clean_str)
 
-        # Case 2: Direct path to directory
-        if isinstance(target, Path) and target.is_dir():
-            files = [
-                p.resolve()
-                for p in target.glob("*.docx")
-                if not p.name.startswith("~$") and not p.name.startswith(".")
-            ]
-            files.sort(key=lambda p: p.name)
-            return files, warnings, errors
+            # Direct .docx path
+            if p_tgt.suffix.lower() == ".docx":
+                if not p_tgt.exists() or not p_tgt.is_file():
+                    errors.append(f"Target file does not exist: {target}")
+                    return [], warnings, errors
+                return _expand_multipart_siblings(p_tgt), warnings, errors
+
+            # Direct path to directory
+            if p_tgt.is_dir():
+                files = [
+                    p.resolve()
+                    for p in p_tgt.rglob("*.docx")
+                    if not p.name.startswith("~$") and not p.name.startswith(".")
+                ]
+                if station:
+                    files = [p for p in files if self._matches_station(p, station)]
+                files.sort(key=lambda p: p.name)
+                return files, warnings, errors
+
+            # Calendar date DD-MM-YYYY
+            if DAILY_DATE_FOLDER_PATTERN.match(clean_str):
+                files = self._find_docx_by_date(full_report_dir, clean_str)
+                if station:
+                    files = [p for p in files if self._matches_station(p, station)]
+                return files, warnings, errors
 
         # Case 3: Sequence of paths
-        if isinstance(target, Sequence) and not isinstance(target, (str, bytes)):
+        if isinstance(target, Sequence) and not isinstance(target, (str, bytes, Path)):
             collected: list[Path] = []
             seen_multipart_stems: set[tuple[Path, str]] = set()
             for item in target:
                 p = Path(item)
-                if p.is_file() and p.suffix.lower() == ".docx" and p.exists():
+                if p.suffix.lower() == ".docx":
+                    if not p.exists() or not p.is_file():
+                        errors.append(f"Target file does not exist: {item}")
+                        continue
                     p_res = p.resolve()
                     m = MULTIPART_DOCX_PATTERN.match(p_res.stem)
                     if m:
@@ -1008,44 +1058,18 @@ class FullReportPostProcessingWorkflow:
                     if p_res not in collected:
                         collected.append(p_res)
                 elif p.is_dir():
-                    for f in sorted(p.glob("*.docx")):
+                    for f in sorted(p.rglob("*.docx")):
                         if not f.name.startswith("~$") and not f.name.startswith("."):
                             if f.resolve() not in collected:
                                 collected.append(f.resolve())
-                elif isinstance(item, str) and DAILY_DATE_FOLDER_PATTERN.match(item.strip()):
-                    date_files = self._find_docx_by_date(full_report_dir, item.strip())
+                elif isinstance(item, (str, Path)) and DAILY_DATE_FOLDER_PATTERN.match(str(item).strip()):
+                    date_files = self._find_docx_by_date(full_report_dir, str(item).strip())
                     for df in date_files:
                         if df not in collected:
                             collected.append(df)
             if station:
                 collected = [p for p in collected if self._matches_station(p, station)]
             return collected, warnings, errors
-
-        # Case 4: Target is date string, file path, or folder name
-        if isinstance(target, str):
-            clean_tgt = target.strip()
-            p_tgt = Path(clean_tgt)
-            # If path to existing .docx file
-            if p_tgt.is_file() and p_tgt.suffix.lower() == ".docx":
-                return _expand_multipart_siblings(p_tgt), warnings, errors
-
-            # If path to existing directory
-            if p_tgt.is_dir():
-                files = [
-                    p.resolve()
-                    for p in p_tgt.glob("*.docx")
-                    if not p.name.startswith("~$") and not p.name.startswith(".")
-                ]
-                if station:
-                    files = [p for p in files if self._matches_station(p, station)]
-                return files, warnings, errors
-
-            # If calendar date DD-MM-YYYY
-            if DAILY_DATE_FOLDER_PATTERN.match(clean_tgt):
-                files = self._find_docx_by_date(full_report_dir, clean_tgt)
-                if station:
-                    files = [p for p in files if self._matches_station(p, station)]
-                return files, warnings, errors
 
         # Case 5: Target is None (scan entire FULL REPORT directory)
         if target is None:
