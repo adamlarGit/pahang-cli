@@ -65,7 +65,7 @@ graph TD
     T99["#99: 33kV WhatsApp daily report generation - Closed"]
     T100["#100: 33kV MSMS pipeline (Consolidate, Enrich, Propagate, Ingest, Mapper T1SUB33) - Closed"]
     T101["#101: 33kV Full Report generation (MultiPartPartitionPolicy for dual-voltage VCB/GIS) - Closed"]
-    T102["#102: 33kV Full Report post-processing (Stitching + testsheet merge)"]
+    T102["#102: 33kV Full Report post-processing (Stitching + testsheet merge) - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -172,7 +172,7 @@ graph TD
 - **Delivers**: Expansion of `MultiPartPartitionPolicy` for 33kV dual-voltage VCB/GIS cubicles and Power Transformers: Part 01 Summary (Front page, Executive Summary Census, Visual Defect Summary, Switchgear Overview), Parts 02..N+1 (per-panel bay chunks with inline CBM defect pages across all lineups), Part N+2 (TX HV/LV sides via `tx-hv-sides.docx`/`tx-lv-sides.docx`, auxiliary thermals via `tx-overview.docx`, balance of plant, condition pages, visual defects, sticker page).
 
 ### #102: feat(33kv-full-report-postprocessing): 33kV Full Report multi-part PDF batch conversion, stitching, and testsheet merge
-- **Status**: Settled
+- **Status**: Closed
 - **GitHub Issue**: [#102](https://github.com/adamlarGit/pahang-cli/issues/102)
 - **Blocked by**: #97, #101
 - **Ticket File**: [tickets/102-33kv-full-report-postprocessing.md](./tickets/102-33kv-full-report-postprocessing.md)
