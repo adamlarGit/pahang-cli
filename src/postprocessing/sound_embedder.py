@@ -31,6 +31,9 @@ CHAMBER_COMPONENT_KEYWORDS: dict[str, tuple[str, ...]] = {
     "BUSBAR": ("BUSBAR", "UPPER_BUSBARS", "LOWER_BUSBARS"),
     "PT": ("VT_CHAMBER", "VOLTAGE_TRANSFORMER", "VT", "PT"),
     "VT": ("VT_CHAMBER", "VOLTAGE_TRANSFORMER", "VT", "PT"),
+    "FUSE": ("FUSE", "CABLE_BOX", "CABLES", "CABLE"),
+    "FRONT": ("CIRCUIT_BREAKER", "BREAKER", "CB"),
+    "REAR": ("CABLE_BOX", "CABLES", "CABLE"),
 }
 
 # Transformer active HV scanning page keywords
@@ -140,6 +143,34 @@ def extract_page_equipment_context(
         tx_idx = int(m_tx.group(1))
         raw_tx_no = m_tx.group(0).strip()
 
+    # 5. Switchgear type, model, manufacturer
+    m_eq = re.search(r"Equipment\s*[:\n\r]*\s*([^\n\r]+)", text)
+    switchgear_type = m_eq.group(1).strip() if m_eq else ""
+    if switchgear_type:
+        switchgear_type = re.split(
+            r"\s+(?:Manufacturer|Model|Rating|Time|Area|Panel|Tx)\b",
+            switchgear_type,
+            flags=re.IGNORECASE,
+        )[0].strip()
+
+    m_model = re.search(r"Model\s*[:\n\r]*\s*([^\n\r]+)", text)
+    model = m_model.group(1).strip() if m_model else ""
+    if model:
+        model = re.split(
+            r"\s+(?:Manufacturer|Equipment|Rating|Time|Area|Panel|Tx|Serial)\b",
+            model,
+            flags=re.IGNORECASE,
+        )[0].strip()
+
+    m_mfg = re.search(r"Manufacturer\s*[:\n\r]*\s*([^\n\r]+)", text)
+    manufacturer = m_mfg.group(1).strip() if m_mfg else ""
+    if manufacturer:
+        manufacturer = re.split(
+            r"\s+(?:Equipment|Model|Rating|Time|Area|Panel|Tx|Serial)\b",
+            manufacturer,
+            flags=re.IGNORECASE,
+        )[0].strip()
+
     # Enforce TwoTierPanelMatchingPolicy
     panel_no: int | None = None
     if raw_panel_no:
@@ -151,8 +182,7 @@ def extract_page_equipment_context(
         if m_tier1:
             panel_no = int(m_tier1.group(1))
 
-    if panel_no is None and package is not None:
-        # Tier 2: Check package switchgear panel catalog fallback
+    if package is not None:
         eq = getattr(package, "equipment", None)
         if eq is None and hasattr(package, "data") and getattr(package, "data", None) is not None:
             eq = getattr(package.data, "equipment", None)
@@ -163,25 +193,49 @@ def extract_page_equipment_context(
         clean_raw_panel = raw_panel_no.strip().upper()
         clean_panel_name = panel_name.strip().upper()
 
-        for swg in swgs:
-            for p in getattr(swg, "panels", ()):
-                feeder_tag = (getattr(p, "panel_feeder_no", "") or "").strip().upper()
-                p_name = (getattr(p, "name", "") or "").strip().upper()
-                matched = False
-                if feeder_tag and clean_raw_panel and feeder_tag == clean_raw_panel:
-                    matched = True
-                elif feeder_tag and clean_panel_name and feeder_tag == clean_panel_name:
-                    matched = True
-                elif p_name and clean_panel_name and p_name == clean_panel_name:
-                    matched = True
-                elif p_name and clean_raw_panel and p_name == clean_raw_panel:
-                    matched = True
+        if panel_no is None:
+            # Tier 2: Check package switchgear panel catalog fallback
+            for swg in swgs:
+                for p in getattr(swg, "panels", ()):
+                    feeder_tag = (getattr(p, "panel_feeder_no", "") or "").strip().upper()
+                    p_name = (getattr(p, "name", "") or "").strip().upper()
+                    matched = False
+                    if feeder_tag and clean_raw_panel and feeder_tag == clean_raw_panel:
+                        matched = True
+                    elif feeder_tag and clean_panel_name and feeder_tag == clean_panel_name:
+                        matched = True
+                    elif p_name and clean_panel_name and p_name == clean_panel_name:
+                        matched = True
+                    elif p_name and clean_raw_panel and p_name == clean_raw_panel:
+                        matched = True
 
-                if matched:
-                    panel_no = getattr(p, "panel_no", None)
+                    if matched:
+                        panel_no = getattr(p, "panel_no", None)
+                        break
+                if panel_no is not None:
                     break
+
+        # Fall back switchgear_type, model, manufacturer to package if missing
+        if (not switchgear_type or not model or not manufacturer) and swgs:
+            swg_target = None
             if panel_no is not None:
-                break
+                for swg in swgs:
+                    for p in getattr(swg, "panels", ()):
+                        if getattr(p, "panel_no", None) == panel_no:
+                            swg_target = swg
+                            break
+                    if swg_target is not None:
+                        break
+            if swg_target is None and swgs:
+                swg_target = swgs[0]
+
+            if swg_target is not None:
+                if not switchgear_type:
+                    switchgear_type = getattr(swg_target, "switchgear_type", "") or ""
+                if not model:
+                    model = getattr(swg_target, "model", "") or ""
+                if not manufacturer:
+                    manufacturer = getattr(swg_target, "manufacturer", "") or ""
 
     return {
         "panel_no": panel_no,
@@ -190,6 +244,9 @@ def extract_page_equipment_context(
         "area": area,
         "tx_idx": tx_idx,
         "raw_tx_no": raw_tx_no,
+        "switchgear_type": switchgear_type,
+        "model": model,
+        "manufacturer": manufacturer,
     }
 
 
@@ -354,20 +411,25 @@ def resolve_measurement_audio_for_page(
         if targets:
             panel_measurements = [
                 m for m in us_meas
-                if any(t in m.subasset.upper() or t in m.label.upper() for t in targets)
+                if m.asset.upper() not in ("TX", "TRANSFORMER")
+                and any(t in m.subasset.upper() or t in m.label.upper() for t in targets)
             ]
 
     # Equipment type detection: distinguish RMU from modular VCB cubicles
+    model = str(page_context.get("model", "")).strip().upper()
+    switchgear_type = str(page_context.get("switchgear_type", "")).strip().upper()
+
     is_rmu = (
         any(m.asset.upper() == "RMU" or m.label.upper().startswith("RMU_") for m in us_meas)
-        or "RMU" in str(page_context.get("switchgear_type", "")).upper()
+        or "RMU" in switchgear_type
+        or "INS24" in model
         or (feeder_dir and "RMU" in feeder_dir.as_posix().upper())
     )
 
-    # Check for RMU board-level fallback (strictly restricted to RMU)
-    is_cable_page = "CABLE" in area
+    # Check for RMU board-level fallback (strictly restricted to RMU feeder pages: CABLE or FUSE)
+    is_rmu_feeder_page = "CABLE" in area or "FUSE" in area
     if not panel_measurements:
-        if is_rmu and is_cable_page:
+        if is_rmu and is_rmu_feeder_page:
             has_feeder_subfolders = False
             if survey_root and survey_root.exists():
                 try:
@@ -393,8 +455,8 @@ def resolve_measurement_audio_for_page(
         # Zero cross-chamber leakage for VCB or unmeasured panels
         return None
 
-    # RmuAudioAttributionPolicy: single untagged US recordings match active cable scanning page
-    if is_rmu and is_cable_page and len(panel_measurements) == 1:
+    # RmuAudioAttributionPolicy: single untagged US recordings match active cable / fuse scanning page
+    if is_rmu and is_rmu_feeder_page and len(panel_measurements) == 1:
         single_m = panel_measurements[0]
         if not single_m.component or single_m.component.upper() in ("$NONE", "NONE", ""):
             return _validate_and_return_8k_wav(single_m)
@@ -414,6 +476,13 @@ def resolve_measurement_audio_for_page(
                     if "UPPER" in m.component.upper() or "UPPER" in m.label.upper()
                 ]
                 chamber_matched = upper if upper else candidates
+            elif chamber_key == "FUSE":
+                # Multi-measurement tie-breaking: prioritize $FUSE over fallback $CABLE_BOX if present
+                fuse_candidates = [
+                    m for m in candidates
+                    if "FUSE" in m.component.upper() or "FUSE" in m.label.upper()
+                ]
+                chamber_matched = fuse_candidates if fuse_candidates else candidates
             else:
                 chamber_matched = candidates
             break
