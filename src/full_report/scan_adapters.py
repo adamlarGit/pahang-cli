@@ -44,6 +44,7 @@ from src.full_report.models import (
     SwitchgearScanSpec,
     TransformerScanSpec,
     has_hv_cable_split,
+    is_transition_panel,
 )
 from src.full_report.photo_resolver import RawPhotoResolver
 from src.full_report.scan_render import (
@@ -385,9 +386,12 @@ def _resolve_swg_overview_photo_num(
     archetype: SwitchgearArchetype,
     ov_area: str,
     photo_numbers: tuple[int, ...],
+    overview_compartments: tuple[str, ...] = (),
 ) -> int | None:
     """Map switchgear overview compartment view to photo number per ADR 0005.
 
+    - 33kV explicit overview compartments matching:
+      - Direct 1-to-1 index pairing if ov_area is in overview_compartments.
     - VCB / GIS:
       - OVERVIEW FRONT: Row 27 photo (photo_numbers[0])
       - OVERVIEW REAR: Row 26 photo (photo_numbers[1])
@@ -398,6 +402,11 @@ def _resolve_swg_overview_photo_num(
     """
     if not photo_numbers:
         return None
+
+    if overview_compartments and ov_area in overview_compartments:
+        idx = overview_compartments.index(ov_area)
+        if idx < len(photo_numbers) and photo_numbers[idx] > 0:
+            return photo_numbers[idx]
 
     if archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
         if ov_area == "OVERVIEW FRONT" and len(photo_numbers) > 0:
@@ -530,9 +539,8 @@ class SwitchgearScanAdapter:
         # 1. Overview Scanning Pages (D26 / D47)
         # ----------------------------------------------------------------------
         overview_comps = (
-            self.swg.overview_compartments
-            if isinstance(self.swg, SwitchgearScanSpec) and self.swg.overview_compartments
-            else SwitchgearTopologyEngine.resolve_overview_compartments(
+            getattr(self.swg, "overview_compartments", ())
+            or SwitchgearTopologyEngine.resolve_overview_compartments(
                 self.archetype, voltage_class=self.voltage_class
             )
         )
@@ -590,7 +598,12 @@ class SwitchgearScanAdapter:
                 seq = "p00" if ov_idx == 0 else f"p00_{ov_idx}"
                 ov_name = f"SWG Overview - {ov_area}"
 
-                ir_num = _resolve_swg_overview_photo_num(self.archetype, ov_area, self.swg.photo_numbers)
+                ir_num = _resolve_swg_overview_photo_num(
+                    self.archetype,
+                    ov_area,
+                    self.swg.photo_numbers,
+                    getattr(self.swg, "overview_compartments", ()),
+                )
                 if ir_num is not None and self.photo_resolver:
                     ir_img = self.photo_resolver.resolve_ir_photo(ir_num)
                     vis_img = self.photo_resolver.resolve_visual_photo(ir_num)
@@ -729,7 +742,11 @@ class SwitchgearScanAdapter:
 
                 # Format parameters
                 h_amp = format_heater_amp(panel.heater_amp, is_vcb=is_vcb)
-                bus_pos = format_busbar_position(f"{p_name} {panel.panel_feeder_no}", is_vcb=is_vcb)
+                bus_pos = format_busbar_position(
+                    f"{p_name} {panel.panel_feeder_no}",
+                    is_vcb=is_vcb,
+                    raw_position=getattr(panel, "busbar_position", None),
+                )
                 us_char_norm = normalize_us_characteristic(panel.us_char, default="NORMAL")
 
                 if comp_us_active:
@@ -766,6 +783,15 @@ class SwitchgearScanAdapter:
                         "prpd": "",
                     }
 
+                is_trans = is_transition_panel(panel) or "TRANSITION" in p_name.upper()
+                raw_feeder_no = getattr(panel, "panel_feeder_no", None)
+                has_feeder_no = raw_feeder_no is not None and str(raw_feeder_no).strip() not in ("", "-")
+
+                if is_trans and not has_feeder_no:
+                    link_no = "-"
+                else:
+                    link_no = _clean_str(panel.panel_feeder_no or str(p_no))
+
                 panel_ctx = {
                     "substation": sub_ctx,
                     "swg": {
@@ -777,7 +803,7 @@ class SwitchgearScanAdapter:
                     },
                     "panel": {
                         "name": p_name,
-                        "linknumber": _clean_str(panel.panel_feeder_no or str(p_no)),
+                        "linknumber": link_no,
                         "feeder_no": _clean_str(panel.panel_feeder_no or ""),
                         "area": comp_name,
                         "serialnumber": _clean_str(panel.serial_no),

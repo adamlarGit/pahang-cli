@@ -404,3 +404,141 @@ def test_us_audio_workflow_batch_resilience_isolates_corrupted_candidate(tmp_pat
     assert len(summary.errors) == 1
     assert "8k.wav" in summary.errors[0]
     assert len(progress_calls) == 3
+
+
+def test_embed_survey_ultrasound_multi_transition_disambiguation(tmp_path: Path):
+    """Verify embed_survey_ultrasound_into_pdf sequentially disambiguates unnumbered transition panels:
+    Pages 43-45 embed PANEL_6 audio, Pages 71-73 embed PANEL_12 audio, Pages 98-100 embed PANEL_18 audio.
+    """
+    survey_root = tmp_path / "US+TEV"
+    survey_root.mkdir(parents=True, exist_ok=True)
+
+    manifest_measures = []
+    # Create survey directories for PANEL_6 (100 samples), PANEL_12 (200 samples), PANEL_18 (300 samples)
+    for p_no, samples in [(6, 100), (12, 200), (18, 300)]:
+        p_dir = survey_root / "VCB" / f"PANEL_{p_no}"
+        p_dir.mkdir(parents=True, exist_ok=True)
+        for comp, tag, db in [
+            ("$CIRCUIT_BREAKER", "front", 15.0),
+            ("$CABLE_BOX", "rear", 14.0),
+            ("$UPPER_BUSBARS", "busbar", 16.0),
+        ]:
+            m_dir = p_dir / f"meas_{tag}"
+            m_dir.mkdir(parents=True, exist_ok=True)
+            _create_synthetic_wav(m_dir / "8k.wav", sampwidth=3, num_samples=samples)
+            (m_dir / "Ultrasonic.html").write_text("<html></html>", encoding="utf-8")
+            (m_dir / "ultrasonic_phase_plot.js").write_text(
+                f'var ultra_events = {{"data": [[{db}, 60, 100]]}};\n', encoding="utf-8"
+            )
+            manifest_measures.append({
+                "$MEASURE_TYPE": "$ULTRA",
+                "Data": f"VCB/PANEL_{p_no}/meas_{tag}",
+                "$COMPONENT": comp,
+            })
+
+    manifest = {
+        "assets": [
+            {
+                "$ASSET_NAME": "VCB",
+                "$SUB_ASSETS": [
+                    {
+                        "$SUB_ASSET_NAME": "SWITCHGEAR",
+                        "$MEASURES": manifest_measures,
+                    }
+                ],
+            }
+        ]
+    }
+    (survey_root / "survey_summary.js").write_text(
+        f"var survey_summary = {json.dumps(manifest)};\n", encoding="utf-8"
+    )
+
+    # Build 18-panel switchgear catalog matching Bandar Indera Mahkota VI
+    class PanelSpec:
+        def __init__(self, panel_no: int, name: str, panel_feeder_no: str = ""):
+            self.panel_no = panel_no
+            self.name = name
+            self.panel_feeder_no = panel_feeder_no
+
+    class SwgSpec:
+        def __init__(self, panels: list[PanelSpec]):
+            self.panels = panels
+
+    class EqSpec:
+        def __init__(self, switchgears: list[SwgSpec]):
+            self.switchgears = switchgears
+
+    class PkgSpec:
+        def __init__(self, equipment: EqSpec):
+            self.equipment = equipment
+
+    panels = []
+    for i in range(1, 19):
+        if i in (6, 12, 18):
+            panels.append(PanelSpec(panel_no=i, name="TRANSITION PANEL", panel_feeder_no=""))
+        else:
+            panels.append(PanelSpec(panel_no=i, name=f"FEEDER {i}", panel_feeder_no=f"CKN000{i:02d}"))
+    pkg = PkgSpec(equipment=EqSpec(switchgears=[SwgSpec(panels=panels)]))
+
+    # Create synthetic deliverable PDF with pages corresponding to Bandar Indera Mahkota VI
+    pdf_path = tmp_path / "DELIVERABLE_MULTI_TRANS.pdf"
+    doc = fitz.open()
+
+    page_specs = [
+        ("5", "FEEDER 5", "CABLE COMPARTMENT"),
+        # Transition 1 (Panel 6)
+        ("-", "TRANSITION PANEL", "FRONT COMPARTMENT"),
+        ("-", "TRANSITION PANEL", "REAR COMPARTMENT"),
+        ("-", "TRANSITION PANEL", "BUSBAR COMPARTMENT"),
+        ("7", "FEEDER 7", "CABLE COMPARTMENT"),
+        ("11", "FEEDER 11", "CABLE COMPARTMENT"),
+        # Transition 2 (Panel 12)
+        ("-", "TRANSITION PANEL", "FRONT COMPARTMENT"),
+        ("-", "TRANSITION PANEL", "REAR COMPARTMENT"),
+        ("-", "TRANSITION PANEL", "BUSBAR COMPARTMENT"),
+        ("13", "FEEDER 13", "CABLE COMPARTMENT"),
+        ("17", "FEEDER 17", "CABLE COMPARTMENT"),
+        # Transition 3 (Panel 18)
+        ("-", "TRANSITION PANEL", "FRONT COMPARTMENT"),
+        ("-", "TRANSITION PANEL", "REAR COMPARTMENT"),
+        ("-", "TRANSITION PANEL", "BUSBAR COMPARTMENT"),
+    ]
+
+    for p_no_str, p_name_str, area_str in page_specs:
+        p = doc.new_page(width=595.0, height=842.0)
+        p.insert_text(fitz.Point(60.0, 100.0), f"Panel No. : {p_no_str}", fontsize=10)
+        p.insert_text(fitz.Point(60.0, 120.0), f"Panel Name : {p_name_str}", fontsize=10)
+        p.insert_text(fitz.Point(60.0, 140.0), f"Area : {area_str}", fontsize=10)
+        p.insert_text(fitz.Point(80.0, 650.0), "Sound clip", fontsize=10)
+
+    doc.save(str(pdf_path))
+    doc.close()
+
+    count = embed_survey_ultrasound_into_pdf(pdf_path, survey_root, package=pkg)
+    assert count == 9
+
+    with fitz.open(pdf_path) as verify_doc:
+        # Pages 1, 2, 3 -> Transition 1 (Panel 6, 100 samples -> 200 bytes)
+        for page_idx in (1, 2, 3):
+            annots = list(verify_doc[page_idx].annots())
+            assert len(annots) == 1
+            sound_ref = int(verify_doc.xref_get_key(annots[0].xref, "Sound")[1].split()[0])
+            stream_len = len(verify_doc.xref_stream(sound_ref))
+            assert stream_len == 200, f"Page {page_idx} expected 200 bytes (Panel 6), got {stream_len}"
+
+        # Pages 6, 7, 8 -> Transition 2 (Panel 12, 200 samples -> 400 bytes)
+        for page_idx in (6, 7, 8):
+            annots = list(verify_doc[page_idx].annots())
+            assert len(annots) == 1
+            sound_ref = int(verify_doc.xref_get_key(annots[0].xref, "Sound")[1].split()[0])
+            stream_len = len(verify_doc.xref_stream(sound_ref))
+            assert stream_len == 400, f"Page {page_idx} expected 400 bytes (Panel 12), got {stream_len}"
+
+        # Pages 11, 12, 13 -> Transition 3 (Panel 18, 300 samples -> 600 bytes)
+        for page_idx in (11, 12, 13):
+            annots = list(verify_doc[page_idx].annots())
+            assert len(annots) == 1
+            sound_ref = int(verify_doc.xref_get_key(annots[0].xref, "Sound")[1].split()[0])
+            stream_len = len(verify_doc.xref_stream(sound_ref))
+            assert stream_len == 600, f"Page {page_idx} expected 600 bytes (Panel 18), got {stream_len}"
+

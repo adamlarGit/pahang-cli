@@ -1212,6 +1212,246 @@ def test_bus_section_audio_resolution_panels_5_11_17(tmp_path: Path):
     assert resolved_c == meas_bs_c.meas_dir / "8k.wav"
 
 
+def test_extract_page_equipment_context_bandar_indera_mahkota_vi_multi_transition():
+    """Verify Bandar Indera Mahkota VI resolves unnumbered transition panels sequentially:
+    Page 43-45 -> PANEL_6, Page 71-73 -> PANEL_12, Page 98-100 -> PANEL_18."""
+    # Build 18-panel switchgear catalog matching Bandar Indera Mahkota VI
+    panels = []
+    for i in range(1, 19):
+        if i in (6, 12, 18):
+            panels.append(MockPanel(panel_no=i, panel_feeder_no="", name="TRANSITION PANEL"))
+        else:
+            panels.append(MockPanel(panel_no=i, panel_feeder_no=f"CKN000{i:02d}", name=f"FEEDER {i}"))
+
+    pkg = MockPackage(equipment=MockEquipment(switchgears=[MockSwitchgear(panels=panels)]))
+
+    # Construct pages
+    p42 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 5"),
+        (60.0, 120.0, "Panel Name : FEEDER 5"),
+        (60.0, 140.0, "Area : CABLE COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p43 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : FRONT COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p44 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : REAR COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p45 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : BUSBAR COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p46 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 7"),
+        (60.0, 120.0, "Panel Name : FEEDER 7"),
+        (60.0, 140.0, "Area : CABLE COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p70 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 11"),
+        (60.0, 120.0, "Panel Name : FEEDER 11"),
+        (60.0, 140.0, "Area : CABLE COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p71 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : FRONT COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p72 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : REAR COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p73 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : BUSBAR COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p74 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 13"),
+        (60.0, 120.0, "Panel Name : FEEDER 13"),
+        (60.0, 140.0, "Area : CABLE COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p97 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 17"),
+        (60.0, 120.0, "Panel Name : FEEDER 17"),
+        (60.0, 140.0, "Area : CABLE COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p98 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : FRONT COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p99 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : REAR COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    p100 = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : BUSBAR COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])[0]
+
+    state: dict[str, Any] = {}
+
+    # Sequential iteration simulating deliverable PDF reading order
+    assert extract_page_equipment_context(p42, package=pkg, state=state)["panel_no"] == 5
+
+    # Transition 1 -> PANEL_6 (Pages 43-45)
+    ctx43 = extract_page_equipment_context(p43, package=pkg, state=state)
+    assert ctx43["panel_no"] == 6
+    assert ctx43["panel_name"] == "TRANSITION PANEL"
+    assert ctx43["raw_panel_no"] == "-"
+
+    ctx44 = extract_page_equipment_context(p44, package=pkg, state=state)
+    assert ctx44["panel_no"] == 6
+
+    ctx45 = extract_page_equipment_context(p45, package=pkg, state=state)
+    assert ctx45["panel_no"] == 6
+
+    # Feeder 7
+    assert extract_page_equipment_context(p46, package=pkg, state=state)["panel_no"] == 7
+
+    # Feeder 11
+    assert extract_page_equipment_context(p70, package=pkg, state=state)["panel_no"] == 11
+
+    # Transition 2 -> PANEL_12 (Pages 71-73)
+    ctx71 = extract_page_equipment_context(p71, package=pkg, state=state)
+    assert ctx71["panel_no"] == 12
+    assert ctx71["panel_name"] == "TRANSITION PANEL"
+
+    ctx72 = extract_page_equipment_context(p72, package=pkg, state=state)
+    assert ctx72["panel_no"] == 12
+
+    ctx73 = extract_page_equipment_context(p73, package=pkg, state=state)
+    assert ctx73["panel_no"] == 12
+
+    # Feeder 13
+    assert extract_page_equipment_context(p74, package=pkg, state=state)["panel_no"] == 13
+
+    # Feeder 17
+    assert extract_page_equipment_context(p97, package=pkg, state=state)["panel_no"] == 17
+
+    # Transition 3 -> PANEL_18 (Pages 98-100)
+    ctx98 = extract_page_equipment_context(p98, package=pkg, state=state)
+    assert ctx98["panel_no"] == 18
+    assert ctx98["panel_name"] == "TRANSITION PANEL"
+
+    ctx99 = extract_page_equipment_context(p99, package=pkg, state=state)
+    assert ctx99["panel_no"] == 18
+
+    ctx100 = extract_page_equipment_context(p100, package=pkg, state=state)
+    assert ctx100["panel_no"] == 18
+
+
+def test_extract_page_equipment_context_transition_prev_panel_no_disambiguation():
+    """Verify prev_panel_no directly disambiguates multi-transition bays without state dict."""
+    panels = []
+    for i in range(1, 19):
+        if i in (6, 12, 18):
+            panels.append(MockPanel(panel_no=i, panel_feeder_no="", name="TRANSITION PANEL"))
+        else:
+            panels.append(MockPanel(panel_no=i, panel_feeder_no=f"CKN000{i:02d}", name=f"FEEDER {i}"))
+
+    pkg = MockPackage(equipment=MockEquipment(switchgears=[MockSwitchgear(panels=panels)]))
+
+    doc = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : -"),
+        (60.0, 120.0, "Panel Name : TRANSITION PANEL"),
+        (60.0, 140.0, "Area : BUSBAR COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])
+    page = doc[0]
+
+    assert extract_page_equipment_context(page, package=pkg, prev_panel_no=5)["panel_no"] == 6
+    assert extract_page_equipment_context(page, package=pkg, prev_panel_no=11)["panel_no"] == 12
+    assert extract_page_equipment_context(page, package=pkg, prev_panel_no=17)["panel_no"] == 18
+    assert extract_page_equipment_context(page, package=pkg, prev_panel_no=None)["panel_no"] == 6
+
+
+def test_resolve_measurement_audio_multi_transition_directories(tmp_path: Path):
+    """Verify multi-transition panels resolve audio to their respective PANEL_6, PANEL_12, and PANEL_18 survey directories."""
+    survey_root = tmp_path / "US+TEV"
+    survey_root.mkdir()
+
+    meas_list = []
+    for p_no in (6, 12, 18):
+        p_dir = survey_root / "VCB" / f"PANEL_{p_no}"
+        p_dir.mkdir(parents=True)
+        for comp, tag in [
+            ("$CIRCUIT_BREAKER", "FRONT"),
+            ("$CABLE_BOX", "REAR"),
+            ("$BUSBARS", "BUSBAR"),
+        ]:
+            m = _create_synthetic_meas(
+                p_dir / f"meas_{tag.lower()}",
+                f"VCB_PANEL_{p_no}_{tag}_US",
+                "VCB",
+                f"PANEL_{p_no}",
+                comp,
+            )
+            meas_list.append(m)
+
+    # Transition 1 (Panel 6)
+    ctx_6_front = {"panel_no": 6, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "FRONT COMPARTMENT"}
+    ctx_6_rear = {"panel_no": 6, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "REAR COMPARTMENT"}
+    ctx_6_busbar = {"panel_no": 6, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "BUSBAR COMPARTMENT"}
+
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_6_front) == survey_root / "VCB" / "PANEL_6" / "meas_front" / "8k.wav"
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_6_rear) == survey_root / "VCB" / "PANEL_6" / "meas_rear" / "8k.wav"
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_6_busbar) == survey_root / "VCB" / "PANEL_6" / "meas_busbar" / "8k.wav"
+
+    # Transition 2 (Panel 12)
+    ctx_12_front = {"panel_no": 12, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "FRONT COMPARTMENT"}
+    ctx_12_rear = {"panel_no": 12, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "REAR COMPARTMENT"}
+    ctx_12_busbar = {"panel_no": 12, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "BUSBAR COMPARTMENT"}
+
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_12_front) == survey_root / "VCB" / "PANEL_12" / "meas_front" / "8k.wav"
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_12_rear) == survey_root / "VCB" / "PANEL_12" / "meas_rear" / "8k.wav"
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_12_busbar) == survey_root / "VCB" / "PANEL_12" / "meas_busbar" / "8k.wav"
+
+    # Transition 3 (Panel 18)
+    ctx_18_front = {"panel_no": 18, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "FRONT COMPARTMENT"}
+    ctx_18_rear = {"panel_no": 18, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "REAR COMPARTMENT"}
+    ctx_18_busbar = {"panel_no": 18, "panel_name": "TRANSITION PANEL", "raw_panel_no": "-", "area": "BUSBAR COMPARTMENT"}
+
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_18_front) == survey_root / "VCB" / "PANEL_18" / "meas_front" / "8k.wav"
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_18_rear) == survey_root / "VCB" / "PANEL_18" / "meas_rear" / "8k.wav"
+    assert resolve_measurement_audio_for_page(survey_root, meas_list, ctx_18_busbar) == survey_root / "VCB" / "PANEL_18" / "meas_busbar" / "8k.wav"
+
+
 
 
 

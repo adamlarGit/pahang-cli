@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Sequence
 import wave
 
 try:
@@ -17,6 +17,7 @@ try:
 except ImportError:
     import fitz
 
+from src.full_report.models import is_transition_panel
 from src.quick_report.prpd import (
     DiscoveredMeasurement,
     decode_ultrasonic_phase_plot,
@@ -103,9 +104,19 @@ def _extract_feeder_tokens(s: str) -> set[str]:
     return {t for t in raw_tokens if t not in noise and (len(t) > 1 or t.isdigit())}
 
 
+def _is_transition_identifier(name: str | Any) -> bool:
+    """Return True if panel name or spec represents a transition bay."""
+    if not name:
+        return False
+    norm = _normalize_tag(name) if isinstance(name, str) else ""
+    return is_transition_panel(name) or (bool(norm) and "TRANSITION" in norm)
+
+
 def extract_page_equipment_context(
     page: fitz.Page,
     package: Any = None,
+    prev_panel_no: int | None = None,
+    state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     r"""Extract physical equipment identifiers from a PDF deliverable page text.
 
@@ -118,12 +129,15 @@ def extract_page_equipment_context(
     Enforces TwoTierPanelMatchingPolicy:
       - Tier 1: Catalog-first lookup against package switchgear panel feeder tags and names
         (with whitespace normalization and token matching for alphanumeric / ERMS link tags).
+        Supports sequential disambiguation for unnumbered transition bays across pages.
       - Tier 2: Regex fallback on raw_panel_no for explicit bare digits or 'Panel N' prefixes,
         preventing alphanumeric feeder codes (e.g. 30A) from hijacking sequential panel indices.
 
     Args:
         page: PyMuPDF Page object.
         package: Optional SubstationTestsheetPackage containing equipment catalogs.
+        prev_panel_no: Optional preceding resolved panel number for sequential tie-breaking.
+        state: Optional mutable dictionary tracking sequential panel context across page iterations.
 
     Returns:
         dict[str, Any]: Dictionary containing extracted equipment context.
@@ -188,6 +202,11 @@ def extract_page_equipment_context(
     # Enforce TwoTierPanelMatchingPolicy
     panel_no: int | None = None
     swgs = ()
+    all_panels: Sequence[Any] = ()
+
+    clean_raw_panel = _normalize_tag(raw_panel_no)
+    clean_panel_name = _normalize_tag(panel_name)
+    is_trans_page = _is_transition_identifier(clean_panel_name) or _is_transition_identifier(panel_name)
 
     # Tier 1: Check package switchgear panel catalog first (catalog-first resolution)
     if package is not None:
@@ -198,29 +217,63 @@ def extract_page_equipment_context(
             eq = package
 
         swgs = getattr(eq, "switchgears", ()) if eq is not None else ()
-        clean_raw_panel = _normalize_tag(raw_panel_no)
-        clean_panel_name = _normalize_tag(panel_name)
+        all_panels = [p for swg in swgs for p in getattr(swg, "panels", ())]
+
+        is_raw_unnumbered = not clean_raw_panel or clean_raw_panel in (
+            "-", "--", "N/A", "NA", "NONE", clean_panel_name
+        )
+
+        # Disambiguate unnumbered transition bays across pages
+        if is_trans_page and is_raw_unnumbered:
+            trans_panels = [
+                p for p in all_panels
+                if _is_transition_identifier(p) or _is_transition_identifier(getattr(p, "name", ""))
+            ]
+            if trans_panels:
+                if state is not None and state.get("current_transition_panel_no") is not None:
+                    panel_no = state["current_transition_panel_no"]
+                else:
+                    ref_no = None
+                    if state is not None:
+                        ref_no = state.get("last_numbered_panel_no")
+                        if ref_no is None:
+                            ref_no = state.get("prev_panel_no")
+                    if ref_no is None and prev_panel_no is not None:
+                        ref_no = prev_panel_no
+                    if ref_no is None:
+                        ref_no = 0
+
+                    candidates = [p for p in trans_panels if getattr(p, "panel_no", 0) > ref_no]
+                    if candidates:
+                        selected = min(candidates, key=lambda p: getattr(p, "panel_no", 0))
+                        panel_no = getattr(selected, "panel_no", None)
+                    else:
+                        panel_no = getattr(trans_panels[0], "panel_no", None)
+
+                    if state is not None and panel_no is not None:
+                        state["current_transition_panel_no"] = panel_no
 
         # Pass 1: Exact matches against catalog feeder_tag and panel name (normalized whitespace)
-        for swg in swgs:
-            for p in getattr(swg, "panels", ()):
-                feeder_tag = _normalize_tag(getattr(p, "panel_feeder_no", "") or "")
-                p_name = _normalize_tag(getattr(p, "name", "") or "")
-                matched = False
-                if feeder_tag and clean_raw_panel and feeder_tag == clean_raw_panel:
-                    matched = True
-                elif feeder_tag and clean_panel_name and feeder_tag == clean_panel_name:
-                    matched = True
-                elif p_name and clean_panel_name and p_name == clean_panel_name:
-                    matched = True
-                elif p_name and clean_raw_panel and p_name == clean_raw_panel:
-                    matched = True
+        if panel_no is None:
+            for swg in swgs:
+                for p in getattr(swg, "panels", ()):
+                    feeder_tag = _normalize_tag(getattr(p, "panel_feeder_no", "") or "")
+                    p_name = _normalize_tag(getattr(p, "name", "") or "")
+                    matched = False
+                    if feeder_tag and clean_raw_panel and feeder_tag == clean_raw_panel:
+                        matched = True
+                    elif feeder_tag and clean_panel_name and feeder_tag == clean_panel_name:
+                        matched = True
+                    elif p_name and clean_panel_name and p_name == clean_panel_name:
+                        matched = True
+                    elif p_name and clean_raw_panel and p_name == clean_raw_panel:
+                        matched = True
 
-                if matched:
-                    panel_no = getattr(p, "panel_no", None)
+                    if matched:
+                        panel_no = getattr(p, "panel_no", None)
+                        break
+                if panel_no is not None:
                     break
-            if panel_no is not None:
-                break
 
         # Pass 2: Token matching against catalog feeder tags (e.g. 30A or CKN00053 matching 30A (CKN00053))
         if panel_no is None:
@@ -276,6 +329,21 @@ def extract_page_equipment_context(
                 model = getattr(swg_target, "model", "") or ""
             if not manufacturer:
                 manufacturer = getattr(swg_target, "manufacturer", "") or ""
+
+    if state is not None and panel_no is not None:
+        state["prev_panel_no"] = panel_no
+        is_trans_resolved = (
+            is_trans_page
+            or any(
+                getattr(p, "panel_no", None) == panel_no and _is_transition_identifier(p)
+                for p in all_panels
+            )
+        )
+        if is_trans_resolved:
+            state["current_transition_panel_no"] = panel_no
+        else:
+            state["current_transition_panel_no"] = None
+            state["last_numbered_panel_no"] = panel_no
 
     return {
         "panel_no": panel_no,

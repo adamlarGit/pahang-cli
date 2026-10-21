@@ -1375,3 +1375,66 @@ def test_switchgear_adapter_33kv_overview_and_cable_entry_fallback(mock_substati
     assert cable_entry_items[0].context["ir"]["image"] == "/photos/IR_101.jpg"
 
 
+def test_transition_panel_linknumber_formats_as_dash_when_feeder_no_absent(
+    mock_substation_info: dict[str, str],
+) -> None:
+    """Transition panels format linknumber as '-' when panel_feeder_no is empty or absent per Ticket #111."""
+    swg = SwitchgearScanSpec(
+        switchgear_type="VCB 11kV",
+        manufacturer="TAMCO",
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        overview_compartments=("OVERVIEW",),
+        panels=(
+            SwitchgearPanelScanSpec(
+                panel_no=6,
+                name="TRANSITION PANEL",
+                panel_feeder_no="",
+                compartments=("FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT"),
+            ),
+            SwitchgearPanelScanSpec(
+                panel_no=12,
+                name="TRANSITION PANEL",
+                panel_feeder_no=None,
+                compartments=("FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT"),
+            ),
+            SwitchgearPanelScanSpec(
+                panel_no=18,
+                name="TRANSITION PANEL",
+                panel_feeder_no="CKN18",
+                compartments=("FRONT COMPARTMENT", "REAR COMPARTMENT", "BUSBAR COMPARTMENT"),
+            ),
+            SwitchgearPanelScanSpec(
+                panel_no=1,
+                name="FEEDER 1",
+                panel_feeder_no="",
+                compartments=("CABLE COMPARTMENT",),
+            ),
+        ),
+        photo_numbers=(30,),
+    )
+
+    adapter = SwitchgearScanAdapter(swg=swg, substation_info=mock_substation_info)
+    result = adapter.adapt()
+
+    # Panel 6 (transition, empty feeder_no) -> linknumber is "-"
+    for item in result.items[1:4]:  # Panel 6 compartments
+        assert item.context["panel"]["linknumber"] == "-"
+        assert item.context["panel"]["name"] == "TRANSITION PANEL"
+
+    # Panel 12 (transition, None feeder_no) -> linknumber is "-"
+    for item in result.items[4:7]:  # Panel 12 compartments
+        assert item.context["panel"]["linknumber"] == "-"
+        assert item.context["panel"]["name"] == "TRANSITION PANEL"
+
+    # Panel 18 (transition, with feeder_no="CKN18") -> linknumber is "CKN18"
+    for item in result.items[7:10]:  # Panel 18 compartments
+        assert item.context["panel"]["linknumber"] == "CKN18"
+        assert item.context["panel"]["name"] == "TRANSITION PANEL"
+
+    # Panel 1 (standard feeder, empty feeder_no) -> linknumber is "1"
+    feeder_item = result.items[10]
+    assert feeder_item.context["panel"]["linknumber"] == "1"
+    assert feeder_item.context["panel"]["name"] == "FEEDER 1"
+
+
+

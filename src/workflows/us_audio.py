@@ -280,14 +280,17 @@ def embed_survey_ultrasound_into_pdf(
             logger.warning("Failed pre-flight unlink of stale temp file %s: %s", tmp_path, exc)
 
     annot_count = 0
+    state: dict[str, Any] = {}
     try:
         with fitz.open(target_pdf) as doc:
             for page in doc:
+                page_ctx = extract_page_equipment_context(
+                    page, package=package, state=state
+                )
+
                 anchor = find_sound_clip_anchor(page)
                 if anchor is None:
                     continue
-
-                page_ctx = extract_page_equipment_context(page, package=package)
 
                 wav_file = resolve_measurement_audio_for_page(
                     survey_path, us_measurements, page_ctx
