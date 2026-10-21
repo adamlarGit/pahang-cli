@@ -192,6 +192,13 @@ graph TD
 - **Ticket File**: [tickets/106-msms-multi-tier-matching.md](./tickets/106-msms-multi-tier-matching.md)
 - **Delivers**: Multi-tier matching in PropagateWoFilter (FL -> Substation Name -> station token/date), locked-file preflight check on TOTAL PE.xlsx, and 100% (25/25) work order match rate on 33kV Thunder Cycle 4 dataset.
 
+### #107: feat(msms): substation name matching and SAP FL synchronization in Enrich MSMS workflow
+- **Status**: Closed
+- **GitHub Issue**: [#107](https://github.com/adamlarGit/pahang-cli/issues/107)
+- **Blocked by**: #106
+- **Ticket File**: [tickets/107-enrich-msms-substation-name-matching.md](./tickets/107-enrich-msms-substation-name-matching.md)
+- **Delivers**: Substation Name and station token fallback matching in EnrichMsmsFilter, SAP FL synchronization into Column E of DATA MSMS.xlsx, metadata enrichment into Columns D, F, G, and open/locked workbook preflight protection.
+
 ---
 
 ## Decisions so far

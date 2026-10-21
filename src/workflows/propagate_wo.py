@@ -57,7 +57,7 @@ def assert_file_unlocked(path: Path) -> None:
     lock_file = path.parent / f"~${path.name}"
     if lock_file.exists():
         raise PermissionError(
-            f"TOTAL PE workbook is locked or currently open in Microsoft Excel: '{path}'. "
+            f"Workbook is locked or currently open in Microsoft Excel: '{path}'. "
             "Please close Microsoft Excel and retry."
         )
 
@@ -66,7 +66,7 @@ def assert_file_unlocked(path: Path) -> None:
             pass
     except PermissionError:
         raise PermissionError(
-            f"TOTAL PE workbook is locked or in use by another process: '{path}'. "
+            f"Workbook is locked or in use by another process: '{path}'. "
             "Please close any application using this file and retry."
         )
     except OSError:
