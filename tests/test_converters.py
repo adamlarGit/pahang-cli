@@ -1,6 +1,11 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+try:
+    import pymupdf as fitz
+except ImportError:
+    import fitz
+
 from src.postprocessing.converters import ComDocumentConverter, FakeDocumentConverter
 
 
@@ -200,3 +205,196 @@ def test_configure_uniform_printer_falls_back_to_microsoft_print_to_pdf() -> Non
         converter._configure_uniform_printer(mock_app)
 
     assert mock_app.ActivePrinter == "Microsoft Print to PDF on Ne02:"
+
+
+def test_com_document_converter_merge_pdfs_batch_pymupdf(tmp_path: Path) -> None:
+    """Test that merge_pdfs_batch uses PyMuPDF, writes via temp file with garbage=3 and deflate=True, and replaces atomically."""
+    doc1 = fitz.open()
+    doc1.new_page(width=595, height=842)
+    pdf1 = tmp_path / "input1.pdf"
+    doc1.save(pdf1)
+    doc1.close()
+
+    doc2 = fitz.open()
+    doc2.new_page(width=595, height=842)
+    pdf2 = tmp_path / "input2.pdf"
+    doc2.save(pdf2)
+    doc2.close()
+
+    converter = ComDocumentConverter()
+
+    # Track save calls to verify garbage=3, deflate=True
+    real_save = fitz.Document.save
+    save_calls = []
+
+    def tracking_save(self, *args, **kwargs):
+        save_calls.append((args, kwargs))
+        return real_save(self, *args, **kwargs)
+
+    with patch.object(fitz.Document, "save", autospec=True, side_effect=tracking_save):
+        out_pdf = tmp_path / "merged.pdf"
+        res = converter.merge_pdfs_batch([pdf1, pdf2], out_pdf)
+
+    assert res == out_pdf
+    assert out_pdf.exists()
+    assert len(save_calls) == 1
+    # Check save kwargs: garbage=3, deflate=True
+    kwargs = save_calls[0][1]
+    assert kwargs.get("garbage") == 3
+    assert kwargs.get("deflate") is True
+
+    # Test in-place merge where output_pdf == pdf1
+    res_inplace = converter.merge_pdfs_batch([pdf1, pdf2], pdf1)
+    assert res_inplace == pdf1
+    with fitz.open(pdf1) as merged_doc:
+        assert len(merged_doc) == 2
+
+
+def test_com_document_converter_merge_pdfs_combines_documents(tmp_path: Path) -> None:
+    """Test that merge_pdfs and _merge_temp_pdfs correctly combine documents into output_pdf."""
+    doc1 = fitz.open()
+    doc1.new_page(width=400, height=400)
+    p1 = tmp_path / "a.pdf"
+    doc1.save(p1)
+    doc1.close()
+
+    doc2 = fitz.open()
+    doc2.new_page(width=400, height=400)
+    p2 = tmp_path / "b.pdf"
+    doc2.save(p2)
+    doc2.close()
+
+    doc3 = fitz.open()
+    doc3.new_page(width=400, height=400)
+    p3 = tmp_path / "c.pdf"
+    doc3.save(p3)
+    doc3.close()
+
+    converter = ComDocumentConverter()
+    out1 = tmp_path / "out1.pdf"
+    res1 = converter.merge_pdfs(p1, p2, out1)
+    assert res1 == out1
+    with fitz.open(out1) as res_doc:
+        assert len(res_doc) == 2
+
+    out2 = tmp_path / "out2.pdf"
+    res2 = converter._merge_temp_pdfs([p1, p2, p3], out2)
+    assert res2 == out2
+    with fitz.open(out2) as res_doc:
+        assert len(res_doc) == 3
+
+
+def test_fake_document_converter_pymupdf_parity_and_telemetry(tmp_path: Path) -> None:
+    """Test FakeDocumentConverter merges using PyMuPDF without PyPDF2, maintaining telemetry."""
+    fake = FakeDocumentConverter()
+    doc1 = fitz.open()
+    doc1.new_page(width=595, height=842)
+    p1 = tmp_path / "part1.pdf"
+    doc1.save(p1)
+    doc1.close()
+
+    doc2 = fitz.open()
+    doc2.new_page(width=595, height=842)
+    p2 = tmp_path / "part2.pdf"
+    doc2.save(p2)
+    doc2.close()
+
+    out_batch = tmp_path / "out_batch.pdf"
+
+    with patch("PyPDF2.PdfReader", side_effect=AssertionError("PyPDF2 must not be used")):
+        # 1. merge_pdfs_batch with existing files
+        fake.merge_pdfs_batch([p1, p2], out_batch)
+        assert len(fake.merge_pdfs_batch_calls) == 1
+        assert len(fake.merge_pdfs_calls) == 0
+        with fitz.open(out_batch) as doc:
+            assert len(doc) == 2
+
+        # 2. merge_pdfs with existing files
+        out_merge = tmp_path / "out_merge.pdf"
+        fake.merge_pdfs(p1, p2, out_merge)
+        assert len(fake.merge_pdfs_calls) == 1
+        assert len(fake.merge_pdfs_batch_calls) == 1
+        with fitz.open(out_merge) as doc:
+            assert len(doc) == 2
+
+        # 3. Non-existent files fallback
+        missing1 = tmp_path / "nonexistent1.pdf"
+        missing2 = tmp_path / "nonexistent2.pdf"
+        out_missing_batch = tmp_path / "out_missing_batch.pdf"
+        fake.merge_pdfs_batch([missing1, missing2], out_missing_batch)
+        with fitz.open(out_missing_batch) as doc:
+            assert len(doc) == 2
+
+        out_missing_merge = tmp_path / "out_missing_merge.pdf"
+        fake.merge_pdfs(missing1, missing2, out_missing_merge)
+        with fitz.open(out_missing_merge) as doc:
+            assert len(doc) == 2
+
+
+def _create_synthetic_pdf_with_xobject(path: Path, xobject_name: str, color_val: int) -> None:
+    """Create a synthetic PDF containing an explicit named XObject in its resources and content stream."""
+    doc = fitz.open()
+    page = doc.new_page(width=300, height=300)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 10, 10), 0)
+    pix.clear_with(color_val)
+    page.insert_image(fitz.Rect(10, 10, 50, 50), stream=pix.tobytes("png"))
+
+    tmp_path = path.with_suffix(".tmp.pdf")
+    doc.save(tmp_path)
+    doc.close()
+
+    doc = fitz.open(tmp_path)
+    for xref in range(1, doc.xref_length()):
+        txt = doc.xref_object(xref)
+        if "/fzImg0" in txt:
+            doc.update_object(xref, txt.replace("/fzImg0", f"/{xobject_name}"))
+        if doc.xref_is_stream(xref):
+            st = doc.xref_stream(xref)
+            if b"/fzImg0" in st:
+                doc.update_stream(xref, st.replace(b"/fzImg0", f"/{xobject_name}".encode("ascii")))
+    doc.save(path)
+    doc.close()
+    try:
+        tmp_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def test_com_document_converter_xobject_collision_regression(tmp_path: Path) -> None:
+    """Regression test: verify that merging PDFs with colliding /XObject identifiers (e.g. /Image41)
+
+    preserves 100% distinct indirect XObject resources and produces zero
+    'cannot find XObject resource' syntax errors during PyMuPDF rendering.
+    """
+    p1 = tmp_path / "part_01.pdf"
+    p2 = tmp_path / "part_02.pdf"
+    p3 = tmp_path / "part_03.pdf"
+
+    _create_synthetic_pdf_with_xobject(p1, "Image41", 50)
+    _create_synthetic_pdf_with_xobject(p2, "Image41", 120)
+    _create_synthetic_pdf_with_xobject(p3, "Image41", 200)
+
+    converter = ComDocumentConverter()
+    out_pdf = tmp_path / "merged_deliverable.pdf"
+    converter.merge_pdfs_batch([p1, p2, p3], out_pdf)
+
+    assert out_pdf.exists()
+
+    fitz.TOOLS.reset_mupdf_warnings()
+    with fitz.open(out_pdf) as merged_doc:
+        assert len(merged_doc) == 3
+        for idx in range(len(merged_doc)):
+            page = merged_doc[idx]
+            pix = page.get_pixmap()
+            assert pix.width == 300 and pix.height == 300
+            images = page.get_images()
+            assert len(images) == 1
+            assert images[0][7] == "Image41"
+
+    warnings = fitz.TOOLS.mupdf_warnings()
+    assert "cannot find XObject resource" not in warnings
+    assert "syntax error" not in warnings
+
+
+
+

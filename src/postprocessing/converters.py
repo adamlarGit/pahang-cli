@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
-import io
 import logging
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 import re
 from types import TracebackType
 from typing import Sequence
 
-from PyPDF2 import PdfReader, PdfWriter
+try:
+    import pymupdf as fitz
+except ImportError:
+    import fitz
+
+from PyPDF2 import PdfWriter
 
 
 def _is_pce_testsheet_sheet(ws_name: str) -> bool:
@@ -485,30 +490,8 @@ class ComDocumentConverter(DocumentConverter):
             logging.debug("Could not inspect sheets for PageSetup: %s", exc)
 
     def _merge_temp_pdfs(self, temp_pdfs: Sequence[Path], output_pdf: Path) -> Path:
-        """Merge temporary sheet PDFs into `output_pdf` sequentially using PyPDF2."""
-        writer = PdfWriter()
-        open_streams = []
-        try:
-            for temp_pdf in temp_pdfs:
-                if temp_pdf.exists():
-                    stream = open(temp_pdf, "rb")
-                    open_streams.append(stream)
-                    reader = PdfReader(stream)
-                    for page in reader.pages:
-                        writer.add_page(page)
-
-            buffer = io.BytesIO()
-            writer.write(buffer)
-        finally:
-            for stream in open_streams:
-                try:
-                    stream.close()
-                except Exception:
-                    pass
-
-        with open(output_pdf, "wb") as f_out:
-            f_out.write(buffer.getvalue())
-        return output_pdf
+        """Merge temporary sheet PDFs into `output_pdf` sequentially via merge_pdfs_batch."""
+        return self.merge_pdfs_batch(temp_pdfs, output_pdf)
 
     def _open_workbook(self, excel_app: object, xlsx_path: Path) -> object:
         """Open Excel workbook via COM with fallback to repair mode for openpyxl-modified files."""
@@ -717,64 +700,44 @@ class ComDocumentConverter(DocumentConverter):
         secondary_pdf: Path,
         output_pdf: Path,
     ) -> Path:
-        """Combine `primary_pdf` and `secondary_pdf` sequentially into `output_pdf` via PyPDF2.
-
-        Supports in-place merge where `output_pdf` is the same path as `primary_pdf`
-        or `secondary_pdf` by buffering the merged result before writing to disk.
-        """
-        output_pdf.parent.mkdir(parents=True, exist_ok=True)
-        with open(primary_pdf, "rb") as f_primary, open(secondary_pdf, "rb") as f_secondary:
-            primary_reader = PdfReader(f_primary)
-            secondary_reader = PdfReader(f_secondary)
-
-            writer = PdfWriter()
-            for page in primary_reader.pages:
-                writer.add_page(page)
-            for page in secondary_reader.pages:
-                writer.add_page(page)
-
-            buffer = io.BytesIO()
-            writer.write(buffer)
-
-        with open(output_pdf, "wb") as f_out:
-            f_out.write(buffer.getvalue())
-
-        return output_pdf
+        """Combine `primary_pdf` and `secondary_pdf` sequentially into `output_pdf` via merge_pdfs_batch."""
+        return self.merge_pdfs_batch([primary_pdf, secondary_pdf], output_pdf)
 
     def merge_pdfs_batch(
         self,
         pdf_paths: Sequence[Path],
         output_pdf: Path,
     ) -> Path:
-        """Combine a sequence of PDFs in order into `output_pdf` via PyPDF2 in one pass.
+        """Combine a sequence of PDFs in order into `output_pdf` via PyMuPDF in one pass.
 
-        Supports in-place merge where `output_pdf` is an input path by buffering the
-        merged result before writing to disk.
+        Supports in-place merge where `output_pdf` is an input path by writing to a temporary
+        file and atomically replacing the target after closing all handles.
         """
         output_pdf.parent.mkdir(parents=True, exist_ok=True)
-        writer = PdfWriter()
-        open_streams = []
+        temp_out = output_pdf.parent / f".tmp_mrg_{output_pdf.name}"
+        out_doc = fitz.open()
         try:
             for p in pdf_paths:
                 p_resolved = Path(p).resolve()
-                stream = open(p_resolved, "rb")
-                open_streams.append(stream)
-                reader = PdfReader(stream)
-                for page in reader.pages:
-                    writer.add_page(page)
-
-            buffer = io.BytesIO()
-            writer.write(buffer)
-        finally:
-            for stream in open_streams:
+                if not p_resolved.exists():
+                    continue
+                src_doc = fitz.open(p_resolved)
                 try:
-                    stream.close()
-                except Exception:
-                    pass
+                    out_doc.insert_pdf(src_doc)
+                finally:
+                    src_doc.close()
 
-        with open(output_pdf, "wb") as f_out:
-            f_out.write(buffer.getvalue())
+            out_doc.save(temp_out, garbage=3, deflate=True)
+        except Exception:
+            try:
+                temp_out.unlink(missing_ok=True)
+            except Exception:
+                pass
+            raise
+        finally:
+            out_doc.close()
 
+        os.replace(temp_out, output_pdf)
         return output_pdf
 
 
@@ -863,76 +826,57 @@ class FakeDocumentConverter(DocumentConverter):
 
         return pdf_path
 
+    def _merge_pdf_files(
+        self,
+        pdf_paths: Sequence[Path],
+        output_pdf: Path,
+        default_pages: int,
+    ) -> Path:
+        """Internal helper to merge PDF files via PyMuPDF or write fallback mock blank pages."""
+        output_pdf.parent.mkdir(parents=True, exist_ok=True)
+        temp_out = output_pdf.parent / f".tmp_mrg_{output_pdf.name}"
+
+        existing_paths = [Path(p).resolve() for p in pdf_paths if Path(p).exists()]
+        if existing_paths:
+            out_doc = fitz.open()
+            try:
+                for p in existing_paths:
+                    src_doc = fitz.open(p)
+                    try:
+                        out_doc.insert_pdf(src_doc)
+                    finally:
+                        src_doc.close()
+                out_doc.save(temp_out, garbage=3, deflate=True)
+            finally:
+                out_doc.close()
+            os.replace(temp_out, output_pdf)
+        else:
+            out_doc = fitz.open()
+            try:
+                for _ in range(default_pages):
+                    out_doc.new_page(width=612, height=792)
+                out_doc.save(temp_out, garbage=3, deflate=True)
+            finally:
+                out_doc.close()
+            os.replace(temp_out, output_pdf)
+
+        return output_pdf
+
     def merge_pdfs(
         self,
         primary_pdf: Path,
         secondary_pdf: Path,
         output_pdf: Path,
     ) -> Path:
-        """Record the call and merge PDFs via PyPDF2 or write mock merged PDF content."""
+        """Record the call and merge PDFs via PyMuPDF or write mock merged PDF content."""
         self.merge_pdfs_calls.append((primary_pdf, secondary_pdf, output_pdf))
-        output_pdf.parent.mkdir(parents=True, exist_ok=True)
-
-        if primary_pdf.exists() and secondary_pdf.exists():
-            with open(primary_pdf, "rb") as f_primary, open(secondary_pdf, "rb") as f_secondary:
-                primary_reader = PdfReader(f_primary)
-                secondary_reader = PdfReader(f_secondary)
-
-                writer = PdfWriter()
-                for page in primary_reader.pages:
-                    writer.add_page(page)
-                for page in secondary_reader.pages:
-                    writer.add_page(page)
-
-                buffer = io.BytesIO()
-                writer.write(buffer)
-
-            with open(output_pdf, "wb") as f_out:
-                f_out.write(buffer.getvalue())
-        else:
-            writer = PdfWriter()
-            writer.add_blank_page(width=612, height=792)
-            writer.add_blank_page(width=612, height=792)
-            with open(output_pdf, "wb") as f:
-                writer.write(f)
-
-        return output_pdf
+        return self._merge_pdf_files([primary_pdf, secondary_pdf], output_pdf, default_pages=2)
 
     def merge_pdfs_batch(
         self,
         pdf_paths: Sequence[Path],
         output_pdf: Path,
     ) -> Path:
-        """Record the call and merge multiple PDFs sequentially via PyPDF2."""
+        """Record the call and merge multiple PDFs sequentially via PyMuPDF."""
         self.merge_pdfs_batch_calls.append((tuple(pdf_paths), output_pdf))
-        output_pdf.parent.mkdir(parents=True, exist_ok=True)
-
-        existing_paths = [Path(p).resolve() for p in pdf_paths if Path(p).exists()]
-        if existing_paths:
-            writer = PdfWriter()
-            open_streams = []
-            try:
-                for p in existing_paths:
-                    stream = open(p, "rb")
-                    open_streams.append(stream)
-                    reader = PdfReader(stream)
-                    for page in reader.pages:
-                        writer.add_page(page)
-                buffer = io.BytesIO()
-                writer.write(buffer)
-            finally:
-                for stream in open_streams:
-                    try:
-                        stream.close()
-                    except Exception:
-                        pass
-            with open(output_pdf, "wb") as f_out:
-                f_out.write(buffer.getvalue())
-        else:
-            writer = PdfWriter()
-            for _ in range(max(1, len(pdf_paths))):
-                writer.add_blank_page(width=612, height=792)
-            with open(output_pdf, "wb") as f:
-                writer.write(f)
-
-        return output_pdf
+        return self._merge_pdf_files(pdf_paths, output_pdf, default_pages=max(1, len(pdf_paths)))
