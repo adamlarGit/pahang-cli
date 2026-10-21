@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.5] - 2026-10-21
+
+### Fixed
+- **PyMuPDF PDF Merge Engine Migration (`fix(postprocessing)`, `src/postprocessing/converters.py`, `tests/test_converters.py`)**:
+  - Migrated internal PDF merge engine in `ComDocumentConverter.merge_pdfs_batch` from `PyPDF2` to PyMuPDF C-level `doc.insert_pdf()`, resolving indirect XObject collisions and eliminating `cannot find XObject resource` syntax warnings in large multi-part reports (closes #105).
+  - Consolidated `ComDocumentConverter.merge_pdfs` and `_merge_temp_pdfs` to delegate directly to `merge_pdfs_batch` (DRY).
+  - Updated `FakeDocumentConverter` to mirror PyMuPDF merge behavior with zero code duplication while preserving isolated `merge_pdfs_calls` and `merge_pdfs_batch_calls` telemetry.
+  - Ensured Windows file-lock safety on in-place merges via atomic replacement (`os.replace`) after closing all input handles.
+
 ## [1.26.4] - 2026-10-21
 
 ### Fixed
