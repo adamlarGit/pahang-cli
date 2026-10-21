@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.4] - 2026-10-21
+
+### Fixed
+- **INDKOM INS24 Switchgear FUSE COMPARTMENT Ultrasound Audio Attribution (`src/postprocessing/sound_embedder.py`)**:
+  - Fixed transformer feeder panels (`TX`) on INDKOM INS24 RMU switchgears missing ultrasound sound annotations in Full Report and Quick Report deliverables.
+  - Added `"FUSE": ("FUSE", "CABLE_BOX", "CABLES", "CABLE")` mapping to `CHAMBER_COMPONENT_KEYWORDS`, enabling deliverable pages categorized as `FUSE COMPARTMENT` to match raw UltraTEV measurements stored under `$CABLE_BOX` or `$FUSE`.
+  - Added regex extraction for `switchgear_type`, `model`, and `manufacturer` from deliverable page text with safe fallback to `package.equipment.switchgears` when absent.
+  - Enhanced `is_rmu` detection to recognize `INS24` models and expanded RMU active feeder scanning detection to `"CABLE" in area or "FUSE" in area`, ensuring untagged and board-level fallback measurements attribute properly to `FUSE COMPARTMENT`.
+  - Added multi-measurement tie-breaking to prioritize native `$FUSE` recordings over `$CABLE_BOX` fallbacks when both are present.
+  - Added cross-asset protection preventing switchgear fallback searches from matching transformer audio measurements.
+
 ## [1.26.3] - 2026-10-16
 
 ### Fixed

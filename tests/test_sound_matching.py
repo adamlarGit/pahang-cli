@@ -662,3 +662,212 @@ def test_embed_survey_ultrasound_into_pdf_tier2_folder_name_matching_without_pac
     reloaded.close()
 
 
+# ==============================================================================
+# Seam 2 additions: Equipment Type, Model, and Manufacturer Context Extraction
+# ==============================================================================
+
+def test_extract_page_equipment_context_extracts_type_model_manufacturer_text():
+    """Context extraction captures switchgear_type, model, and manufacturer from page text."""
+    # Test colon-delimited format
+    doc1 = _create_synthetic_page([
+        (60.0, 80.0, "Equipment : RMU SF6"),
+        (60.0, 100.0, "Manufacturer : INDKOM"),
+        (60.0, 120.0, "Model : INS24"),
+        (60.0, 140.0, "Panel No. : CKN03129"),
+        (60.0, 160.0, "Panel Name : TX"),
+        (60.0, 180.0, "Area : FUSE COMPARTMENT"),
+    ])
+    ctx1 = extract_page_equipment_context(doc1[0])
+    assert ctx1["switchgear_type"] == "RMU SF6"
+    assert ctx1["manufacturer"] == "INDKOM"
+    assert ctx1["model"] == "INS24"
+    assert ctx1["raw_panel_no"] == "CKN03129"
+    assert ctx1["panel_name"] == "TX"
+    assert ctx1["area"] == "FUSE COMPARTMENT"
+
+    # Test newline-delimited format (common in Word table conversions)
+    doc2 = _create_synthetic_page([
+        (60.0, 80.0, "Equipment\nRMU SF6"),
+        (60.0, 100.0, "Manufacturer\nINDKOM"),
+        (60.0, 120.0, "Model\nINS24"),
+        (60.0, 140.0, "Area\nFUSE COMPARTMENT"),
+    ])
+    ctx2 = extract_page_equipment_context(doc2[0])
+    assert ctx2["switchgear_type"] == "RMU SF6"
+    assert ctx2["manufacturer"] == "INDKOM"
+    assert ctx2["model"] == "INS24"
+    assert ctx2["area"] == "FUSE COMPARTMENT"
+
+
+def test_extract_page_equipment_context_type_model_manufacturer_package_fallback():
+    """Context extraction falls back to package metadata when absent in page text."""
+    from src.testsheet.models import (
+        SwitchgearPanelSpec,
+        SubstationEquipmentPackage,
+        SwitchgearSpec,
+        TestsheetData,
+    )
+    doc = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : CKN03129"),
+        (60.0, 120.0, "Panel Name : TX"),
+        (60.0, 140.0, "Area : FUSE COMPARTMENT"),
+    ])
+    tdata = TestsheetData(
+        substation_number=70,
+        substation_name_erms="PUSAT KEBUDAYAAN CINA",
+        equipment=SubstationEquipmentPackage(
+            switchgears=(
+                SwitchgearSpec(
+                    switchgear_type="RMU SF6",
+                    manufacturer="INDKOM",
+                    model="INS24",
+                    panels=(
+                        SwitchgearPanelSpec(panel_no=1, panel_feeder_no="CKN03130", name="FLAT POLIS"),
+                        SwitchgearPanelSpec(panel_no=2, panel_feeder_no="CKN03128", name="CAPITAL SQUARE"),
+                        SwitchgearPanelSpec(panel_no=3, panel_feeder_no="CKN03129", name="TX"),
+                    ),
+                ),
+            )
+        ),
+    )
+    ctx = extract_page_equipment_context(doc[0], package=tdata)
+    assert ctx["panel_no"] == 3
+    assert ctx["switchgear_type"] == "RMU SF6"
+    assert ctx["manufacturer"] == "INDKOM"
+    assert ctx["model"] == "INS24"
+
+
+# ==============================================================================
+# Seam 3 additions: INDKOM INS24 FUSE COMPARTMENT Ultrasound Resolution
+# ==============================================================================
+
+def test_indkom_ins24_fuse_compartment_resolves_cable_box_measurement(tmp_path: Path):
+    """INDKOM INS24 TX panel with area='FUSE COMPARTMENT' resolves raw US measurement tagged as $CABLE_BOX."""
+    survey_root = tmp_path / "US+TEV"
+    survey_root.mkdir()
+    feeder_dir = survey_root / "SWG" / "FEEDER_3"
+    feeder_dir.mkdir(parents=True)
+
+    meas_cable_box = _create_synthetic_meas(
+        feeder_dir / "meas_us",
+        label="SWG_FEEDER_3_CABLE_BOX_US",
+        asset="SWG",
+        subasset="FEEDER 3",
+        component="$CABLE_BOX",
+    )
+
+    ctx = {
+        "panel_no": 3,
+        "panel_name": "TX",
+        "raw_panel_no": "CKN03129",
+        "area": "FUSE COMPARTMENT",
+        "model": "INS24",
+        "switchgear_type": "RMU SF6",
+        "manufacturer": "INDKOM",
+    }
+
+    resolved = resolve_measurement_audio_for_page(survey_root, [meas_cable_box], ctx)
+    assert resolved == meas_cable_box.meas_dir / "8k.wav"
+
+
+def test_indkom_ins24_fuse_compartment_resolves_fuse_measurement(tmp_path: Path):
+    """INDKOM INS24 TX panel with area='FUSE COMPARTMENT' resolves raw US measurement tagged as $FUSE."""
+    survey_root = tmp_path / "US+TEV"
+    survey_root.mkdir()
+    feeder_dir = survey_root / "SWG" / "FEEDER_3"
+    feeder_dir.mkdir(parents=True)
+
+    meas_fuse = _create_synthetic_meas(
+        feeder_dir / "meas_us_fuse",
+        label="SWG_FEEDER_3_FUSE_US",
+        asset="SWG",
+        subasset="FEEDER 3",
+        component="$FUSE",
+    )
+
+    ctx = {
+        "panel_no": 3,
+        "panel_name": "TX",
+        "raw_panel_no": "CKN03129",
+        "area": "FUSE COMPARTMENT",
+        "model": "INS24",
+        "switchgear_type": "RMU SF6",
+        "manufacturer": "INDKOM",
+    }
+
+    resolved = resolve_measurement_audio_for_page(survey_root, [meas_fuse], ctx)
+    assert resolved == meas_fuse.meas_dir / "8k.wav"
+
+
+def test_indkom_ins24_fuse_compartment_prioritizes_fuse_over_cable_box(tmp_path: Path):
+    """When both $FUSE and $CABLE_BOX measurements exist, FUSE COMPARTMENT prioritizes $FUSE."""
+    survey_root = tmp_path / "US+TEV"
+    survey_root.mkdir()
+    feeder_dir = survey_root / "SWG" / "FEEDER_3"
+    feeder_dir.mkdir(parents=True)
+
+    meas_cable = _create_synthetic_meas(
+        feeder_dir / "meas_cable",
+        label="SWG_FEEDER_3_CABLE_BOX_US",
+        asset="SWG",
+        subasset="FEEDER 3",
+        component="$CABLE_BOX",
+        db_reading=25.0,  # Higher dB
+    )
+    meas_fuse = _create_synthetic_meas(
+        feeder_dir / "meas_fuse",
+        label="SWG_FEEDER_3_FUSE_US",
+        asset="SWG",
+        subasset="FEEDER 3",
+        component="$FUSE",
+        db_reading=15.0,  # Lower dB, but exact chamber match
+    )
+
+    ctx = {
+        "panel_no": 3,
+        "panel_name": "TX",
+        "raw_panel_no": "CKN03129",
+        "area": "FUSE COMPARTMENT",
+        "model": "INS24",
+        "switchgear_type": "RMU SF6",
+    }
+
+    resolved = resolve_measurement_audio_for_page(survey_root, [meas_cable, meas_fuse], ctx)
+    assert resolved == meas_fuse.meas_dir / "8k.wav"
+
+
+def test_rmu_audio_attribution_fuse_compartment_untagged_and_board_level(tmp_path: Path):
+    """RMU feeder scanning recognizes FUSE COMPARTMENT for untagged feeder and board-level fallback."""
+    # Part A: Untagged recording under FEEDER_3
+    survey_root = tmp_path / "US+TEV_UNTAGGED"
+    survey_root.mkdir()
+    feeder3_dir = survey_root / "RMU" / "FEEDER_3"
+    feeder3_dir.mkdir(parents=True)
+    meas_untagged = _create_synthetic_meas(
+        feeder3_dir / "meas_rmu3", "RMU_FEEDER_3_US", "RMU", "FEEDER_3", component=None
+    )
+
+    ctx_f3 = {
+        "panel_no": 3,
+        "panel_name": "TX",
+        "raw_panel_no": "3",
+        "area": "FUSE COMPARTMENT",
+        "model": "INS24",
+    }
+    res_f3 = resolve_measurement_audio_for_page(survey_root, [meas_untagged], ctx_f3)
+    assert res_f3 == meas_untagged.meas_dir / "8k.wav"
+
+    # Part B: Board-level acoustic fallback for FUSE COMPARTMENT
+    survey_root_board = tmp_path / "US+TEV_BOARD"
+    survey_root_board.mkdir()
+    rmu_board_dir = survey_root_board / "RMU"
+    rmu_board_dir.mkdir()
+    meas_board = _create_synthetic_meas(
+        rmu_board_dir / "meas_board", "RMU_US", "RMU", "", component=None
+    )
+
+    res_board = resolve_measurement_audio_for_page(survey_root_board, [meas_board], ctx_f3)
+    assert res_board == meas_board.meas_dir / "8k.wav"
+
+
+
