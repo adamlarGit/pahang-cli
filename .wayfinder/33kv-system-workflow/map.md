@@ -185,6 +185,13 @@ graph TD
 - **Ticket File**: [tickets/103-docs-adr-and-e2e-regression-verification.md](./tickets/103-docs-adr-and-e2e-regression-verification.md)
 - **Delivers**: ADR 0007 documenting the unified voltage-polymorphic architecture across all 14 actions, `CONTEXT.md` ubiquitous language additions, and complete regression test run verifying 0 failures across 11kV and 33kV test suites.
 
+### #106: feat(msms): multi-tier substation matching and locked-file detection in Propagate Work Orders workflow
+- **Status**: Closed
+- **GitHub Issue**: [#106](https://github.com/adamlarGit/pahang-cli/issues/106)
+- **Blocked by**: None
+- **Ticket File**: [tickets/106-msms-multi-tier-matching.md](./tickets/106-msms-multi-tier-matching.md)
+- **Delivers**: Multi-tier matching in PropagateWoFilter (FL -> Substation Name -> station token/date), locked-file preflight check on TOTAL PE.xlsx, and 100% (25/25) work order match rate on 33kV Thunder Cycle 4 dataset.
+
 ---
 
 ## Decisions so far
