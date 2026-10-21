@@ -26,6 +26,8 @@ from src.postprocessing.sound_embedder import (
     find_sound_clip_anchor,
     extract_page_equipment_context,
     resolve_measurement_audio_for_page,
+    _normalize_tag,
+    _extract_feeder_tokens,
 )
 from src.quick_report.prpd import DiscoveredMeasurement
 
@@ -989,6 +991,226 @@ def test_resolve_measurement_audio_front_and_rear_zero_leakage_and_variants(tmp_
     # Zero cross-chamber leakage: FRONT does not match CABLE, REAR does not match CB
     assert resolve_measurement_audio_for_page(survey_root, [meas_cable_variant], ctx_front) is None
     assert resolve_measurement_audio_for_page(survey_root, [meas_cb_variant], ctx_rear) is None
+
+
+# ==============================================================================
+# Seam 5: Catalog-First Feeder Tag Normalization & Bus Section Audio Resolution (#110)
+# ==============================================================================
+
+def test_feeder_normalization_embedded_newlines_and_whitespace():
+    """Whitespace in feeder tags is normalized to single spaces during catalog lookup."""
+    # Unit level assertion on normalization helper
+    assert _normalize_tag("30A\n(CKN00053)") == "30A (CKN00053)"
+    assert _normalize_tag("30B\r\n(CKN70058)") == "30B (CKN70058)"
+    assert _normalize_tag("  30C \t \n (CKN70063)  ") == "30C (CKN70063)"
+    assert _normalize_tag("BUS  SECTION\n \tA") == "BUS SECTION A"
+
+    # Verify matching across rendered PDF text and testsheet catalog with embedded newlines
+    doc = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 30A (CKN00053)"),
+        (60.0, 120.0, "Panel Name : BUS SECTION A"),
+        (60.0, 140.0, "Area : BREAKER COMPARTMENT"),
+    ])
+    page = doc[0]
+
+    mock_pkg = MockPackage(
+        equipment=MockEquipment(
+            switchgears=[
+                MockSwitchgear(
+                    panels=[
+                        MockPanel(panel_no=5, panel_feeder_no="30A\n(CKN00053)", name="BUS SECTION A"),
+                    ]
+                )
+            ]
+        )
+    )
+
+    ctx = extract_page_equipment_context(page, package=mock_pkg)
+    assert ctx["panel_no"] == 5
+    assert ctx["raw_panel_no"] == "30A (CKN00053)"
+    assert ctx["panel_name"] == "BUS SECTION A"
+
+
+def test_catalog_first_matching_prevents_raw_regex_hijacking():
+    """Catalog feeder tag matching runs prior to fallback regex, preventing digits from hijacking panel_no."""
+    # Feeder 15 on Panel 8 in a switchgear where Panel 15 also exists
+    doc = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 15"),
+        (60.0, 120.0, "Panel Name : FEEDER 15"),
+        (60.0, 140.0, "Area : CABLE COMPARTMENT"),
+    ])
+    page = doc[0]
+
+    mock_pkg = MockPackage(
+        equipment=MockEquipment(
+            switchgears=[
+                MockSwitchgear(
+                    panels=[
+                        MockPanel(panel_no=8, panel_feeder_no="15", name="FEEDER 15"),
+                        MockPanel(panel_no=15, panel_feeder_no="CRB70015", name="INCOMER 2"),
+                    ]
+                )
+            ]
+        )
+    )
+
+    ctx = extract_page_equipment_context(page, package=mock_pkg)
+    assert ctx["panel_no"] == 8  # Resolved to catalog panel 8, NOT hijacked to panel 15!
+
+
+def test_alphanumeric_feeder_codes_do_not_hijack_panel_index_without_package():
+    """Alphanumeric codes (30A, 30B, 30C, 15A) do not match naive digit regex when package is None."""
+    # 30A (CKN00053) without package must NOT match 30
+    doc_bs_a = _create_synthetic_page([(60.0, 100.0, "Panel No. : 30A (CKN00053)")])
+    ctx_bs_a = extract_page_equipment_context(doc_bs_a[0], package=None)
+    assert ctx_bs_a["panel_no"] is None
+
+    # Bare 30A without package must NOT match 30
+    doc_30a = _create_synthetic_page([(60.0, 100.0, "Panel No. : 30A")])
+    ctx_30a = extract_page_equipment_context(doc_30a[0], package=None)
+    assert ctx_30a["panel_no"] is None
+
+    # Panel 30A without package must NOT match 30
+    doc_p30a = _create_synthetic_page([(60.0, 100.0, "Panel No. : Panel 30A")])
+    ctx_p30a = extract_page_equipment_context(doc_p30a[0], package=None)
+    assert ctx_p30a["panel_no"] is None
+
+    # 15A without package must NOT match 15
+    doc_15a = _create_synthetic_page([(60.0, 100.0, "Panel No. : 15A")])
+    ctx_15a = extract_page_equipment_context(doc_15a[0], package=None)
+    assert ctx_15a["panel_no"] is None
+
+    # Valid bare digits and 'Panel N' must still match as expected
+    doc_valid = _create_synthetic_page([(60.0, 100.0, "Panel No. : 15")])
+    assert extract_page_equipment_context(doc_valid[0], package=None)["panel_no"] == 15
+
+    doc_panel_word = _create_synthetic_page([(60.0, 100.0, "Panel No. : Panel 7")])
+    assert extract_page_equipment_context(doc_panel_word[0], package=None)["panel_no"] == 7
+
+
+def test_bus_section_feeder_token_matching_erms_and_code():
+    """Token matching resolves ERMS link number or alphanumeric feeder code against catalog feeder tag."""
+    mock_pkg = MockPackage(
+        equipment=MockEquipment(
+            switchgears=[
+                MockSwitchgear(
+                    panels=[
+                        MockPanel(panel_no=5, panel_feeder_no="30A (CKN00053)", name="B/S A"),
+                    ]
+                )
+            ]
+        )
+    )
+
+    # 1. Matching via feeder code token "30A"
+    doc_code = _create_synthetic_page([(60.0, 100.0, "Panel No. : 30A")])
+    assert extract_page_equipment_context(doc_code[0], package=mock_pkg)["panel_no"] == 5
+
+    # 2. Matching via ERMS link number token "CKN00053"
+    doc_erms = _create_synthetic_page([(60.0, 100.0, "Panel No. : CKN00053")])
+    assert extract_page_equipment_context(doc_erms[0], package=mock_pkg)["panel_no"] == 5
+
+    # 3. Catalog with concise feeder code matches page with full ERMS tag
+    mock_pkg_concise = MockPackage(
+        equipment=MockEquipment(
+            switchgears=[
+                MockSwitchgear(
+                    panels=[
+                        MockPanel(panel_no=5, panel_feeder_no="30A", name="B/S A"),
+                    ]
+                )
+            ]
+        )
+    )
+    doc_full = _create_synthetic_page([(60.0, 100.0, "Panel No. : 30A (CKN00053)")])
+    assert extract_page_equipment_context(doc_full[0], package=mock_pkg_concise)["panel_no"] == 5
+
+
+def test_bus_section_audio_resolution_panels_5_11_17(tmp_path: Path):
+    """Deliverable PDF pages for 30A, 30B, and 30C correctly resolve to PANEL_5, PANEL_11, and PANEL_17 survey audio."""
+    survey_root = tmp_path / "US+TEV"
+    survey_root.mkdir()
+
+    # Create 22-panel switchgear layout with B/S A (Panel 5), B/S B (Panel 11), B/S C (Panel 17)
+    panels = []
+    for i in range(1, 23):
+        if i == 5:
+            panels.append(MockPanel(panel_no=5, panel_feeder_no="30A\n(CKN00053)", name="B/S A"))
+        elif i == 11:
+            panels.append(MockPanel(panel_no=11, panel_feeder_no="30B\n(CKN70058)", name="B/S B"))
+        elif i == 17:
+            panels.append(MockPanel(panel_no=17, panel_feeder_no="30C\n(CKN70063)", name="B/S C"))
+        else:
+            panels.append(MockPanel(panel_no=i, panel_feeder_no=f"CRB{70000+i}", name=f"FEEDER {i}"))
+
+    mock_pkg = MockPackage(equipment=MockEquipment(switchgears=[MockSwitchgear(panels=panels)]))
+
+    # Create synthetic survey recordings for Bus Section panels
+    feeder_dir_5 = survey_root / "VCB" / "PANEL_5"
+    feeder_dir_11 = survey_root / "VCB" / "PANEL_11"
+    feeder_dir_17 = survey_root / "VCB" / "PANEL_17"
+    for d in (feeder_dir_5, feeder_dir_11, feeder_dir_17):
+        d.mkdir(parents=True)
+
+    meas_bs_a = _create_synthetic_meas(
+        feeder_dir_5 / "meas_a",
+        label="VCB_PANEL_5_CIRCUIT_BREAKER_US",
+        asset="VCB",
+        subasset="PANEL_5",
+        component="$CIRCUIT_BREAKER",
+    )
+    meas_bs_b = _create_synthetic_meas(
+        feeder_dir_11 / "meas_b",
+        label="VCB_PANEL_11_CIRCUIT_BREAKER_US",
+        asset="VCB",
+        subasset="PANEL_11",
+        component="$CIRCUIT_BREAKER",
+    )
+    meas_bs_c = _create_synthetic_meas(
+        feeder_dir_17 / "meas_c",
+        label="VCB_PANEL_17_CIRCUIT_BREAKER_US",
+        asset="VCB",
+        subasset="PANEL_17",
+        component="$CIRCUIT_BREAKER",
+    )
+    all_meas = [meas_bs_a, meas_bs_b, meas_bs_c]
+
+    # Rendered PDF Page A: 30A (CKN00053)
+    doc_a = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 30A (CKN00053)"),
+        (60.0, 120.0, "Panel Name : BUS SECTION A"),
+        (60.0, 140.0, "Area : BREAKER COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])
+    ctx_a = extract_page_equipment_context(doc_a[0], package=mock_pkg)
+    assert ctx_a["panel_no"] == 5
+    resolved_a = resolve_measurement_audio_for_page(survey_root, all_meas, ctx_a)
+    assert resolved_a == meas_bs_a.meas_dir / "8k.wav"
+
+    # Rendered PDF Page B: 30B (CKN70058)
+    doc_b = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 30B (CKN70058)"),
+        (60.0, 120.0, "Panel Name : BUS SECTION B"),
+        (60.0, 140.0, "Area : BREAKER COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])
+    ctx_b = extract_page_equipment_context(doc_b[0], package=mock_pkg)
+    assert ctx_b["panel_no"] == 11
+    resolved_b = resolve_measurement_audio_for_page(survey_root, all_meas, ctx_b)
+    assert resolved_b == meas_bs_b.meas_dir / "8k.wav"
+
+    # Rendered PDF Page C: 30C (CKN70063)
+    doc_c = _create_synthetic_page([
+        (60.0, 100.0, "Panel No. : 30C (CKN70063)"),
+        (60.0, 120.0, "Panel Name : BUS SECTION C"),
+        (60.0, 140.0, "Area : BREAKER COMPARTMENT"),
+        (60.0, 650.0, "Sound clip"),
+    ])
+    ctx_c = extract_page_equipment_context(doc_c[0], package=mock_pkg)
+    assert ctx_c["panel_no"] == 17
+    resolved_c = resolve_measurement_audio_for_page(survey_root, all_meas, ctx_c)
+    assert resolved_c == meas_bs_c.meas_dir / "8k.wav"
+
 
 
 

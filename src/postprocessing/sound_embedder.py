@@ -89,6 +89,20 @@ def find_sound_clip_anchor(page: fitz.Page) -> fitz.Rect | None:
     return fitz.Rect(cx - 9.0, cy - 9.0, cx + 9.0, cy + 9.0)
 
 
+def _normalize_tag(s: str) -> str:
+    """Normalize internal whitespace and strip string to uppercase."""
+    return re.sub(r"\s+", " ", s).strip().upper()
+
+
+def _extract_feeder_tokens(s: str) -> set[str]:
+    """Extract individual alphanumeric feeder tokens, stripping punctuation and noise words."""
+    if not s:
+        return set()
+    raw_tokens = re.findall(r"[A-Za-z0-9]+", s.upper())
+    noise = {"PANEL", "FEEDER", "NO", "SWG", "VCB", "BUS", "SECTION", "BAY", "THE"}
+    return {t for t in raw_tokens if t not in noise and (len(t) > 1 or t.isdigit())}
+
+
 def extract_page_equipment_context(
     page: fitz.Page,
     package: Any = None,
@@ -96,16 +110,16 @@ def extract_page_equipment_context(
     r"""Extract physical equipment identifiers from a PDF deliverable page text.
 
     Extracts text and regex matches:
-      - Switchgear panel index / feeder tag: r"Panel No\.\s*[:\n\r]*\s*([^\n\r]+)"
-      - Feeder name: r"Panel Name\s*[:\n\r]*\s*([^\n\r]+)" (from Row 4)
+      - Switchgear panel index / feeder tag: r"Panel No\.\s*[:\n\r]*\s*([^\n\r]+(?:\r?\n\s*\([^)\n\r]+\))?)"
+      - Feeder name: r"Panel Name\s*[:\n\r]*\s*([^\n\r]+(?:\r?\n\s*\([^)\n\r]+\))?)" (from Row 4)
       - Compartment area: r"Area\s*[:\n\r]*\s*([A-Za-z0-9_\s]+?)(?:\s+(?:Panel|IR|Time|Model|Tx)|$)"
       - Transformer unit index: r"Tx No\.\s*[:\n\r]*(?:TX|Tx|TRANSFORMER)?\s*(\d+)" and r"(?:Tx No\.|TX)\s*[:\n\r]*\s*(?:TX)?\s*(\d+)"
 
     Enforces TwoTierPanelMatchingPolicy:
-      - Tier 1: Parses explicit digits from Panel No. if present (e.g. 1, Panel 1, 1 (CRB70001) -> 1).
-      - Tier 2: If unnumbered utility code (e.g. CRB00764), uses extracted Panel Name to resolve
-        via find_swg_feeder_survey_dir directly, falling back to package.equipment.switchgears[0].panels
-        if package is provided.
+      - Tier 1: Catalog-first lookup against package switchgear panel feeder tags and names
+        (with whitespace normalization and token matching for alphanumeric / ERMS link tags).
+      - Tier 2: Regex fallback on raw_panel_no for explicit bare digits or 'Panel N' prefixes,
+        preventing alphanumeric feeder codes (e.g. 30A) from hijacking sequential panel indices.
 
     Args:
         page: PyMuPDF Page object.
@@ -116,12 +130,12 @@ def extract_page_equipment_context(
     """
     text = page.get_text("text")
 
-    # 1. Switchgear panel index / feeder tag (captures "1", "Panel 1", "1 (CRB70001)", "CRB00764")
-    m_panel = re.search(r"Panel No\.\s*[:\n\r]*\s*([^\n\r]+)", text)
+    # 1. Switchgear panel index / feeder tag (captures "1", "Panel 1", "1 (CRB70001)", "CRB00764", "30A (CKN00053)")
+    m_panel = re.search(r"Panel No\.\s*[:\n\r]*\s*([^\n\r]+(?:\r?\n\s*\([^)\n\r]+\))?)", text)
     raw_panel_no = m_panel.group(1).strip() if m_panel else ""
 
     # 2. Feeder name (Row 4)
-    m_name = re.search(r"Panel Name\s*[:\n\r]*\s*([^\n\r]+)", text)
+    m_name = re.search(r"Panel Name\s*[:\n\r]*\s*([^\n\r]+(?:\r?\n\s*\([^)\n\r]+\))?)", text)
     panel_name = m_name.group(1).strip() if m_name else ""
 
     # 3. Compartment area
@@ -173,15 +187,9 @@ def extract_page_equipment_context(
 
     # Enforce TwoTierPanelMatchingPolicy
     panel_no: int | None = None
-    if raw_panel_no:
-        # Tier 1: Check for explicit digits (e.g. "1", "Panel 1", "1 (CRB70001)")
-        m_tier1 = (
-            re.search(r"^Panel\s*(\d+)", raw_panel_no, re.IGNORECASE)
-            or re.search(r"^(\d+)", raw_panel_no)
-        )
-        if m_tier1:
-            panel_no = int(m_tier1.group(1))
+    swgs = ()
 
+    # Tier 1: Check package switchgear panel catalog first (catalog-first resolution)
     if package is not None:
         eq = getattr(package, "equipment", None)
         if eq is None and hasattr(package, "data") and getattr(package, "data", None) is not None:
@@ -190,23 +198,44 @@ def extract_page_equipment_context(
             eq = package
 
         swgs = getattr(eq, "switchgears", ()) if eq is not None else ()
-        clean_raw_panel = raw_panel_no.strip().upper()
-        clean_panel_name = panel_name.strip().upper()
+        clean_raw_panel = _normalize_tag(raw_panel_no)
+        clean_panel_name = _normalize_tag(panel_name)
 
+        # Pass 1: Exact matches against catalog feeder_tag and panel name (normalized whitespace)
+        for swg in swgs:
+            for p in getattr(swg, "panels", ()):
+                feeder_tag = _normalize_tag(getattr(p, "panel_feeder_no", "") or "")
+                p_name = _normalize_tag(getattr(p, "name", "") or "")
+                matched = False
+                if feeder_tag and clean_raw_panel and feeder_tag == clean_raw_panel:
+                    matched = True
+                elif feeder_tag and clean_panel_name and feeder_tag == clean_panel_name:
+                    matched = True
+                elif p_name and clean_panel_name and p_name == clean_panel_name:
+                    matched = True
+                elif p_name and clean_raw_panel and p_name == clean_raw_panel:
+                    matched = True
+
+                if matched:
+                    panel_no = getattr(p, "panel_no", None)
+                    break
+            if panel_no is not None:
+                break
+
+        # Pass 2: Token matching against catalog feeder tags (e.g. 30A or CKN00053 matching 30A (CKN00053))
         if panel_no is None:
-            # Tier 2: Check package switchgear panel catalog fallback
+            raw_tokens = _extract_feeder_tokens(clean_raw_panel)
+            pname_tokens = _extract_feeder_tokens(clean_panel_name)
             for swg in swgs:
                 for p in getattr(swg, "panels", ()):
-                    feeder_tag = (getattr(p, "panel_feeder_no", "") or "").strip().upper()
-                    p_name = (getattr(p, "name", "") or "").strip().upper()
+                    feeder_tag = _normalize_tag(getattr(p, "panel_feeder_no", "") or "")
+                    f_tokens = _extract_feeder_tokens(feeder_tag)
+                    if not f_tokens:
+                        continue
                     matched = False
-                    if feeder_tag and clean_raw_panel and feeder_tag == clean_raw_panel:
+                    if raw_tokens and (raw_tokens.issubset(f_tokens) or f_tokens.issubset(raw_tokens)):
                         matched = True
-                    elif feeder_tag and clean_panel_name and feeder_tag == clean_panel_name:
-                        matched = True
-                    elif p_name and clean_panel_name and p_name == clean_panel_name:
-                        matched = True
-                    elif p_name and clean_raw_panel and p_name == clean_raw_panel:
+                    elif pname_tokens and (pname_tokens.issubset(f_tokens) or f_tokens.issubset(pname_tokens)):
                         matched = True
 
                     if matched:
@@ -215,27 +244,38 @@ def extract_page_equipment_context(
                 if panel_no is not None:
                     break
 
-        # Fall back switchgear_type, model, manufacturer to package if missing
-        if (not switchgear_type or not model or not manufacturer) and swgs:
-            swg_target = None
-            if panel_no is not None:
-                for swg in swgs:
-                    for p in getattr(swg, "panels", ()):
-                        if getattr(p, "panel_no", None) == panel_no:
-                            swg_target = swg
-                            break
-                    if swg_target is not None:
-                        break
-            if swg_target is None and swgs:
-                swg_target = swgs[0]
+    # Tier 2: Fall back to raw integer regex parsing from raw_panel_no if not matched in catalog.
+    # Alphanumeric codes (e.g. 30A, 30B, 30C) are strictly protected from naively matching ^(\d+).
+    if panel_no is None and raw_panel_no:
+        clean_raw_for_fallback = raw_panel_no.strip()
+        m_fallback = (
+            re.search(r"^Panel\s*(\d+)\b", clean_raw_for_fallback, re.IGNORECASE)
+            or re.search(r"^(\d+)(?:\s|$|\()", clean_raw_for_fallback)
+        )
+        if m_fallback:
+            panel_no = int(m_fallback.group(1))
 
-            if swg_target is not None:
-                if not switchgear_type:
-                    switchgear_type = getattr(swg_target, "switchgear_type", "") or ""
-                if not model:
-                    model = getattr(swg_target, "model", "") or ""
-                if not manufacturer:
-                    manufacturer = getattr(swg_target, "manufacturer", "") or ""
+    # Fall back switchgear_type, model, manufacturer to package if missing
+    if (not switchgear_type or not model or not manufacturer) and swgs:
+        swg_target = None
+        if panel_no is not None:
+            for swg in swgs:
+                for p in getattr(swg, "panels", ()):
+                    if getattr(p, "panel_no", None) == panel_no:
+                        swg_target = swg
+                        break
+                if swg_target is not None:
+                    break
+        if swg_target is None and swgs:
+            swg_target = swgs[0]
+
+        if swg_target is not None:
+            if not switchgear_type:
+                switchgear_type = getattr(swg_target, "switchgear_type", "") or ""
+            if not model:
+                model = getattr(swg_target, "model", "") or ""
+            if not manufacturer:
+                manufacturer = getattr(swg_target, "manufacturer", "") or ""
 
     return {
         "panel_no": panel_no,
@@ -402,11 +442,13 @@ def resolve_measurement_audio_for_page(
                 f"FEEDER_{str(panel_no).zfill(2)}",
             ])
         if panel_name:
-            targets.append(panel_name.strip().upper())
-            targets.append(panel_name.strip().upper().replace(" ", "_"))
+            p_norm = _normalize_tag(panel_name)
+            targets.append(p_norm)
+            targets.append(p_norm.replace(" ", "_"))
         if raw_panel_no:
-            targets.append(raw_panel_no.strip().upper())
-            targets.append(raw_panel_no.strip().upper().replace(" ", "_"))
+            r_norm = _normalize_tag(raw_panel_no)
+            targets.append(r_norm)
+            targets.append(r_norm.replace(" ", "_"))
 
         if targets:
             panel_measurements = [
