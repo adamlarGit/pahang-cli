@@ -460,7 +460,12 @@ class PpuTestsheetParser(TestsheetParserStrategy):
         """Extract substation type (PPU, SSU, PMU, MPPU) from station name, filename, or FL token."""
         for candidate in (name, filename, fl_erms):
             if candidate:
-                m = re.search(r"\b(PPU|SSU|PMU|MPPU)\b", candidate, re.IGNORECASE)
+                cand_str = str(candidate).strip()
+                if re.search(r"\bMINI[\s_-]+PPU\b", cand_str, re.IGNORECASE) or re.search(
+                    r"\b(MPPU|MPU)\b", cand_str, re.IGNORECASE
+                ):
+                    return "MPPU"
+                m = re.search(r"\b(PPU|SSU|PMU)\b", cand_str, re.IGNORECASE)
                 if m:
                     return m.group(1).upper()
         return ""

@@ -540,6 +540,36 @@ def test_ppu_extract_gps_production_kuala_tahan() -> None:
     meta = parser.extract_testsheet_metadata(prod_path)
     assert data.gps_coordinate == "4.359481, 102.405296"
     assert meta.gps_coordinate == "4.359481, 102.405296"
+    assert data.substation_type == "MPPU"
+    assert meta.substation_type == "MPPU"
+
+
+def test_ppu_resolve_substation_type_fallback_tokens() -> None:
+    """Verify _resolve_substation_type resolves MINI PPU and MPU tokens to MPPU,
+
+    and canonical tokens to PPU, SSU, PMU.
+    """
+    parser = PpuTestsheetParser()
+
+    # 1. MINI PPU variants resolve to MPPU
+    assert parser._resolve_substation_type("MINI PPU KUALA TAHAN 33/11kV", "dummy.xlsx", "") == "MPPU"
+    assert parser._resolve_substation_type("MINI-PPU KUALA TAHAN", "dummy.xlsx", "") == "MPPU"
+    assert parser._resolve_substation_type("", "33. MINI PPU KUALA TAHAN.xlsx", "") == "MPPU"
+
+    # 2. \bMPU\b token in FL or filename resolves to MPPU
+    assert parser._resolve_substation_type("", "", "CJRT/MPU/G00008") == "MPPU"
+    assert parser._resolve_substation_type("", "", "CTRI/MPU/G00008") == "MPPU"
+    assert parser._resolve_substation_type("", "08. MPU KUALA TAHAN.xlsx", "") == "MPPU"
+
+    # 3. Explicit MPPU token resolves to MPPU
+    assert parser._resolve_substation_type("MPPU BERA", "dummy.xlsx", "") == "MPPU"
+    assert parser._resolve_substation_type("", "", "CJRT/MPPU/G00008") == "MPPU"
+
+    # 4. Standard canonical tokens
+    assert parser._resolve_substation_type("PPU APMM 33-11kV", "dummy.xlsx", "CGBG/PPU/G00001") == "PPU"
+    assert parser._resolve_substation_type("SSU FLEXSYS", "dummy.xlsx", "CGBG/SSU/G00002") == "SSU"
+    assert parser._resolve_substation_type("PMU JENGKA", "dummy.xlsx", "CJGK/PMU/G00003") == "PMU"
+
 
 
 

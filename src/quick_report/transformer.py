@@ -99,6 +99,8 @@ class QuickReportTransformer:
                 "tev_bg": format_db_int(getattr(pkg.data, "tev_background", "-")),
                 "tev_background": format_db_int(getattr(pkg.data, "tev_background", "-")),
             },
+            "type": pkg.data.substation_type or "",
+            "substation_type": pkg.data.substation_type or "",
             "raw_data_dir": raw_data_dir,
             "survey_dir": raw_data_dir,
             "tev_bg": format_db_int(getattr(pkg.data, "tev_background", "-")),

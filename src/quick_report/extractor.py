@@ -16,6 +16,7 @@ from src.core.normalizers import (
     format_month_folder,
     resolve_station_from_fl,
 )
+from src.master.qr02 import enrich_packages_with_cba_33kv
 from src.quick_report.defects import MasterQr03DefectRepository
 from src.quick_report.utils import (
     normalize_functional_location_input,
@@ -39,6 +40,15 @@ class QuickReportExtractor:
         self.repository = repository or SubstationTestsheetRepository()
         self._defect_repo: MasterQr03DefectRepository | None = None
 
+    def enrich_packages_with_cba(
+        self,
+        packages: Sequence[SubstationTestsheetPackage],
+        cba_path: Path | None = None,
+        environment: ProjectEnvironment | None = None,
+    ) -> list[SubstationTestsheetPackage]:
+        """Enrich 33kV packages with official master metadata from QR02 CBA."""
+        return enrich_packages_with_cba_33kv(packages, cba_path=cba_path, environment=environment)
+
     def extract(
         self,
         environment: ProjectEnvironment,
@@ -46,6 +56,17 @@ class QuickReportExtractor:
         fls: Sequence[str] | None = None,
     ) -> list[SubstationTestsheetPackage]:
         """Discover testsheet packages strictly via read I/O (without domain filtering)."""
+        voltage_type = (
+            getattr(environment, "voltage_type", None)
+            or getattr(getattr(environment, "metadata", None), "voltage_type", None)
+            or getattr(getattr(environment, "storage", None), "voltage_type", None)
+        )
+        if voltage_type:
+            if getattr(self.repository, "voltage_type", None) is None:
+                self.repository.voltage_type = voltage_type
+            if hasattr(self.repository, "extractor") and getattr(self.repository.extractor, "voltage_type", None) is None:
+                self.repository.extractor.voltage_type = voltage_type
+
         if fls is not None:
             packages = self._extract_fl_mode(environment, fls)
         elif folders is not None:
@@ -81,6 +102,9 @@ class QuickReportExtractor:
                     packages.extend(self.repository.discover_packages(folder_path))
         else:
             packages = self.repository.discover_packages(environment.get_testsheet_dir())
+
+        if voltage_type == "33kV":
+            packages = self.enrich_packages_with_cba(packages, environment=environment)
 
         return packages
 

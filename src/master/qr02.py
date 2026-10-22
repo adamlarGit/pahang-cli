@@ -4,18 +4,172 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Sequence
+import dataclasses
 from datetime import datetime
+import logging
 from pathlib import Path
 import re
 import shutil
 import tempfile
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
+import openpyxl
 import pythoncom
 import win32com.client as win32
 
 from src.project.storage import WorkspaceStorage
 from src.testsheet.extractor import clean_val, normalize_building_type, normalize_fl_erms, to_excel_date
+
+if TYPE_CHECKING:
+    from src.project.environment import ProjectEnvironment
+    from src.testsheet.models import SubstationTestsheetPackage
+
+logger = logging.getLogger(__name__)
+
+
+def load_qr02_cba_33kv_metadata(cba_path: Path) -> dict[str, dict[str, str]]:
+    """Index QR02 CBA sheet by Column G (FUNCTIONAL LOCATION).
+
+    Reads Column G (FUNCTIONAL LOCATION), Column H (SUBSTATION NAME), and Column I (TYPE).
+    Returns mapping of normalized FL -> {"substation_name": str, "substation_type": str}.
+    """
+    if not cba_path.exists():
+        return {}
+
+    mapping: dict[str, dict[str, str]] = {}
+    try:
+        wb = openpyxl.load_workbook(cba_path, read_only=True, data_only=True)
+        try:
+            if "QR02 CBA" not in wb.sheetnames:
+                logger.warning(f"'QR02 CBA' sheet not found in {cba_path}")
+                return {}
+            ws = wb["QR02 CBA"]
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                if len(row) < 7:
+                    continue
+                fl_val = row[6]
+                if not fl_val:
+                    continue
+                fl_str = str(fl_val).strip()
+                norm_fl = normalize_fl_erms(fl_str)
+                if not norm_fl or norm_fl.lower() in (
+                    "n/a",
+                    "none",
+                    "functional location",
+                    "function location",
+                    "fl",
+                ):
+                    continue
+
+                name_val = str(row[7]).strip() if len(row) > 7 and row[7] is not None else ""
+                type_val = str(row[8]).strip() if len(row) > 8 and row[8] is not None else ""
+                if name_val.lower() in ("none", "-", "n/a", "nan"):
+                    name_val = ""
+                if type_val.lower() in ("none", "-", "n/a", "nan"):
+                    type_val = ""
+
+                entry = {"substation_name": name_val, "substation_type": type_val}
+                mapping[norm_fl] = entry
+                mapping[fl_str.upper()] = entry
+                clean_no_slash = fl_str.upper().replace("/", "")
+                if clean_no_slash:
+                    mapping[clean_no_slash] = entry
+        finally:
+            wb.close()
+    except Exception as e:
+        logger.warning(f"Failed to read QR02 CBA from {cba_path}: {e}")
+        return {}
+    return mapping
+
+
+def enrich_packages_with_cba_33kv(
+    packages: Sequence[SubstationTestsheetPackage],
+    cba_path: Path | None = None,
+    environment: ProjectEnvironment | None = None,
+) -> list[SubstationTestsheetPackage]:
+    """Enrich 33kV packages with official master metadata from QR02 CBA.
+
+    Resolves Column H (SUBSTATION NAME) and Column I (TYPE) indexed by Column G (FL).
+    Falls back gracefully to cell D6 (name) and stem/sheet token (type) if FL not in CBA.
+    """
+    resolved_cba_path = cba_path
+    if resolved_cba_path is None and environment is not None:
+        eff_voltage = (
+            getattr(environment, "voltage_type", None)
+            or getattr(getattr(environment, "metadata", None), "voltage_type", None)
+            or getattr(getattr(environment, "storage", None), "voltage_type", None)
+        )
+        if eff_voltage == "33kV":
+            year = (
+                getattr(environment, "year", None)
+                or getattr(getattr(environment, "metadata", None), "year", None)
+                or "2026"
+            )
+            try:
+                if hasattr(environment, "storage") and hasattr(environment.storage, "get_engr_33kv_cba_path"):
+                    resolved_cba_path = environment.storage.get_engr_33kv_cba_path(year)
+                elif hasattr(environment, "get_engr_33kv_cba_path"):
+                    resolved_cba_path = environment.get_engr_33kv_cba_path(year)
+            except Exception as e:
+                logger.warning(f"Could not resolve 33kV CBA path: {e}")
+                resolved_cba_path = None
+
+    if resolved_cba_path is None:
+        return list(packages)
+
+    if not resolved_cba_path.exists():
+        logger.warning(
+            f"33kV ENGR CBA workbook not found at '{resolved_cba_path}'. "
+            "Falling back to testsheet cell D6 and stem type."
+        )
+        return list(packages)
+
+    cba_index = load_qr02_cba_33kv_metadata(resolved_cba_path)
+    if not cba_index:
+        logger.warning(
+            f"No records indexed from QR02 CBA in '{resolved_cba_path}'. "
+            "Falling back to testsheet cell D6 and stem type."
+        )
+        return list(packages)
+
+    enriched: list[SubstationTestsheetPackage] = []
+    for pkg in packages:
+        data = pkg.data
+        if data is None:
+            enriched.append(pkg)
+            continue
+
+        fl_candidate = (data.fl_erms or data.fl_site or "").strip()
+        norm_fl = normalize_fl_erms(fl_candidate)
+
+        cba_entry = (
+            cba_index.get(norm_fl)
+            or cba_index.get(fl_candidate.upper())
+            or cba_index.get(fl_candidate.upper().replace("/", ""))
+        )
+
+        if cba_entry:
+            cba_name = cba_entry.get("substation_name", "")
+            cba_type = cba_entry.get("substation_type", "")
+
+            new_name = cba_name if cba_name else data.substation_name_erms
+            new_type = cba_type if cba_type else data.substation_type
+
+            updated_data = dataclasses.replace(
+                data,
+                substation_name_erms=new_name,
+                substation_type=new_type,
+            )
+            enriched.append(dataclasses.replace(pkg, data=updated_data))
+        else:
+            logger.warning(
+                f"Functional location '{fl_candidate}' not found in QR02 CBA "
+                f"('{resolved_cba_path.name}'). Falling back to testsheet cell D6 "
+                f"('{data.substation_name_erms}') and type '{data.substation_type}'."
+            )
+            enriched.append(pkg)
+
+    return enriched
 
 
 def _get_field(rec: Any, *names: str, default: Any = None) -> Any:

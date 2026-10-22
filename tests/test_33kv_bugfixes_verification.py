@@ -382,3 +382,99 @@ def test_ticket_116_gps_extracted_from_m3_not_d3(tmp_path: Path) -> None:
     assert meta.gps_coordinate == "4.359481, 102.405296"
     assert data.substation_name_site == "MINI PPU KUALA TAHAN 33/11kV"
 
+
+# ==============================================================================
+# BUG C TESTS: Substation Type Master Enrichment & Local Fallback (Ticket #117)
+# ==============================================================================
+
+
+def test_ticket_117_feedback_loop_assertion(tmp_path: Path) -> None:
+    """Feedback loop assertion: Verify CJRT/MPU/G00008 resolves to MPPU
+
+    in plan.pe_info["substation"]["substation_type"] and pe_info["substation"]["type"],
+    via local fallback and QR02 CBA enrichment.
+    """
+    from unittest.mock import MagicMock
+    from src.project.environment import ProjectEnvironment
+    from src.project.models import ProjectMetadata
+    from src.project.storage import LocalWorkspaceStorage
+    from src.quick_report.extractor import QuickReportExtractor
+    from src.workflows.quick_report import QuickReportWorkflow
+
+    # 1. Local fallback without ENGR CBA: PpuTestsheetParser resolves MINI PPU / MPU to MPPU
+    wb_path = tmp_path / "33. MINI PPU KUALA TAHAN 33-11kV.xlsx"
+    create_ppu_testsheet_workbook(
+        path=wb_path,
+        substation_name="MINI PPU KUALA TAHAN 33/11kV",
+        fl_number="CJRT/MPU/G00008",
+        substation_number=33,
+    )
+    parser = PpuTestsheetParser()
+    data = parser.extract_testsheet_data(wb_path)
+    assert data.substation_type == "MPPU", f"Expected MPPU from local fallback, got {data.substation_type!r}"
+
+    # 2. Master QR02 CBA enrichment in QuickReport workflow
+    meta = ProjectMetadata(
+        key="test_33kv_thunder",
+        name="Contract PO 42394550 - THUNDER",
+        po_number="PO 42394550",
+        state="Pahang",
+        voltage_type="33kV",
+        year="2026",
+        cycle="Cycle 4",
+        technologies=("IR", "US", "TEV"),
+        base_path=str(tmp_path),
+    )
+    storage = LocalWorkspaceStorage(tmp_path, voltage_type="33kV")
+    env = ProjectEnvironment(metadata=meta, storage=storage)
+
+    # Synthetic master CBA with Col G=FL, Col H=Name, Col I=Type
+    cba_path = tmp_path / "PYTHON" / "ENGR FROM DRIVE" / "ENGR-750-39 -CBA-PAHANG - 2026.xlsx"
+    cba_path.parent.mkdir(parents=True, exist_ok=True)
+    import openpyxl
+    wb_cba = openpyxl.Workbook()
+    ws_cba = wb_cba.active
+    ws_cba.title = "QR02 CBA"
+    ws_cba.append(["NO", "DISTRICT", "ZONE", "STATION CODE", "CYCLE", "VOLTAGE", "FUNCTIONAL LOCATION", "SUBSTATION NAME", "TYPE", "SYSTEM"])
+    ws_cba.append([1, "JERANTUT", "CJRT", "MPU", 4, "33kV", "CJRT/MPU/G00008", "MINI PPU KUALA TAHAN 33/11kV", "MPPU", "33/11"])
+    wb_cba.save(cba_path)
+    wb_cba.close()
+
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=wb_path,
+        unsorted_raw_data_dir=tmp_path / "raw",
+        station="JERANTUT",
+        month="OCTOBER",
+        date_str="22-10-2026",
+        substation_number=33,
+        data=data,
+    )
+
+    extractor = QuickReportExtractor()
+    workflow = QuickReportWorkflow(extractor=extractor)
+    extractor.extract = MagicMock(return_value=[pkg])
+    extractor.extract_defects = MagicMock(return_value=([], []))
+    env.get_vi_front_page_template = MagicMock(return_value=tmp_path / "fp.docx")
+    env.get_template = MagicMock(return_value=tmp_path / "sticker.docx")
+
+    inspection, plans = workflow._plan("CJRT/MPU/G00008", env)
+    assert len(plans) == 1
+    plan = plans[0]
+
+    # Feedback loop core assertions
+    assert plan.pe_info["substation"]["substation_type"] == "MPPU"
+    assert plan.pe_info["substation"]["type"] == "MPPU"
+    assert inspection.targets[0].substation_type == "MPPU"
+
+    # Front page docx rendering verification
+    front_page_template = Path("templates/QUICK REPORT/1. FRONT PAGE TEMPLATE IR US TEV BOX Jinja2 updated.docx")
+    if front_page_template.exists():
+        from src.quick_report.front_page import generate_front_page
+        import docx
+        out_fp = generate_front_page(plan.pe_info, front_page_template, tmp_path, substation_number=33)
+        assert out_fp.exists()
+        doc = docx.Document(out_fp)
+        doc_text = " ".join([p.text for p in doc.paragraphs] + [c.text for t in doc.tables for row in t.rows for c in row.cells])
+        assert "MPPU" in doc_text
+
+

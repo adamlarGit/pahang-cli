@@ -210,6 +210,15 @@ class QuickReportWorkflow:
                 fls=fls,
             )
             filtered_packages = [pkg for pkg in packages if pkg.data is not None]
+            voltage_type = (
+                getattr(environment, "voltage_type", None)
+                or getattr(getattr(environment, "metadata", None), "voltage_type", None)
+                or getattr(getattr(environment, "storage", None), "voltage_type", None)
+            )
+            if voltage_type == "33kV" and hasattr(self._extractor, "enrich_packages_with_cba"):
+                filtered_packages = self._extractor.enrich_packages_with_cba(
+                    filtered_packages, environment=environment
+                )
             if station:
                 filtered_packages = [
                     pkg for pkg in filtered_packages if self._matches_station(pkg, station)
@@ -268,6 +277,7 @@ class QuickReportWorkflow:
                     vi_defect_count=len(plan.vi_defects),
                     condition_pair_count=len(plan.condition_pairs),
                     station=pkg.station or (pkg.data.station_name if pkg.data else "") or "",
+                    substation_type=(pkg.data.substation_type if pkg.data else "") or "",
                 )
                 items.append(item)
             except Exception as e:

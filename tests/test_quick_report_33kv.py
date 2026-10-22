@@ -488,5 +488,151 @@ def test_ppu_condition_pairs_dual_33kv_only() -> None:
     assert not any("SWITCHGEAR 11kV" in k for k in pair_keys)
 
 
+# ===========================================================================
+# Ticket #117: QR02 CBA 33kV Master Metadata Substation Type Enrichment
+# ===========================================================================
+
+def _create_sample_qr02_cba_33kv(path: Path, rows: list[list[Any]]) -> None:
+    """Helper to create a synthetic 33kV QR02 CBA master workbook."""
+    import openpyxl
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "QR02 CBA"
+    ws.append([
+        "NO", "DISTRICT", "ZONE", "STATION CODE", "CYCLE", "VOLTAGE",
+        "FUNCTIONAL LOCATION", "SUBSTATION NAME", "TYPE", "SYSTEM",
+    ])
+    for r in rows:
+        ws.append(r)
+    wb.save(path)
+    wb.close()
+
+
+def test_master_qr02_load_and_enrich_cleanly_accessible(tmp_path: Path) -> None:
+    """Verify load_qr02_cba_33kv_metadata and enrich_packages_with_cba_33kv
+
+    are cleanly exposed from src.master.qr02 and re-exported from src.workflows.populate_total_pe.
+    """
+    from src.master.qr02 import load_qr02_cba_33kv_metadata as master_loader
+    from src.master.qr02 import enrich_packages_with_cba_33kv as master_enricher
+    from src.workflows.populate_total_pe import load_qr02_cba_33kv_metadata as workflow_loader
+
+    assert callable(master_loader)
+    assert callable(master_enricher)
+    assert callable(workflow_loader)
+
+    cba_path = tmp_path / "ENGR-750-39 -CBA-PAHANG - 2026.xlsx"
+    _create_sample_qr02_cba_33kv(cba_path, [
+        [1, "JERANTUT", "CJRT", "MPU", 4, "33kV", "CJRT/MPU/G00008", "MINI PPU KUALA TAHAN 33/11kV", "MPPU", "33/11"],
+    ])
+
+    meta = master_loader(cba_path)
+    assert "CJRT/MPU/G00008" in meta
+    assert meta["CJRT/MPU/G00008"]["substation_name"] == "MINI PPU KUALA TAHAN 33/11kV"
+    assert meta["CJRT/MPU/G00008"]["substation_type"] == "MPPU"
+
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=tmp_path / "dummy.xlsx",
+        unsorted_raw_data_dir=tmp_path / "raw",
+        station="JERANTUT",
+        month="OCTOBER",
+        date_str="22-10-2026",
+        substation_number=33,
+        data=TestsheetData(
+            substation_number=33,
+            fl_erms="CJRT/MPU/G00008",
+            substation_name_erms="MINI PPU KUALA TAHAN",
+            substation_type="PPU",
+            date_str="22-10-2026",
+        ),
+    )
+
+    enriched = master_enricher([pkg], cba_path=cba_path)
+    assert len(enriched) == 1
+    assert enriched[0].data.substation_type == "MPPU"
+    assert enriched[0].data.substation_name_erms == "MINI PPU KUALA TAHAN 33/11kV"
+
+
+def test_quick_report_extractor_and_plan_enrich_substation_type(tmp_path: Path) -> None:
+    """Verify QuickReportExtractor and QuickReportWorkflow._plan enrich 33kV packages with master substation type."""
+    from src.quick_report.extractor import QuickReportExtractor
+    from src.workflows.quick_report import QuickReportWorkflow
+
+    cba_path = tmp_path / "PYTHON" / "ENGR FROM DRIVE" / "ENGR-750-39 -CBA-PAHANG - 2026.xlsx"
+    _create_sample_qr02_cba_33kv(cba_path, [
+        [1, "JERANTUT", "CJRT", "MPU", 4, "33kV", "CJRT/MPU/G00008", "MINI PPU KUALA TAHAN 33/11kV", "MPPU", "33/11"],
+    ])
+
+    meta = ProjectMetadata(
+        key="test_33kv_thunder",
+        name="Contract PO 42394550 - THUNDER",
+        po_number="PO 42394550",
+        state="Pahang",
+        voltage_type="33kV",
+        year="2026",
+        cycle="Cycle 4",
+        technologies=("IR", "US", "TEV"),
+        base_path=str(tmp_path),
+    )
+    storage = LocalWorkspaceStorage(tmp_path, voltage_type="33kV")
+    env = ProjectEnvironment(metadata=meta, storage=storage)
+
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=tmp_path / "33. MINI PPU KUALA TAHAN.xlsx",
+        unsorted_raw_data_dir=tmp_path / "raw",
+        station="JERANTUT",
+        month="OCTOBER",
+        date_str="22-10-2026",
+        substation_number=33,
+        data=TestsheetData(
+            substation_number=33,
+            fl_erms="CJRT/MPU/G00008",
+            substation_name_erms="MINI PPU KUALA TAHAN",
+            substation_type="PPU",
+            date_str="22-10-2026",
+        ),
+    )
+
+    extractor = QuickReportExtractor()
+    enriched = extractor.enrich_packages_with_cba([pkg], environment=env)
+    assert len(enriched) == 1
+    assert enriched[0].data.substation_type == "MPPU"
+    assert enriched[0].data.substation_name_erms == "MINI PPU KUALA TAHAN 33/11kV"
+
+    # Plan synthesis verification
+    workflow = QuickReportWorkflow(extractor=extractor)
+    # Mock extractor.extract to return pkg (which _plan should also enrich)
+    extractor.extract = MagicMock(return_value=[pkg])
+    extractor.extract_defects = MagicMock(return_value=([], []))
+    env.get_vi_front_page_template = MagicMock(return_value=tmp_path / "fp.docx")
+    env.get_template = MagicMock(return_value=tmp_path / "sticker.docx")
+
+    inspection, plans = workflow._plan("CJRT/MPU/G00008", env)
+    assert len(plans) == 1
+    plan = plans[0]
+
+    # Verify plan.pe_info["substation"]["substation_type"] and ["type"] resolve to "MPPU"
+    assert plan.pe_info["substation"]["substation_type"] == "MPPU"
+    assert plan.pe_info["substation"]["type"] == "MPPU"
+    assert plan.pe_info["substation"]["name_erms"] == "MINI PPU KUALA TAHAN 33/11kV"
+
+    # Verify inspection items reflect enriched substation type
+    assert len(inspection.targets) == 1
+    assert inspection.targets[0].substation_type == "MPPU"
+
+    # Word front page docx rendering verification
+    front_page_template = Path("templates/QUICK REPORT/1. FRONT PAGE TEMPLATE IR US TEV BOX Jinja2 updated.docx")
+    if front_page_template.exists():
+        from src.quick_report.front_page import generate_front_page
+        import docx
+        out_fp = generate_front_page(plan.pe_info, front_page_template, tmp_path, substation_number=33)
+        assert out_fp.exists()
+        doc = docx.Document(out_fp)
+        doc_text = " ".join([p.text for p in doc.paragraphs] + [c.text for t in doc.tables for row in t.rows for c in row.cells])
+        assert "MPPU" in doc_text
+
+
+
 
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.2] - 2026-10-23
+
+### Fixed
+- **33kV Substation Type Master Enrichment & Local Fallback (`fix(quick-report)`, `src/master/qr02.py`, `src/quick_report/extractor.py`, `src/testsheet/parsers/ppu.py`, `src/workflows/quick_report.py`, `src/workflows/populate_total_pe.py`, `src/workflows/models.py`)**:
+  - Relocated and exposed `load_qr02_cba_33kv_metadata` and shared `enrich_packages_with_cba_33kv` in `src/master/qr02.py`, refactoring `PopulateTotalPeExtractor` and `QuickReportExtractor` to share the canonical 33kV QR02 CBA enrichment seam.
+  - Enriched 33kV packages in `QuickReportExtractor.extract` and `QuickReportWorkflow._plan` with official master `substation_name` (Column H) and `substation_type` (Column I, e.g. `MPPU`) resolved against Functional Location (Column G).
+  - Enhanced `PpuTestsheetParser._resolve_substation_type` to recognize `"MINI PPU"` and `r"\bMPU\b"` tokens, resolving to `"MPPU"` as a fallback when the ENGR CBA workbook is absent.
+  - Added `substation_type` to `SubstationInspectionItem` telemetry and ensured plan contexts (`pe_info["substation"]["substation_type"]`, `pe_info["substation"]["type"]`, and root) reflect authoritative substation type across Word docx rendering (fixes #117).
+
+
 ## [1.27.1] - 2026-10-23
 
 ### Fixed

@@ -98,6 +98,7 @@ class SubstationInspectionItem:
     vi_defect_count: int
     condition_pair_count: int
     station: str = ""
+    substation_type: str = ""
 
 
 
