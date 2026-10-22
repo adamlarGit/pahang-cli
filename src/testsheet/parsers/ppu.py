@@ -45,6 +45,8 @@ from src.testsheet.parsers.common import (
 
 logger = logging.getLogger(__name__)
 
+_GPS_COORD_RE = re.compile(r"\d+\.\d+.*,\s*\d+\.\d+")
+
 
 def classify_transformer_rating(
     rating: object,
@@ -194,12 +196,9 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                 )
 
                 # GPS from Visual Inspec. sheet
-                gps_coordinate = ""
                 ws_vi = self._find_vi_sheet(wb)
-                if ws_vi is not None:
-                    gps_val = clean_val(ws_vi["D3"].value)
-                    if gps_val:
-                        gps_coordinate = gps_val
+                sub_name = station_hint or meta.get("substation_name_site") or meta.get("substation_name_erms") or ""
+                gps_coordinate = self._extract_gps_coordinate(ws_vi, substation_name=sub_name)
 
                 equipment = SubstationEquipmentPackage(
                     switchgears=(meta["swg_meta"],) if meta["swg_meta"] is not None else ()
@@ -256,12 +255,9 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             )
 
             # GPS from Visual Inspec. sheet
-            gps_coordinate = ""
             ws_vi = self._find_vi_sheet(wb)
-            if ws_vi is not None:
-                gps_val = clean_val(ws_vi["D3"].value)
-                if gps_val:
-                    gps_coordinate = gps_val
+            sub_name = station_hint or meta.get("substation_name_site") or meta.get("substation_name_erms") or ""
+            gps_coordinate = self._extract_gps_coordinate(ws_vi, substation_name=sub_name)
 
             # 3. Switchgear lineups assembly
             switchgears: list[SwitchgearSpec] = []
@@ -478,6 +474,44 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             if s_clean.startswith("visual inspec"):
                 return wb[sname]
         return None
+
+    def _extract_gps_coordinate(self, ws_vi: Worksheet | None, substation_name: str = "") -> str:
+        """Extract GPS coordinates from Visual Inspection sheet.
+
+        Locates coordinates from cell M3 (or adjacent to "GPS:" label).
+        Fallback to cell D3 is retained only when D3 matches coordinate regex
+        and does not match the substation name.
+        """
+        if ws_vi is None:
+            return ""
+
+        # 1. Look for cell adjacent to "GPS:" label in header rows (rows 1..5)
+        for r in range(1, 6):
+            for c in range(1, 25):
+                val = clean_val(ws_vi.cell(r, c).value)
+                if val and "gps" in val.lower():
+                    m = _GPS_COORD_RE.search(val)
+                    if m:
+                        return m.group(0).strip()
+                    adj_val = clean_val(ws_vi.cell(r, c + 1).value)
+                    if adj_val:
+                        return adj_val
+
+        # 2. Check cell M3 directly
+        m3_val = clean_val(ws_vi["M3"].value)
+        if m3_val:
+            return m3_val
+
+        # 3. Fallback to D3 only when D3 matches coordinate regex pattern
+        #    and does not match the substation name
+        d3_val = clean_val(ws_vi["D3"].value)
+        if d3_val and _GPS_COORD_RE.search(d3_val):
+            sub_norm = substation_name.strip().lower()
+            d3_norm = d3_val.strip().lower()
+            if not sub_norm or (sub_norm != d3_norm and sub_norm not in d3_norm):
+                return d3_val
+
+        return ""
 
     def _find_extra_sheets(self, wb: openpyxl.Workbook, prefix: str) -> list[Worksheet]:
         """Find and sequentially sort extra switchgear sheets (e.g. 33kV (Extra))."""

@@ -439,3 +439,107 @@ def test_ppu_breaker_readings_isolated_from_cable_sub_row(tmp_path: Path) -> Non
     assert panel.cable_us_reading == "9.5"
 
 
+def test_ppu_gps_coordinate_extraction(tmp_path: Path) -> None:
+    import openpyxl
+    parser = PpuTestsheetParser()
+
+    # Case 1: Standard layout (L3="GPS:", M3=coords, D3=substation_name)
+    wb1 = tmp_path / "01. PPU STANDARD GPS.xlsx"
+    create_ppu_testsheet_workbook(
+        path=wb1,
+        substation_name="PPU STANDARD 33-11kV",
+        gps_coordinate="4.123456, 103.654321",
+    )
+    data1 = parser.extract_testsheet_data(wb1)
+    meta1 = parser.extract_testsheet_metadata(wb1)
+    assert data1.gps_coordinate == "4.123456, 103.654321"
+    assert meta1.gps_coordinate == "4.123456, 103.654321"
+
+    # Case 2: Adjacent cell to "GPS:" label in different column
+    wb2 = tmp_path / "02. PPU ADJACENT GPS.xlsx"
+    create_ppu_testsheet_workbook(
+        path=wb2,
+        substation_name="PPU ADJACENT 33kV",
+    )
+    wb_obj = openpyxl.load_workbook(wb2)
+    ws_vi = wb_obj["Visual Inspec."]
+    ws_vi["L3"] = None
+    ws_vi["M3"] = None
+    ws_vi["K3"] = "GPS:"
+    ws_vi["L3"] = "3.999111, 102.888222"
+    wb_obj.save(wb2)
+    wb_obj.close()
+    data2 = parser.extract_testsheet_data(wb2)
+    meta2 = parser.extract_testsheet_metadata(wb2)
+    assert data2.gps_coordinate == "3.999111, 102.888222"
+    assert meta2.gps_coordinate == "3.999111, 102.888222"
+
+    # Case 3: Cell M3 directly without "GPS:" label
+    wb3 = tmp_path / "03. PPU M3 DIRECT.xlsx"
+    create_ppu_testsheet_workbook(
+        path=wb3,
+        substation_name="PPU M3 DIRECT",
+    )
+    wb_obj = openpyxl.load_workbook(wb3)
+    ws_vi = wb_obj["Visual Inspec."]
+    ws_vi["L3"] = None  # Remove "GPS:" label
+    ws_vi["M3"] = "4.000123, 101.999456"
+    wb_obj.save(wb3)
+    wb_obj.close()
+    data3 = parser.extract_testsheet_data(wb3)
+    meta3 = parser.extract_testsheet_metadata(wb3)
+    assert data3.gps_coordinate == "4.000123, 101.999456"
+    assert meta3.gps_coordinate == "4.000123, 101.999456"
+
+    # Case 4: Fallback to D3 only when D3 matches coordinate regex and does not match substation name
+    wb4 = tmp_path / "04. PPU D3 FALLBACK.xlsx"
+    create_ppu_testsheet_workbook(
+        path=wb4,
+        substation_name="PPU D3 FALLBACK",
+    )
+    wb_obj = openpyxl.load_workbook(wb4)
+    ws_vi = wb_obj["Visual Inspec."]
+    ws_vi["L3"] = None
+    ws_vi["M3"] = None
+    ws_vi["D3"] = "3.7501, 103.2205"  # coordinate in D3
+    wb_obj.save(wb4)
+    wb_obj.close()
+    data4 = parser.extract_testsheet_data(wb4)
+    meta4 = parser.extract_testsheet_metadata(wb4)
+    assert data4.gps_coordinate == "3.7501, 103.2205"
+    assert meta4.gps_coordinate == "3.7501, 103.2205"
+
+    # Case 5: When D3 is substation name and M3 is empty, no coordinate extracted (no false positive from D3)
+    wb5 = tmp_path / "05. PPU D3 SUBSTATION NAME.xlsx"
+    create_ppu_testsheet_workbook(
+        path=wb5,
+        substation_name="PPU NAME ONLY 33kV",
+    )
+    wb_obj = openpyxl.load_workbook(wb5)
+    ws_vi = wb_obj["Visual Inspec."]
+    ws_vi["L3"] = None
+    ws_vi["M3"] = None
+    ws_vi["D3"] = "PPU NAME ONLY 33kV"
+    wb_obj.save(wb5)
+    wb_obj.close()
+    data5 = parser.extract_testsheet_data(wb5)
+    meta5 = parser.extract_testsheet_metadata(wb5)
+    assert data5.gps_coordinate == ""
+    assert meta5.gps_coordinate == ""
+
+
+def test_ppu_extract_gps_production_kuala_tahan() -> None:
+    prod_path = Path(
+        r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI).xlsx"
+    )
+    if not prod_path.exists():
+        pytest.skip(f"Production testsheet not found: {prod_path}")
+
+    parser = PpuTestsheetParser()
+    data = parser.extract_testsheet_data(prod_path)
+    meta = parser.extract_testsheet_metadata(prod_path)
+    assert data.gps_coordinate == "4.359481, 102.405296"
+    assert meta.gps_coordinate == "4.359481, 102.405296"
+
+
+

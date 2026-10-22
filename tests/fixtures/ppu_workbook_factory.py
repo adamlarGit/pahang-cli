@@ -257,7 +257,10 @@ def create_ppu_testsheet_workbook(
 
     # 3. Visual Inspection sheet
     ws_vi = wb.create_sheet(title=vi_sheet_name)
-    ws_vi["D3"] = gps_coordinate
+    ws_vi["B3"] = "Substation Name"
+    ws_vi["D3"] = substation_name
+    ws_vi["L3"] = "GPS:"
+    ws_vi["M3"] = gps_coordinate
 
     # Default checklist items if none provided
     if visual_checklist_items is None:

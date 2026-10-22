@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.1] - 2026-10-23
+
 ### Fixed
+- **33kV Testsheet GPS Coordinate Extraction (`fix(testsheet)`, `src/testsheet/parsers/ppu.py`, `tests/fixtures/ppu_workbook_factory.py`)**:
+  - Located GPS coordinates from cell `M3` (or adjacent to `"GPS:"` label) in the `Visual Inspection` sheet instead of reading cell `D3` (which contains Substation Name).
+  - Retained fallback to cell `D3` only when `D3` strictly matches coordinate regex (`\d+\.\d+.*,\s*\d+\.\d+`) and does not match the substation name.
+  - Aligned synthetic fixture factory `create_ppu_testsheet_workbook` to write `ws_vi["D3"] = substation_name`, `ws_vi["L3"] = "GPS:"`, and `ws_vi["M3"] = gps_coordinate` to accurately mirror real-world 33kV production workbooks.
+  - Fixes #116.
 - **PyMuPDF PDF Merge Engine Migration (`fix(postprocessing)`, `src/postprocessing/converters.py`, `tests/test_converters.py`)**:
   - Migrated internal PDF merge engine in `ComDocumentConverter.merge_pdfs_batch` from `PyPDF2` to PyMuPDF C-level `doc.insert_pdf()`, resolving indirect XObject collisions and eliminating `cannot find XObject resource` syntax warnings in large multi-part reports (closes #105).
   - Consolidated `ComDocumentConverter.merge_pdfs` and `_merge_temp_pdfs` to delegate directly to `merge_pdfs_batch` (DRY).

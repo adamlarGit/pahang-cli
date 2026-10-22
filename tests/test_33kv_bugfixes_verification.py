@@ -362,3 +362,23 @@ def test_bug_b_substation_condition_pairs_from_overview_compartments() -> None:
     pair_labels = [p[0] for p in pairs]
 
     assert "33kV CABLE CELLAR" in pair_labels
+
+
+def test_ticket_116_gps_extracted_from_m3_not_d3(tmp_path: Path) -> None:
+    """Verify Ticket #116: GPS coordinate extracted from M3 (adjacent to GPS:), not D3 substation name."""
+    parser = PpuTestsheetParser()
+    wb_path = tmp_path / "33. MINI PPU KUALA TAHAN 33-11kV.xlsx"
+
+    create_ppu_testsheet_workbook(
+        path=wb_path,
+        substation_name="MINI PPU KUALA TAHAN 33/11kV",
+        gps_coordinate="4.359481, 102.405296",
+    )
+
+    data = parser.extract_testsheet_data(wb_path)
+    meta = parser.extract_testsheet_metadata(wb_path)
+
+    assert data.gps_coordinate == "4.359481, 102.405296"
+    assert meta.gps_coordinate == "4.359481, 102.405296"
+    assert data.substation_name_site == "MINI PPU KUALA TAHAN 33/11kV"
+
