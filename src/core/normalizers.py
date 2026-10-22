@@ -325,20 +325,26 @@ def format_testsheet_time(val: object) -> str:
 
 
 def format_humidity_str(val: object) -> str:
-    """
-    Extract numeric humidity value and append '%'. Returns '-' if empty or invalid.
+    """Extract numeric humidity value and append '%'. Returns '-' if empty or invalid.
+
+    Normalizes decimal floats <= 1.0 (e.g. 0.64 -> '64%') and rounds to integer.
     """
     if val is None:
         return "-"
     s = str(val).strip()
-    if not s or s == "-":
+    if not s or s in ("-", "None", "N/A", "nan"):
         return "-"
     match = re.search(r"(\d+(?:\.\d+)?)", s)
     if match:
-        num = match.group(1)
-        if num.endswith(".0"):
-            num = num[:-2]
-        return f"{num}%"
+        try:
+            f_val = float(match.group(1))
+            if 0 < f_val <= 1.0:
+                f_val = round(f_val * 100)
+            else:
+                f_val = round(f_val)
+            return f"{int(f_val)}%"
+        except (ValueError, OverflowError):
+            return "-"
     return "-"
 
 
@@ -815,7 +821,7 @@ def format_heater_amp(
     Returns:
         Formatted heater current string or '-' if invalid or non-VCB.
     """
-    vcb_active = is_vcb if is_vcb is not None else (switchgear_type is not None and "VCB" in str(switchgear_type).upper())
+    vcb_active = is_vcb if is_vcb is not None else (switchgear_type is not None and any(t in str(switchgear_type).upper() for t in ("VCB", "GIS")))
     if not vcb_active:
         return "-"
 
@@ -958,25 +964,33 @@ def format_busbar_position(
     panel_name: Any,
     switchgear_type: str | None = None,
     is_vcb: bool | None = None,
+    raw_position: str | None = None,
 ) -> str:
     """Format busbar position for switchgear panels.
 
+    - If raw_position is provided and non-empty: output raw_position.
     - If panel name contains 'TRANSITION' (case-insensitive, e.g. 'TRANSITION PANEL', 'TRANSITION'): output '-'.
-    - Otherwise, if switchgear is VCB: output 'MAIN'.
+    - Otherwise, if switchgear is VCB or GIS: output 'MAIN'.
     - Otherwise (Non-VCB like RMU, MRMU, OIL, OCB, etc.): output '-'.
 
     Args:
         panel_name: Name or label of the switchgear panel.
-        switchgear_type: Switchgear type string (e.g. 'VCB', 'RMU SF6', 'MRMU', etc.).
-        is_vcb: Explicit boolean indicating if the switchgear/panel is VCB. Takes precedence if provided.
+        switchgear_type: Switchgear type string (e.g. 'VCB', 'GIS', 'RMU SF6', 'MRMU', etc.).
+        is_vcb: Explicit boolean indicating if the switchgear/panel is VCB/GIS. Takes precedence if provided.
+        raw_position: Raw busbar position extracted from testsheet (e.g. 'MAIN', 'RESERVE', 'N/A').
 
     Returns:
-        'MAIN' for non-transition panels on VCB switchgear, or '-' otherwise.
+        Busbar position string or '-' otherwise.
     """
+    if raw_position is not None:
+        raw_s = str(raw_position).strip()
+        if raw_s and raw_s.upper() not in _NULL_SENTINELS:
+            return raw_s.upper()
+
     p_name = str(panel_name or "").strip().upper()
     if "TRANSITION" in p_name:
         return "-"
-    vcb_active = is_vcb if is_vcb is not None else (switchgear_type is not None and "VCB" in str(switchgear_type).upper())
+    vcb_active = is_vcb if is_vcb is not None else (switchgear_type is not None and any(t in str(switchgear_type).upper() for t in ("VCB", "GIS")))
     if vcb_active:
         return "MAIN"
     return "-"

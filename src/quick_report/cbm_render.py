@@ -635,6 +635,16 @@ def _build_swg_render_context(
         panel_tev_reading = matched_panel.tev_reading or _text_or_empty(record.tev_reading)
         panel_tev_ppc = matched_panel.tev_ppc
         panel_tev_char = matched_panel.tev_char or _text_or_empty(record.tev_char)
+
+        comp_area_str = f"{record.defect_area or ''} {area} {record.additional_remarks or ''}".upper()
+        is_cable = "CABLE" in comp_area_str or "REAR" in comp_area_str
+        if is_cable:
+            if getattr(matched_panel, "cable_us_reading", None):
+                panel_us_reading = matched_panel.cable_us_reading
+            if getattr(matched_panel, "cable_tev_reading", None):
+                panel_tev_reading = matched_panel.cable_tev_reading
+            if getattr(matched_panel, "cable_tev_ppc", None):
+                panel_tev_ppc = matched_panel.cable_tev_ppc
     else:
         panel_loadamp = ""
         panel_heateramp = ""
@@ -672,6 +682,7 @@ def _build_swg_render_context(
     panel_busbarposition = format_busbar_position(
         combined_panel_name,
         is_vcb=is_vcb,
+        raw_position=getattr(matched_panel, "busbar_position", None) if matched_panel else None,
     )
 
     us_char_default = "-" if overview else "NORMAL"

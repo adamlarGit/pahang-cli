@@ -84,9 +84,10 @@ class TestSwitchgear33kvTopology:
         )
         assert board.archetype == SwitchgearArchetype.GIS_CUBICLE
         assert board.voltage_class == VoltageClass.KV_33
-        assert "OVERVIEW FRONT" in board.overview_compartments
-        assert "OVERVIEW REAR" in board.overview_compartments
-        assert "OVERVIEW TOP" in board.overview_compartments
+        assert "OVERVIEW FRONT (LHS)" in board.overview_compartments
+        assert "OVERVIEW FRONT (RHS)" in board.overview_compartments
+        assert "OVERVIEW REAR (LHS)" in board.overview_compartments
+        assert "OVERVIEW TOP (LHS)" in board.overview_compartments
 
     def test_classify_board_33kv_vcb(self) -> None:
         """33kV VCB lineups are classified as VCB_CUBICLE."""
@@ -126,7 +127,7 @@ class TestSwitchgear33kvTopology:
         assert list(comps) == expected
 
     def test_classify_board_33kv_tamco_vh3_cubicle(self) -> None:
-        """TAMCO 33kV switchgear is automatically classified as VCB_CUBICLE with 3 overview pages."""
+        """TAMCO 33kV switchgear is automatically classified as VCB_CUBICLE with canonical 33kV overview pages."""
         board = SwitchgearTopologyEngine.classify_board(
             switchgear_type="33kV",
             manufacturer="TAMCO",
@@ -135,7 +136,9 @@ class TestSwitchgear33kvTopology:
         )
         assert board.archetype == SwitchgearArchetype.VCB_CUBICLE
         assert board.voltage_class == VoltageClass.KV_33
-        assert board.overview_compartments == ("OVERVIEW FRONT", "OVERVIEW REAR", "OVERVIEW TOP")
+        assert "OVERVIEW FRONT (LHS)" in board.overview_compartments
+        assert "OVERVIEW CABLE CELLAR (LHS)" in board.overview_compartments
+        assert len(board.overview_compartments) == 12
 
     def test_resolve_panel_compartments_33kv_bus_section_resolves_all_six(self) -> None:
         """33kV Bus Section and Bus Coupler bays resolve all 6 physical compartments + secondary."""
@@ -1012,4 +1015,52 @@ class TestDualVoltageLineupIsolationAndWrappedContainers:
         ad = SwitchgearScanAdapter(swg=swg, is_33kv=False)
         assert ad.voltage_class == VoltageClass.KV_33
         assert ad.is_33kv is True
+
+    def test_switchgear_scan_adapter_cable_compartment_uses_cable_specific_readings(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify SwitchgearScanAdapter uses cable-specific TEV/US readings for Cable and Rear compartments."""
+        panel = SwitchgearPanelSpec(
+            panel_no=1,
+            name="FEEDER 1",
+            panel_type="VCB",
+            us_reading="2.0",
+            tev_reading="10.0",
+            tev_ppc="5",
+            cable_us_reading="6.5",
+            cable_tev_reading="25.0",
+            cable_tev_ppc="20",
+        )
+        swg = SwitchgearSpec(
+            switchgear_type="VCB 33kV",
+            manufacturer="TAMCO",
+            model="VH3",
+            rating="33kV",
+            panels=(panel,),
+        )
+        templates_dir = tmp_path / "templates"
+        templates_dir.mkdir(parents=True, exist_ok=True)
+        (templates_dir / "swg-overview.docx").write_text("dummy")
+        (templates_dir / "swg-panel.docx").write_text("dummy")
+
+        adapter = SwitchgearScanAdapter(
+            swg=swg,
+            substation_info={"substation_name": "TEST", "voltage_type": "33kV"},
+            is_33kv=True,
+            templates_dir=templates_dir,
+        )
+        res = adapter.adapt()
+        comp_items = {item.component_name: item for item in res.items if not item.is_overview}
+
+        # Breaker Compartment gets breaker readings
+        breaker_item = comp_items["BREAKER COMPARTMENT"]
+        assert breaker_item.context["panel"]["us"]["reading"] == "2"
+        assert breaker_item.context["panel"]["tev"]["reading"] == "10"
+        assert breaker_item.context["panel"]["tev"]["ppc"] == "5"
+
+        # Cable Compartment gets cable-specific readings
+        cable_item = comp_items["CABLE COMPARTMENT"]
+        assert cable_item.context["panel"]["us"]["reading"] == "7"
+        assert cable_item.context["panel"]["tev"]["reading"] == "25"
+        assert cable_item.context["panel"]["tev"]["ppc"] == "20"
 

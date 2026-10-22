@@ -18,21 +18,19 @@ from src.core.contract import normalize_swg_compartment
 from src.core.normalizers import normalize_tx_id
 from src.core.topology import (
     BayRole,
-    SwitchgearArchetype,
     SwitchgearTopologyEngine,
     VoltageClass,
     classify_bay_role,
+    classify_voltage_rating,
 )
 from src.full_report.models import (
     FullReportScanPackage,
     SwitchgearScanSpec,
-    TRANSFORMER_STANDARD_COMPONENTS,
     has_hv_cable_split,
 )
 from src.quick_report.cbm_render import _build_jinja_env
 from src.quick_report.cbm_summary import (
     format_db_reading,
-    format_summary_equipment,
     format_temperature_reading,
     prepare_tech_summary_rows,
 )
@@ -689,6 +687,12 @@ class ExecutiveSummaryCensusBuilder:
 
             mfg = (swg.manufacturer or "").strip()
             swg_type = (swg.switchgear_type or "RMU SF6").strip()
+            rating_str = (getattr(swg, "rating", "") or "").strip()
+            voltage_class = classify_voltage_rating(rating_str)
+            if voltage_class == VoltageClass.KV_33 or "36" in rating_str or "33" in rating_str:
+                prefix = "36kV" if "36" in rating_str else "33kV"
+                if not swg_type.upper().startswith(prefix.upper()) and not swg_type.upper().startswith("33") and not swg_type.upper().startswith("36"):
+                    swg_type = f"{prefix} {swg_type}"
             if mfg and mfg.upper() not in swg_type.upper():
                 swg_overview_title = f"{swg_type}, {mfg}"
             else:
@@ -737,10 +741,8 @@ class ExecutiveSummaryCensusBuilder:
                         clean_feeder = m_fn.group(1).strip()
                         clean_name = m_fn.group(2).strip()
 
-                if clean_feeder and clean_name:
-                    panel_eq = f"PANEL {clean_feeder}\n{clean_name}"
-                elif clean_feeder:
-                    panel_eq = f"PANEL {clean_feeder}"
+                if clean_feeder:
+                    panel_eq = f"PANEL {clean_feeder}\n{clean_name}" if clean_name else f"PANEL {clean_feeder}"
                 elif clean_name:
                     if clean_name.upper().startswith("PANEL"):
                         panel_eq = clean_name

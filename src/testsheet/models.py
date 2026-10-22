@@ -54,12 +54,16 @@ class SwitchgearPanelSpec:
     status: str = ""
     load_amp: str = ""
     cable_type: str = ""
+    busbar_position: str = ""
     heater_amp: str = ""
     us_reading: str = ""
     us_char: str = ""
     tev_reading: str = ""
     tev_ppc: str = ""
     tev_char: str = ""
+    cable_tev_reading: str = ""
+    cable_tev_ppc: str = ""
+    cable_us_reading: str = ""
     photo_numbers: tuple[int, ...] = ()
     cable_photo: int | None = None
     breaker_photo: int | None = None
@@ -95,6 +99,7 @@ class SwitchgearSpec:
     serial_no: str = ""
     panels: tuple[SwitchgearPanelSpec, ...] = ()
     photo_numbers: tuple[int, ...] = ()
+    overview_compartments: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

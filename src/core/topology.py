@@ -80,7 +80,7 @@ def classify_voltage_rating(rating: str | None = None) -> VoltageClass:
 
     import re
 
-    if re.search(r"(?:\b33\s*KV\b|^33$)", clean):
+    if re.search(r"(?:\b3[36]\s*KV\b|^(?:33|36)$)", clean):
         return VoltageClass.KV_33
     if re.search(r"(?:\b22\s*KV\b|^22$)", clean):
         return VoltageClass.KV_22
@@ -207,6 +207,21 @@ def resolve_overview_compartments(
             except KeyError:
                 voltage_class = VoltageClass.KV_11
 
+    if voltage_class == VoltageClass.KV_33 and archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
+        return (
+            "OVERVIEW FRONT (LHS)",
+            "OVERVIEW FRONT (RHS)",
+            "OVERVIEW REAR (LHS)",
+            "OVERVIEW REAR (RHS)",
+            "OVERVIEW TOP (LHS)",
+            "OVERVIEW TOP (RHS)",
+            "OVERVIEW CABLE CELLAR (LHS)",
+            "OVERVIEW CABLE CELLAR (RHS)",
+            "OVERVIEW MAIN BUSBAR (LHS)",
+            "OVERVIEW MAIN BUSBAR (RHS)",
+            "OVERVIEW RESERVE BUSBAR (LHS)",
+            "OVERVIEW RESERVE BUSBAR (RHS)",
+        )
     if archetype in (SwitchgearArchetype.VCB_CUBICLE, SwitchgearArchetype.GIS_CUBICLE):
         return ("OVERVIEW FRONT", "OVERVIEW REAR", "OVERVIEW TOP")
     if archetype == SwitchgearArchetype.RMU_DUAL_CABLE_ENTRY:
@@ -462,7 +477,7 @@ class SwitchgearTopologyEngine:
 
         archetype = resolve_switchgear_archetype(switchgear_type, manufacturer, model_resolved)
         voltage_class = classify_voltage_rating(rating)
-        if voltage_class == VoltageClass.KV_11 and ("33" in switchgear_type.upper() or "33" in rating.upper() or "33" in model_resolved.upper()):
+        if voltage_class == VoltageClass.KV_11 and any(k in switchgear_type.upper() or k in rating.upper() or k in model_resolved.upper() for k in ("33", "36")):
             voltage_class = VoltageClass.KV_33
 
         if voltage_class == VoltageClass.KV_33 and "RMU" not in switchgear_type.upper():

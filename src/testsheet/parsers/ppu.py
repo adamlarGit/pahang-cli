@@ -6,7 +6,7 @@ from datetime import datetime
 import logging
 from pathlib import Path
 import re
-from typing import ClassVar, Sequence
+from typing import Any, ClassVar, Mapping, Sequence
 import warnings
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
@@ -304,10 +304,15 @@ class PpuTestsheetParser(TestsheetParserStrategy):
         finally:
             wb.close()
 
+        has_cc = any(
+            any("CELLAR" in str(comp).upper() for comp in getattr(s, "overview_compartments", ()))
+            for s in switchgears
+        )
         equipment = SubstationEquipmentPackage(
             switchgears=tuple(switchgears),
             transformers=tuple(transformers),
             lvdb_specs=tuple(lvdb_specs),
+            has_cable_cellar=has_cc,
         )
 
         return TestsheetData(
@@ -405,13 +410,15 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             if tev_bg_val is not None:
                 tev_background = str(tev_bg_val)
 
-            # Switchgear Details (L6..L11)
+            # Switchgear Details (L6..L11, M6)
             manufacturer = clean_val(ws_header["L6"].value) or ""
+            type_from_m6 = clean_val(ws_header["M6"].value) or ""
             year = clean_val(ws_header["L7"].value) or ""
             model = clean_val(ws_header["L8"].value) or ""
             serial_no = clean_val(ws_header["L9"].value) or ""
-            swg_type = clean_val(ws_header["L10"].value) or ""
+            busbar_type = clean_val(ws_header["L10"].value) or ""
             rating = clean_val(ws_header["L11"].value) or ""
+            swg_type = type_from_m6 or busbar_type or "VCB"
             if any((manufacturer, year, model, serial_no, swg_type, rating)):
                 swg_meta = SwitchgearSpec(
                     switchgear_type=swg_type,
@@ -494,28 +501,74 @@ class PpuTestsheetParser(TestsheetParserStrategy):
         extra_sheets: list[Worksheet],
     ) -> SwitchgearSpec | None:
         """Parse switchgear lineup across main and extra sheets."""
-        # Details from L6..L11
+        # Details from L6..L11, M6
         manufacturer = clean_val(ws_main["L6"].value) or ""
+        type_from_m6 = clean_val(ws_main["M6"].value) or ""
         manufactured_year = clean_val(ws_main["L7"].value) or ""
         model = clean_val(ws_main["L8"].value) or ""
         serial_no = clean_val(ws_main["L9"].value) or ""
-        switchgear_type = clean_val(ws_main["L10"].value) or ""
+        busbar_type = clean_val(ws_main["L10"].value) or ""
         rating = clean_val(ws_main["L11"].value) or ""
+        switchgear_type = type_from_m6 or busbar_type or "VCB"
 
         # Panels extraction across main sheet and extra sheets
         panels: list[SwitchgearPanelSpec] = []
         panel_counter = 1
 
         for ws in [ws_main] + extra_sheets:
-            sheet_panels = self._parse_sheet_panels(ws, start_index=panel_counter)
+            sheet_panels = self._parse_sheet_panels(ws, start_index=panel_counter, switchgear_type=switchgear_type)
             panels.extend(sheet_panels)
             panel_counter += len(sheet_panels)
 
         # Overview Bays (Rows 63-74 on main sheet)
+        # Desired canonical order: LHS pairs before RHS pairs
+        # Row mapping:
+        # RHS: 63 FRONT, 64 BACK (REAR), 65 TOP, 66 CABLE CELLAR, 67 MBB, 68 RBB
+        # LHS: 69 FRONT, 70 BACK (REAR), 71 TOP, 72 CABLE CELLAR, 73 MBB, 74 RBB
+        row_map = {
+            63: ("OVERVIEW FRONT (RHS)", parse_photo_numbers(ws_main["P63"].value)),
+            64: ("OVERVIEW REAR (RHS)", parse_photo_numbers(ws_main["P64"].value)),
+            65: ("OVERVIEW TOP (RHS)", parse_photo_numbers(ws_main["P65"].value)),
+            66: ("OVERVIEW CABLE CELLAR (RHS)", parse_photo_numbers(ws_main["P66"].value)),
+            67: ("OVERVIEW MAIN BUSBAR (RHS)", parse_photo_numbers(ws_main["P67"].value)),
+            68: ("OVERVIEW RESERVE BUSBAR (RHS)", parse_photo_numbers(ws_main["P68"].value)),
+            69: ("OVERVIEW FRONT (LHS)", parse_photo_numbers(ws_main["P69"].value)),
+            70: ("OVERVIEW REAR (LHS)", parse_photo_numbers(ws_main["P70"].value)),
+            71: ("OVERVIEW TOP (LHS)", parse_photo_numbers(ws_main["P71"].value)),
+            72: ("OVERVIEW CABLE CELLAR (LHS)", parse_photo_numbers(ws_main["P72"].value)),
+            73: ("OVERVIEW MAIN BUSBAR (LHS)", parse_photo_numbers(ws_main["P73"].value)),
+            74: ("OVERVIEW RESERVE BUSBAR (LHS)", parse_photo_numbers(ws_main["P74"].value)),
+        }
+
+        order = [
+            (69, 63),  # FRONT
+            (70, 64),  # REAR
+            (71, 65),  # TOP
+            (72, 66),  # CABLE CELLAR (optional)
+            (73, 67),  # MAIN BUSBAR
+            (74, 68),  # RESERVE BUSBAR (optional)
+        ]
+        ov_comps: list[str] = []
+        ov_photos: list[int] = []
+        has_any_overview_photo = any(bool(p) for _, p in row_map.values())
+        if has_any_overview_photo:
+            for lhs_r, rhs_r in order:
+                lhs_name, lhs_p = row_map[lhs_r]
+                rhs_name, rhs_p = row_map[rhs_r]
+                if lhs_p or rhs_p or "CELLAR" not in lhs_name:
+                    if lhs_p or "RESERVE" not in lhs_name:
+                        ov_comps.append(lhs_name)
+                        ov_photos.append(lhs_p[0] if lhs_p else 0)
+                    if rhs_p or "RESERVE" not in rhs_name:
+                        ov_comps.append(rhs_name)
+                        ov_photos.append(rhs_p[0] if rhs_p else 0)
+
         overview_rhs = self._extract_overview_photos(ws_main, start_row=63, end_row=68)
         overview_lhs = self._extract_overview_photos(ws_main, start_row=69, end_row=74)
-
         all_overview_photos: list[int] = []
+        for n in ov_photos:
+            if n > 0 and n not in all_overview_photos:
+                all_overview_photos.append(n)
         for n in overview_rhs + overview_lhs:
             if n not in all_overview_photos:
                 all_overview_photos.append(n)
@@ -524,29 +577,7 @@ class PpuTestsheetParser(TestsheetParserStrategy):
         if not panels:
             return None
 
-        # Prepend synthetic OVERVIEW RHS and OVERVIEW LHS panels
-        synthetic_panels: list[SwitchgearPanelSpec] = []
-        if overview_rhs:
-            synthetic_panels.append(
-                SwitchgearPanelSpec(
-                    panel_no=0,
-                    panel_feeder_no="OVERVIEW RHS",
-                    name="OVERVIEW RHS",
-                    photo_numbers=overview_rhs,
-                )
-            )
-        if overview_lhs:
-            synthetic_panels.append(
-                SwitchgearPanelSpec(
-                    panel_no=0,
-                    panel_feeder_no="OVERVIEW LHS",
-                    name="OVERVIEW LHS",
-                    photo_numbers=overview_lhs,
-                )
-            )
-
-        full_panel_list = tuple(synthetic_panels + panels)
-
+        # Synthetic panels removed: overview compartments are stored cleanly on SwitchgearSpec
         return SwitchgearSpec(
             switchgear_type=switchgear_type,
             manufacturer=manufacturer,
@@ -554,14 +585,16 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             manufactured_year=manufactured_year,
             rating=rating,
             serial_no=serial_no,
-            panels=full_panel_list,
-            photo_numbers=tuple(all_overview_photos),
+            panels=tuple(panels),
+            photo_numbers=tuple(ov_photos if any(p > 0 for p in ov_photos) else all_overview_photos),
+            overview_compartments=tuple(ov_comps),
         )
 
     def _parse_sheet_panels(
         self,
         ws: Worksheet,
         start_index: int = 1,
+        switchgear_type: str = "",
     ) -> list[SwitchgearPanelSpec]:
         """Parse 6-row stride switchgear panels from Rows 15 to 62."""
         panels: list[SwitchgearPanelSpec] = []
@@ -571,21 +604,155 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             if r > ws.max_row:
                 break
 
-            feeder_no = clean_val(ws[f"B{r}"].value) or ""
-            name = clean_val(ws[f"C{r}"].value) or ""
+            b_val = ws[f"B{r}"].value
+            b_str = str(b_val).strip() if b_val is not None else ""
+            c_raw = clean_val(ws[f"C{r}"].value) or ""
+            d_raw = clean_val(ws[f"D{r}"].value) or ""
+
+            # Detect layout: live testsheet layout vs testsheet factory layout
+            # In live layout: Col B is panel_no (e.g. 1, 2, "1", "2" -> pure digits)
+            # In factory layout: Col B is feeder_no (e.g. "3P1", "1K1" -> feeder token)
+            b_is_digits = b_str.isdigit()
+
+            if b_is_digits:
+                # Live testsheet layout: Col B is panel_no, Col C is feeder_code, Col D is feeder_name
+                panel_feeder_no = c_raw
+                feeder_name = d_raw
+                is_factory_layout = False
+            elif b_str:
+                # Factory layout: Col B is feeder_no, Col C is name, Col D is status
+                panel_feeder_no = b_str
+                feeder_name = c_raw
+                is_factory_layout = True
+            else:
+                # Col B is empty
+                if d_raw.upper() in ("CLOSE", "OPEN", "TRIP", "SERVICE", "TEST", "RACK IN", "RACK OUT"):
+                    panel_feeder_no = ""
+                    feeder_name = c_raw
+                    is_factory_layout = True
+                else:
+                    panel_feeder_no = c_raw
+                    feeder_name = d_raw
+                    is_factory_layout = False
 
             # Unpopulated template bays (blank panel no and feeder name) are skipped
-            if not feeder_no and not name:
+            if not panel_feeder_no and not feeder_name:
                 continue
 
-            status = clean_val(ws[f"D{r}"].value) or clean_val(ws[f"E{r}"].value) or ""
-            load_raw = clean_val(ws[f"F{r}"].value) or ""
+            if is_factory_layout:
+                status = d_raw or clean_val(ws[f"E{r}"].value) or ""
+                load_raw = clean_val(ws[f"F{r}"].value) or ""
+                cable_type = clean_val(ws[f"G{r}"].value) or clean_val(ws[f"E{r}"].value) or ""
+                heater_amp = clean_val(ws[f"H{r}"].value) or ""
+                panel_type = clean_val(ws[f"J{r}"].value) or switchgear_type or "VCB"
+                busbar_position = ""
+                breaker_serial = clean_val(ws[f"V{r}"].value) or clean_val(ws[f"I{r}"].value) or ""
+            else:
+                # Cable Type: Col E
+                cable_type = clean_val(ws[f"E{r}"].value) or ""
+
+                # Breaker Position & Status: Col F & Col G
+                breaker_pos = clean_val(ws[f"F{r}"].value) or ""
+                status_val = clean_val(ws[f"G{r}"].value) or ""
+                if any(t in switchgear_type.upper() for t in ("VCB", "GIS")):
+                    if breaker_pos and status_val and breaker_pos.upper() != status_val.upper() and "/" not in status_val:
+                        status = f"{breaker_pos}/{status_val}"
+                    else:
+                        status = status_val or breaker_pos or ""
+                else:
+                    status = status_val or breaker_pos or ""
+
+                # Busbar Position: Col H
+                busbar_position = clean_val(ws[f"H{r}"].value) or ""
+
+                # Load (A): Col I
+                load_raw = clean_val(ws[f"I{r}"].value) or ""
+
+                # Heater Amp: Col J across 6-row stride
+                heater_amp = ""
+                for sub_r in range(r, r + 6):
+                    if sub_r <= ws.max_row:
+                        j_val = clean_val(ws[f"J{sub_r}"].value)
+                        if j_val is not None:
+                            j_str = str(j_val).strip()
+                            m_num = re.search(r"(\d+(?:\.\d+)?)", j_str)
+                            if m_num and float(m_num.group(1)) > 0:
+                                heater_amp = j_str
+                                break
+                            elif not heater_amp and j_str and j_str.upper() not in ("-", "NONE", "N/A"):
+                                heater_amp = j_str
+
+                panel_type = switchgear_type or "VCB"
+                breaker_serial = clean_val(ws[f"V{r}"].value) or ""
+
             norm_load = format_load_amp(load_raw)
             load_amp = "" if norm_load == "-" else norm_load
-            cable_type = clean_val(ws[f"G{r}"].value) or ""
-            heater_amp = clean_val(ws[f"H{r}"].value) or ""
-            panel_type = clean_val(ws[f"J{r}"].value) or ""
-            breaker_serial = clean_val(ws[f"V{r}"].value) or clean_val(ws[f"I{r}"].value) or ""
+
+            if breaker_serial and "SN:" in breaker_serial.upper():
+                m_sn = re.search(r"SN\s*:\s*([^\n\r]+)", breaker_serial, re.I)
+                if m_sn:
+                    breaker_serial = m_sn.group(1).strip()
+            elif not breaker_serial:
+                for sub_r in range(r, r + 6):
+                    if sub_r <= ws.max_row:
+                        val = clean_val(ws[f"V{sub_r}"].value)
+                        if val and "SN:" in val.upper():
+                            m_sn = re.search(r"SN\s*:\s*([^\n\r]+)", val, re.I)
+                            if m_sn:
+                                breaker_serial = m_sn.group(1).strip()
+                                break
+
+            # Ultrasound (Col T) and TEV (Col R / Col S)
+            # Col U: Type of Characteristic (for TEV / US; defaults to "NORMAL" if empty)
+            # Col V: Remarks / Other Defects (e.g. SN: breaker serial, GIS gas pressure)
+            us_reading = clean_val(ws[f"T{r}"].value) or ""
+            if not us_reading:
+                for sub_r in range(r, r + 6):
+                    if sub_r <= ws.max_row:
+                        val = clean_val(ws[f"T{sub_r}"].value)
+                        if val is not None:
+                            us_reading = val
+                            break
+
+            tev_reading = clean_val(ws[f"R{r}"].value) or ""
+            if not tev_reading:
+                for sub_r in range(r, r + 6):
+                    if sub_r <= ws.max_row:
+                        val = clean_val(ws[f"R{sub_r}"].value)
+                        if val is not None:
+                            tev_reading = val
+                            break
+
+            tev_ppc = clean_val(ws[f"S{r}"].value) or ""
+            if not tev_ppc:
+                for sub_r in range(r, r + 6):
+                    if sub_r <= ws.max_row:
+                        val = clean_val(ws[f"S{sub_r}"].value)
+                        if val is not None:
+                            tev_ppc = val
+                            break
+
+            # Cable Compartment TEV and Ultrasound readings (Row r + 1)
+            cable_tev_reading = ""
+            cable_tev_ppc = ""
+            cable_us_reading = ""
+            if r + 1 <= ws.max_row:
+                cable_tev_reading = clean_val(ws[f"R{r + 1}"].value) or ""
+                cable_tev_ppc = clean_val(ws[f"S{r + 1}"].value) or ""
+                cable_us_reading = clean_val(ws[f"T{r + 1}"].value) or ""
+
+            # Characteristic: Column U (empty if no defect -> defaults to "NORMAL")
+            u_char = clean_val(ws[f"U{r}"].value) or ""
+            if not u_char:
+                for sub_r in range(r, r + 6):
+                    if sub_r <= ws.max_row:
+                        val = clean_val(ws[f"U{sub_r}"].value)
+                        if val is not None:
+                            u_char = val
+                            break
+
+            us_char = u_char or "NORMAL"
+            tev_char = u_char or "NORMAL"
 
             # 6-Row Stride photo parsing (Col P)
             # Row 1 (r): Breaker
@@ -650,14 +817,23 @@ class PpuTestsheetParser(TestsheetParserStrategy):
 
             panel = SwitchgearPanelSpec(
                 panel_no=panel_idx,
-                panel_feeder_no=feeder_no,
-                name=name,
+                panel_feeder_no=panel_feeder_no,
+                name=feeder_name,
                 panel_type=panel_type,
                 serial_no=breaker_serial,
                 status=status,
                 load_amp=load_amp,
                 cable_type=cable_type,
+                busbar_position=busbar_position,
                 heater_amp=heater_amp,
+                us_reading=us_reading,
+                us_char=us_char,
+                tev_reading=tev_reading,
+                tev_ppc=tev_ppc,
+                tev_char=tev_char,
+                cable_tev_reading=cable_tev_reading,
+                cable_tev_ppc=cable_tev_ppc,
+                cable_us_reading=cable_us_reading,
                 breaker_photo=breaker_photo,
                 cable_photo=cable_photo,
                 busbar_photo=busbar_photo,
@@ -883,10 +1059,13 @@ class PpuTestsheetParser(TestsheetParserStrategy):
     ) -> TransformerSpec | None:
         """Extract a single transformer slot into PowerTransformerSpec or TransformerSpec."""
         default_id = slot["default_tx_id"]
+        slot_id = slot.get("slot_id", 1)
         cols = slot["cols"]
-        part1_row = slot["part1_row"]
-        part2_row = slot["part2_row"]
         unit_hint = slot["unit_hint"]
+
+        part1_row, part2_row = self._resolve_tx_slot_rows(
+            ws, slot_id, default_id, slot["part1_row"], slot["part2_row"]
+        )
 
         # 1. Header metadata (Rows 6-9)
         mfg = self._get_tx_meta_val(ws, 7, cols, r"(?:2\.1\s*)?Manufacturer\s*[:.]*")
@@ -1042,30 +1221,104 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                 photo_numbers=tuple(all_unit_photos),
             )
 
+    def _resolve_tx_slot_rows(
+        self,
+        ws: Worksheet,
+        slot_id: int,
+        default_id: str,
+        default_p1: int,
+        default_p2: int,
+    ) -> tuple[int, int]:
+        """Dynamically resolve Part 1 and Part 2 row indices for a transformer slot."""
+        norm_target = re.sub(r"[\s_]+", "", default_id).upper()
+        p1_row = default_p1
+        p2_row = default_p2
+
+        # 1. Resolve Part 1 row (search rows 12..30)
+        for r in range(12, min(31, ws.max_row + 1)):
+            c_val = clean_val(ws[f"C{r}"].value) or ""
+            b_val = clean_val(ws[f"B{r}"].value) or ""
+            norm_c = re.sub(r"[\s_]+", "", c_val).upper()
+            if norm_c == norm_target:
+                p1_row = r
+                break
+            b_num = self._parse_positive_int(b_val)
+            if b_num == slot_id and ("TX" in norm_c or "LOCAL" in norm_c):
+                p1_row = r
+                break
+
+        # 2. Resolve Part 2 row (search rows 30..50)
+        for r in range(30, min(51, ws.max_row + 1)):
+            c_val = clean_val(ws[f"C{r}"].value) or ""
+            b_val = clean_val(ws[f"B{r}"].value) or ""
+            norm_c = re.sub(r"[\s_]+", "", c_val).upper()
+            if norm_c == norm_target:
+                p2_row = r
+                break
+            b_num = self._parse_positive_int(b_val)
+            if b_num == slot_id and ("TX" in norm_c or "LOCAL" in norm_c):
+                p2_row = r
+                break
+
+        return p1_row, p2_row
+
     @staticmethod
     def _extract_station_service_lvdb(ws: Worksheet) -> list[LVDBSpec]:
-        """Extract station service LVDB from Rows 49-54."""
+        """Extract station service LVDB dynamically by finding label rows."""
         lvdb_specs: list[LVDBSpec] = []
-        if ws.max_row >= 51:
-            lvdb_rating = clean_val(ws["D51"].value) or ""
-            lvdb_photos = parse_photo_numbers(ws["G51"].value)
-            lvdb_sn = clean_val(ws["D52"].value) or "" if ws.max_row >= 52 else ""
-            lvdb_model = clean_val(ws["D53"].value) or "" if ws.max_row >= 53 else ""
-            lvdb_mfg = clean_val(ws["D54"].value) or "" if ws.max_row >= 54 else ""
+        if ws.max_row < 40:
+            return lvdb_specs
 
-            if lvdb_rating or lvdb_photos or lvdb_sn or lvdb_model or lvdb_mfg:
-                lvdb_specs.append(
-                    LVDBSpec(
-                        name="LVDB 1",
-                        label="LVDB",
-                        source="LOCAL TX",
-                        manufacturer=lvdb_mfg,
-                        model=lvdb_model,
-                        serial_no=lvdb_sn,
-                        rating=lvdb_rating,
-                        photo_numbers=lvdb_photos,
-                    )
+        rating_row = None
+        sn_row = None
+        model_row = None
+        mfg_row = None
+
+        for r in range(48, min(65, ws.max_row + 1)):
+            b_val = clean_val(ws[f"B{r}"].value) or ""
+            if not b_val:
+                continue
+            b_lower = b_val.lower()
+            if "rating" in b_lower and rating_row is None:
+                rating_row = r
+            elif "serial" in b_lower and sn_row is None:
+                sn_row = r
+            elif ("type" in b_lower or "model" in b_lower) and model_row is None:
+                model_row = r
+            elif "manufacturer" in b_lower and mfg_row is None:
+                mfg_row = r
+
+        r_rating = rating_row or 51
+        r_sn = sn_row or 52
+        r_model = model_row or 53
+        r_mfg = mfg_row or 54
+
+        lvdb_rating = clean_val(ws[f"D{r_rating}"].value) or "" if r_rating <= ws.max_row else ""
+        lvdb_photos: Sequence[int] = ()
+        if r_rating <= ws.max_row:
+            for p_col in ("G", "E", "F", "H"):
+                photos = parse_photo_numbers(ws[f"{p_col}{r_rating}"].value)
+                if photos:
+                    lvdb_photos = photos
+                    break
+
+        lvdb_sn = clean_val(ws[f"D{r_sn}"].value) or "" if r_sn <= ws.max_row else ""
+        lvdb_model = clean_val(ws[f"D{r_model}"].value) or "" if r_model <= ws.max_row else ""
+        lvdb_mfg = clean_val(ws[f"D{r_mfg}"].value) or "" if r_mfg <= ws.max_row else ""
+
+        if lvdb_rating or lvdb_photos or lvdb_sn or lvdb_model or lvdb_mfg:
+            lvdb_specs.append(
+                LVDBSpec(
+                    name="LVDB 1",
+                    label="LVDB",
+                    source="LOCAL TX",
+                    manufacturer=lvdb_mfg,
+                    model=lvdb_model,
+                    serial_no=lvdb_sn,
+                    rating=lvdb_rating,
+                    photo_numbers=tuple(lvdb_photos),
                 )
+            )
         return lvdb_specs
 
     @staticmethod
@@ -1099,37 +1352,81 @@ class PpuTestsheetParser(TestsheetParserStrategy):
         cols: Sequence[str],
         label_pat: str,
     ) -> str:
-        """Extract metadata value within a column block matching a label pattern."""
-        for idx, col in enumerate(cols):
-            val = clean_val(ws[f"{col}{row_idx}"].value)
-            if val and re.search(label_pat, val, re.IGNORECASE):
-                sub = re.sub(label_pat, "", val, flags=re.IGNORECASE).strip(" :-\t.")
-                if sub:
-                    return sub
-                for next_col in cols[idx + 1:]:
-                    n_val = clean_val(ws[f"{next_col}{row_idx}"].value)
-                    if n_val and not re.search(r"^\d\.\d", n_val) and not re.search(label_pat, n_val, re.IGNORECASE):
-                        return n_val
-        for col in cols:
-            val = clean_val(ws[f"{col}{row_idx}"].value)
-            if val and not re.search(label_pat, val, re.IGNORECASE) and not re.search(r"^\d\.\d", val):
-                return val
+        """Extract metadata value within a column block matching a label pattern across candidate rows."""
+        is_mfg = bool(re.search(r"manufacturer", label_pat, re.IGNORECASE))
+        is_rating = bool(re.search(r"rating", label_pat, re.IGNORECASE))
+        is_sn = bool(re.search(r"serial", label_pat, re.IGNORECASE))
+
+        candidate_rows = [row_idx]
+        for offset in (1, -1, 2, -2):
+            r = row_idx + offset
+            if 7 <= r <= 12 and r not in candidate_rows:
+                candidate_rows.append(r)
+        for r in range(7, 13):
+            if r not in candidate_rows:
+                candidate_rows.append(r)
+
+        # 1. Search for matching label in candidate rows (Rows 7..12)
+        for r in candidate_rows:
+            if r > ws.max_row:
+                continue
+            for idx, col in enumerate(cols):
+                val = clean_val(ws[f"{col}{r}"].value)
+                if val and re.search(label_pat, val, re.IGNORECASE):
+                    sub = re.sub(label_pat, "", val, flags=re.IGNORECASE).strip(" :-\t.")
+                    if sub:
+                        return sub
+                    for next_col in cols[idx + 1:]:
+                        n_val = clean_val(ws[f"{next_col}{r}"].value)
+                        if n_val and not re.search(r"^\d\.\d", n_val) and not re.search(label_pat, n_val, re.IGNORECASE):
+                            return n_val
+
+        # 2. Rating-specific heuristic: if label was omitted/overwritten, check for rating pattern
+        if is_rating:
+            for r in candidate_rows:
+                if r > ws.max_row:
+                    continue
+                row_text = " ".join(str(ws[f"{c}{r}"].value or "") for c in cols)
+                if re.search(r"(?:manufacturer|serial)", row_text, re.IGNORECASE):
+                    continue
+                for col in reversed(cols):
+                    val = clean_val(ws[f"{col}{r}"].value)
+                    if val and re.search(r"\d+(?:\.\d+)?\s*(?:MVA|KVA)", val, re.IGNORECASE):
+                        return val
+
+        # 3. Fallback on expected row_idx if it has a non-label, non-header value and no conflicting label
+        if 7 <= row_idx <= ws.max_row:
+            row_text = " ".join(str(ws[f"{c}{row_idx}"].value or "") for c in cols)
+            conflict_pat = r"serial" if is_mfg else (r"manufacturer" if is_sn else r"(?:manufacturer|serial)")
+            if not re.search(conflict_pat, row_text, re.IGNORECASE):
+                for col in reversed(cols):
+                    val = clean_val(ws[f"{col}{row_idx}"].value)
+                    if (
+                        val
+                        and not re.search(r"^(?:\d\.\d|model|tx|local)\b", val, re.IGNORECASE)
+                        and not re.search(label_pat, val, re.IGNORECASE)
+                        and not re.search(r"(?:manufacturer|rating|serial)", val, re.IGNORECASE)
+                    ):
+                        return val
+
         return ""
 
     @staticmethod
     def _get_tx_model(ws: Worksheet, cols: Sequence[str]) -> str:
-        """Extract Model specification within a column block on Row 6."""
-        for idx, col in enumerate(cols):
-            val = clean_val(ws[f"{col}6"].value)
-            if val and re.search(r"model", val, re.IGNORECASE):
-                sub = re.sub(r"model\s*[:.]*", "", val, flags=re.IGNORECASE).strip()
-                if sub:
-                    return sub
-                for next_col in cols[idx + 1:]:
-                    n_val = clean_val(ws[f"{next_col}6"].value)
-                    if n_val and not re.search(r"^model\s*[:.]*$", n_val, re.IGNORECASE):
-                        return n_val
-        # If no explicit "Model" label, check last column in block on Row 6 if not slot name or label
+        """Extract Model specification within a column block across candidate rows."""
+        for r in (6, 7):
+            if r > ws.max_row:
+                continue
+            for idx, col in enumerate(cols):
+                val = clean_val(ws[f"{col}{r}"].value)
+                if val and re.search(r"model", val, re.IGNORECASE):
+                    sub = re.sub(r"model\s*[:.]*", "", val, flags=re.IGNORECASE).strip()
+                    if sub:
+                        return sub
+                    for next_col in cols[idx + 1:]:
+                        n_val = clean_val(ws[f"{next_col}{r}"].value)
+                        if n_val and not re.search(r"^model\s*[:.]*$", n_val, re.IGNORECASE):
+                            return n_val
         for col in reversed(cols):
             val = clean_val(ws[f"{col}6"].value)
             if val and not re.search(r"^(?:model|tx|local)\b", val, re.IGNORECASE):

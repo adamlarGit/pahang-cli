@@ -103,6 +103,9 @@ def create_ppu_testsheet_workbook(
                     "pt_photo": 100 + i * 10 + 4,
                     "cable_entry_photo": 100 + i * 10 + 5,
                     "link_box_photo": 100 + i * 10 + 6,
+                    "tev_reading": "0",
+                    "tev_ppc": "0",
+                    "us_reading": "0",
                 }
                 for i in range(panels_input)
             ]
@@ -122,6 +125,31 @@ def create_ppu_testsheet_workbook(
             ws[f"H{r}"] = p.get("heater_amp", "")
             ws[f"J{r}"] = p.get("panel_type", "")
             ws[f"V{r}"] = p.get("breaker_serial", "")
+
+            # TEV and Ultrasound readings
+            if "tev_reading" in p and p["tev_reading"] is not None:
+                ws[f"R{r}"] = p["tev_reading"]
+            if "tev_ppc" in p and p["tev_ppc"] is not None:
+                ws[f"S{r}"] = p["tev_ppc"]
+            if "us_reading" in p and p["us_reading"] is not None:
+                ws[f"T{r}"] = p["us_reading"]
+            if "tev_char" in p and p["tev_char"] is not None:
+                ws[f"U{r}"] = p["tev_char"]
+            elif "us_char" in p and p["us_char"] is not None:
+                ws[f"U{r}"] = p["us_char"]
+
+            if "cable_tev_reading" in p and p["cable_tev_reading"] is not None:
+                ws[f"R{r + 1}"] = p["cable_tev_reading"]
+            if "cable_tev_ppc" in p and p["cable_tev_ppc"] is not None:
+                ws[f"S{r + 1}"] = p["cable_tev_ppc"]
+            if "cable_us_reading" in p and p["cable_us_reading"] is not None:
+                ws[f"T{r + 1}"] = p["cable_us_reading"]
+
+            if "sub_rows" in p and isinstance(p["sub_rows"], dict):
+                for offset, col_vals in p["sub_rows"].items():
+                    sub_row = r + int(offset)
+                    for col_letter, cell_val in col_vals.items():
+                        ws[f"{col_letter}{sub_row}"] = cell_val
 
             # Photos in Col P (Row 1..6)
             if "breaker_photo" in p and p["breaker_photo"] is not None:

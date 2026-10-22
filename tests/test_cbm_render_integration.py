@@ -54,6 +54,58 @@ def test_swg_render_context_includes_analysis_and_recommendation() -> None:
     assert "CABLE TERMINATION/CABLE XLPE" in ctx["analysis"]
 
 
+def test_swg_render_context_cable_compartment_prefers_cable_readings() -> None:
+    from src.testsheet.models import (
+        SubstationEquipmentPackage,
+        SwitchgearPanelSpec,
+        SwitchgearSpec,
+    )
+
+    panel = SwitchgearPanelSpec(
+        panel_no=1,
+        panel_feeder_no="3P1",
+        name="FEEDER 1",
+        panel_type="VCB",
+        us_reading="2.0",
+        tev_reading="10.0",
+        tev_ppc="5",
+        cable_us_reading="8.0",
+        cable_tev_reading="30.0",
+        cable_tev_ppc="25",
+    )
+    swg = SwitchgearSpec(
+        switchgear_type="VCB",
+        panels=(panel,),
+    )
+    pe_info = {
+        "equipment_package": SubstationEquipmentPackage(switchgears=(swg,)),
+    }
+
+    # Case 1: Cable Compartment defect prefers cable-specific readings
+    rec_cable = CbmDefectRecord(
+        equipment="VCB",
+        equipment_id="3P1",
+        technology="TEV",
+        defect_area="CABLE COMPARTMENT",
+    )
+    ctx_cable = _build_swg_render_context(rec_cable, overview=False, pe_info=pe_info)
+    assert ctx_cable["panel"]["tev"]["reading"] == "30"
+    assert ctx_cable["panel"]["tev"]["ppc"] == "25"
+    assert ctx_cable["panel"]["us"]["reading"] == "8"
+
+    # Case 2: Breaker Compartment defect uses breaker readings
+    rec_breaker = CbmDefectRecord(
+        equipment="VCB",
+        equipment_id="3P1",
+        technology="TEV",
+        defect_area="BREAKER COMPARTMENT",
+    )
+    ctx_breaker = _build_swg_render_context(rec_breaker, overview=False, pe_info=pe_info)
+    assert ctx_breaker["panel"]["tev"]["reading"] == "10"
+    assert ctx_breaker["panel"]["tev"]["ppc"] == "5"
+    assert ctx_breaker["panel"]["us"]["reading"] == "2"
+
+
 def test_tx_render_context_includes_analysis_and_recommendation() -> None:
     record = CbmDefectRecord(
         equipment="LTX/DTX",

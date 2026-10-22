@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from docx import Document
 from docx.enum.text import WD_LINE_SPACING
@@ -18,7 +18,6 @@ from src.testsheet.models import (
     PowerTransformerSpec,
     SubstationEquipmentPackage,
     SubstationTestsheetPackage,
-    SwitchgearSpec,
     TransformerSpec,
 )
 
@@ -168,11 +167,16 @@ class PpuSubstationConditionPairBuilderPolicy:
             effective_has_cc = getattr(eq, "has_cable_cellar", False)
             if not effective_has_cc and (swg_33_present or swg_11_present):
                 for s in eq.switchgears:
+                    if any("CELLAR" in str(comp).upper() for comp in getattr(s, "overview_compartments", ())):
+                        effective_has_cc = True
+                        break
                     for p in s.panels:
                         p_comb = f"{p.name} {p.panel_feeder_no}".upper()
                         if "CELLAR" in p_comb:
                             effective_has_cc = True
                             break
+                    if effective_has_cc:
+                        break
 
         if effective_has_cc:
             if swg_33_present and swg_11_present:

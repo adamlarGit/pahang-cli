@@ -245,12 +245,12 @@ def test_ppu_overview_bays_and_photo_numbers(tmp_path: Path) -> None:
     assert 204 in swg.photo_numbers
     assert 205 in swg.photo_numbers
 
-    # Synthetic panels prepended
+    # Overview compartments stored on SwitchgearSpec without injecting fake panels
+    assert len(swg.overview_compartments) > 0
+    assert any("OVERVIEW FRONT" in c for c in swg.overview_compartments)
     panel_names = [p.name for p in swg.panels]
-    assert panel_names[0] == "OVERVIEW RHS"
-    assert panel_names[1] == "OVERVIEW LHS"
-    assert swg.panels[0].photo_numbers == (201, 202, 203)
-    assert swg.panels[1].photo_numbers == (204, 205)
+    assert "OVERVIEW RHS" not in panel_names
+    assert panel_names[0] == "FEEDER 33kV 1"
 
 
 def test_ppu_visual_inspection_findings(tmp_path: Path) -> None:
@@ -352,4 +352,46 @@ def test_ppu_overview_only_without_panels_raises_value_error(tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="No populated 33kV or 11kV switchgear lineups found"):
         parser.extract_testsheet_data(wb_path)
+
+
+def test_ppu_cable_compartment_readings_extraction(tmp_path: Path) -> None:
+    """Verify Row 16 (r+1) Cable Compartment TEV, PPC, and US readings are parsed into cable_* fields."""
+    parser = PpuTestsheetParser()
+    wb_path = tmp_path / "08. PPU CABLE READINGS.xlsx"
+
+    panel_custom = [
+        {
+            "feeder_no": "3P1",
+            "name": "FEEDER 1 33kV",
+            "status": "CLOSE",
+            "tev_reading": "12",
+            "tev_ppc": "5",
+            "us_reading": "3",
+            "cable_tev_reading": "24",
+            "cable_tev_ppc": "18",
+            "cable_us_reading": "7",
+        }
+    ]
+
+    create_ppu_testsheet_workbook(
+        path=wb_path,
+        has_33kv=True,
+        has_11kv=False,
+        panels_33kv=panel_custom,
+    )
+
+    data = parser.extract_testsheet_data(wb_path)
+    swg = data.equipment.switchgears[0]
+    panel = swg.panels[0]
+
+    # Breaker readings from Row 15
+    assert panel.tev_reading == "12"
+    assert panel.tev_ppc == "5"
+    assert panel.us_reading == "3"
+
+    # Cable Compartment readings from Row 16 (r+1)
+    assert panel.cable_tev_reading == "24"
+    assert panel.cable_tev_ppc == "18"
+    assert panel.cable_us_reading == "7"
+
 

@@ -749,9 +749,21 @@ class SwitchgearScanAdapter:
                 )
                 us_char_norm = normalize_us_characteristic(panel.us_char, default="NORMAL")
 
+                us_reading_val = panel.us_reading
+                tev_reading_val = panel.tev_reading
+                tev_ppc_val = panel.tev_ppc
+
+                if comp_name in ("CABLE COMPARTMENT", "REAR COMPARTMENT"):
+                    if getattr(panel, "cable_us_reading", None):
+                        us_reading_val = panel.cable_us_reading
+                    if getattr(panel, "cable_tev_reading", None):
+                        tev_reading_val = panel.cable_tev_reading
+                    if getattr(panel, "cable_tev_ppc", None):
+                        tev_ppc_val = panel.cable_tev_ppc
+
                 if comp_us_active:
                     us_ctx = {
-                        "reading": format_db_int(panel.us_reading),
+                        "reading": format_db_int(us_reading_val),
                         "char": us_char_norm,
                         "severity": "NORMAL",
                         "prpd": us_prpd,
@@ -767,8 +779,8 @@ class SwitchgearScanAdapter:
                 if comp_tev_active:
                     tev_ctx = {
                         "bg": format_db_int(self.tev_background),
-                        "reading": format_db_int(panel.tev_reading),
-                        "ppc": _clean_str(panel.tev_ppc),
+                        "reading": format_db_int(tev_reading_val),
+                        "ppc": _clean_str(tev_ppc_val),
                         "char": _clean_str(panel.tev_char),
                         "severity": "NORMAL",
                         "prpd": tev_prpd,
