@@ -37,6 +37,7 @@ def test_compile_document_com_recopy_paste(tmp_path: Path):
     compiler.compile([p1, p2], out)
 
     mock_word.Documents.Add.assert_called_once()
+    assert mock_main_doc.Saved is False
     assert mock_word.Documents.Open.call_count == 2
     mock_part_doc1.Content.Copy.assert_called_once()
     mock_part_doc1.Close.assert_called_once_with(False)
@@ -70,6 +71,7 @@ def test_compile_document_with_external_word_app(tmp_path: Path):
     compiler.compile([p1], out)
 
     mock_word.Documents.Add.assert_called_once()
+    assert mock_main_doc.Saved is False
     mock_part_doc.Content.Copy.assert_called_once()
     mock_part_doc.Close.assert_called_once_with(False)
     assert mock_rng.PasteAndFormat.call_count == 1 or mock_rng.Paste.call_count == 1
@@ -838,6 +840,114 @@ def test_safe_close_document_logs_warning_on_fallback_failure(caplog):
         _safe_close_document(mock_doc, word_app=mock_word, expected_name="out.docx")
 
     assert any("Failed to close fallback document" in record.message for record in caplog.records)
+
+
+def test_compile_marks_compilation_document_dirty_before_opening_parts(tmp_path: Path):
+    """Verify WordComDocumentCompiler marks compilation document dirty (Saved=False) so Word COM does not auto-close it."""
+    part1_path = tmp_path / "part1.docx"
+    part1_path.touch()
+    out = tmp_path / "out.docx"
+
+    mock_word = MagicMock()
+    mock_main_doc = MagicMock()
+    mock_part_doc = MagicMock()
+    mock_rng = MagicMock()
+
+    # Track if Saved=False was set before Documents.Open was called
+    saved_state_at_open = []
+
+    def mock_open(*_args, **_kwargs):
+        saved_state_at_open.append(getattr(mock_main_doc, "Saved", None))
+        return mock_part_doc
+
+    mock_word.Documents.Add.return_value = mock_main_doc
+    mock_word.Documents.Open.side_effect = mock_open
+    mock_main_doc.Content = mock_rng
+    mock_main_doc.Tables.Count = 0
+    mock_rng.Information.return_value = False
+
+    compiler = WordComDocumentCompiler(word_app=mock_word)
+    compiler.compile([part1_path], out)
+
+    mock_word.Documents.Add.assert_called_once()
+    assert mock_main_doc.Saved is False
+    assert saved_state_at_open == [False]
+
+
+@pytest.mark.parametrize("part_count", [1, 2])
+def test_compile_integration_word_com_session_preserves_proxy_lifecycle(tmp_path: Path, part_count: int):
+    """Integration regression asserting single-part and multi-part compilation succeed within a shared COM session."""
+    try:
+        import win32com.client
+        import pythoncom
+    except ImportError:
+        pytest.skip("win32com or pythoncom not installed")
+
+    compiler = WordComDocumentCompiler()
+    try:
+        with compiler.session():
+            pass
+    except Exception as exc:
+        pytest.skip(f"Word.Application COM is unavailable: {exc}")
+
+    import docx
+
+    part_paths: list[Path] = []
+    for i in range(1, part_count + 1):
+        part_path = tmp_path / f"part{i}.docx"
+        doc = docx.Document()
+        doc.add_paragraph(f"Part {i} content")
+        doc.save(str(part_path))
+        part_paths.append(part_path)
+
+    out_file = tmp_path / f"out_{part_count}_parts.docx"
+    with compiler.session():
+        compiled_result = compiler.compile(part_paths, out_file)
+
+    assert compiled_result == out_file.resolve()
+    assert out_file.exists()
+    assert out_file.stat().st_size > 0
+
+
+def test_quick_report_workflow_33kv_substations_compilation_regression():
+    """Verify Quick Report batch workflow succeeds for 33kV substations without RPC_E_DISCONNECTED (Ticket #112)."""
+    dataset_33kv = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER")
+    target_date_dir = dataset_33kv / "TESTSHEET" / "JERANTUT" / "01. OCTOBER" / "22-10-2026"
+    tahan_file = target_date_dir / "33. MINI PPU KUALA TAHAN 33-11kV (VI).xlsx"
+    merting_file = target_date_dir / "34. MINI PPU MERTING 33-11kV (VI).xlsx"
+
+    if not tahan_file.exists() or not merting_file.exists():
+        pytest.skip("33kV reference testsheets not available on host")
+
+    from src.project.environment import ProjectEnvironment
+    from src.project.models import ProjectMetadata
+    from src.project.storage import LocalWorkspaceStorage
+    from src.workflows.quick_report import QuickReportWorkflow
+
+    meta = ProjectMetadata(
+        key="test_pahang_33kv",
+        name="Test Pahang 33kV",
+        po_number="42394550",
+        state="PAHANG",
+        voltage_type="33kV",
+        year="2026",
+        cycle="CYCLE1",
+        technologies=("IR", "US", "TEV"),
+        base_path=str(dataset_33kv),
+    )
+    storage = LocalWorkspaceStorage(dataset_33kv)
+    env = ProjectEnvironment(metadata=meta, storage=storage)
+
+    workflow = QuickReportWorkflow()
+    result = workflow.generate(target=target_date_dir, environment=env)
+
+    assert result.reports_generated >= 2
+    assert len(result.errors) == 0
+    generated_names = [p.name for p in result.generated_paths]
+    assert any("KUALA TAHAN" in name for name in generated_names)
+    assert any("MERTING" in name for name in generated_names)
+
+
 
 
 

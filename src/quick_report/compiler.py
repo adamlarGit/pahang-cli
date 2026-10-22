@@ -302,6 +302,11 @@ class WordComDocumentCompiler:
         main_doc = None
         try:
             main_doc = word_app.Documents.Add()
+            # Prevent Word COM from auto-closing pristine Document1 when opening part documents (Ticket #112)
+            try:
+                main_doc.Saved = False
+            except Exception as exc:
+                logger.warning("Failed to set compilation document Saved=False: %s", exc)
             for idx, part in enumerate(parts):
                 part_path = str(Path(part).resolve())
                 part_doc = None
