@@ -834,3 +834,98 @@ def test_populate_data_msms_feeder_pillar_synthesis(mock_env: ProjectEnvironment
     assert 29.0 <= float(fp2_in1_avg["TNBNEWREADING"]) <= 30.0
 
 
+def test_tev_us_pulse_meters_normalization_in_workflow(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    """Verify that PopulateDataMsmsWorkflow normalizes TEV, US, and Pulse meters to clean integer strings."""
+    date_str = "07-10-2026"
+    date_dir = tmp_path / "TESTSHEET" / "GEBENG" / "01. OCTOBER" / date_str
+    date_dir.mkdir(parents=True)
+    (date_dir / "UNSORTED RAW DATA").mkdir()
+
+    ts_wb = openpyxl.Workbook()
+    ws_vi = ts_wb.active
+    ws_vi.title = "Visual Inspec."
+    ws_vi["D3"] = "PPU APMM 33-11kV"
+    ws_vi["D4"] = "CGBG/PPUAPMM"
+    ws_vi["D5"] = date_str
+
+    # 33kV (Main) sheet
+    ws_33 = ts_wb.create_sheet("33kV (Main)")
+    ws_33["C13"] = "1"
+    ws_33["D13"] = "INCOMING"
+    ws_33["E13"] = "3P1"
+    ws_33["R15"] = "5 dB"      # TEV_S33_FP_P31VV (Front Panel / Breaker)
+    ws_33["S15"] = "0 pulses"  # TEV_S33_FP_PUL_P31VV
+    ws_33["R16"] = "7 dB"      # TEV_S33_BP_P31VV (Back Panel / Cable Compartment)
+    ws_33["S16"] = 0           # TEV_S33_BP_PUL_P31VV
+    ws_33["T16"] = "0 dB"      # US_S33_BP_P31VV
+
+    # 11kV (Main) sheet
+    ws_11 = ts_wb.create_sheet("11kV (Main)")
+    ws_11["C13"] = "1"
+    ws_11["D13"] = "TX 1"
+    ws_11["E13"] = "1P1"
+    ws_11["R16"] = "10dB"      # TEV_S11_BP_P31VV
+    ws_11["S16"] = 15.0        # TEV_S11_BP_PUL_P31VV
+    ws_11["T15"] = 0.0         # US_S11_BR_P31VV
+    ws_11["R17"] = "-"         # Empty / sentinel cell for unmeasured meter
+
+    ts_path = date_dir / "001. PPU APMM 33-11kV.xlsx"
+    ts_wb.save(ts_path)
+    ts_wb.close()
+
+    # Setup TOTAL PE.xlsx
+    total_pe_path = mock_env.storage.get_total_pe_path()
+    mock_env.storage.ensure_directory(total_pe_path.parent)
+    wb_pe = openpyxl.Workbook()
+    ws_pe = wb_pe.active
+    ws_pe.title = "DataCycle1"
+    ws_pe.append(["PE NO", "FL NUMBER", "SUBSTATION NAME", "DATE", "TYPE", "WO", "SCOPE"])
+    ws_pe.append([1, "CGBG/PPUAPMM", "PPU APMM 33-11kV", date_str, "PPU", "W1616898", "CBM"])
+    wb_pe.save(total_pe_path)
+    wb_pe.close()
+
+    # Setup CSV in TO BE FILLED
+    to_be_filled_dir = mock_env.storage.get_msms_to_be_filled_dir()
+    mock_env.storage.ensure_directory(to_be_filled_dir)
+    csv_path = to_be_filled_dir / "07-10-2026_001.csv"
+
+    csv_rows = [
+        "WONUM,TNBLOCATION,METERNAME,METER.DESCRIPTION,TNBNEWREADING,TNBNEWREADINGDATE,ACTSTART,ACTFINISH,TNBCOMMENTS\n",
+        # 33kV Breaker & Cable Compartments
+        "W1616898,CGBG/PPUAPMM/33KV/1,TEV_S33_FP_P31VV,TEV Breaker,,,,,\n",
+        "W1616898,CGBG/PPUAPMM/33KV/1,TEV_S33_FP_PUL_P31VV,TEV Pulse Breaker,,,,,\n",
+        "W1616898,CGBG/PPUAPMM/33KV/1,TEV_S33_BP_P31VV,TEV Cable Comp,,,,,\n",
+        "W1616898,CGBG/PPUAPMM/33KV/1,TEV_S33_BP_PUL_P31VV,TEV Pulse Cable Comp,,,,,\n",
+        "W1616898,CGBG/PPUAPMM/33KV/1,US_S33_BP_P31VV,US Cable Comp,,,,,\n",
+        # 11kV Cable & Breaker Compartments
+        "W1616898,CGBG/PPUAPMM/11KV/1,TEV_S11_BP_P31VV,TEV Cable Comp,,,,,\n",
+        "W1616898,CGBG/PPUAPMM/11KV/1,TEV_S11_BP_PUL_P31VV,TEV Pulse Cable Comp,,,,,\n",
+        "W1616898,CGBG/PPUAPMM/11KV/1,US_S11_BR_P31VV,US Breaker,,,,,\n",
+        # Unmeasured meter pointing to cell R17 with "-"
+        "W1616898,CGBG/PPUAPMM/11KV/1,TEV_S11_BB_P31VV,TEV Busbar,,,,,\n",
+    ]
+    csv_path.write_text("".join(csv_rows), encoding="utf-8")
+
+    workflow = PopulateDataMsmsWorkflow()
+    req = PopulateDataMsmsRequest(mode=PopulateMode.AUTO, overwrite=True)
+    result = workflow.execute(mock_env, req)
+    assert result.rows_populated == 8
+    assert not result.errors
+
+    df = pd.read_csv(csv_path, dtype=str).fillna("")
+    readings = dict(zip(df["METERNAME"], df["TNBNEWREADING"]))
+
+    # All dB and pulse values normalized to clean integer strings
+    assert readings["TEV_S33_FP_P31VV"] == "5"
+    assert readings["TEV_S33_FP_PUL_P31VV"] == "0"
+    assert readings["TEV_S33_BP_P31VV"] == "7"
+    assert readings["TEV_S33_BP_PUL_P31VV"] == "0"
+    assert readings["US_S33_BP_P31VV"] == "0"
+    assert readings["TEV_S11_BP_P31VV"] == "10"
+    assert readings["TEV_S11_BP_PUL_P31VV"] == "15"
+    assert readings["US_S11_BR_P31VV"] == "0"
+    # Sentinel '-' remains unpopulated
+    assert readings["TEV_S11_BB_P31VV"] == ""
+
+
+

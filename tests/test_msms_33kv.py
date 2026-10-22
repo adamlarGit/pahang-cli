@@ -502,6 +502,8 @@ def test_populate_data_msms_33kv_end_to_end(mock_33kv_env: ProjectEnvironment, t
     ws_33["T15"] = 0        # US_S33_FP_P31VV
     ws_33["R15"] = 5        # TEV_S33_FP_P31VV
     ws_33["S15"] = 0        # TEV_S33_FP_PUL_P31VV
+    ws_33["R16"] = "7 dB"   # TEV_S33_BP_P31VV (Cable Compartment TEV)
+    ws_33["S16"] = 0        # TEV_S33_BP_PUL_P31VV (Cable Compartment Pulse)
     ws_33["V16"] = "B: 1.41 Bar"  # Gas Pressure
 
     ws_11 = wb["11kV (Main)"]
@@ -509,6 +511,8 @@ def test_populate_data_msms_33kv_end_to_end(mock_33kv_env: ProjectEnvironment, t
     ws_11["J15"] = "0.85A"  # HEATER_11KV_AMP (numeric ampere)
     ws_11["O15"] = 31.2     # TH_S11_BR_AVG_P31VV
     ws_11["T15"] = 0        # US_S11_BR_P31VV
+    ws_11["R16"] = "10dB"   # TEV_S11_BP_P31VV (Cable Compartment TEV)
+    ws_11["S16"] = 15.0     # TEV_S11_BP_PUL_P31VV (Cable Compartment Pulse)
 
     ws_tx = wb["TX"]
     ws_tx["U14"] = 36.8     # TH_PTXHV_AVG_P31VV (TX 1)
@@ -558,10 +562,14 @@ def test_populate_data_msms_33kv_end_to_end(mock_33kv_env: ProjectEnvironment, t
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/33KV/1,TH_S33_BR_MAX_P31VV,,,,GAUGE\n",
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/33KV/1,US_S33_FP_P31VV,,,,GAUGE\n",
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/33KV/1,TEV_S33_FP_P31VV,,,,GAUGE\n",
+        ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/33KV/1,TEV_S33_BP_P31VV,,,,GAUGE\n",
+        ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/33KV/1,TEV_S33_BP_PUL_P31VV,,,,GAUGE\n",
         # 11kV switchgear gauge meters
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/11KV/1,SG_11_LOADING,,,,GAUGE\n",
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/11KV/1,TH_S11_BR_AVG_P31VV,,,,GAUGE\n",
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/11KV/1,US_S11_BR_P31VV,,,,GAUGE\n",
+        ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/11KV/1,TEV_S11_BP_P31VV,,,,GAUGE\n",
+        ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/11KV/1,TEV_S11_BP_PUL_P31VV,,,,GAUGE\n",
         # Power Transformer gauge meters
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/PTX1,TH_PTXHV_AVG_P31VV,,,,GAUGE\n",
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/PTX1,TH_PTXMT_AVG_P31VV,,,,GAUGE\n",
@@ -629,11 +637,15 @@ def test_populate_data_msms_33kv_end_to_end(mock_33kv_env: ProjectEnvironment, t
     assert records["TH_S33_BR_MAX_P31VV"]["TNBNEWREADING"] in ("29", "29.0")
     assert records["US_S33_FP_P31VV"]["TNBNEWREADING"] == "0"
     assert records["TEV_S33_FP_P31VV"]["TNBNEWREADING"] == "5"
+    assert records["TEV_S33_BP_P31VV"]["TNBNEWREADING"] == "7"
+    assert records["TEV_S33_BP_PUL_P31VV"]["TNBNEWREADING"] == "0"
 
     # 11kV switchgear meters populated
     assert records["SG_11_LOADING"]["TNBNEWREADING"] == "220"
     assert records["TH_S11_BR_AVG_P31VV"]["TNBNEWREADING"] == "31.2"
     assert records["US_S11_BR_P31VV"]["TNBNEWREADING"] == "0"
+    assert records["TEV_S11_BP_P31VV"]["TNBNEWREADING"] == "10"
+    assert records["TEV_S11_BP_PUL_P31VV"]["TNBNEWREADING"] == "15"
 
     # Power Transformer meters populated
     assert records["TH_PTXHV_AVG_P31VV"]["TNBNEWREADING"] == "36.8"

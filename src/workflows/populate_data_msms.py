@@ -22,6 +22,7 @@ from src.core.normalizers import (
     extract_background_temperature,
     extract_gas_pressure,
     extract_heater_amp,
+    format_db_int,
     format_load_amp,
     normalize_date_str,
     normalize_for_csv,
@@ -824,6 +825,12 @@ class PopulateDataMsmsTransformer:
         elif m_upper.startswith("HEATER_") and "AMP" in m_upper:
             extracted_amp = extract_heater_amp(cell_val)
             norm_val = normalize_for_csv(extracted_amp, decimals=2) if extracted_amp is not None else ""
+        elif (
+            m_upper.startswith(("TEV_", "TV_", "US_", "PUL_"))
+            or "_PUL" in m_upper
+        ):
+            db_val = format_db_int(cell_val)
+            norm_val = db_val if db_val != "-" else ""
         else:
             norm_val = normalize_for_csv(cell_val)
 
