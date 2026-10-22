@@ -702,35 +702,12 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                                 breaker_serial = m_sn.group(1).strip()
                                 break
 
-            # Ultrasound (Col T) and TEV (Col R / Col S)
+            # Ultrasound (Col T) and TEV (Col R / Col S) for Breaker Compartment (Row r)
             # Col U: Type of Characteristic (for TEV / US; defaults to "NORMAL" if empty)
             # Col V: Remarks / Other Defects (e.g. SN: breaker serial, GIS gas pressure)
             us_reading = clean_val(ws[f"T{r}"].value) or ""
-            if not us_reading:
-                for sub_r in range(r, r + 6):
-                    if sub_r <= ws.max_row:
-                        val = clean_val(ws[f"T{sub_r}"].value)
-                        if val is not None:
-                            us_reading = val
-                            break
-
             tev_reading = clean_val(ws[f"R{r}"].value) or ""
-            if not tev_reading:
-                for sub_r in range(r, r + 6):
-                    if sub_r <= ws.max_row:
-                        val = clean_val(ws[f"R{sub_r}"].value)
-                        if val is not None:
-                            tev_reading = val
-                            break
-
             tev_ppc = clean_val(ws[f"S{r}"].value) or ""
-            if not tev_ppc:
-                for sub_r in range(r, r + 6):
-                    if sub_r <= ws.max_row:
-                        val = clean_val(ws[f"S{sub_r}"].value)
-                        if val is not None:
-                            tev_ppc = val
-                            break
 
             # Cable Compartment TEV and Ultrasound readings (Row r + 1)
             cable_tev_reading = ""

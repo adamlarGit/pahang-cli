@@ -395,3 +395,47 @@ def test_ppu_cable_compartment_readings_extraction(tmp_path: Path) -> None:
     assert panel.cable_us_reading == "7"
 
 
+def test_ppu_breaker_readings_isolated_from_cable_sub_row(tmp_path: Path) -> None:
+    """Verify that when Row r has no TEV/US readings but Row r+1 has Cable TEV/US readings,
+
+    panel.tev_reading and panel.us_reading remain empty while cable_* fields are populated.
+    """
+    parser = PpuTestsheetParser()
+    wb_path = tmp_path / "09. PPU CABLE ISOLATION.xlsx"
+
+    panel_custom = [
+        {
+            "feeder_no": "3P1",
+            "name": "ISOLATION TEST 33kV",
+            "status": "CLOSE",
+            "tev_reading": "",
+            "tev_ppc": "",
+            "us_reading": "",
+            "cable_tev_reading": "28.0",
+            "cable_tev_ppc": "15",
+            "cable_us_reading": "9.5",
+        }
+    ]
+
+    create_ppu_testsheet_workbook(
+        path=wb_path,
+        has_33kv=True,
+        has_11kv=False,
+        panels_33kv=panel_custom,
+    )
+
+    data = parser.extract_testsheet_data(wb_path)
+    swg = data.equipment.switchgears[0]
+    panel = swg.panels[0]
+
+    # Breaker readings must remain empty (no leakage from Row r+1)
+    assert panel.tev_reading == ""
+    assert panel.tev_ppc == ""
+    assert panel.us_reading == ""
+
+    # Cable readings are populated
+    assert panel.cable_tev_reading == "28.0"
+    assert panel.cable_tev_ppc == "15"
+    assert panel.cable_us_reading == "9.5"
+
+

@@ -72,9 +72,9 @@ def test_bug_a_readings_wiring_direct_row(tmp_path: Path) -> None:
 
 
 def test_bug_a_readings_sub_row_fallback(tmp_path: Path) -> None:
-    """Verify sub-row fallback across the 6-row stride (r to r+5)
+    """Verify breaker readings are isolated to row r and do not inherit cable readings from sub-row 1,
 
-    when row r has empty readings.
+    while characteristic in Col U falls back across the stride.
     """
     wb_path = tmp_path / "02. PPU READINGS FALLBACK.xlsx"
     parser = PpuTestsheetParser()
@@ -88,7 +88,7 @@ def test_bug_a_readings_sub_row_fallback(tmp_path: Path) -> None:
             "tev_reading": "",
             "tev_ppc": "",
             "us_reading": "",
-            # Place readings on sub-rows (e.g. Cable row r+1, Busbar row r+2)
+            # Place readings on sub-rows (Cable row r+1, Busbar row r+2)
             "sub_rows": {
                 1: {"R": "32.0", "S": "40"},
                 2: {"T": "16.5", "U": "CORONA DISCHARGE"},
@@ -107,9 +107,16 @@ def test_bug_a_readings_sub_row_fallback(tmp_path: Path) -> None:
     swg = data.equipment.switchgears[0]
     panel = swg.panels[0]
 
-    assert panel.tev_reading == "32.0"
-    assert panel.tev_ppc == "40"
-    assert panel.us_reading == "16.5"
+    # Breaker readings on row r remain empty
+    assert panel.tev_reading == ""
+    assert panel.tev_ppc == ""
+    assert panel.us_reading == ""
+
+    # Cable readings on row r+1 are correctly isolated to cable fields
+    assert panel.cable_tev_reading == "32.0"
+    assert panel.cable_tev_ppc == "40"
+
+    # Characteristic in Col U falls back across the bay stride
     assert panel.us_char == "CORONA DISCHARGE"
     assert panel.tev_char == "CORONA DISCHARGE"
 
