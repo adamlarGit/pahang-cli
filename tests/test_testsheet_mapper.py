@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from src.testsheet.mapper import (
+    PceReadingMapper,
     TestsheetReadingMapper,
     get_sheet_name,
     parse_equipment_index,
@@ -127,7 +128,7 @@ def test_vcb_dynamic_panel_slot_mapping() -> None:
     mapper = TestsheetReadingMapper()
 
     # Panel 1: rows 10-13 on Sheet 1
-    # Cable (+0 -> row 10)
+    # Cable / Back Panel (+0 -> row 10)
     assert mapper.get_target("TH_S11_CBL_AVG_PE13V", "/11KV/1") == ("PCE Testsheet", "N10")
     assert mapper.get_target("TH_S11_CBL_MAX_PE13V", "/11KV/1") == ("PCE Testsheet", "L10")
     assert mapper.get_target("TH_S11_CBL_REF_PE13V", "/11KV/1") == ("PCE Testsheet", "K10")
@@ -135,6 +136,10 @@ def test_vcb_dynamic_panel_slot_mapping() -> None:
     assert mapper.get_target("TV_S11_CBL_PE13V", "/11KV/1") == ("PCE Testsheet", "T10")
     assert mapper.get_target("TV_S11_CBL_PUL_PE13V", "/11KV/1") == ("PCE Testsheet", "U10")
     assert mapper.get_target("US_S11_CBL_PE13V", "/11KV/1") == ("PCE Testsheet", "Q10")
+    assert mapper.get_target("TEV_S11_BP_PE13V", "/11KV/1") == ("PCE Testsheet", "T10")
+    assert mapper.get_target("TEV_S11_BP_PUL_PE13V", "/11KV/1") == ("PCE Testsheet", "U10")
+    assert mapper.get_target("TV_S11_BP_PE13V", "/11KV/1") == ("PCE Testsheet", "T10")
+    assert mapper.get_target("TH_S11_BP_AVG_PE13V", "/11KV/1") == ("PCE Testsheet", "N10")
 
     # Breaker (+1 -> row 11)
     assert mapper.get_target("TH_S11_BR_AVG_PE13V", "/11KV/1") == ("PCE Testsheet", "N11")
@@ -260,3 +265,15 @@ def test_unmapped_and_is_stub() -> None:
     assert mapper.is_stub("TH_FPIN1_AVG_PE13R", "/FP/FP1") is True
     assert mapper.is_stub("TH_S11_LV_AVG_PE13V", "/11KV/1") is True
     assert mapper.is_stub("TH_S11_CBL_AVG_PE13V", "/11KV/1") is False
+
+
+def test_pce_reading_mapper_tev_and_back_panel() -> None:
+    pce = PceReadingMapper()
+    # Direct PceReadingMapper tests for TEV and Back Panel
+    assert pce.get_target("TEV_S11_BP_PE13V", "/11KV/1") == ("PCE Testsheet", "T10")
+    assert pce.get_target("TEV_S11_BP_PUL_PE13V", "/11KV/1") == ("PCE Testsheet", "U10")
+    assert pce.get_target("TV_S11_BP_PE13V", "/11KV/1") == ("PCE Testsheet", "T10")
+    assert pce.get_target("TH_S11_BP_AVG_PE13V", "/11KV/1") == ("PCE Testsheet", "N10")
+    assert pce.get_target("TEV_S11_BP_PE13V", "/11KV/4") == ("PCE Testsheet", "T22")
+    assert pce.get_target("TEV_S11_BP_PUL_PE13V", "/11KV/4") == ("PCE Testsheet", "U22")
+

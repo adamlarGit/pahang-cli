@@ -257,6 +257,7 @@ class PceReadingMapper(ReadingMapperStrategy):
         "AVG": "N",
         "US": "Q",
         "TV": "T",
+        "TEV": "T",
         "PUL": "U",
     }
 
@@ -435,7 +436,13 @@ class PceReadingMapper(ReadingMapperStrategy):
         sheet_name, local_slot = self.resolve_panel_sheet_and_slot(panel_idx)
 
         offset = None
-        if "_CBL_" in meter or "_CBL" in meter or "S11_CBL" in meter:
+        if (
+            "_CBL_" in meter
+            or "_CBL" in meter
+            or "S11_CBL" in meter
+            or "_BP_" in meter
+            or "S11_BP" in meter
+        ):
             offset = 0
         elif "_BR_" in meter or "_BR" in meter or "S11_BR" in meter:
             offset = 1
@@ -461,8 +468,8 @@ class PceReadingMapper(ReadingMapperStrategy):
             return self.SWITCHGEAR_COLUMNS["US"]
         if "_PUL" in meter:
             return self.SWITCHGEAR_COLUMNS["PUL"]
-        if meter.startswith("TV_"):
-            return self.SWITCHGEAR_COLUMNS["TV"]
+        if meter.startswith("TEV_") or meter.startswith("TV_"):
+            return self.SWITCHGEAR_COLUMNS.get("TEV", self.SWITCHGEAR_COLUMNS["TV"])
         if "_REF" in meter:
             return self.SWITCHGEAR_COLUMNS["REF"]
         if "_MAX" in meter:
@@ -765,19 +772,23 @@ class PpuReadingMapper(ReadingMapperStrategy):
         # Offset 0: Breaker / Front Panel
         if "_BR_" in meter or "_FP_" in meter or "S33_FP" in meter or "S11_BR" in meter:
             return 0
-        # Offset 1: Cable
-        if "_CBL_" in meter or "S33_CBL" in meter or "S11_CBL" in meter:
+        # Offset 1: Cable Compartment / Back Panel
+        if (
+            "_CBL_" in meter
+            or "S33_CBL" in meter
+            or "S11_CBL" in meter
+            or "_BP_" in meter
+            or "S33_BP" in meter
+            or "S11_BP" in meter
+        ):
             return 1
-        # Offset 2: Busbar Top / Back Panel
+        # Offset 2: Busbar Top
         if (
             "_BB_" in meter
             or "_TBB_" in meter
             or "_TOP_" in meter
-            or "_BP_" in meter
             or "S33_TOP" in meter
-            or "S33_BP" in meter
             or "S11_TOP" in meter
-            or "S11_BP" in meter
         ):
             return 2
         # Offset 3: PT Compartment

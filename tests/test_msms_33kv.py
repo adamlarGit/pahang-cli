@@ -218,19 +218,19 @@ def test_ppu_mapper_coordinate_resolution() -> None:
     assert mapper.get_target("TEV_S33_FP_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "R15")
     assert mapper.get_target("TEV_S33_FP_PUL_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "S15")
 
-    # Offset 1: Cable
+    # Offset 1: Cable Compartment / Back Panel
     assert mapper.get_target("TH_S33_CBL_AVG_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "O16")
     assert mapper.get_target("TH_S33_CBL_MAX_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "M16")
     assert mapper.get_target("US_S33_CBL_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "T16")
+    assert mapper.get_target("TEV_S33_BP_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "R16")
+    assert mapper.get_target("TEV_S33_BP_PUL_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "S16")
 
-    # Offset 2: Busbar Top / Back panel
+    # Offset 2: Busbar Top
     assert mapper.get_target("TH_S33_BB_TREF_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "L17")
     assert mapper.get_target("TH_S33_BB_TMAX_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "M17")
     assert mapper.get_target("TH_S33_BB_TDEL_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "N17")
     assert mapper.get_target("TH_S33_BB_TAVG_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "O17")
     assert mapper.get_target("US_S33_TOP_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "T17")
-    assert mapper.get_target("TEV_S33_BP_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "R17")
-    assert mapper.get_target("TEV_S33_BP_PUL_P31VV", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "S17")
 
     # Gas Pressure
     assert mapper.get_target("SG_33_GIS_PRES_CB", "CGBG/PPUAPMM/33KV/1") == ("33kV (Main)", "V16")
@@ -258,6 +258,8 @@ def test_ppu_mapper_coordinate_resolution() -> None:
     assert mapper.get_target("US_S11_BR_P31VV", "CGBG/PPUAPMM/11KV/1") == ("11kV (Main)", "T15")
     assert mapper.get_target("TH_S11_CBL_AVG_P31VV", "CGBG/PPUAPMM/11KV/1") == ("11kV (Main)", "O16")
     assert mapper.get_target("US_S11_CBL_P31VV", "CGBG/PPUAPMM/11KV/1") == ("11kV (Main)", "T16")
+    assert mapper.get_target("TEV_S11_BP_P31VV", "CGBG/PPUAPMM/11KV/1") == ("11kV (Main)", "R16")
+    assert mapper.get_target("TEV_S11_BP_PUL_P31VV", "CGBG/PPUAPMM/11KV/1") == ("11kV (Main)", "S16")
     assert mapper.get_target("TH_S11_TBB_AVG_P31VV", "CGBG/PPUAPMM/11KV/1") == ("11kV (Main)", "O17")
     assert mapper.get_target("US_S11_TOP_P31VV", "CGBG/PPUAPMM/11KV/1") == ("11kV (Main)", "T17")
     assert mapper.get_target("TEV_S11_FP_P31VV", "CGBG/PPUAPMM/11KV/1") == ("11kV (Main)", "R15")
