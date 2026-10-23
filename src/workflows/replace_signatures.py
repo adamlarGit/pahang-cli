@@ -31,6 +31,62 @@ class ReplaceImagesSummary:
     failed_count: int
 
 
+@dataclass(frozen=True)
+class AnchorCoordinates:
+    """Explicit anchor coordinates with EMU offsets for TwoCellAnchor."""
+
+    col: int
+    col_off: int
+    row: int
+    row_off: int
+
+    def to_marker(self) -> AnchorMarker:
+        return AnchorMarker(
+            col=self.col,
+            colOff=self.col_off,
+            row=self.row,
+            rowOff=self.row_off,
+        )
+
+
+@dataclass(frozen=True)
+class SheetSignatureLayout:
+    """Pair of vendor and TNB signature anchor coordinates for a sheet layout."""
+
+    vendor_from: AnchorCoordinates
+    vendor_to: AnchorCoordinates
+    tnb_from: AnchorCoordinates
+    tnb_to: AnchorCoordinates
+
+    def create_vendor_anchor(self) -> TwoCellAnchor:
+        return TwoCellAnchor(_from=self.vendor_from.to_marker(), to=self.vendor_to.to_marker())
+
+    def create_tnb_anchor(self) -> TwoCellAnchor:
+        return TwoCellAnchor(_from=self.tnb_from.to_marker(), to=self.tnb_to.to_marker())
+
+
+SIGNATURE_LAYOUT_REGISTRY: dict[str, SheetSignatureLayout] = {
+    "switchgear": SheetSignatureLayout(
+        vendor_from=AnchorCoordinates(col=4, col_off=127000, row=76, row_off=25400),
+        vendor_to=AnchorCoordinates(col=4, col_off=2286000, row=76, row_off=723900),
+        tnb_from=AnchorCoordinates(col=11, col_off=127000, row=76, row_off=25400),
+        tnb_to=AnchorCoordinates(col=11, col_off=2286000, row=76, row_off=723900),
+    ),
+    "transformer": SheetSignatureLayout(
+        vendor_from=AnchorCoordinates(col=5, col_off=127000, row=72, row_off=25400),
+        vendor_to=AnchorCoordinates(col=5, col_off=1841500, row=72, row_off=571500),
+        tnb_from=AnchorCoordinates(col=17, col_off=127000, row=72, row_off=25400),
+        tnb_to=AnchorCoordinates(col=17, col_off=1841500, row=72, row_off=571500),
+    ),
+    "visual_inspection": SheetSignatureLayout(
+        vendor_from=AnchorCoordinates(col=3, col_off=100000, row=81, row_off=25400),
+        vendor_to=AnchorCoordinates(col=6, col_off=200000, row=86, row_off=-25400),
+        tnb_from=AnchorCoordinates(col=12, col_off=100000, row=81, row_off=25400),
+        tnb_to=AnchorCoordinates(col=15, col_off=200000, row=86, row_off=-25400),
+    ),
+}
+
+
 def replace_pce_images(
     xlsx_path: str | Path,
     photo1_path: str | Path | None = None,
@@ -99,29 +155,21 @@ def replace_pce_images(
                             if get_format(chosen_p1) == "png":
                                 img1.format = "png"
 
-                            if layout == "switchgear":
-                                # Switchgear vendor placeholder at E77 (spans Cols 3–6, Rows 74–80)
-                                marker_from = AnchorMarker(col=3, colOff=0, row=74, rowOff=0)
-                                marker_to = AnchorMarker(col=6, colOff=0, row=80, rowOff=0)
-                            elif layout == "transformer":
-                                # Transformer vendor placeholder at F73 (spans Cols 5–8, Rows 70–76)
-                                marker_from = AnchorMarker(col=5, colOff=0, row=70, rowOff=0)
-                                marker_to = AnchorMarker(col=8, colOff=0, row=76, rowOff=0)
-                            elif layout == "visual_inspection":
-                                # Visual inspection vendor placeholder at D82 (spans Cols 3–6, Rows 80–86)
-                                marker_from = AnchorMarker(col=3, colOff=0, row=80, rowOff=0)
-                                marker_to = AnchorMarker(col=6, colOff=0, row=86, rowOff=0)
+                            if layout in SIGNATURE_LAYOUT_REGISTRY:
+                                img1.anchor = SIGNATURE_LAYOUT_REGISTRY[layout].create_vendor_anchor()
                             elif layout == "pce_testsheet" or "pce testsheet" in title_lower:
                                 marker_from = AnchorMarker(col=3, colOff=1449204, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=12650)
                                 marker_to = AnchorMarker(col=6, colOff=826923, row=row_idx + 4, rowOff=62917)
+                                img1.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
                             elif layout == "pce_vi" or "pce vi" in title_lower:
                                 marker_from = AnchorMarker(col=2, colOff=14608, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=164752)
                                 marker_to = AnchorMarker(col=5, colOff=663339, row=row_idx + 3, rowOff=50601)
+                                img1.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
                             else:
                                 marker_from = AnchorMarker(col=col_idx, colOff=1449204, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=12650)
                                 marker_to = AnchorMarker(col=col_idx + 3, colOff=826923, row=row_idx + 4, rowOff=62917)
+                                img1.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
 
-                            img1.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
                             ws.add_image(img1)
                         placeholders_replaced += 1
 
@@ -132,29 +180,21 @@ def replace_pce_images(
                             if get_format(chosen_p2) == "png":
                                 img2.format = "png"
 
-                            if layout == "switchgear":
-                                # Switchgear TNB placeholder at L77 (spans Cols 10–13, Rows 73–80)
-                                marker_from = AnchorMarker(col=10, colOff=0, row=73, rowOff=0)
-                                marker_to = AnchorMarker(col=13, colOff=0, row=80, rowOff=0)
-                            elif layout == "transformer":
-                                # Transformer TNB placeholder at R73 (spans Cols 16–22, Rows 70–78)
-                                marker_from = AnchorMarker(col=16, colOff=0, row=70, rowOff=0)
-                                marker_to = AnchorMarker(col=22, colOff=0, row=78, rowOff=0)
-                            elif layout == "visual_inspection":
-                                # Visual inspection TNB placeholder at M82 (spans Cols 11–16, Rows 80–87)
-                                marker_from = AnchorMarker(col=11, colOff=0, row=80, rowOff=0)
-                                marker_to = AnchorMarker(col=16, colOff=0, row=87, rowOff=0)
+                            if layout in SIGNATURE_LAYOUT_REGISTRY:
+                                img2.anchor = SIGNATURE_LAYOUT_REGISTRY[layout].create_tnb_anchor()
                             elif layout == "pce_testsheet" or "pce testsheet" in title_lower:
                                 marker_from = AnchorMarker(col=19, colOff=502432, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=24928)
                                 marker_to = AnchorMarker(col=24, colOff=23064, row=row_idx + 6, rowOff=12017)
+                                img2.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
                             elif layout == "pce_vi" or "pce vi" in title_lower:
                                 marker_from = AnchorMarker(col=10, colOff=463652, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=114300)
                                 marker_to = AnchorMarker(col=14, colOff=197220, row=row_idx + 4, rowOff=126503)
+                                img2.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
                             else:
                                 marker_from = AnchorMarker(col=col_idx, colOff=502432, row=row_idx - 1 if row_idx > 0 else row_idx, rowOff=24928)
                                 marker_to = AnchorMarker(col=col_idx + 5, colOff=23064, row=row_idx + 6, rowOff=12017)
+                                img2.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
 
-                            img2.anchor = TwoCellAnchor(_from=marker_from, to=marker_to)
                             ws.add_image(img2)
                         placeholders_replaced += 1
 

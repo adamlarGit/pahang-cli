@@ -42,7 +42,7 @@ from src.workflows.postprocessing_preflight import (
     validate_postprocessing_preflight,
 )
 from src.workflows.rename_files import rename_files_match
-from src.workflows.replace_signatures import replace_pce_images
+from src.workflows.replace_signatures import SIGNATURE_LAYOUT_REGISTRY, replace_pce_images
 from tests.fixtures.ppu_workbook_factory import create_ppu_testsheet_workbook
 
 
@@ -258,7 +258,7 @@ class TestSignatureAnchorGeometries33kV:
 
         wb = openpyxl.load_workbook(out_file)
 
-        # 1. Switchgear: Vendor at E77 (Cols 3–6, Rows 74–80), TNB at L77 (Cols 10–13, Rows 73–80)
+        # 1. Switchgear: Vendor at E77, TNB at L77
         ws_swg = wb["33kV (Main)"]
         assert ws_swg["E77"].value is None  # Placeholder text stripped
         assert ws_swg["L77"].value is None
@@ -266,13 +266,33 @@ class TestSignatureAnchorGeometries33kV:
         img_vendor_swg = ws_swg._images[0]
         img_tnb_swg = ws_swg._images[1]
 
-        assert (img_vendor_swg.anchor._from.col, img_vendor_swg.anchor._from.row) == (3, 74)
-        assert (img_vendor_swg.anchor.to.col, img_vendor_swg.anchor.to.row) == (6, 80)
+        assert (
+            img_vendor_swg.anchor._from.col,
+            img_vendor_swg.anchor._from.colOff,
+            img_vendor_swg.anchor._from.row,
+            img_vendor_swg.anchor._from.rowOff,
+        ) == (4, 127000, 76, 25400)
+        assert (
+            img_vendor_swg.anchor.to.col,
+            img_vendor_swg.anchor.to.colOff,
+            img_vendor_swg.anchor.to.row,
+            img_vendor_swg.anchor.to.rowOff,
+        ) == (4, 2286000, 76, 723900)
 
-        assert (img_tnb_swg.anchor._from.col, img_tnb_swg.anchor._from.row) == (10, 73)
-        assert (img_tnb_swg.anchor.to.col, img_tnb_swg.anchor.to.row) == (13, 80)
+        assert (
+            img_tnb_swg.anchor._from.col,
+            img_tnb_swg.anchor._from.colOff,
+            img_tnb_swg.anchor._from.row,
+            img_tnb_swg.anchor._from.rowOff,
+        ) == (11, 127000, 76, 25400)
+        assert (
+            img_tnb_swg.anchor.to.col,
+            img_tnb_swg.anchor.to.colOff,
+            img_tnb_swg.anchor.to.row,
+            img_tnb_swg.anchor.to.rowOff,
+        ) == (11, 2286000, 76, 723900)
 
-        # 2. Transformer: Vendor at F73 (Cols 5–8, Rows 70–76), TNB at R73 (Cols 16–22, Rows 70–78)
+        # 2. Transformer: Vendor at F73, TNB at R73
         ws_tx = wb["TX"]
         assert ws_tx["F73"].value is None
         assert ws_tx["R73"].value is None
@@ -280,13 +300,33 @@ class TestSignatureAnchorGeometries33kV:
         img_vendor_tx = ws_tx._images[0]
         img_tnb_tx = ws_tx._images[1]
 
-        assert (img_vendor_tx.anchor._from.col, img_vendor_tx.anchor._from.row) == (5, 70)
-        assert (img_vendor_tx.anchor.to.col, img_vendor_tx.anchor.to.row) == (8, 76)
+        assert (
+            img_vendor_tx.anchor._from.col,
+            img_vendor_tx.anchor._from.colOff,
+            img_vendor_tx.anchor._from.row,
+            img_vendor_tx.anchor._from.rowOff,
+        ) == (5, 127000, 72, 25400)
+        assert (
+            img_vendor_tx.anchor.to.col,
+            img_vendor_tx.anchor.to.colOff,
+            img_vendor_tx.anchor.to.row,
+            img_vendor_tx.anchor.to.rowOff,
+        ) == (5, 1841500, 72, 571500)
 
-        assert (img_tnb_tx.anchor._from.col, img_tnb_tx.anchor._from.row) == (16, 70)
-        assert (img_tnb_tx.anchor.to.col, img_tnb_tx.anchor.to.row) == (22, 78)
+        assert (
+            img_tnb_tx.anchor._from.col,
+            img_tnb_tx.anchor._from.colOff,
+            img_tnb_tx.anchor._from.row,
+            img_tnb_tx.anchor._from.rowOff,
+        ) == (17, 127000, 72, 25400)
+        assert (
+            img_tnb_tx.anchor.to.col,
+            img_tnb_tx.anchor.to.colOff,
+            img_tnb_tx.anchor.to.row,
+            img_tnb_tx.anchor.to.rowOff,
+        ) == (17, 1841500, 72, 571500)
 
-        # 3. Visual Inspection: Vendor at D82 (Cols 3–6, Rows 80–86), TNB at M82 (Cols 11–16, Rows 80–87)
+        # 3. Visual Inspection: Vendor at D82:G87, TNB at M82:P87
         ws_vi = wb["Visual Inspec."]
         assert ws_vi["D82"].value is None
         assert ws_vi["M82"].value is None
@@ -294,11 +334,31 @@ class TestSignatureAnchorGeometries33kV:
         img_vendor_vi = ws_vi._images[0]
         img_tnb_vi = ws_vi._images[1]
 
-        assert (img_vendor_vi.anchor._from.col, img_vendor_vi.anchor._from.row) == (3, 80)
-        assert (img_vendor_vi.anchor.to.col, img_vendor_vi.anchor.to.row) == (6, 86)
+        assert (
+            img_vendor_vi.anchor._from.col,
+            img_vendor_vi.anchor._from.colOff,
+            img_vendor_vi.anchor._from.row,
+            img_vendor_vi.anchor._from.rowOff,
+        ) == (3, 100000, 81, 25400)
+        assert (
+            img_vendor_vi.anchor.to.col,
+            img_vendor_vi.anchor.to.colOff,
+            img_vendor_vi.anchor.to.row,
+            img_vendor_vi.anchor.to.rowOff,
+        ) == (6, 200000, 86, -25400)
 
-        assert (img_tnb_vi.anchor._from.col, img_tnb_vi.anchor._from.row) == (11, 80)
-        assert (img_tnb_vi.anchor.to.col, img_tnb_vi.anchor.to.row) == (16, 87)
+        assert (
+            img_tnb_vi.anchor._from.col,
+            img_tnb_vi.anchor._from.colOff,
+            img_tnb_vi.anchor._from.row,
+            img_tnb_vi.anchor._from.rowOff,
+        ) == (12, 100000, 81, 25400)
+        assert (
+            img_tnb_vi.anchor.to.col,
+            img_tnb_vi.anchor.to.colOff,
+            img_tnb_vi.anchor.to.row,
+            img_tnb_vi.anchor.to.rowOff,
+        ) == (15, 200000, 86, -25400)
 
         wb.close()
 
@@ -336,6 +396,42 @@ class TestSignatureAnchorGeometries33kV:
         assert wb["Visual Inspec."]["D82"].value is None
         assert wb["Visual Inspec."]["M82"].value is None
         wb.close()
+
+    def test_signature_layout_registry_calibrated_coordinates(self) -> None:
+        """Declarative registry must define calibrated coordinates for switchgear, transformer, and visual_inspection."""
+        assert "switchgear" in SIGNATURE_LAYOUT_REGISTRY
+        assert "transformer" in SIGNATURE_LAYOUT_REGISTRY
+        assert "visual_inspection" in SIGNATURE_LAYOUT_REGISTRY
+
+        # Switchgear: Vendor E77, TNB L77
+        swg = SIGNATURE_LAYOUT_REGISTRY["switchgear"]
+        assert (swg.vendor_from.col, swg.vendor_from.col_off, swg.vendor_from.row, swg.vendor_from.row_off) == (4, 127000, 76, 25400)
+        assert (swg.vendor_to.col, swg.vendor_to.col_off, swg.vendor_to.row, swg.vendor_to.row_off) == (4, 2286000, 76, 723900)
+        assert (swg.tnb_from.col, swg.tnb_from.col_off, swg.tnb_from.row, swg.tnb_from.row_off) == (11, 127000, 76, 25400)
+        assert (swg.tnb_to.col, swg.tnb_to.col_off, swg.tnb_to.row, swg.tnb_to.row_off) == (11, 2286000, 76, 723900)
+
+        # Transformer: Vendor F73, TNB R73
+        tx = SIGNATURE_LAYOUT_REGISTRY["transformer"]
+        assert (tx.vendor_from.col, tx.vendor_from.col_off, tx.vendor_from.row, tx.vendor_from.row_off) == (5, 127000, 72, 25400)
+        assert (tx.vendor_to.col, tx.vendor_to.col_off, tx.vendor_to.row, tx.vendor_to.row_off) == (5, 1841500, 72, 571500)
+        assert (tx.tnb_from.col, tx.tnb_from.col_off, tx.tnb_from.row, tx.tnb_from.row_off) == (17, 127000, 72, 25400)
+        assert (tx.tnb_to.col, tx.tnb_to.col_off, tx.tnb_to.row, tx.tnb_to.row_off) == (17, 1841500, 72, 571500)
+
+        # Visual Inspection: Vendor D82:G87, TNB M82:P87
+        vi = SIGNATURE_LAYOUT_REGISTRY["visual_inspection"]
+        assert (vi.vendor_from.col, vi.vendor_from.col_off, vi.vendor_from.row, vi.vendor_from.row_off) == (3, 100000, 81, 25400)
+        assert (vi.vendor_to.col, vi.vendor_to.col_off, vi.vendor_to.row, vi.vendor_to.row_off) == (6, 200000, 86, -25400)
+        assert (vi.tnb_from.col, vi.tnb_from.col_off, vi.tnb_from.row, vi.tnb_from.row_off) == (12, 100000, 81, 25400)
+        assert (vi.tnb_to.col, vi.tnb_to.col_off, vi.tnb_to.row, vi.tnb_to.row_off) == (15, 200000, 86, -25400)
+
+    def test_33kv_extra_template_merged_cells_e77_f77(self) -> None:
+        """33kV softcopy testsheet template on sheet '33kV (Extra) (2)' must have E77:F77 merged."""
+        template_path = Path("templates/TESTSHEET 33kV/33kV_softcopy_testsheet_v1.0.xlsx")
+        wb = openpyxl.load_workbook(template_path)
+        ws_extra2 = wb["33kV (Extra) (2)"]
+        merged_ranges = [str(r) for r in ws_extra2.merged_cells.ranges]
+        wb.close()
+        assert "E77:F77" in merged_ranges
 
 
 # ==============================================================================

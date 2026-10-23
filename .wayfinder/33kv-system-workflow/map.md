@@ -66,6 +66,8 @@ graph TD
     T100["#100: 33kV MSMS pipeline (Consolidate, Enrich, Propagate, Ingest, Mapper T1SUB33) - Closed"]
     T101["#101: 33kV Full Report generation (MultiPartPartitionPolicy for dual-voltage VCB/GIS) - Closed"]
     T102["#102: 33kV Full Report post-processing (Stitching + testsheet merge) - Closed"]
+    T118["#118: Calibrate 33kV testsheet signature coordinates with declarative layout registry - Closed"]
+    T119["#119: Record signature layout registry in domain context and verify e2e export"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -84,6 +86,9 @@ graph TD
     T96 --> T101
     T97 --> T102
     T101 --> T102
+    T97 --> T118
+    T118 --> T119
+    T119 --> T103
     T97 --> T103
     T99 --> T103
     T100 --> T103
@@ -205,6 +210,20 @@ graph TD
 - **Blocked by**: #106, #107
 - **Ticket File**: [tickets/108-msms-33kv-e2e-integration-tests.md](./tickets/108-msms-33kv-e2e-integration-tests.md)
 - **Delivers**: Comprehensive end-to-end integration test suite exercising the complete 33kV MSMS pipeline (Workflows 8 through 12) across synthetic and active project environments with zero regressions.
+
+### #118: fix(signatures): calibrate 33kV testsheet signature coordinates with declarative layout registry
+- **Status**: Closed
+- **GitHub Issue**: [#118](https://github.com/adamlarGit/pahang-cli/issues/118)
+- **Blocked by**: None
+- **Ticket File**: [tickets/118-calibrate-33kv-signature-coordinates.md](./tickets/118-calibrate-33kv-signature-coordinates.md)
+- **Delivers**: Declarative signature layout registry mapping 33kV sheets (Switchgear, Transformer, Visual Inspection) to calibrated TwoCellAnchor coordinates with EMU offsets, template fix merging E77:F77 on sheet 33kV (Extra) (2), and updated assertions preserving 11kV signature placement.
+
+### #119: docs(signatures): record signature layout registry in domain context and verify e2e export
+- **Status**: Open
+- **GitHub Issue**: [#119](https://github.com/adamlarGit/pahang-cli/issues/119)
+- **Blocked by**: #118
+- **Ticket File**: [tickets/119-docs-and-e2e-verification.md](./tickets/119-docs-and-e2e-verification.md)
+- **Delivers**: Documenting signature coordinate layout registry in CONTEXT.md and ADR, end-to-end PDF export verification on real 33kV testsheet workbooks, and full regression test suite verification.
 
 ---
 
