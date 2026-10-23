@@ -68,6 +68,8 @@ graph TD
     T102["#102: 33kV Full Report post-processing (Stitching + testsheet merge) - Closed"]
     T118["#118: Calibrate 33kV testsheet signature coordinates with declarative layout registry - Closed"]
     T119["#119: Record signature layout registry in domain context and verify e2e export"]
+    T120["#120: Exclude Column K from PT measurement detection in PpuTestsheetParser - Closed"]
+    T121["#121: Verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -89,6 +91,9 @@ graph TD
     T97 --> T118
     T118 --> T119
     T119 --> T103
+    T92 --> T120
+    T120 --> T121
+    T121 --> T103
     T97 --> T103
     T99 --> T103
     T100 --> T103
@@ -224,6 +229,20 @@ graph TD
 - **Blocked by**: #118
 - **Ticket File**: [tickets/119-docs-and-e2e-verification.md](./tickets/119-docs-and-e2e-verification.md)
 - **Delivers**: Documenting signature coordinate layout registry in CONTEXT.md and ADR, end-to-end PDF export verification on real 33kV testsheet workbooks, and full regression test suite verification.
+
+### #120: fix(testsheet): exclude compartment label Column K from PT measurement detection in PpuTestsheetParser
+- **Status**: Closed
+- **GitHub Issue**: [#120](https://github.com/adamlarGit/pahang-cli/issues/120)
+- **Blocked by**: None (can start immediately)
+- **Ticket File**: [tickets/120-exclude-compartment-label-from-pt-detection.md](./tickets/120-exclude-compartment-label-from-pt-detection.md)
+- **Delivers**: Exclude pre-printed Column K compartment label from PT measurement detection in PpuTestsheetParser, check measurement columns ("L", "M", "N", "O", "R", "S", "T", "U", "V"), update test workbook factory, and add regression unit tests.
+
+### #121: fix(full-report): verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008
+- **Status**: Open
+- **GitHub Issue**: [#121](https://github.com/adamlarGit/pahang-cli/issues/121)
+- **Blocked by**: #120
+- **Ticket File**: [tickets/121-verify-pt-compartment-elimination-kuala-tahan.md](./tickets/121-verify-pt-compartment-elimination-kuala-tahan.md)
+- **Delivers**: Regenerate and verify Full Report deliverable package for CJRT/MPU/G00008 (MINI PPU KUALA TAHAN 33/11kV), ensuring PT COMPARTMENT is generated strictly for Panel 5 (PANEL 31 - TX 5MVA) and eliminated from Panels 1 to 4.
 
 ---
 
