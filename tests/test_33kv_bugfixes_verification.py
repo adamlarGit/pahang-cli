@@ -10,6 +10,7 @@ from pathlib import Path
 
 from src.core.topology import (
     SwitchgearArchetype,
+    SwitchgearTopologyEngine,
     VoltageClass,
     resolve_overview_compartments,
 )
@@ -476,5 +477,248 @@ def test_ticket_117_feedback_loop_assertion(tmp_path: Path) -> None:
         doc = docx.Document(out_fp)
         doc_text = " ".join([p.text for p in doc.paragraphs] + [c.text for t in doc.tables for row in t.rows for c in row.cells])
         assert "MPPU" in doc_text
+
+
+# ==============================================================================
+# BUG D TESTS: PT Compartment Elimination on Panels 1-4 for Kuala Tahan (Ticket #121)
+# ==============================================================================
+
+
+def test_ticket_121_pt_compartment_elimination_kuala_tahan(tmp_path: Path) -> None:
+    """Ticket #121: Verify PT COMPARTMENT elimination on Panels 1-4 and preservation on Panel 5
+
+    for MINI PPU KUALA TAHAN 33/11kV (CJRT/MPU/G00008).
+    Validates:
+    1. Table 2 Census in Part 01: Panels 1-4 have only
+       ("BREAKER COMPARTMENT", "CABLE COMPARTMENT", "BUSBAR COMPARTMENT", "SECONDARY COMPARTMENT"),
+       while Panel 5 has ("BREAKER COMPARTMENT", "CABLE COMPARTMENT", "BUSBAR COMPARTMENT", "PT COMPARTMENT", "SECONDARY COMPARTMENT").
+    2. Part 02 (Panel 1 - LOCAL TX): Contains NO PT COMPARTMENT scan page.
+    3. Part 03 (Panel 2 - SPARE): Contains NO PT COMPARTMENT scan page.
+    4. Part 04 (Panel 3 - PE SM K.TAHAN): Contains NO PT COMPARTMENT scan page.
+    5. Part 05 (Panel 4 - PE PERSONA): Contains NO PT COMPARTMENT scan page.
+    6. Part 06 (Panel 5 - TX 5MVA): Contains valid PT COMPARTMENT scan page with Photo #57 and measurements.
+    7. Deliverable Word documents on disk match the expected compartment structure.
+    """
+    import docx
+
+    # --------------------------------------------------------------------------
+    # 1. On-disk deliverable Word documents verification
+    # --------------------------------------------------------------------------
+    deliverables_dir = Path(
+        r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\FULL REPORT\JERANTUT\01. OCTOBER\22-10-2026"
+    )
+
+    if deliverables_dir.exists():
+        part1_path = deliverables_dir / "33. MINI PPU KUALA TAHAN 3311kV (VI) - Part 01 - Summary.docx"
+        part2_path = deliverables_dir / "33. MINI PPU KUALA TAHAN 3311kV (VI) - Part 02 - Panel 1 (11kV - LOCAL TX).docx"
+        part3_path = deliverables_dir / "33. MINI PPU KUALA TAHAN 3311kV (VI) - Part 03 - Panel 2 (11kV - SPARE).docx"
+        part4_path = deliverables_dir / "33. MINI PPU KUALA TAHAN 3311kV (VI) - Part 04 - Panel 3 (11kV - PE SM K.TAHAN).docx"
+        part5_path = deliverables_dir / "33. MINI PPU KUALA TAHAN 3311kV (VI) - Part 05 - Panel 4 (11kV - PE PERSONA).docx"
+        part6_path = deliverables_dir / "33. MINI PPU KUALA TAHAN 3311kV (VI) - Part 06 - Panel 5 (11kV - TX 5MVA).docx"
+        part7_path = deliverables_dir / "33. MINI PPU KUALA TAHAN 3311kV (VI) - Part 07 - TX and Condition.docx"
+
+        assert part1_path.exists(), f"Part 01 deliverable missing at {part1_path}"
+        assert part2_path.exists(), f"Part 02 deliverable missing at {part2_path}"
+        assert part3_path.exists(), f"Part 03 deliverable missing at {part3_path}"
+        assert part4_path.exists(), f"Part 04 deliverable missing at {part4_path}"
+        assert part5_path.exists(), f"Part 05 deliverable missing at {part5_path}"
+        assert part6_path.exists(), f"Part 06 deliverable missing at {part6_path}"
+        assert part7_path.exists(), f"Part 07 deliverable missing at {part7_path}"
+
+        # 1.1 Verify Part 01 - Summary: Table 2 Census
+        doc1 = docx.Document(part1_path)
+        census_table = None
+        for t in doc1.tables:
+            header_text = " ".join(c.text.strip() for c in t.rows[0].cells)
+            if "FEEDER" in header_text or "COMPARTMENT" in header_text:
+                census_table = t
+                break
+        if census_table is None and len(doc1.tables) > 2:
+            census_table = doc1.tables[2]
+        assert census_table is not None, "Table 2 Census not found in Part 01 - Summary.docx"
+
+        panel_census_comps: dict[str, list[str]] = {}
+        curr_panel: str | None = None
+        for row in census_table.rows:
+            cells = [c.text.strip().replace("\n", " ") for c in row.cells]
+            if len(cells) > 2 and cells[1] and cells[1] != "FEEDER / PANEL NAME":
+                curr_panel = cells[1]
+                comp = cells[2]
+                panel_census_comps.setdefault(curr_panel, []).append(comp)
+            elif len(cells) > 2 and curr_panel and cells[2]:
+                comp = cells[2]
+                panel_census_comps.setdefault(curr_panel, []).append(comp)
+
+        expected_panels_1_to_4 = [
+            "PANEL 7 LOCAL TX",
+            "PANEL 5 SPARE",
+            "PANEL 3 PE SM K.TAHAN",
+            "PANEL 1 PE PERSONA",
+        ]
+        for p_name in expected_panels_1_to_4:
+            assert p_name in panel_census_comps, f"Panel {p_name} missing from Table 2 Census"
+            comps = panel_census_comps[p_name]
+            assert "PT COMPARTMENT" not in comps, f"PT COMPARTMENT found in {p_name} census: {comps}"
+            assert comps == [
+                "BREAKER COMPARTMENT",
+                "CABLE COMPARTMENT",
+                "BUSBAR COMPARTMENT",
+                "SECONDARY COMPARTMENT",
+            ]
+
+        assert "PANEL 31 TX 5MVA" in panel_census_comps, "PANEL 31 TX 5MVA missing from Table 2 Census"
+        panel5_comps = panel_census_comps["PANEL 31 TX 5MVA"]
+        assert "PT COMPARTMENT" in panel5_comps, "PT COMPARTMENT missing from PANEL 31 TX 5MVA census"
+        assert panel5_comps == [
+            "BREAKER COMPARTMENT",
+            "CABLE COMPARTMENT",
+            "BUSBAR COMPARTMENT",
+            "PT COMPARTMENT",
+            "SECONDARY COMPARTMENT",
+        ]
+
+        # 1.2 Verify Parts 02 to 05 contain NO PT COMPARTMENT scan page
+        panel_docs = [
+            (part2_path, "Panel 1 - LOCAL TX"),
+            (part3_path, "Panel 2 - SPARE"),
+            (part4_path, "Panel 3 - PE SM K.TAHAN"),
+            (part5_path, "Panel 4 - PE PERSONA"),
+        ]
+        for doc_path, panel_label in panel_docs:
+            doc = docx.Document(doc_path)
+            all_text = " ".join(
+                [p.text for p in doc.paragraphs]
+                + [c.text for t in doc.tables for r in t.rows for c in r.cells]
+            )
+            assert "PT COMPARTMENT" not in all_text, (
+                f"{panel_label} ({doc_path.name}) contains 'PT COMPARTMENT'"
+            )
+            # Verify exactly 4 scan tables (BREAKER, CABLE, BUSBAR, SECONDARY)
+            scan_tables = []
+            for t in doc.tables:
+                for r in t.rows:
+                    row_texts = [c.text.strip() for c in r.cells]
+                    if "Area" in row_texts:
+                        distinct = [x for x in dict.fromkeys(row_texts) if x]
+                        scan_tables.append(distinct)
+                        break
+            assert len(scan_tables) == 4, f"{panel_label} expected 4 scan tables, got {len(scan_tables)}"
+            table_areas = [st[1] for st in scan_tables if len(st) > 1]
+            assert table_areas == [
+                "BREAKER COMPARTMENT",
+                "CABLE COMPARTMENT",
+                "BUSBAR COMPARTMENT",
+                "SECONDARY COMPARTMENT",
+            ]
+
+        # 1.3 Verify Part 06 (Panel 5 - TX 5MVA) contains valid PT COMPARTMENT scan page
+        doc6 = docx.Document(part6_path)
+        scan_tables_p6 = []
+        pt_table = None
+        for t in doc6.tables:
+            for r in t.rows:
+                row_texts = [c.text.strip() for c in r.cells]
+                if "Area" in row_texts:
+                    distinct = [x for x in dict.fromkeys(row_texts) if x]
+                    scan_tables_p6.append(distinct)
+                    if "PT COMPARTMENT" in distinct:
+                        pt_table = t
+                    break
+
+        assert len(scan_tables_p6) == 5, f"Panel 5 expected 5 scan tables, got {len(scan_tables_p6)}"
+        p6_areas = [st[1] for st in scan_tables_p6 if len(st) > 1]
+        assert p6_areas == [
+            "BREAKER COMPARTMENT",
+            "CABLE COMPARTMENT",
+            "BUSBAR COMPARTMENT",
+            "PT COMPARTMENT",
+            "SECONDARY COMPARTMENT",
+        ]
+        assert pt_table is not None, "PT COMPARTMENT scan table not found in Part 06"
+
+        pt_table_text = " ".join([c.text.strip() for r in pt_table.rows for c in r.cells])
+        assert "PT COMPARTMENT" in pt_table_text
+        assert "TX 5MVA" in pt_table_text
+        assert "46.1" in pt_table_text  # Sp1 measurement
+        assert "45.4" in pt_table_text  # Sp2 measurement
+        assert "44.3" in pt_table_text  # Ar1 measurement
+        assert "34.0" in pt_table_text  # Ambient temp measurement
+        assert "47" in pt_table_text    # Load measurement
+        assert "0dB" in pt_table_text   # Ultrasound measurement
+
+        # Check testsheet photo #57
+        ts_path = Path(
+            r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI).xlsx"
+        )
+        if ts_path.exists():
+            ts_data = PpuTestsheetParser().extract_testsheet_data(ts_path)
+            swg = ts_data.equipment.switchgears[0]
+            assert len(swg.panels) == 5
+            for p in swg.panels[:4]:
+                assert p.has_pt_measurement is False
+                assert p.pt_photo is None
+            p5 = swg.panels[4]
+            assert p5.has_pt_measurement is True
+            assert p5.pt_photo == 57
+
+    # --------------------------------------------------------------------------
+    # 2. Synthetic Unit / Regression Pipeline Verification
+    # --------------------------------------------------------------------------
+    wb_synthetic = tmp_path / "33. MINI PPU KUALA TAHAN 33-11kV SYNTHETIC.xlsx"
+    create_ppu_testsheet_workbook(
+        path=wb_synthetic,
+        substation_name="MINI PPU KUALA TAHAN 33/11kV",
+        fl_number="CJRT/MPU/G00008",
+        substation_number=33,
+        has_33kv=False,
+        has_11kv=True,
+        panels_11kv=[
+            {"feeder_no": "7", "name": "LOCAL TX", "has_pt_measurement": False},
+            {"feeder_no": "5", "name": "SPARE", "has_pt_measurement": False},
+            {"feeder_no": "3", "name": "PE SM K.TAHAN", "has_pt_measurement": False},
+            {"feeder_no": "1", "name": "PE PERSONA", "has_pt_measurement": False},
+            {"feeder_no": "31", "name": "TX 5MVA", "has_pt_measurement": True, "pt_photo": 57},
+        ],
+    )
+
+    synth_data = PpuTestsheetParser().extract_testsheet_data(wb_synthetic)
+    synth_swg = synth_data.equipment.switchgears[0]
+    assert len(synth_swg.panels) == 5
+
+    for p in synth_swg.panels[:4]:
+        assert p.has_pt_measurement is False
+        assert p.pt_photo is None
+        comps = SwitchgearTopologyEngine.resolve_panel_compartments(
+            archetype=SwitchgearArchetype.VCB_CUBICLE,
+            panel=p,
+            voltage_class=VoltageClass.KV_11,
+            is_33kv=False,
+        )
+        assert "PT COMPARTMENT" not in comps
+        assert comps == (
+            "BREAKER COMPARTMENT",
+            "CABLE COMPARTMENT",
+            "BUSBAR COMPARTMENT",
+            "SECONDARY COMPARTMENT",
+        )
+
+    p5_synth = synth_swg.panels[4]
+    assert p5_synth.has_pt_measurement is True
+    assert p5_synth.pt_photo == 57
+    comps5 = SwitchgearTopologyEngine.resolve_panel_compartments(
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        panel=p5_synth,
+        voltage_class=VoltageClass.KV_11,
+        is_33kv=False,
+    )
+    assert "PT COMPARTMENT" in comps5
+    assert comps5 == (
+        "BREAKER COMPARTMENT",
+        "CABLE COMPARTMENT",
+        "BUSBAR COMPARTMENT",
+        "PT COMPARTMENT",
+        "SECONDARY COMPARTMENT",
+    )
+
 
 
