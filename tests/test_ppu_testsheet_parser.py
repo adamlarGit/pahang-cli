@@ -571,5 +571,65 @@ def test_ppu_resolve_substation_type_fallback_tokens() -> None:
     assert parser._resolve_substation_type("PMU JENGKA", "dummy.xlsx", "CJGK/PMU/G00003") == "PMU"
 
 
+def test_ppu_pt_measurement_detection_excludes_column_k(tmp_path: Path) -> None:
+    """Ticket #120 regression: Column K 'PT COMPARTMENT' label must not trigger has_pt_measurement.
+
+    Only actual measurement cells in columns L, M, N, O, R, S, T, U, V should trigger
+    has_pt_measurement = True.
+    """
+    parser = PpuTestsheetParser()
+    wb_path = tmp_path / "01. PPU PT REGRESSION.xlsx"
+
+    create_ppu_testsheet_workbook(
+        path=wb_path,
+        has_33kv=True,
+        has_11kv=False,
+        panels_33kv=[
+            {
+                "feeder_no": "3P1",
+                "name": "BAY 1 - NO PT MEASUREMENT",
+                "has_pt_measurement": False,
+            },
+            {
+                "feeder_no": "3P2",
+                "name": "BAY 2 - PT MEASUREMENT IN L",
+                "has_pt_measurement": True,
+            },
+            {
+                "feeder_no": "3P3",
+                "name": "BAY 3 - PT MEASUREMENT IN O",
+                "sub_rows": {
+                    3: {"O": "1.2"},
+                },
+            },
+            {
+                "feeder_no": "3P4",
+                "name": "BAY 4 - PT TEV READING IN R",
+                "sub_rows": {
+                    3: {"R": "8.0"},
+                },
+            },
+        ],
+    )
+
+    data = parser.extract_testsheet_data(wb_path)
+    swg = data.equipment.switchgears[0]
+    assert len(swg.panels) == 4
+    p1, p2, p3, p4 = swg.panels
+
+    # Panel 1: has pre-printed "PT COMPARTMENT" in Column K, but no readings in L..V
+    assert p1.has_pt_measurement is False
+
+    # Panel 2: has measurement in Column L ("24.5")
+    assert p2.has_pt_measurement is True
+
+    # Panel 3: has measurement in Column O ("1.2")
+    assert p3.has_pt_measurement is True
+
+    # Panel 4: has TEV reading in Column R ("8.0")
+    assert p4.has_pt_measurement is True
+
+
+
 
 

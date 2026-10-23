@@ -171,9 +171,11 @@ def create_ppu_testsheet_workbook(
             elif "remarks" in p and p["remarks"]:
                 ws[f"Q{r}"] = p["remarks"]
 
-            # PT measurement in Row 4
+            # PT compartment label and measurement in Row 4
+            if ws[f"K{r + 3}"].value is None:
+                ws[f"K{r + 3}"] = "PT COMPARTMENT"
             if p.get("has_pt_measurement"):
-                ws[f"K{r + 3}"] = "24.5"
+                ws[f"L{r + 3}"] = "24.5"
 
         # Overview Bays (Rows 63-74)
         # RHS Overview (Rows 63-68)

@@ -807,10 +807,11 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                             break
 
             # PT measurement detection in Row 4 (r+3)
+            # Ticket #120: Exclude Column K ("PT COMPARTMENT" label) and include ("L", "M", "N", "O", "R", "S", "T", "U", "V")
             has_pt = False
             pt_row = r + 3
             if pt_row <= ws.max_row:
-                for col in ("K", "L", "M", "N", "R", "S", "T", "U", "V"):
+                for col in ("L", "M", "N", "O", "R", "S", "T", "U", "V"):
                     if clean_val(ws[f"{col}{pt_row}"].value) is not None:
                         has_pt = True
                         break
