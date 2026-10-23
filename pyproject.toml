@@ -1,6 +1,6 @@
 [project]
 name = "pahang-cli"
-version = "1.27.2"
+version = "1.27.0"
 description = "Pahang Area - Interactive CLI for PE inspection workflows"
 
 
