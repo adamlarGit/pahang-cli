@@ -69,7 +69,7 @@ graph TD
     T118["#118: Calibrate 33kV testsheet signature coordinates with declarative layout registry - Closed"]
     T119["#119: Record signature layout registry in domain context and verify e2e export"]
     T120["#120: Exclude Column K from PT measurement detection in PpuTestsheetParser - Closed"]
-    T121["#121: Verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008"]
+    T121["#121: Verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008 - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -238,7 +238,7 @@ graph TD
 - **Delivers**: Exclude pre-printed Column K compartment label from PT measurement detection in PpuTestsheetParser, check measurement columns ("L", "M", "N", "O", "R", "S", "T", "U", "V"), update test workbook factory, and add regression unit tests.
 
 ### #121: fix(full-report): verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#121](https://github.com/adamlarGit/pahang-cli/issues/121)
 - **Blocked by**: #120
 - **Ticket File**: [tickets/121-verify-pt-compartment-elimination-kuala-tahan.md](./tickets/121-verify-pt-compartment-elimination-kuala-tahan.md)
