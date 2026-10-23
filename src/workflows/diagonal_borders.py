@@ -25,7 +25,9 @@ VI_SHEET_RANGES_TO_PROCESS = [
 ]
 
 # List of ranges to process for 33kV sheets
-SWITCHGEAR_33KV_RANGES = ["C15:U62"]
+SWITCHGEAR_EXTRA_RANGES = ["C15:U62"]
+SWITCHGEAR_MAIN_RANGES = ["C15:U62", "L63:P74"]
+SWITCHGEAR_33KV_RANGES = SWITCHGEAR_EXTRA_RANGES  # Backward compatibility alias
 TX_33KV_RANGES = [
     "F14:AD28",  # Group 1: Primary Terminations & Ultrasound
     "F33:AD47",  # Group 2: Auxiliary Components
@@ -249,6 +251,12 @@ def process_range(ws: object, range_string: str, wb: object | None = None) -> No
 _repair_openpyxl_zip = repair_openpyxl_zip
 
 
+def _is_main_switchgear_sheet(sheet_name: str) -> bool:
+    """Return True if worksheet represents a 33kV (Main) or 11kV (Main) switchgear sheet."""
+    return bool(re.match(r"^(?:33|11)\s*kv\s*\(\s*main\s*\)$", str(sheet_name).strip(), re.IGNORECASE))
+
+
+
 def process_workbook(file_path: str | Path) -> str:
     """Process a single workbook applying diagonal borders to blank cells."""
     path = Path(file_path).expanduser().resolve()
@@ -257,7 +265,8 @@ def process_workbook(file_path: str | Path) -> str:
     for ws in wb.worksheets:
         layout = classify_sheet_layout(ws.title)
         if layout == "switchgear":
-            for rng in SWITCHGEAR_33KV_RANGES:
+            target_ranges = SWITCHGEAR_MAIN_RANGES if _is_main_switchgear_sheet(ws.title) else SWITCHGEAR_33KV_RANGES
+            for rng in target_ranges:
                 process_range(ws, rng, wb)
         elif layout == "transformer":
             for rng in TX_33KV_RANGES:

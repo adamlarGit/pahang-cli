@@ -394,6 +394,11 @@ The domain model and classification policy governing transformers on 33kV testsh
 - **PowerTransformerSpec**: Subclass of `TransformerSpec` representing high-voltage power transformers ($\ge 5$ MVA). Captures auxiliary component thermals (`marshalling_kiosk_temp`, `conservator_temp`, `body_temp`, `cooling_fin_temp`), auxiliary photo numbers (`marshalling_kiosk_photo`, `conservator_photo`, `body_photo`, `cooling_fin_photo`, `hv_cable_photo`, `lv_cable_photo`), and dual-side ultrasound measurements (`hv_ultrasound`, `hv_ultrasound_char`, `hv_ultrasound_file`, `lv_ultrasound`, `lv_ultrasound_char`, `lv_ultrasound_file`). Ensures 100% polymorphic backward compatibility with all downstream consumers expecting `TransformerSpec`.
 - **Classification Gate**: Units with rating $\ge 5$ MVA (e.g. `5MVA`, `10MVA`, `15MVA`, `30MVA`) instantiate `PowerTransformerSpec`. Units with rating $100 - 1000$ kVA or labeled `LOCAL TX` instantiate standard distribution `TransformerSpec`. Out-of-range or ambiguous ratings log a non-fatal warning and default to standard `TransformerSpec` without halting the pipeline. SSU stations with absent or empty `TX` sheets produce empty transformer packages (`transformers = ()`).
 
+### SwitchgearDiagonalBordersPolicy
+The diagonal border scanning policy governing blank-cell strikethroughs across switchgear testsheet worksheets in `src/workflows/diagonal_borders.py`. Applies the primary feeder measurement grid (`C15:U62`) and Overview Panel thermal grid (`L63:P74`) to Main switchgear sheets (`33kV (Main)` and `11kV (Main)`), while restricting Extra switchgear sheets (`33kV (Extra)`, `11kV (Extra)`) to `C15:U62` and preserving Visual Inspection sheets strictly unslashed.
+
+
+
 
 
 
