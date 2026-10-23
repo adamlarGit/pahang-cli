@@ -258,7 +258,7 @@ class TestSignatureAnchorGeometries33kV:
 
         wb = openpyxl.load_workbook(out_file)
 
-        # 1. Switchgear: Vendor at E77, TNB at L77
+        # 1. Switchgear: Vendor at E76:F81, TNB at L75:M80
         ws_swg = wb["33kV (Main)"]
         assert ws_swg["E77"].value is None  # Placeholder text stripped
         assert ws_swg["L77"].value is None
@@ -271,28 +271,28 @@ class TestSignatureAnchorGeometries33kV:
             img_vendor_swg.anchor._from.colOff,
             img_vendor_swg.anchor._from.row,
             img_vendor_swg.anchor._from.rowOff,
-        ) == (4, 127000, 76, 25400)
+        ) == (4, 113500, 75, 152400)
         assert (
             img_vendor_swg.anchor.to.col,
             img_vendor_swg.anchor.to.colOff,
             img_vendor_swg.anchor.to.row,
             img_vendor_swg.anchor.to.rowOff,
-        ) == (4, 2286000, 76, 723900)
+        ) == (6, 163500, 80, 63500)
 
         assert (
             img_tnb_swg.anchor._from.col,
             img_tnb_swg.anchor._from.colOff,
             img_tnb_swg.anchor._from.row,
             img_tnb_swg.anchor._from.rowOff,
-        ) == (11, 127000, 76, 25400)
+        ) == (11, 50000, 74, 692150)
         assert (
             img_tnb_swg.anchor.to.col,
             img_tnb_swg.anchor.to.colOff,
             img_tnb_swg.anchor.to.row,
             img_tnb_swg.anchor.to.rowOff,
-        ) == (11, 2286000, 76, 723900)
+        ) == (13, 100000, 79, 190500)
 
-        # 2. Transformer: Vendor at F73, TNB at R73
+        # 2. Transformer: Vendor at F73:G76, TNB at R73:S76
         ws_tx = wb["TX"]
         assert ws_tx["F73"].value is None
         assert ws_tx["R73"].value is None
@@ -305,26 +305,26 @@ class TestSignatureAnchorGeometries33kV:
             img_vendor_tx.anchor._from.colOff,
             img_vendor_tx.anchor._from.row,
             img_vendor_tx.anchor._from.rowOff,
-        ) == (5, 127000, 72, 25400)
+        ) == (5, 50000, 72, 25400)
         assert (
             img_vendor_tx.anchor.to.col,
             img_vendor_tx.anchor.to.colOff,
             img_vendor_tx.anchor.to.row,
             img_vendor_tx.anchor.to.rowOff,
-        ) == (5, 1841500, 72, 571500)
+        ) == (7, 200000, 76, 0)
 
         assert (
             img_tnb_tx.anchor._from.col,
             img_tnb_tx.anchor._from.colOff,
             img_tnb_tx.anchor._from.row,
             img_tnb_tx.anchor._from.rowOff,
-        ) == (17, 127000, 72, 25400)
+        ) == (17, 50000, 72, 25400)
         assert (
             img_tnb_tx.anchor.to.col,
             img_tnb_tx.anchor.to.colOff,
             img_tnb_tx.anchor.to.row,
             img_tnb_tx.anchor.to.rowOff,
-        ) == (17, 1841500, 72, 571500)
+        ) == (19, 200000, 76, 0)
 
         # 3. Visual Inspection: Vendor at D82:G87, TNB at M82:P87
         ws_vi = wb["Visual Inspec."]
@@ -403,19 +403,19 @@ class TestSignatureAnchorGeometries33kV:
         assert "transformer" in SIGNATURE_LAYOUT_REGISTRY
         assert "visual_inspection" in SIGNATURE_LAYOUT_REGISTRY
 
-        # Switchgear: Vendor E77, TNB L77
+        # Switchgear: Vendor E76:F81, TNB L75:M80
         swg = SIGNATURE_LAYOUT_REGISTRY["switchgear"]
-        assert (swg.vendor_from.col, swg.vendor_from.col_off, swg.vendor_from.row, swg.vendor_from.row_off) == (4, 127000, 76, 25400)
-        assert (swg.vendor_to.col, swg.vendor_to.col_off, swg.vendor_to.row, swg.vendor_to.row_off) == (4, 2286000, 76, 723900)
-        assert (swg.tnb_from.col, swg.tnb_from.col_off, swg.tnb_from.row, swg.tnb_from.row_off) == (11, 127000, 76, 25400)
-        assert (swg.tnb_to.col, swg.tnb_to.col_off, swg.tnb_to.row, swg.tnb_to.row_off) == (11, 2286000, 76, 723900)
+        assert (swg.vendor_from.col, swg.vendor_from.col_off, swg.vendor_from.row, swg.vendor_from.row_off) == (4, 113500, 75, 152400)
+        assert (swg.vendor_to.col, swg.vendor_to.col_off, swg.vendor_to.row, swg.vendor_to.row_off) == (6, 163500, 80, 63500)
+        assert (swg.tnb_from.col, swg.tnb_from.col_off, swg.tnb_from.row, swg.tnb_from.row_off) == (11, 50000, 74, 692150)
+        assert (swg.tnb_to.col, swg.tnb_to.col_off, swg.tnb_to.row, swg.tnb_to.row_off) == (13, 100000, 79, 190500)
 
-        # Transformer: Vendor F73, TNB R73
+        # Transformer: Vendor F73:G76, TNB R73:S76
         tx = SIGNATURE_LAYOUT_REGISTRY["transformer"]
-        assert (tx.vendor_from.col, tx.vendor_from.col_off, tx.vendor_from.row, tx.vendor_from.row_off) == (5, 127000, 72, 25400)
-        assert (tx.vendor_to.col, tx.vendor_to.col_off, tx.vendor_to.row, tx.vendor_to.row_off) == (5, 1841500, 72, 571500)
-        assert (tx.tnb_from.col, tx.tnb_from.col_off, tx.tnb_from.row, tx.tnb_from.row_off) == (17, 127000, 72, 25400)
-        assert (tx.tnb_to.col, tx.tnb_to.col_off, tx.tnb_to.row, tx.tnb_to.row_off) == (17, 1841500, 72, 571500)
+        assert (tx.vendor_from.col, tx.vendor_from.col_off, tx.vendor_from.row, tx.vendor_from.row_off) == (5, 50000, 72, 25400)
+        assert (tx.vendor_to.col, tx.vendor_to.col_off, tx.vendor_to.row, tx.vendor_to.row_off) == (7, 200000, 76, 0)
+        assert (tx.tnb_from.col, tx.tnb_from.col_off, tx.tnb_from.row, tx.tnb_from.row_off) == (17, 50000, 72, 25400)
+        assert (tx.tnb_to.col, tx.tnb_to.col_off, tx.tnb_to.row, tx.tnb_to.row_off) == (19, 200000, 76, 0)
 
         # Visual Inspection: Vendor D82:G87, TNB M82:P87
         vi = SIGNATURE_LAYOUT_REGISTRY["visual_inspection"]

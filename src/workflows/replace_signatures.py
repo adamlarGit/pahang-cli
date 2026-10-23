@@ -67,16 +67,16 @@ class SheetSignatureLayout:
 
 SIGNATURE_LAYOUT_REGISTRY: dict[str, SheetSignatureLayout] = {
     "switchgear": SheetSignatureLayout(
-        vendor_from=AnchorCoordinates(col=4, col_off=127000, row=76, row_off=25400),
-        vendor_to=AnchorCoordinates(col=4, col_off=2286000, row=76, row_off=723900),
-        tnb_from=AnchorCoordinates(col=11, col_off=127000, row=76, row_off=25400),
-        tnb_to=AnchorCoordinates(col=11, col_off=2286000, row=76, row_off=723900),
+        vendor_from=AnchorCoordinates(col=4, col_off=113500, row=75, row_off=152400),
+        vendor_to=AnchorCoordinates(col=6, col_off=163500, row=80, row_off=63500),
+        tnb_from=AnchorCoordinates(col=11, col_off=50000, row=74, row_off=692150),
+        tnb_to=AnchorCoordinates(col=13, col_off=100000, row=79, row_off=190500),
     ),
     "transformer": SheetSignatureLayout(
-        vendor_from=AnchorCoordinates(col=5, col_off=127000, row=72, row_off=25400),
-        vendor_to=AnchorCoordinates(col=5, col_off=1841500, row=72, row_off=571500),
-        tnb_from=AnchorCoordinates(col=17, col_off=127000, row=72, row_off=25400),
-        tnb_to=AnchorCoordinates(col=17, col_off=1841500, row=72, row_off=571500),
+        vendor_from=AnchorCoordinates(col=5, col_off=50000, row=72, row_off=25400),
+        vendor_to=AnchorCoordinates(col=7, col_off=200000, row=76, row_off=0),
+        tnb_from=AnchorCoordinates(col=17, col_off=50000, row=72, row_off=25400),
+        tnb_to=AnchorCoordinates(col=19, col_off=200000, row=76, row_off=0),
     ),
     "visual_inspection": SheetSignatureLayout(
         vendor_from=AnchorCoordinates(col=3, col_off=100000, row=81, row_off=25400),

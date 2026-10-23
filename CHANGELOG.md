@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **33kV Testsheet Signature Calibration (`fix(signatures)`, `src/workflows/replace_signatures.py`, `tests/test_postprocessing_33kv.py`)**:
+  - Calibrated `SIGNATURE_LAYOUT_REGISTRY` TwoCellAnchor bounds for Switchgear (`col=4..6, row=75..80` for Vendor; `col=11..13, row=74..79` for TNB) and Transformer (`col=5..7, row=72..76` for Vendor; `col=17..19, row=72..76` for TNB) sheets.
+  - Eliminated single-cell anchor clipping and aspect ratio distortion, expanding signature placement across merged cells without overlapping Row 74 RBB measurement cells or Row 79 Date fields.
+  - Aligned switchgear aspect ratios (~2.16 vendor, ~2.80 TNB) to eliminate horizontal stretching.
+  - Fixes #118.
 - **33kV Substation Type Master Enrichment & Local Fallback (`fix(quick-report)`, `src/master/qr02.py`, `src/quick_report/extractor.py`, `src/testsheet/parsers/ppu.py`, `src/workflows/quick_report.py`, `src/workflows/populate_total_pe.py`, `src/workflows/models.py`)**:
   - Relocated and exposed `load_qr02_cba_33kv_metadata` and shared `enrich_packages_with_cba_33kv` in `src/master/qr02.py`, refactoring `PopulateTotalPeExtractor` and `QuickReportExtractor` to share the canonical 33kV QR02 CBA enrichment seam.
   - Enriched 33kV packages in `QuickReportExtractor.extract` and `QuickReportWorkflow._plan` with official master `substation_name` (Column H) and `substation_type` (Column I, e.g. `MPPU`) resolved against Functional Location (Column G).
