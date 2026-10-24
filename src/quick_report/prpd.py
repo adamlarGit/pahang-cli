@@ -24,7 +24,7 @@ import struct
 import subprocess
 import threading
 import time
-from typing import Any
+from typing import Any, Sequence
 import urllib.parse
 
 from docxtpl import DocxTemplate, InlineImage
@@ -992,7 +992,7 @@ def find_swg_feeder_survey_dir(
     feeder_no: str = "",
     panel_name: str = "",
 ) -> Path | None:
-    """Find the target SWG/VCB/RMU feeder survey directory using 3-tier precedence."""
+    """Find the target SWG/VCB/RMU feeder survey directory using multi-tier precedence."""
     swg_prefixes = ("SWG", "VCB", "RMU")
     try:
         swg_dirs = [
@@ -1015,7 +1015,78 @@ def find_swg_feeder_survey_dir(
         except OSError:
             continue
 
-    # Tier 1: Match panel_no (Column A index, 1-based)
+    if not candidate_subdirs:
+        return None
+
+    raw_feeder = str(feeder_no or "").strip()
+    raw_name = str(panel_name or "").strip()
+    clean_pname = re.sub(r"[-_ ]+", "_", raw_name.upper()).strip("_")
+    clean_feeder = re.sub(r"[-_ ]+", "_", raw_feeder.upper()).strip("_")
+    feeder_digits = re.findall(r"\d+", clean_feeder)
+    feeder_int_str = str(int(feeder_digits[0])) if feeder_digits else ""
+    pname_tokens = [w for w in re.split(r"[^A-Z0-9]+", raw_name.upper()) if len(w) >= 2]
+
+    # Pre-normalize candidate directories: (path, d_upper, d_norm)
+    normalized_candidates: list[tuple[Path, str, str]] = []
+    for d in candidate_subdirs:
+        d_upper = d.name.upper()
+        d_norm = re.sub(r"[-_ ]+", "_", d_upper).strip("_")
+        normalized_candidates.append((d, d_upper, d_norm))
+
+    # Tier 1: Feeder number and panel name combined match
+    # (e.g. feeder_no="7", panel_name="LOCAL TX" -> "7_LOCAL_TX_300kVA")
+    if clean_feeder and clean_pname:
+        for d, d_upper, d_norm in normalized_candidates:
+            prefix_match = (
+                re.match(rf"^0*{re.escape(feeder_int_str or clean_feeder)}[_\-\s]", d_upper)
+                or d_norm.startswith(f"{clean_feeder}_")
+                or (feeder_int_str and d_norm.startswith(f"{feeder_int_str}_"))
+            )
+            if prefix_match:
+                if clean_pname in d_norm or (pname_tokens and all(t in d_norm for t in pname_tokens)):
+                    return d
+                remainder = re.sub(rf"^0*{re.escape(feeder_int_str or clean_feeder)}[_\-\s]+", "", d_norm)
+                if remainder and (remainder in clean_pname or clean_pname in remainder):
+                    return d
+
+    # Tier 2: Feeder number match (directory starts with feeder_no or matches FEEDER_{no} / PANEL_{no})
+    if clean_feeder:
+        target_variants = {
+            clean_feeder,
+            f"FEEDER_{clean_feeder}",
+            f"PANEL_{clean_feeder}",
+            f"FEEDER {clean_feeder}",
+            f"PANEL {clean_feeder}",
+        }
+        if feeder_int_str:
+            target_variants.update({
+                feeder_int_str,
+                f"FEEDER_{feeder_int_str}",
+                f"PANEL_{feeder_int_str}",
+                f"FEEDER {feeder_int_str}",
+                f"PANEL {feeder_int_str}",
+                f"FEEDER_{feeder_int_str.zfill(2)}",
+                f"PANEL_{feeder_int_str.zfill(2)}",
+                f"FEEDER {feeder_int_str.zfill(2)}",
+                f"PANEL {feeder_int_str.zfill(2)}",
+            })
+        for d, d_upper, d_norm in normalized_candidates:
+            if d_norm in target_variants or d_upper in target_variants:
+                return d
+            if re.match(rf"^0*{re.escape(feeder_int_str or clean_feeder)}[_\-\s]", d_upper):
+                return d
+
+    # Tier 3: Panel name match (exact, ends with, or all significant tokens)
+    if clean_pname:
+        for d, d_upper, d_norm in normalized_candidates:
+            if d_norm == clean_pname or d_upper == raw_name.upper():
+                return d
+            if d_norm.endswith(f"_{clean_pname}") or clean_pname in d_norm:
+                return d
+            if pname_tokens and len(pname_tokens) >= 2 and all(t in d_norm for t in pname_tokens):
+                return d
+
+    # Tier 4: Match panel_no (Column A index, 1-based)
     if panel_no > 0:
         p_num_str = str(panel_no)
         target_names = {
@@ -1025,23 +1096,15 @@ def find_swg_feeder_survey_dir(
             f"PANEL {p_num_str}",
             f"FEEDER_{p_num_str.zfill(2)}",
             f"PANEL_{p_num_str.zfill(2)}",
+            f"FEEDER {p_num_str.zfill(2)}",
+            f"PANEL {p_num_str.zfill(2)}",
         }
-        for d in candidate_subdirs:
-            d_upper = d.name.upper()
-            d_norm = d_upper.replace("-", "_")
+        for d, d_upper, d_norm in normalized_candidates:
             if d_upper in target_names or d_norm in target_names:
                 return d
 
-    # Tier 2: Match exact folder name against panel_name / feeder_no
-    clean_pname = panel_name.strip().upper().replace(" ", "_")
-    clean_feeder = feeder_no.strip().upper().replace(" ", "_")
-    for d in candidate_subdirs:
-        d_upper = d.name.upper()
-        if d_upper in (panel_name.strip().upper(), clean_pname, feeder_no.strip().upper(), clean_feeder):
-            return d
-
-    # Tier 3: Match digits in feeder_no (handling leading zeroes like F02 -> 2)
-    digits = re.findall(r"\d+", feeder_no) or re.findall(r"\d+", panel_name)
+    # Tier 5: Match digits in feeder_no or panel_name (fallback for generic patterns)
+    digits = re.findall(r"\d+", raw_feeder) or re.findall(r"\d+", raw_name)
     if digits:
         raw_digit = digits[0]
         try:
@@ -1060,9 +1123,7 @@ def find_swg_feeder_survey_dir(
             f"FEEDER_{int_digit.zfill(2)}",
             f"PANEL_{int_digit.zfill(2)}",
         }
-        for d in candidate_subdirs:
-            d_upper = d.name.upper()
-            d_norm = d_upper.replace("-", "_")
+        for d, d_upper, d_norm in normalized_candidates:
             if d_upper in target_variants or d_norm in target_variants:
                 return d
 
@@ -1330,8 +1391,12 @@ def generate_prpd_graphs_for_transformer(
 
 def _discover_substation_assets(
     survey_root: Path | str,
+    panels: Sequence[Any] | None = None,
 ) -> tuple[dict[int, Path], dict[int, Path]]:
     """Scan SWG feeders (with panel number regex and collision resolution) and TX folders once.
+
+    When `panels` sequence from the testsheet is provided, matches candidate survey directories
+    against panel feeder numbers and feeder names avoiding sequential index collision.
 
     Returns:
         (swg_panels, tx_units) where:
@@ -1356,11 +1421,49 @@ def _discover_substation_assets(
         swg_dirs = []
     swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU") else 1, d.name.upper()))
 
+    candidate_feeders: list[Path] = []
     for s_dir in swg_dirs:
         try:
-            candidate_feeders = [d for d in s_dir.iterdir() if d.is_dir()]
+            candidate_feeders.extend([d for d in s_dir.iterdir() if d.is_dir()])
         except OSError:
             continue
+
+    if panels:
+        matched_feeders: set[Path] = set()
+        for panel in panels:
+            p_no = getattr(panel, "panel_no", None)
+            if p_no is None:
+                continue
+            try:
+                p_no = int(p_no)
+            except (ValueError, TypeError):
+                continue
+            if p_no <= 0:
+                continue
+
+            p_feeder = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "").strip()
+            p_name = str(getattr(panel, "name", "") or "").strip()
+
+            feeder_dir = find_swg_feeder_survey_dir(
+                survey_root=survey_path,
+                panel_no=p_no,
+                feeder_no=p_feeder,
+                panel_name=p_name,
+            )
+            if feeder_dir and feeder_dir not in matched_feeders:
+                swg_panels[p_no] = feeder_dir
+                matched_feeders.add(feeder_dir)
+
+        # For any unmatched candidate feeders, assign next free indices
+        for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
+            if feeder_dir in matched_feeders:
+                continue
+            next_idx = 1
+            while next_idx in swg_panels:
+                next_idx += 1
+            swg_panels[next_idx] = feeder_dir
+            matched_feeders.add(feeder_dir)
+    else:
         for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
             digits = re.findall(r"\d+", feeder_dir.name)
             if digits:
@@ -1406,10 +1509,12 @@ def generate_all_substation_prpd_graphs(
     survey_root: Path | str | None,
     output_dir: Path | str,
     mode: str = "option_c",
+    panels: Sequence[Any] | None = None,
 ) -> dict[str, Any]:
     """Discover all SWG feeders and TX units and generate all PRPD PNG graphs in one pass.
 
     Supports mode='option_c' (Headless Chrome) and mode='option_b' (Native Python).
+    When `panels` is provided, discovery aligns panels using testsheet feeder numbers and names.
 
     Returns structured catalog:
     {
@@ -1438,7 +1543,7 @@ def generate_all_substation_prpd_graphs(
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    swg_panels, tx_units = _discover_substation_assets(survey_path)
+    swg_panels, tx_units = _discover_substation_assets(survey_path, panels=panels)
 
     for panel_idx in swg_panels:
         catalog["swg"][panel_idx] = {"us": None, "tev": None}
@@ -1591,6 +1696,14 @@ def generate_all_substation_prpd_graphs(
                 "us": us_png,
                 "tev": tev_png,
             }
+
+    if panels:
+        for panel in panels:
+            p_no = getattr(panel, "panel_no", None)
+            p_feeder = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "").strip()
+            if p_no is not None and p_no in catalog["swg"] and p_feeder:
+                catalog["swg"][f"feeder_{p_feeder}"] = catalog["swg"][p_no]
+                catalog["swg"][p_feeder] = catalog["swg"][p_no]
 
     return catalog
 

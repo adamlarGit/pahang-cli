@@ -1437,4 +1437,54 @@ def test_transition_panel_linknumber_formats_as_dash_when_feeder_no_absent(
     assert feeder_item.context["panel"]["name"] == "FEEDER 1"
 
 
+def test_switchgear_adapter_resolve_prpd_forwards_feeder_no(
+    mock_substation_info: dict[str, str],
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """SwitchgearScanAdapter._resolve_prpd forwards panel_feeder_no to generate_prpd_graphs_for_swg_panel."""
+    swg = SwitchgearScanSpec(
+        switchgear_type="VCB",
+        manufacturer="TAMCO",
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        overview_compartments=("OVERVIEW",),
+        panels=(
+            SwitchgearPanelScanSpec(
+                panel_no=1,
+                name="LOCAL TX",
+                panel_feeder_no="7",
+                compartments=("CABLE COMPARTMENT",),
+            ),
+        ),
+    )
+
+    captured_args = {}
+
+    def mock_generate_prpd(survey_root, panel_no, output_dir, feeder_no="", panel_name="", **kwargs):
+        captured_args["panel_no"] = panel_no
+        captured_args["feeder_no"] = feeder_no
+        captured_args["panel_name"] = panel_name
+        return None, None
+
+    monkeypatch.setattr(
+        "src.full_report.scan_adapters.generate_prpd_graphs_for_swg_panel",
+        mock_generate_prpd,
+    )
+
+    survey_root = tmp_path / "MOCK_SURVEY"
+    survey_root.mkdir()
+
+    adapter = SwitchgearScanAdapter(
+        swg=swg,
+        substation_info=mock_substation_info,
+        survey_root=survey_root,
+    )
+    adapter.adapt()
+
+    assert captured_args.get("panel_no") == 1
+    assert captured_args.get("feeder_no") == "7"
+    assert captured_args.get("panel_name") == "LOCAL TX"
+
+
+
 

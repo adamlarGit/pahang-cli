@@ -70,7 +70,7 @@ graph TD
     T119["#119: Record signature layout registry in domain context and verify e2e export"]
     T120["#120: Exclude Column K from PT measurement detection in PpuTestsheetParser - Closed"]
     T121["#121: Verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008 - Closed"]
-    T122["#122: Align switchgear survey discovery with testsheet feeder and link numbers"]
+    T122["#122: Align switchgear survey discovery with testsheet feeder and link numbers - Closed"]
     T123["#123: Discover 33kV PTX and LTX transformer survey directories"]
     T124["#124: Resolve compartment-specific ultrasound graphs and verify 22-10-2026 reports"]
     T125["#125: Restore per-page template recopy-paste sequence for unique ActiveX CIRViewer isolation - Closed"]
@@ -256,7 +256,7 @@ graph TD
 - **Delivers**: Regenerate and verify Full Report deliverable package for CJRT/MPU/G00008 (MINI PPU KUALA TAHAN 33/11kV), ensuring PT COMPARTMENT is generated strictly for Panel 5 (PANEL 31 - TX 5MVA) and eliminated from Panels 1 to 4.
 
 ### #122: fix(prpd): align switchgear survey discovery with testsheet feeder and link numbers
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#122](https://github.com/adamlarGit/pahang-cli/issues/122)
 - **Blocked by**: #101
 - **Ticket File**: [tickets/122-align-switchgear-survey-discovery-with-testsheet-feeder-numbers.md](./tickets/122-align-switchgear-survey-discovery-with-testsheet-feeder-numbers.md)

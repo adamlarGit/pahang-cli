@@ -889,6 +889,13 @@ class FullReportWorkflow:
             if cand.exists():
                 raw_dir = cand
 
+        eq_pkg = self._resolve_equipment_package(pkg)
+        panels = []
+        if eq_pkg and getattr(eq_pkg, "switchgears", None):
+            for swg in eq_pkg.switchgears:
+                if getattr(swg, "panels", None):
+                    panels.extend(swg.panels)
+
         # Discover UltraTEV survey folder and generate all PRPD graphs for this substation
         survey_root = None
         prpd_catalog = None
@@ -900,12 +907,12 @@ class FullReportWorkflow:
                         survey_root=survey_root,
                         output_dir=prpd_dir,
                         mode=prpd_mode,
+                        panels=panels,
                     )
                 except Exception as exc:
                     logger.warning("Failed to generate PRPD graphs for %s: %s", st_name, exc)
                     prpd_catalog = None
 
-        eq_pkg = self._resolve_equipment_package(pkg)
         ts_data = getattr(pkg, "data", None)
         sub_info = {
             "name_erms": st_name,

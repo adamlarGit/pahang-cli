@@ -1272,6 +1272,147 @@ def test_cbm_render_process_inline_images_rejects_blank_and_invalid_images(tmp_p
     assert context["image_list"][1].tpl == doc
 
 
+def test_find_swg_feeder_survey_dir_feeder_no_and_name_alignment(tmp_path: Path):
+    """Test find_swg_feeder_survey_dir aligns survey folders with feeder numbers and names (Ticket #122)."""
+    survey_dir = tmp_path / "SURVEY_FEEDER_ALIGN"
+    vcb_dir = survey_dir / "VCB"
+    f7 = vcb_dir / "7_LOCAL_TX_300kVA"
+    f5 = vcb_dir / "5_SPARE"
+    f3 = vcb_dir / "3_PE_SM_K_TAHAN"
+    f1 = vcb_dir / "1_PE_PERSONA"
+    f31 = vcb_dir / "31_TX_5MVA_"
+
+    for d in (f7, f5, f3, f1, f31):
+        d.mkdir(parents=True)
+
+    # 1. Panel 1: feeder "7", name "LOCAL TX"
+    res1 = find_swg_feeder_survey_dir(survey_dir, panel_no=1, feeder_no="7", panel_name="LOCAL TX")
+    assert res1 == f7
+
+    # 2. Panel 2: feeder "5", name "SPARE"
+    res2 = find_swg_feeder_survey_dir(survey_dir, panel_no=2, feeder_no="5", panel_name="SPARE")
+    assert res2 == f5
+
+    # 3. Panel 3: feeder "3", name "PE SM K.TAHAN"
+    res3 = find_swg_feeder_survey_dir(survey_dir, panel_no=3, feeder_no="3", panel_name="PE SM K.TAHAN")
+    assert res3 == f3
+
+    # 4. Panel 4: feeder "1", name "PE PERSONA"
+    res4 = find_swg_feeder_survey_dir(survey_dir, panel_no=4, feeder_no="1", panel_name="PE PERSONA")
+    assert res4 == f1
+
+    # 5. Panel 5: feeder "31", name "TX 5MVA"
+    res5 = find_swg_feeder_survey_dir(survey_dir, panel_no=5, feeder_no="31", panel_name="TX 5MVA")
+    assert res5 == f31
+
+
+def test_discover_substation_assets_with_testsheet_panels(tmp_path: Path):
+    """Test _discover_substation_assets maps panels 1..5 to survey folders using feeder numbers and names."""
+    from unittest.mock import Mock
+
+    survey_dir = tmp_path / "SURVEY_PANELS_ALIGN"
+    vcb_dir = survey_dir / "VCB"
+    f7 = vcb_dir / "7_LOCAL_TX_300kVA"
+    f5 = vcb_dir / "5_SPARE"
+    f3 = vcb_dir / "3_PE_SM_K_TAHAN"
+    f1 = vcb_dir / "1_PE_PERSONA"
+    f31 = vcb_dir / "31_TX_5MVA_"
+
+    for d in (f7, f5, f3, f1, f31):
+        d.mkdir(parents=True)
+
+    panels = [
+        Mock(panel_no=1, panel_feeder_no="7", name="LOCAL TX"),
+        Mock(panel_no=2, panel_feeder_no="5", name="SPARE"),
+        Mock(panel_no=3, panel_feeder_no="3", name="PE SM K.TAHAN"),
+        Mock(panel_no=4, panel_feeder_no="1", name="PE PERSONA"),
+        Mock(panel_no=5, panel_feeder_no="31", name="TX 5MVA"),
+    ]
+
+    swg_panels, tx_units = _discover_substation_assets(survey_dir, panels=panels)
+
+    assert len(swg_panels) == 5
+    assert swg_panels[1] == f7
+    assert swg_panels[2] == f5
+    assert swg_panels[3] == f3
+    assert swg_panels[4] == f1
+    assert swg_panels[5] == f31
+
+
+def test_generate_all_substation_prpd_graphs_with_panels(tmp_path: Path):
+    """Test generate_all_substation_prpd_graphs aligns panels and exposes feeder aliases."""
+    from unittest.mock import Mock
+
+    survey_dir = tmp_path / "SURVEY_PANELS_CATALOG"
+    vcb_dir = survey_dir / "VCB"
+    f7 = vcb_dir / "7_LOCAL_TX_300kVA"
+    f5 = vcb_dir / "5_SPARE"
+    f7.mkdir(parents=True)
+    f5.mkdir(parents=True)
+
+    # Add synthetic US measurement in f7
+    f7_us = f7 / "20261022T163359_Ultrasonic"
+    f7_us.mkdir(parents=True)
+    (f7_us / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[10.0, 50, 1]]};', encoding="utf-8")
+
+    out_dir = tmp_path / "out_catalog"
+    panels = [
+        Mock(panel_no=1, panel_feeder_no="7", name="LOCAL TX"),
+        Mock(panel_no=2, panel_feeder_no="5", name="SPARE"),
+    ]
+
+    catalog = generate_all_substation_prpd_graphs(survey_dir, out_dir, mode="option_b", panels=panels)
+
+    assert "swg" in catalog
+    assert 1 in catalog["swg"]
+    assert 2 in catalog["swg"]
+    assert catalog["swg"][1]["us"] is not None
+    assert catalog["swg"][2]["us"] is None
+
+    # Check feeder aliases
+    assert "feeder_7" in catalog["swg"]
+    assert catalog["swg"]["feeder_7"] == catalog["swg"][1]
+    assert "feeder_5" in catalog["swg"]
+    assert catalog["swg"]["feeder_5"] == catalog["swg"][2]
+
+
+def test_discover_22_10_2026_substations_regression():
+    """Verify feeder-aligned survey discovery for 22-10-2026 real substations (KT and Merting)."""
+    from src.testsheet.parsers.ppu import PpuTestsheetParser
+
+    # 1. Kuala Tahan
+    ts_kt = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI).xlsx")
+    survey_kt = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI)\RAW DATA\US")
+    if not (ts_kt.exists() and survey_kt.exists()):
+        pytest.skip("Kuala Tahan 22-10-2026 test files not found")
+
+    data_kt = PpuTestsheetParser().extract_testsheet_data(ts_kt)
+    panels_kt = data_kt.equipment.switchgears[0].panels
+    swg_kt, _ = _discover_substation_assets(survey_kt, panels=panels_kt)
+    assert swg_kt[1].name.startswith("7_LOCAL_TX")
+    assert swg_kt[2].name.startswith("5_SPARE")
+    assert swg_kt[3].name.startswith("3_PE_SM_K_TAHAN")
+    assert swg_kt[4].name.startswith("1_PE_PERSONA")
+    assert swg_kt[5].name.startswith("31_TX_5MVA")
+
+    # 2. Merting
+    ts_m = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI).xlsx")
+    survey_m = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI)\RAW DATA\US")
+    if not (ts_m.exists() and survey_m.exists()):
+        pytest.skip("Merting 22-10-2026 test files not found")
+
+    data_m = PpuTestsheetParser().extract_testsheet_data(ts_m)
+    panels_m = data_m.equipment.switchgears[0].panels
+    swg_m, _ = _discover_substation_assets(survey_m, panels=panels_m)
+    assert swg_m[1].name.startswith("7_LOCAL_TX")
+    assert swg_m[2].name.startswith("5_SPARE")
+    assert swg_m[3].name.startswith("3_PE_KG_MERTING")
+    assert swg_m[4].name.startswith("1_PE_KG_LUBUK_PAYUNG")
+    assert swg_m[5].name.startswith("31_TX_5MVA")
+
+
+
+
 
 
 

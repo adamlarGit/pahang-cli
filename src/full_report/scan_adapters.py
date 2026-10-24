@@ -732,9 +732,11 @@ class SwitchgearScanAdapter:
                 comp_us_active = self.contract.is_swg_us_active(comp_name)
 
                 # Resolve PRPD graphs for panel and compartment
+                p_feeder_no = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "")
                 us_prpd, tev_prpd = self._resolve_prpd(
                     panel_no=p_no,
                     panel_name=p_name,
+                    feeder_no=p_feeder_no,
                     compartment=comp_name,
                     include_tev=comp_tev_active,
                     include_us=comp_us_active,
@@ -887,6 +889,7 @@ class SwitchgearScanAdapter:
         self,
         panel_no: int,
         panel_name: str = "",
+        feeder_no: str = "",
         compartment: str | None = None,
         include_tev: bool = True,
         include_us: bool = True,
@@ -898,8 +901,17 @@ class SwitchgearScanAdapter:
         # 1. Catalog lookup
         if self.prpd_catalog and "swg" in self.prpd_catalog:
             swg_cat = self.prpd_catalog["swg"]
+            entry = None
             if panel_no in swg_cat:
                 entry = swg_cat[panel_no]
+            elif feeder_no:
+                clean_f = str(feeder_no).strip()
+                if f"feeder_{clean_f}" in swg_cat:
+                    entry = swg_cat[f"feeder_{clean_f}"]
+                elif clean_f in swg_cat:
+                    entry = swg_cat[clean_f]
+
+            if entry is not None:
                 us_p = str(entry.get("us") or "") if should_gen_us else ""
                 tev_p = str(entry.get("tev") or "") if should_gen_tev else ""
                 return us_p, tev_p
@@ -913,6 +925,7 @@ class SwitchgearScanAdapter:
                     survey_root=s_root,
                     panel_no=panel_no,
                     output_dir=out_d,
+                    feeder_no=feeder_no,
                     panel_name=panel_name,
                     mode=self.prpd_mode,
                     compartment=compartment,
