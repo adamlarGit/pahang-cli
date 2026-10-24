@@ -1215,12 +1215,41 @@ class TransformerScanAdapter:
 
     def _resolve_prpd_us(self) -> str:
         """Resolve Transformer US PRPD waveform image file path, falling back to clean '' per D08."""
+        is_power_tx = isinstance(self.tx, PowerTransformerSpec)
+        tx_id_str = str(getattr(self.tx, "tx_id", "") or "").upper()
+        is_local_tx = (
+            not is_power_tx
+            and (
+                bool(re.search(r"\b(LT|LTX|LOCAL)\b", tx_id_str))
+                or (
+                    self.prpd_catalog
+                    and "tx" in self.prpd_catalog
+                    and ("ltx" in self.prpd_catalog["tx"] or "LTX" in self.prpd_catalog["tx"])
+                    and self.tx_index >= 2
+                )
+            )
+        )
+
+        if is_power_tx:
+            candidate_keys: list[Any] = ["ptx", "PTX", self.tx_index, 1]
+            tx_type: str | None = "PTX"
+        elif is_local_tx:
+            candidate_keys = ["ltx", "LTX", self.tx_index, 2]
+            tx_type = "LTX"
+        else:
+            candidate_keys = [self.tx_index, 1]
+            tx_type = None
+
         # 1. Catalog lookup
         if self.prpd_catalog and "tx" in self.prpd_catalog:
             tx_cat = self.prpd_catalog["tx"]
-            if self.tx_index in tx_cat:
-                entry = tx_cat[self.tx_index]
-                return str(entry.get("us") or "")
+            for key in candidate_keys:
+                if key in tx_cat and tx_cat[key]:
+                    entry = tx_cat[key]
+                    if isinstance(entry, dict):
+                        us_val = entry.get("us")
+                        if us_val:
+                            return str(us_val)
 
         # 2. Dynamic generation via prpd.py
         if self.survey_root and self.survey_root.exists():
@@ -1232,10 +1261,16 @@ class TransformerScanAdapter:
                     tx_idx=self.tx_index,
                     output_dir=out_d,
                     mode=self.prpd_mode,
+                    tx_type=tx_type,
                 )
                 return str(us_png) if us_png else ""
             except Exception as exc:
-                logger.warning("Failed to generate PRPD US graph for TX %d: %s", self.tx_index, exc)
+                logger.warning(
+                    "Failed to generate PRPD US graph for TX %d (%s): %s",
+                    self.tx_index,
+                    tx_type or "standard",
+                    exc,
+                )
 
         return ""
 

@@ -1486,5 +1486,159 @@ def test_switchgear_adapter_resolve_prpd_forwards_feeder_no(
     assert captured_args.get("panel_name") == "LOCAL TX"
 
 
+def test_transformer_scan_adapter_ptx_and_ltx_prpd_catalog_lookup(
+    mock_substation_info: dict[str, str],
+    dummy_prpd_image: Path,
+) -> None:
+    """TransformerScanAdapter resolves PTX for PowerTransformerSpec and LTX for Local TX from catalog."""
+    from src.testsheet.models import PowerTransformerSpec, TransformerSpec
+
+    ptx = PowerTransformerSpec(
+        tx_id="TX 1",
+        rating_kva="5MVA",
+        manufacturer="TAMCO",
+        model="ONAN",
+        serial_no="SN-PTX",
+    )
+    ltx = TransformerSpec(
+        tx_id="LOCAL TX",
+        rating_kva="300kVA",
+        manufacturer="TAMCO",
+        model="HERMETICALLY SEAL",
+        serial_no="SN-LTX",
+    )
+
+    catalog = {
+        "tx": {
+            "ptx": {"us": str(dummy_prpd_image), "tev": None},
+            "ltx": {"us": str(dummy_prpd_image), "tev": None},
+        }
+    }
+
+    # 1. Power Transformer
+    ad_ptx = TransformerScanAdapter(
+        tx=ptx,
+        substation_info=mock_substation_info,
+        tx_index=1,
+        prpd_catalog=catalog,
+    )
+    assert ad_ptx._resolve_prpd_us() == str(dummy_prpd_image)
+    res_ptx = ad_ptx.adapt()
+    bushing_item = next(it for it in res_ptx.items if it.component_name == "HV BUSHING")
+    cable_item = next(it for it in res_ptx.items if it.component_name == "HV CABLE")
+    assert bushing_item.context["us"]["prpd"] == str(dummy_prpd_image)
+    assert cable_item.context["us"]["prpd"] == str(dummy_prpd_image)
+
+    # 2. Local Transformer
+    ad_ltx = TransformerScanAdapter(
+        tx=ltx,
+        substation_info=mock_substation_info,
+        tx_index=2,
+        prpd_catalog=catalog,
+    )
+    assert ad_ltx._resolve_prpd_us() == str(dummy_prpd_image)
+    res_ltx = ad_ltx.adapt()
+    bushing_ltx = next(it for it in res_ltx.items if it.component_name == "HV BUSHING")
+    cable_ltx = next(it for it in res_ltx.items if it.component_name == "HV CABLE")
+    assert bushing_ltx.context["us"]["prpd"] == str(dummy_prpd_image)
+    assert cable_ltx.context["us"]["prpd"] == str(dummy_prpd_image)
+
+
+def test_transformer_scan_adapter_dynamic_prpd_resolution_ptx_ltx(
+    mock_substation_info: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    """TransformerScanAdapter dynamically generates US PRPD graphs for PTX and LTX directories."""
+    from src.testsheet.models import PowerTransformerSpec, TransformerSpec
+
+    survey_dir = tmp_path / "SURVEY_ROOT"
+    ptx_meas = survey_dir / "PTX" / "Transformer" / "20261022T164608_Ultrasonic"
+    ltx_meas = survey_dir / "LTX" / "Transformer" / "20261022T164352_Ultrasonic"
+    ptx_meas.mkdir(parents=True)
+    ltx_meas.mkdir(parents=True)
+
+    sample_js = 'var ultra_events = {"data": [[10.0, 50, 1]]};'
+    (ptx_meas / "ultrasonic_phase_plot.js").write_text(sample_js, encoding="utf-8")
+    (ltx_meas / "ultrasonic_phase_plot.js").write_text(sample_js, encoding="utf-8")
+
+    out_dir = tmp_path / "OUT_PRPD"
+
+    ptx = PowerTransformerSpec(tx_id="TX 1", rating_kva="5MVA")
+    ltx = TransformerSpec(tx_id="LOCAL TX", rating_kva="300kVA")
+
+    ad_ptx = TransformerScanAdapter(
+        tx=ptx,
+        substation_info=mock_substation_info,
+        tx_index=1,
+        survey_root=survey_dir,
+        prpd_output_dir=out_dir,
+        prpd_mode="option_b",
+    )
+    ad_ltx = TransformerScanAdapter(
+        tx=ltx,
+        substation_info=mock_substation_info,
+        tx_index=2,
+        survey_root=survey_dir,
+        prpd_output_dir=out_dir,
+        prpd_mode="option_b",
+    )
+
+    prpd_ptx = ad_ptx._resolve_prpd_us()
+    prpd_ltx = ad_ltx._resolve_prpd_us()
+
+    assert prpd_ptx and Path(prpd_ptx).exists()
+    assert prpd_ltx and Path(prpd_ltx).exists()
+
+
+def test_33kv_mini_ppu_part07_tx_scanning_pages_prpd(
+    mock_substation_info: dict[str, str],
+    tmp_path: Path,
+) -> None:
+    """Verify Part 07 TX scanning pages resolve non-empty US PRPD for 33kV KT and Merting."""
+    from src.testsheet.parsers.ppu import PpuTestsheetParser
+    from src.quick_report.prpd import generate_all_substation_prpd_graphs
+
+    substations = [
+        (
+            Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI).xlsx"),
+            Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI)\RAW DATA\US"),
+        ),
+        (
+            Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI).xlsx"),
+            Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI)\RAW DATA\US"),
+        ),
+    ]
+
+    for ts_path, survey_path in substations:
+        if not (ts_path.exists() and survey_path.exists()):
+            pytest.skip(f"Test data missing for {ts_path.stem}")
+
+        data = PpuTestsheetParser().extract_testsheet_data(ts_path)
+        tx_list = list(data.equipment.transformers)
+        assert len(tx_list) >= 2, f"Expected at least 2 transformers, got {len(tx_list)}"
+
+        out_dir = tmp_path / ts_path.stem
+        catalog = generate_all_substation_prpd_graphs(
+            survey_root=survey_path,
+            output_dir=out_dir,
+            mode="option_b",
+        )
+
+        for tx_idx, tx in enumerate(tx_list, 1):
+            adapter = TransformerScanAdapter(
+                tx=tx,
+                substation_info=mock_substation_info,
+                tx_index=tx_idx,
+                prpd_catalog=catalog,
+            )
+            result = adapter.adapt()
+            for item in result.items:
+                if item.component_name in ("HV BUSHING", "HV CABLE"):
+                    us_prpd = item.context.get("us", {}).get("prpd", "")
+                    assert us_prpd != "", f"Empty US PRPD graph for {tx.tx_id} - {item.component_name}"
+                    assert Path(us_prpd).exists(), f"PRPD file does not exist: {us_prpd}"
+
+
+
 
 

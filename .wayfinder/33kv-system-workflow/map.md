@@ -71,7 +71,7 @@ graph TD
     T120["#120: Exclude Column K from PT measurement detection in PpuTestsheetParser - Closed"]
     T121["#121: Verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008 - Closed"]
     T122["#122: Align switchgear survey discovery with testsheet feeder and link numbers - Closed"]
-    T123["#123: Discover 33kV PTX and LTX transformer survey directories"]
+    T123["#123: Discover 33kV PTX and LTX transformer survey directories - Closed"]
     T124["#124: Resolve compartment-specific ultrasound graphs and verify 22-10-2026 reports"]
     T125["#125: Restore per-page template recopy-paste sequence for unique ActiveX CIRViewer isolation - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
@@ -263,7 +263,7 @@ graph TD
 - **Delivers**: Align switchgear survey discovery in `_discover_substation_assets` and `find_swg_feeder_survey_dir` to match testsheet feeder numbers and names.
 
 ### #123: feat(prpd): discover 33kV PTX and LTX transformer survey directories
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#123](https://github.com/adamlarGit/pahang-cli/issues/123)
 - **Blocked by**: #101
 - **Ticket File**: [tickets/123-discover-33kv-ptx-and-ltx-transformer-survey-directories.md](./tickets/123-discover-33kv-ptx-and-ltx-transformer-survey-directories.md)

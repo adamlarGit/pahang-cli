@@ -735,7 +735,7 @@ def _is_survey_dir(p: Path) -> bool:
             return False
         if (p / "survey_summary.js").exists() or (p / "survey_metadata.js").exists():
             return True
-        prefixes = ("SWG", "VCB", "RMU", "TX")
+        prefixes = ("SWG", "VCB", "RMU", "TX", "PTX", "LTX")
         return any(
             c.is_dir() and (c.name.upper().startswith(prefixes) or "TRANSFORMER" in c.name.upper())
             for c in p.iterdir()
@@ -771,12 +771,12 @@ def discover_ultratev_survey_dir(raw_data_dir: Path | str | None) -> Path | None
                 if child.is_dir() and _is_survey_dir(child):
                     return child
 
-    # Deep search fallback for any folder containing survey_summary.js or SWG/VCB/RMU
+    # Deep search fallback for any folder containing survey_summary.js or SWG/VCB/RMU/PTX/LTX
     try:
         for child in sorted(raw_path.rglob("survey_summary.js"), reverse=True):
             if child.parent.is_dir():
                 return child.parent
-        for pattern in ("SWG*", "VCB*", "RMU*"):
+        for pattern in ("SWG*", "VCB*", "RMU*", "PTX*", "LTX*"):
             for child in sorted(raw_path.rglob(pattern), reverse=True):
                 parent = child.parent
                 if parent.is_dir() and _is_survey_dir(parent):
@@ -1130,25 +1130,103 @@ def find_swg_feeder_survey_dir(
     return None
 
 
-def find_tx_survey_dir(survey_root: Path, tx_idx: int = 1) -> Path | None:
-    """Find the target Transformer survey directory (supporting 1-TX and multi-TX layouts)."""
-    # 1. Multi-TX folder pattern (e.g. TX1/Transformer/, TX2/Transformer/)
-    tx_folder = survey_root / f"TX{tx_idx}"
-    if tx_folder.exists():
-        tf_sub = tx_folder / "Transformer"
-        return tf_sub if tf_sub.exists() else tx_folder
+def _find_transformer_subfolder(parent: Path) -> Path | None:
+    """Find a nested 'Transformer' subfolder (case-insensitive) if present."""
+    try:
+        if not parent.is_dir():
+            return None
+        for sub in parent.iterdir():
+            if sub.is_dir() and sub.name.upper() == "TRANSFORMER":
+                return sub
+    except OSError:
+        pass
+    return None
 
-    # 2. Single-TX folder pattern (TX/Transformer/)
-    if tx_idx == 1:
-        tx_folder = survey_root / "TX"
-        if tx_folder.exists():
-            tf_sub = tx_folder / "Transformer"
-            return tf_sub if tf_sub.exists() else tx_folder
 
-    # 3. Fallback to any folder containing Transformer_<N>
-    for child in survey_root.iterdir():
-        if child.is_dir() and f"TX{tx_idx}" in child.name.upper():
-            return child
+def find_tx_survey_dir(
+    survey_root: Path | str | None,
+    tx_idx: int | str = 1,
+    tx_type: str | None = None,
+) -> Path | None:
+    """Find the target Transformer survey directory (supporting 1-TX, multi-TX, and 33kV PTX/LTX layouts)."""
+    if not survey_root:
+        return None
+    root = Path(survey_root)
+    if not root.exists():
+        return None
+
+    # Normalize type hint and numeric index
+    type_str: str | None = None
+    if tx_type:
+        type_str = str(tx_type).strip().upper()
+    elif isinstance(tx_idx, str) and not tx_idx.strip().isdigit():
+        type_str = tx_idx.strip().upper()
+
+    numeric_idx: int = 1
+    if isinstance(tx_idx, int):
+        numeric_idx = tx_idx
+    elif isinstance(tx_idx, str) and tx_idx.strip().isdigit():
+        numeric_idx = int(tx_idx.strip())
+    elif type_str and ("LT" in type_str or "LOCAL" in type_str):
+        numeric_idx = 2
+    else:
+        numeric_idx = 1
+
+    try:
+        children = [c for c in root.iterdir() if c.is_dir()]
+    except OSError:
+        return None
+
+    # Determine candidate folder names by precedence
+    candidate_names: list[str] = []
+    if type_str:
+        if "PT" in type_str or "POWER" in type_str:
+            candidate_names = [f"PTX{numeric_idx}", "PTX", f"TX{numeric_idx}", "TX"]
+        elif "LT" in type_str or "LOCAL" in type_str:
+            candidate_names = [f"LTX{numeric_idx}", "LTX", "LTX2", "LTX1", f"TX{numeric_idx}"]
+        else:
+            candidate_names = [f"{type_str}{numeric_idx}", type_str, f"TX{numeric_idx}", "TX"]
+    else:
+        if numeric_idx == 1:
+            candidate_names = ["TX1", "TX", "PTX", "PTX1"]
+        elif numeric_idx == 2:
+            candidate_names = ["TX2", "LTX", "LTX2", "LTX1", "PTX2"]
+        else:
+            candidate_names = [f"TX{numeric_idx}", f"PTX{numeric_idx}", f"LTX{numeric_idx}"]
+
+    # Pass 1: Exact case-insensitive match against candidate names
+    for cand in candidate_names:
+        cand_u = cand.upper()
+        for child in children:
+            if child.name.upper() == cand_u:
+                tf_sub = _find_transformer_subfolder(child)
+                return tf_sub if tf_sub else child
+
+    # Pass 2: Fallback matching by token / substring
+    if type_str and ("PT" in type_str or "POWER" in type_str):
+        for child in children:
+            c_u = child.name.upper()
+            if "PTX" in c_u or "POWER" in c_u or f"TX{numeric_idx}" in c_u:
+                tf_sub = _find_transformer_subfolder(child)
+                return tf_sub if tf_sub else child
+    elif type_str and ("LT" in type_str or "LOCAL" in type_str):
+        for child in children:
+            c_u = child.name.upper()
+            if "LTX" in c_u or "LOCAL" in c_u or f"TX{numeric_idx}" in c_u:
+                tf_sub = _find_transformer_subfolder(child)
+                return tf_sub if tf_sub else child
+    else:
+        for child in children:
+            c_u = child.name.upper()
+            if f"TX{numeric_idx}" in c_u:
+                tf_sub = _find_transformer_subfolder(child)
+                return tf_sub if tf_sub else child
+            if numeric_idx == 1 and "PTX" in c_u:
+                tf_sub = _find_transformer_subfolder(child)
+                return tf_sub if tf_sub else child
+            if numeric_idx == 2 and "LTX" in c_u:
+                tf_sub = _find_transformer_subfolder(child)
+                return tf_sub if tf_sub else child
 
     return None
 
@@ -1296,11 +1374,13 @@ def generate_prpd_graphs_for_swg_panel(
 
 def generate_prpd_graphs_for_transformer(
     survey_root: Path | None,
-    tx_idx: int,
-    output_dir: Path,
+    tx_idx: int = 1,
+    output_dir: Path | str | None = None,
     mode: str = "option_c",
     http_port: int | None = None,
     chrome_path: str | None = None,
+    *,
+    tx_type: str | None = None,
 ) -> tuple[Path | None, Path | None]:
     """Generate US and TEV PRPD PNG graph images for a transformer.
 
@@ -1310,9 +1390,12 @@ def generate_prpd_graphs_for_transformer(
     if not survey_root:
         return None, None
 
-    tx_dir = find_tx_survey_dir(survey_root=survey_root, tx_idx=tx_idx)
+    tx_dir = find_tx_survey_dir(survey_root=survey_root, tx_idx=tx_idx, tx_type=tx_type)
     if not tx_dir:
         return None, None
+
+    out_path = Path(output_dir) if output_dir else Path(tempfile.gettempdir())
+    out_path.mkdir(parents=True, exist_ok=True)
 
     us_png: Path | None = None
     tev_png: Path | None = None
@@ -1325,7 +1408,7 @@ def generate_prpd_graphs_for_transformer(
             if us_file.exists():
                 try:
                     events = decode_ultrasonic_phase_plot(us_file)
-                    us_out = output_dir / f"prpd_tx{tx_idx}_us.png"
+                    us_out = out_path / f"prpd_tx{tx_idx}_us.png"
                     us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
                 except Exception:
                     us_png = None
@@ -1337,7 +1420,7 @@ def generate_prpd_graphs_for_transformer(
             if tev_file.exists():
                 try:
                     events = decode_tev_event_data(tev_file)
-                    tev_out = output_dir / f"prpd_tx{tx_idx}_tev.png"
+                    tev_out = out_path / f"prpd_tx{tx_idx}_tev.png"
                     tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
                 except Exception:
                     tev_png = None
@@ -1353,7 +1436,7 @@ def generate_prpd_graphs_for_transformer(
             if us_dir:
                 us_html = us_dir / "Ultrasonic.html"
                 if us_html.exists():
-                    us_out = output_dir / f"prpd_tx{tx_idx}_us.png"
+                    us_out = out_path / f"prpd_tx{tx_idx}_us.png"
                     u_png = render_prpd_option_c_image(
                         html_file=us_html,
                         output_png=us_out,
@@ -1364,7 +1447,7 @@ def generate_prpd_graphs_for_transformer(
             if tev_dir:
                 tev_html = tev_dir / "TEV.html"
                 if tev_html.exists():
-                    tev_out = output_dir / f"prpd_tx{tx_idx}_tev.png"
+                    tev_out = out_path / f"prpd_tx{tx_idx}_tev.png"
                     t_png = render_prpd_option_c_image(
                         html_file=tev_html,
                         output_png=tev_out,
@@ -1383,10 +1466,38 @@ def generate_prpd_graphs_for_transformer(
         if http_port is not None:
             us_png, tev_png = _do_render(http_port, resolved_chrome)
         else:
-            with SurveyHttpServer(survey_root, temp_dir=output_dir) as port:
+            with SurveyHttpServer(survey_root, temp_dir=out_path) as port:
                 us_png, tev_png = _do_render(port, resolved_chrome)
 
     return us_png, tev_png
+
+
+class TxUnitsDict(dict):
+    """Dictionary mapping transformer indices with case-insensitive string alias support ('ptx', 'ltx')."""
+
+    def __init__(self, *args, aliases: dict[str, int] | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._aliases: dict[str, int] = {k.lower(): v for k, v in (aliases or {}).items()}
+
+    def __getitem__(self, key: Any) -> Path:
+        if isinstance(key, str):
+            k_lower = key.lower()
+            if k_lower in self._aliases and self._aliases[k_lower] in self:
+                return super().__getitem__(self._aliases[k_lower])
+        return super().__getitem__(key)
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, str):
+            k_lower = key.lower()
+            if k_lower in self._aliases and self._aliases[k_lower] in self:
+                return True
+        return super().__contains__(key)
 
 
 def _discover_substation_assets(
@@ -1481,24 +1592,55 @@ def _discover_substation_assets(
 
     # 2. Transformer (TX) units
     candidate_tx_indices: set[int] = set()
+    aliases: dict[str, int] = {}
+    has_ptx = False
+    has_ltx = False
     try:
         survey_children = [c for c in survey_path.iterdir() if c.is_dir()]
     except OSError:
         survey_children = []
+
     for child in survey_children:
         d_upper = child.name.upper()
-        if d_upper.startswith("TX") or "TRANSFORMER" in d_upper:
+        if d_upper.startswith("PTX") or "POWER_TRANSFORMER" in d_upper or "POWER TRANSFORMER" in d_upper:
+            has_ptx = True
+            digits = re.findall(r"\d+", d_upper)
+            ptx_idx = int(digits[0]) if digits else 1
+            candidate_tx_indices.add(ptx_idx)
+            aliases["ptx"] = ptx_idx
+        elif d_upper.startswith("LTX") or "LOCAL_TRANSFORMER" in d_upper or "LOCAL TRANSFORMER" in d_upper:
+            has_ltx = True
+            digits = re.findall(r"\d+", d_upper)
+            ltx_idx = int(digits[0]) if digits else 2
+            candidate_tx_indices.add(ltx_idx)
+            aliases["ltx"] = ltx_idx
+        elif d_upper.startswith("TX") or "TRANSFORMER" in d_upper:
             digits = re.findall(r"\d+", d_upper)
             if digits:
                 candidate_tx_indices.add(int(digits[0]))
             else:
                 candidate_tx_indices.add(1)
+
     if not candidate_tx_indices:
         if (survey_path / "TX").exists():
             candidate_tx_indices.add(1)
+        elif (survey_path / "PTX").exists():
+            has_ptx = True
+            candidate_tx_indices.add(1)
+            aliases["ptx"] = 1
+        elif (survey_path / "LTX").exists():
+            has_ltx = True
+            candidate_tx_indices.add(2)
+            aliases["ltx"] = 2
 
+    tx_units: dict[Any, Path] = TxUnitsDict(aliases=aliases)
     for tx_idx in sorted(candidate_tx_indices):
-        tx_dir = find_tx_survey_dir(survey_path, tx_idx=tx_idx)
+        tx_type = None
+        if has_ptx and tx_idx == aliases.get("ptx", 1):
+            tx_type = "PTX"
+        elif has_ltx and tx_idx == aliases.get("ltx", 2):
+            tx_type = "LTX"
+        tx_dir = find_tx_survey_dir(survey_path, tx_idx=tx_idx, tx_type=tx_type)
         if tx_dir and tx_dir.exists():
             tx_units[tx_idx] = tx_dir
 
@@ -1548,7 +1690,8 @@ def generate_all_substation_prpd_graphs(
     for panel_idx in swg_panels:
         catalog["swg"][panel_idx] = {"us": None, "tev": None}
     for tx_idx in tx_units:
-        catalog["tx"][tx_idx] = {"us": None, "tev": None}
+        if isinstance(tx_idx, int):
+            catalog["tx"][tx_idx] = {"us": None, "tev": None}
 
     norm_mode = (mode or "option_c").strip().lower()
 
@@ -1597,7 +1740,7 @@ def generate_all_substation_prpd_graphs(
                         "tev": tev_png,
                     }
 
-                for tx_idx, tx_dir in tx_units.items():
+                for tx_idx, tx_dir in [(k, v) for k, v in tx_units.items() if isinstance(k, int)]:
                     us_png = None
                     tev_png = None
 
@@ -1666,7 +1809,7 @@ def generate_all_substation_prpd_graphs(
                 "tev": tev_png,
             }
 
-        for tx_idx, tx_dir in tx_units.items():
+        for tx_idx, tx_dir in [(k, v) for k, v in tx_units.items() if isinstance(k, int)]:
             us_png = None
             tev_png = None
 
@@ -1696,6 +1839,14 @@ def generate_all_substation_prpd_graphs(
                 "us": us_png,
                 "tev": tev_png,
             }
+
+    # Map detected alias keys in catalog["tx"] for O(1) direct lookup (e.g. 'ptx', 'ltx')
+    if hasattr(tx_units, "_aliases"):
+        for alias_name, target_idx in getattr(tx_units, "_aliases", {}).items():
+            if target_idx in catalog["tx"]:
+                catalog["tx"][alias_name] = catalog["tx"][target_idx]
+                catalog["tx"][alias_name.lower()] = catalog["tx"][target_idx]
+                catalog["tx"][alias_name.upper()] = catalog["tx"][target_idx]
 
     if panels:
         for panel in panels:
@@ -1731,6 +1882,7 @@ __all__ = [
     "OPTION_C_INJECTION_TEMPLATE",
     "SurveyHttpServer",
     "ThreadedTCPServer",
+    "TxUnitsDict",
     "_discover_substation_assets",
     "build_prpd_inline_images",
     "decode_tev_event_data",

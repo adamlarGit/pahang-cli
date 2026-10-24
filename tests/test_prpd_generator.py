@@ -1388,12 +1388,14 @@ def test_discover_22_10_2026_substations_regression():
 
     data_kt = PpuTestsheetParser().extract_testsheet_data(ts_kt)
     panels_kt = data_kt.equipment.switchgears[0].panels
-    swg_kt, _ = _discover_substation_assets(survey_kt, panels=panels_kt)
+    swg_kt, tx_kt = _discover_substation_assets(survey_kt, panels=panels_kt)
     assert swg_kt[1].name.startswith("7_LOCAL_TX")
     assert swg_kt[2].name.startswith("5_SPARE")
     assert swg_kt[3].name.startswith("3_PE_SM_K_TAHAN")
     assert swg_kt[4].name.startswith("1_PE_PERSONA")
     assert swg_kt[5].name.startswith("31_TX_5MVA")
+    assert 1 in tx_kt and tx_kt[1].name.lower() in ("ptx", "transformer")
+    assert 2 in tx_kt and tx_kt[2].name.lower() in ("ltx", "transformer")
 
     # 2. Merting
     ts_m = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI).xlsx")
@@ -1403,12 +1405,84 @@ def test_discover_22_10_2026_substations_regression():
 
     data_m = PpuTestsheetParser().extract_testsheet_data(ts_m)
     panels_m = data_m.equipment.switchgears[0].panels
-    swg_m, _ = _discover_substation_assets(survey_m, panels=panels_m)
+    swg_m, tx_m = _discover_substation_assets(survey_m, panels=panels_m)
     assert swg_m[1].name.startswith("7_LOCAL_TX")
     assert swg_m[2].name.startswith("5_SPARE")
     assert swg_m[3].name.startswith("3_PE_KG_MERTING")
     assert swg_m[4].name.startswith("1_PE_KG_LUBUK_PAYUNG")
     assert swg_m[5].name.startswith("31_TX_5MVA")
+    assert 1 in tx_m and tx_m[1].name.lower() in ("ptx", "transformer")
+    assert 2 in tx_m and tx_m[2].name.lower() in ("ltx", "transformer")
+
+
+def test_find_tx_survey_dir_ptx_and_ltx(tmp_path: Path):
+    """Test transformer directory discovery for 33kV PTX and LTX structures."""
+    survey_dir = tmp_path / "33KV_SURVEY"
+    ptx_sub = survey_dir / "PTX" / "Transformer"
+    ltx_sub = survey_dir / "LTX" / "Transformer"
+    ptx_sub.mkdir(parents=True)
+    ltx_sub.mkdir(parents=True)
+
+    # 1. By index
+    assert find_tx_survey_dir(survey_dir, tx_idx=1) == ptx_sub
+    assert find_tx_survey_dir(survey_dir, tx_idx=2) == ltx_sub
+
+    # 2. By explicit tx_type
+    assert find_tx_survey_dir(survey_dir, tx_idx=1, tx_type="PTX") == ptx_sub
+    assert find_tx_survey_dir(survey_dir, tx_idx=2, tx_type="LTX") == ltx_sub
+    assert find_tx_survey_dir(survey_dir, tx_type="power") == ptx_sub
+    assert find_tx_survey_dir(survey_dir, tx_type="local") == ltx_sub
+
+    # 3. By string alias index
+    assert find_tx_survey_dir(survey_dir, tx_idx="ptx") == ptx_sub
+    assert find_tx_survey_dir(survey_dir, tx_idx="ltx") == ltx_sub
+
+
+def test_discover_substation_assets_ptx_and_ltx(tmp_path: Path):
+    """Test _discover_substation_assets discovers PTX and LTX folders and supports alias keys."""
+    survey_dir = tmp_path / "33KV_DISCOVER"
+    ptx_sub = survey_dir / "PTX" / "Transformer"
+    ltx_sub = survey_dir / "LTX" / "Transformer"
+    ptx_sub.mkdir(parents=True)
+    ltx_sub.mkdir(parents=True)
+
+    _, tx_units = _discover_substation_assets(survey_dir)
+
+    assert 1 in tx_units
+    assert tx_units[1] == ptx_sub
+    assert 2 in tx_units
+    assert tx_units[2] == ltx_sub
+    assert "ptx" in tx_units
+    assert tx_units["ptx"] == ptx_sub
+    assert "ltx" in tx_units
+    assert tx_units["ltx"] == ltx_sub
+    assert len(tx_units) == 2
+
+
+def test_generate_all_substation_prpd_graphs_ptx_and_ltx(tmp_path: Path):
+    """Test generate_all_substation_prpd_graphs populates catalog with ptx and ltx aliases."""
+    survey_dir = tmp_path / "33KV_GRAPHS"
+    ptx_meas = survey_dir / "PTX" / "Transformer" / "20261022T164608_Ultrasonic"
+    ltx_meas = survey_dir / "LTX" / "Transformer" / "20261022T164352_Ultrasonic"
+    ptx_meas.mkdir(parents=True)
+    ltx_meas.mkdir(parents=True)
+
+    # Minimal dummy valid ultrasonic js payload
+    sample_js = 'var ultra_events = {"data": [[10.0, 50, 1]]};'
+    (ptx_meas / "ultrasonic_phase_plot.js").write_text(sample_js, encoding="utf-8")
+    (ltx_meas / "ultrasonic_phase_plot.js").write_text(sample_js, encoding="utf-8")
+
+    out_dir = tmp_path / "OUTPUT"
+    catalog = generate_all_substation_prpd_graphs(survey_dir, output_dir=out_dir, mode="option_b")
+
+    assert "tx" in catalog
+    assert 1 in catalog["tx"] and catalog["tx"][1]["us"] is not None
+    assert 2 in catalog["tx"] and catalog["tx"][2]["us"] is not None
+    assert "ptx" in catalog["tx"]
+    assert catalog["tx"]["ptx"]["us"] == catalog["tx"][1]["us"]
+    assert "ltx" in catalog["tx"]
+    assert catalog["tx"]["ltx"]["us"] == catalog["tx"][2]["us"]
+
 
 
 
