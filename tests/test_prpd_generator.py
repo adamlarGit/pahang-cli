@@ -1484,6 +1484,147 @@ def test_generate_all_substation_prpd_graphs_ptx_and_ltx(tmp_path: Path):
     assert catalog["tx"]["ltx"]["us"] == catalog["tx"][2]["us"]
 
 
+def test_extract_measurement_component_and_matches_compartment(tmp_path: Path):
+    """Test extracting $COMPONENT from measurement_metadata.js and compartment matching logic."""
+    from src.quick_report.prpd import _matches_compartment, extract_measurement_component
+
+    # 1. Test extraction from measurement_metadata.js
+    meas_dir = tmp_path / "20261022T163504_Ultrasonic"
+    meas_dir.mkdir()
+    meta_content = (
+        'var measurement_metadata = {"Trend":[],"measurement_fields":['
+        '{"fields":[{"data":"VCB","fieldname":"$ASSET_NAME"},'
+        '{"data":"$CIRCUIT_BREAKER","fieldname":"$COMPONENT"}],'
+        '"group":"$GROUP_METADATA"}]};'
+    )
+    (meas_dir / "measurement_metadata.js").write_text(meta_content, encoding="utf-8")
+    extracted = extract_measurement_component(meas_dir)
+    assert extracted == "CIRCUIT_BREAKER"
+
+    # 2. Test compartment matching
+    assert _matches_compartment("BREAKER COMPARTMENT", "CIRCUIT_BREAKER") is True
+    assert _matches_compartment("CIRCUIT BREAKER", "CIRCUIT_BREAKER") is True
+    assert _matches_compartment("FRONT COMPARTMENT", "CIRCUIT_BREAKER") is True
+    assert _matches_compartment("CABLE COMPARTMENT", "CABLE_BOX") is True
+    assert _matches_compartment("CABLE BOX", "CABLE_BOX") is True
+    assert _matches_compartment("REAR COMPARTMENT", "CABLE_BOX") is True
+    assert _matches_compartment("BUSBAR COMPARTMENT", "UPPER_BUSBARS") is True
+    assert _matches_compartment("UPPER BUSBARS", "UPPER_BUSBARS") is True
+    assert _matches_compartment("PT COMPARTMENT", "VT_CHAMBER") is True
+
+    # Negative / non-matching
+    assert _matches_compartment("BREAKER COMPARTMENT", "CABLE_BOX") is False
+    assert _matches_compartment("BREAKER COMPARTMENT", "UPPER_BUSBARS") is False
+    assert _matches_compartment("CABLE COMPARTMENT", "CIRCUIT_BREAKER") is False
+    assert _matches_compartment("BUSBAR COMPARTMENT", "CIRCUIT_BREAKER") is False
+    assert _matches_compartment("CABLE ENTRY", "CABLE_BOX") is False
+
+
+def test_find_latest_measurement_dir_by_compartment(tmp_path: Path):
+    """Test find_latest_measurement_dir selects the compartment-matching directory."""
+    feeder_dir = tmp_path / "1_PE_PERSONA"
+    d_cb = feeder_dir / "20261022T163504_Ultrasonic"
+    d_cable = feeder_dir / "20261022T163746_Ultrasonic"
+    d_busbar = feeder_dir / "20261022T163803_Ultrasonic"
+
+    for d in (d_cb, d_cable, d_busbar):
+        d.mkdir(parents=True)
+        (d / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[10.0, 50, 1]]};', encoding="utf-8")
+
+    (d_cb / "measurement_metadata.js").write_text(
+        'var measurement_metadata = {"measurement_fields":[{"fields":[{"data":"$CIRCUIT_BREAKER","fieldname":"$COMPONENT"}]}]};',
+        encoding="utf-8",
+    )
+    (d_cable / "measurement_metadata.js").write_text(
+        'var measurement_metadata = {"measurement_fields":[{"fields":[{"data":"$CABLE_BOX","fieldname":"$COMPONENT"}]}]};',
+        encoding="utf-8",
+    )
+    (d_busbar / "measurement_metadata.js").write_text(
+        'var measurement_metadata = {"measurement_fields":[{"fields":[{"data":"$UPPER_BUSBARS","fieldname":"$COMPONENT"}]}]};',
+        encoding="utf-8",
+    )
+
+    # Resolves circuit breaker
+    res_cb = find_latest_measurement_dir(feeder_dir, "US", compartment="BREAKER COMPARTMENT")
+    assert res_cb == d_cb
+
+    # Resolves cable box
+    res_cable = find_latest_measurement_dir(feeder_dir, "US", compartment="CABLE COMPARTMENT")
+    assert res_cable == d_cable
+
+    # Resolves upper busbars
+    res_busbar = find_latest_measurement_dir(feeder_dir, "US", compartment="BUSBAR COMPARTMENT")
+    assert res_busbar == d_busbar
+
+    # Graceful fallback to latest timestamp if compartment is None
+    res_none = find_latest_measurement_dir(feeder_dir, "US", compartment=None)
+    assert res_none == d_busbar
+
+    # Graceful fallback to latest timestamp if compartment not found
+    res_unmatched = find_latest_measurement_dir(feeder_dir, "US", compartment="UNKNOWN COMPARTMENT")
+    assert res_unmatched == d_busbar
+
+
+def test_generate_prpd_graphs_for_swg_panel_compartment_slug(tmp_path: Path):
+    """Test generate_prpd_graphs_for_swg_panel saves outputs with sanitized compartment slugs."""
+    survey_dir = tmp_path / "SURVEY"
+    feeder_dir = survey_dir / "SWG" / "FEEDER_1"
+    d_cb = feeder_dir / "20261022T163504_Ultrasonic"
+    d_cable = feeder_dir / "20261022T163746_Ultrasonic"
+    d_busbar = feeder_dir / "20261022T163803_Ultrasonic"
+
+    for d in (d_cb, d_cable, d_busbar):
+        d.mkdir(parents=True)
+        (d / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[10.0, 50, 1]]};', encoding="utf-8")
+
+    (d_cb / "measurement_metadata.js").write_text(
+        'var measurement_metadata = {"measurement_fields":[{"fields":[{"data":"$CIRCUIT_BREAKER","fieldname":"$COMPONENT"}]}]};',
+        encoding="utf-8",
+    )
+    (d_cable / "measurement_metadata.js").write_text(
+        'var measurement_metadata = {"measurement_fields":[{"fields":[{"data":"$CABLE_BOX","fieldname":"$COMPONENT"}]}]};',
+        encoding="utf-8",
+    )
+    (d_busbar / "measurement_metadata.js").write_text(
+        'var measurement_metadata = {"measurement_fields":[{"fields":[{"data":"$UPPER_BUSBARS","fieldname":"$COMPONENT"}]}]};',
+        encoding="utf-8",
+    )
+
+    out_dir = tmp_path / "GRAPHS_OUT"
+    us_cb, _ = generate_prpd_graphs_for_swg_panel(
+        survey_root=survey_dir,
+        panel_no=1,
+        output_dir=out_dir,
+        mode="option_b",
+        compartment="BREAKER COMPARTMENT",
+    )
+    us_cable, _ = generate_prpd_graphs_for_swg_panel(
+        survey_root=survey_dir,
+        panel_no=1,
+        output_dir=out_dir,
+        mode="option_b",
+        compartment="CABLE COMPARTMENT",
+    )
+    us_busbar, _ = generate_prpd_graphs_for_swg_panel(
+        survey_root=survey_dir,
+        panel_no=1,
+        output_dir=out_dir,
+        mode="option_b",
+        compartment="BUSBAR COMPARTMENT",
+    )
+
+    assert us_cb is not None and us_cb.exists()
+    assert us_cable is not None and us_cable.exists()
+    assert us_busbar is not None and us_busbar.exists()
+
+    # Filenames must be distinct with compartment slugs
+    assert us_cb.name == "prpd_swg_panel1_breaker_compartment_us.png"
+    assert us_cable.name == "prpd_swg_panel1_cable_compartment_us.png"
+    assert us_busbar.name == "prpd_swg_panel1_busbar_compartment_us.png"
+    assert len({us_cb, us_cable, us_busbar}) == 3
+
+
+
 
 
 

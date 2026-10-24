@@ -54,6 +54,7 @@ from src.full_report.scan_render import (
     FullReportScanPageRendererCore,
 )
 from src.quick_report.prpd import (
+    _matches_compartment,
     discover_ultratev_survey_dir,
     generate_prpd_graphs_for_swg_panel,
     generate_prpd_graphs_for_transformer,
@@ -885,6 +886,15 @@ class SwitchgearScanAdapter:
             is_overview_substituted=is_ov_substituted,
         )
 
+    def render_swg_scan_pages(
+        self,
+        output_dir: Path | str,
+        renderer: FullReportScanPageRendererCore | None = None,
+    ) -> list[Path]:
+        """Render all switchgear scan pages into output_dir."""
+        res = self.adapt()
+        return res.render_all(output_dir, renderer=renderer)
+
     def _resolve_prpd(
         self,
         panel_no: int,
@@ -899,9 +909,9 @@ class SwitchgearScanAdapter:
         should_gen_us = include_us and (compartment is None or is_swg_compartment_us_eligible(compartment))
 
         # 1. Catalog lookup
+        entry = None
         if self.prpd_catalog and "swg" in self.prpd_catalog:
             swg_cat = self.prpd_catalog["swg"]
-            entry = None
             if panel_no in swg_cat:
                 entry = swg_cat[panel_no]
             elif feeder_no:
@@ -912,9 +922,36 @@ class SwitchgearScanAdapter:
                     entry = swg_cat[clean_f]
 
             if entry is not None:
-                us_p = str(entry.get("us") or "") if should_gen_us else ""
-                tev_p = str(entry.get("tev") or "") if should_gen_tev else ""
-                return us_p, tev_p
+                us_p = None
+                tev_p = None
+
+                if compartment:
+                    comp_dict = entry.get("compartments")
+                    if isinstance(comp_dict, dict):
+                        for c_k, c_v in comp_dict.items():
+                            if _matches_compartment(compartment, c_k) and isinstance(c_v, dict):
+                                us_p = c_v.get("us")
+                                tev_p = c_v.get("tev")
+                                break
+                    if not us_p:
+                        clean_comp_slug = re.sub(r"[^\w]+", "_", compartment.upper()).strip("_").lower()
+                        if f"us_{clean_comp_slug}" in entry:
+                            us_p = entry[f"us_{clean_comp_slug}"]
+                    if not tev_p:
+                        clean_comp_slug = re.sub(r"[^\w]+", "_", compartment.upper()).strip("_").lower()
+                        if f"tev_{clean_comp_slug}" in entry:
+                            tev_p = entry[f"tev_{clean_comp_slug}"]
+
+                if us_p is not None or tev_p is not None:
+                    return (
+                        str(us_p) if (should_gen_us and us_p) else "",
+                        str(tev_p) if (should_gen_tev and tev_p) else "",
+                    )
+
+                if compartment is None:
+                    us_p = str(entry.get("us") or "") if should_gen_us else ""
+                    tev_p = str(entry.get("tev") or "") if should_gen_tev else ""
+                    return us_p, tev_p
 
         # 2. Dynamic generation via prpd.py if survey directory is available
         if self.survey_root and self.survey_root.exists():
@@ -932,9 +969,19 @@ class SwitchgearScanAdapter:
                     include_tev=should_gen_tev,
                     include_us=should_gen_us,
                 )
-                return (str(us_png) if us_png else ""), (str(tev_png) if tev_png else "")
+                if us_png or tev_png:
+                    return (
+                        str(us_png) if (should_gen_us and us_png) else "",
+                        str(tev_png) if (should_gen_tev and tev_png) else "",
+                    )
             except Exception as exc:
                 logger.warning("Failed to generate PRPD graphs for SWG panel %d: %s", panel_no, exc)
+
+        # 3. Fallback to catalog default entry if available
+        if entry is not None:
+            us_p = str(entry.get("us") or "") if should_gen_us else ""
+            tev_p = str(entry.get("tev") or "") if should_gen_tev else ""
+            return us_p, tev_p
 
         return "", ""
 

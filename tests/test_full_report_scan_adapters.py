@@ -11,6 +11,7 @@ Validates:
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 import tempfile
 from typing import Any
@@ -1637,6 +1638,152 @@ def test_33kv_mini_ppu_part07_tx_scanning_pages_prpd(
                     us_prpd = item.context.get("us", {}).get("prpd", "")
                     assert us_prpd != "", f"Empty US PRPD graph for {tx.tx_id} - {item.component_name}"
                     assert Path(us_prpd).exists(), f"PRPD file does not exist: {us_prpd}"
+
+
+def test_switchgear_scan_adapter_compartment_specific_ultrasound_from_catalog(tmp_path: Path):
+    """Test SwitchgearScanAdapter assigns distinct US PRPD graphs to compartments from catalog."""
+    from src.full_report.models import SwitchgearPanelScanSpec, SwitchgearScanSpec
+
+    p_cb = tmp_path / "panel1_cb_us.png"
+    p_cable = tmp_path / "panel1_cable_us.png"
+    p_busbar = tmp_path / "panel1_busbar_us.png"
+    for p in (p_cb, p_cable, p_busbar):
+        p.write_bytes(b"dummy_png_bytes")
+
+    catalog = {
+        "swg": {
+            1: {
+                "us": p_cb,
+                "tev": None,
+                "compartments": {
+                    "CIRCUIT_BREAKER": {"us": p_cb, "tev": None},
+                    "CABLE_BOX": {"us": p_cable, "tev": None},
+                    "UPPER_BUSBARS": {"us": p_busbar, "tev": None},
+                },
+            }
+        }
+    }
+
+    panel = SwitchgearPanelScanSpec(
+        panel_no=1,
+        name="INCOMING 1",
+        compartments=("BREAKER COMPARTMENT", "CABLE COMPARTMENT", "BUSBAR COMPARTMENT"),
+    )
+    swg = SwitchgearScanSpec(
+        switchgear_type="VCB",
+        manufacturer="TAMCO",
+        model="VH3",
+        rating="33kV",
+        panels=(panel,),
+    )
+
+    adapter = SwitchgearScanAdapter(
+        swg=swg,
+        substation_info={"date": "22/10/2026", "time": "10:00", "ambient": "30", "humidity": "60"},
+        prpd_catalog=catalog,
+    )
+    result = adapter.adapt()
+
+    cb_items = [it for it in result.items if it.component_name == "BREAKER COMPARTMENT"]
+    cable_items = [it for it in result.items if it.component_name == "CABLE COMPARTMENT"]
+    busbar_items = [it for it in result.items if it.component_name == "BUSBAR COMPARTMENT"]
+
+    assert len(cb_items) == 1
+    assert len(cable_items) == 1
+    assert len(busbar_items) == 1
+
+    us_cb = cb_items[0].context["panel"]["us"]["prpd"]
+    us_cable = cable_items[0].context["panel"]["us"]["prpd"]
+    us_busbar = busbar_items[0].context["panel"]["us"]["prpd"]
+
+    assert us_cb == str(p_cb)
+    assert us_cable == str(p_cable)
+    assert us_busbar == str(p_busbar)
+
+    # Must be distinct, not replicated
+    assert len({us_cb, us_cable, us_busbar}) == 3
+
+    # Check convenience method render_swg_scan_pages exists
+    assert hasattr(adapter, "render_swg_scan_pages")
+
+
+def test_switchgear_scan_adapter_33kv_kuala_tahan_and_merting_end_to_end(tmp_path: Path):
+    """End-to-end test verifying compartment-specific ultrasound graphs on 22-10-2026 substations."""
+    from src.quick_report.prpd import generate_all_substation_prpd_graphs
+    from src.testsheet.parsers.ppu import PpuTestsheetParser
+
+    substations = [
+        (
+            Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI).xlsx"),
+            Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI)\RAW DATA\US"),
+        ),
+        (
+            Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI).xlsx"),
+            Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI)\RAW DATA\US"),
+        ),
+    ]
+
+    for ts_path, survey_path in substations:
+        if not (ts_path.exists() and survey_path.exists()):
+            pytest.skip(f"Test data missing for {ts_path.stem}")
+
+        data = PpuTestsheetParser().extract_testsheet_data(ts_path)
+        swg_list = list(data.equipment.switchgears)
+        assert len(swg_list) >= 1, f"Expected at least 1 switchgear, got {len(swg_list)}"
+        swg = swg_list[0]
+
+        out_dir = tmp_path / ts_path.stem
+        catalog = generate_all_substation_prpd_graphs(
+            survey_root=survey_path,
+            output_dir=out_dir,
+            mode="option_b",
+            panels=swg.panels,
+        )
+
+        adapter = SwitchgearScanAdapter(
+            swg=swg,
+            substation_info={"date": "22/10/2026", "time": "10:00", "ambient": "30", "humidity": "60"},
+            survey_root=survey_path,
+            prpd_catalog=catalog,
+            prpd_mode="option_b",
+            is_33kv=True,
+        )
+        result = adapter.adapt()
+
+        # Check each panel has distinct US graphs across Breaker, Cable, Busbar
+        for panel in swg.panels:
+            p_no = panel.panel_no
+            panel_items = [it for it in result.items if it.panel_no == p_no]
+            cb_items = [it for it in panel_items if it.component_name == "BREAKER COMPARTMENT"]
+            cable_items = [it for it in panel_items if it.component_name == "CABLE COMPARTMENT"]
+            busbar_items = [it for it in panel_items if it.component_name == "BUSBAR COMPARTMENT"]
+
+            if cb_items and cable_items and busbar_items:
+                us_cb = cb_items[0].context["panel"]["us"]["prpd"]
+                us_cable = cable_items[0].context["panel"]["us"]["prpd"]
+                us_busbar = busbar_items[0].context["panel"]["us"]["prpd"]
+
+                assert us_cb != "", f"Empty Breaker US PRPD for panel {p_no} in {ts_path.stem}"
+                assert us_cable != "", f"Empty Cable US PRPD for panel {p_no} in {ts_path.stem}"
+                assert us_busbar != "", f"Empty Busbar US PRPD for panel {p_no} in {ts_path.stem}"
+
+                assert Path(us_cb).exists(), f"Breaker PRPD file does not exist: {us_cb}"
+                assert Path(us_cable).exists(), f"Cable PRPD file does not exist: {us_cable}"
+                assert Path(us_busbar).exists(), f"Busbar PRPD file does not exist: {us_busbar}"
+
+                # Must be distinct file paths and distinct image contents (not replicated)
+                assert us_cb != us_cable, f"Breaker and Cable graph paths identical for panel {p_no}"
+                assert us_cable != us_busbar, f"Cable and Busbar graph paths identical for panel {p_no}"
+                assert us_cb != us_busbar, f"Breaker and Busbar graph paths identical for panel {p_no}"
+
+                h_cb = hashlib.md5(Path(us_cb).read_bytes()).hexdigest()
+                h_cable = hashlib.md5(Path(us_cable).read_bytes()).hexdigest()
+                h_busbar = hashlib.md5(Path(us_busbar).read_bytes()).hexdigest()
+
+                assert h_cb != h_cable, f"Breaker and Cable graph contents identical for panel {p_no} in {ts_path.stem}"
+                assert h_cable != h_busbar, f"Cable and Busbar graph contents identical for panel {p_no} in {ts_path.stem}"
+                assert h_cb != h_busbar, f"Breaker and Busbar graph contents identical for panel {p_no} in {ts_path.stem}"
+
 
 
 

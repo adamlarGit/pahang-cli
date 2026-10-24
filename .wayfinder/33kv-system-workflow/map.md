@@ -72,7 +72,7 @@ graph TD
     T121["#121: Verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008 - Closed"]
     T122["#122: Align switchgear survey discovery with testsheet feeder and link numbers - Closed"]
     T123["#123: Discover 33kV PTX and LTX transformer survey directories - Closed"]
-    T124["#124: Resolve compartment-specific ultrasound graphs and verify 22-10-2026 reports"]
+    T124["#124: Resolve compartment-specific ultrasound graphs and verify 22-10-2026 reports - Closed"]
     T125["#125: Restore per-page template recopy-paste sequence for unique ActiveX CIRViewer isolation - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
@@ -270,11 +270,15 @@ graph TD
 - **Delivers**: Transformer survey directory discovery recognizing 33kV `PTX` and `LTX` directories and mapping them to transformer specs.
 
 ### #124: fix(full-report): resolve compartment-specific ultrasound graphs and verify 22-10-2026 reports
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#124](https://github.com/adamlarGit/pahang-cli/issues/124)
 - **Blocked by**: #122, #123
 - **Ticket File**: [tickets/124-resolve-compartment-specific-ultrasound-graphs-and-verify-22-10-2026.md](./tickets/124-resolve-compartment-specific-ultrasound-graphs-and-verify-22-10-2026.md)
 - **Delivers**: Resolve compartment-specific ultrasound graphs (Breaker, Cable, Busbar) without duplicating single panel-wide graphs on 22-10-2026 reports.
+- [x] `SwitchgearScanAdapter` resolves compartment-specific ultrasound graphs for Circuit Breaker, Cable Box, and Upper Busbars.
+- [x] Full Reports generated for `22-10-2026` under `FULL REPORT/JERANTUT/01. OCTOBER/22-10-2026/` have populated, correctly attributed US graphs in all panel and transformer scanning documents (Part 02 through Part 07).
+- [x] No regression on previously working substations (e.g. `25. MINI PPU SG KOYAN`).
+- [x] Automated end-to-end verification tests pass.
 
 ### #125: fix(compiler): restore per-page template recopy-paste sequence for unique ActiveX CIRViewer isolation (#ADR-0002)
 - **Status**: Closed

@@ -1231,8 +1231,191 @@ def find_tx_survey_dir(
     return None
 
 
-def find_latest_measurement_dir(feeder_or_tx_dir: Path, tech_type: str) -> Path | None:
-    """Find the latest timestamped measurement directory containing valid payload."""
+def extract_measurement_component(meas_dir: Path | str) -> str:
+    """Extract $COMPONENT token from measurement_metadata.js, sanitized to uppercase."""
+    p = Path(meas_dir)
+    meta_file = p / "measurement_metadata.js"
+    if not meta_file.is_file():
+        return ""
+    content = ""
+    try:
+        content = meta_file.read_text(encoding="utf-8", errors="ignore")
+        start = content.find("{")
+        if start != -1:
+            decoder = json.JSONDecoder()
+            obj, _ = decoder.raw_decode(content[start:])
+            if isinstance(obj, dict):
+                for group in obj.get("measurement_fields", []):
+                    if isinstance(group, dict):
+                        for f in group.get("fields", []):
+                            if isinstance(f, dict) and f.get("fieldname") == "$COMPONENT":
+                                val = f.get("data")
+                                if val:
+                                    return _clean_survey_token(str(val))
+    except Exception:
+        pass
+
+    try:
+        if content:
+            m = re.search(r'"fieldname"\s*:\s*"\$COMPONENT"\s*,\s*"data"\s*:\s*"([^"]+)"', content)
+            if not m:
+                m = re.search(r'"data"\s*:\s*"([^"]+)"\s*,\s*"fieldname"\s*:\s*"\$COMPONENT"', content)
+            if m:
+                return _clean_survey_token(m.group(1))
+    except Exception:
+        pass
+
+    return ""
+
+
+def _matches_compartment(compartment: str | None, component_token: str | None) -> bool:
+    """Check if a measurement component token matches a requested compartment name."""
+    if not compartment or not component_token:
+        return False
+
+    comp_clean = _clean_survey_token(compartment)
+    token_clean = _clean_survey_token(component_token)
+
+    if not comp_clean or not token_clean:
+        return False
+
+    if comp_clean == token_clean:
+        return True
+
+    # Breaker variants (CIRCUIT_BREAKER, BREAKER, FRONT_COMPARTMENT, FRONT)
+    is_breaker_comp = (
+        "BREAKER" in comp_clean
+        or comp_clean in ("CIRCUIT_BREAKER", "FRONT_COMPARTMENT", "FRONT")
+    )
+    if is_breaker_comp:
+        # Exclude if another compartment indicator is present in token_clean
+        if any(other in token_clean for other in ("CABLE", "BUSBAR", "BUS_BAR", "VT", "PT", "CHAMBER")):
+            return False
+        return "CIRCUIT_BREAKER" in token_clean or "BREAKER" in token_clean or token_clean in ("CIRCUIT_BREAKER", "BREAKER")
+
+    # Cable variants (CABLE_BOX, CABLE_COMPARTMENT, REAR_COMPARTMENT)
+    # Exclude CABLE_ENTRY so cable entry does not collide with cable box
+    is_cable_comp = (
+        comp_clean != "CABLE_ENTRY"
+        and (
+            "CABLE" in comp_clean
+            or comp_clean in ("CABLE_BOX", "REAR_COMPARTMENT", "BACK_COMPARTMENT", "REAR", "BACK")
+        )
+    )
+    if is_cable_comp:
+        if any(other in token_clean for other in ("BUSBAR", "BUS_BAR", "BREAKER", "VT", "PT", "CHAMBER")):
+            return False
+        return any(k in token_clean for k in ("CABLE_BOX", "CABLE"))
+
+    # Busbar variants (UPPER_BUSBARS, BUSBAR, BUSBARS, BUSBAR_COMPARTMENT)
+    is_busbar_comp = "BUSBAR" in comp_clean or "BUS_BAR" in comp_clean
+    if is_busbar_comp:
+        if any(other in token_clean for other in ("BREAKER", "CABLE", "VT", "PT")):
+            return False
+        return "BUSBAR" in token_clean or "BUS_BAR" in token_clean
+
+    # PT / VT variants (PT_COMPARTMENT, VT_CHAMBER, PT, VT, VOLTAGE_TRANSFORMER)
+    is_pt_comp = any(k in comp_clean for k in ("PT", "VT", "VOLTAGE_TRANSFORMER", "POTENTIAL_TRANSFORMER", "CHAMBER"))
+    if is_pt_comp:
+        if any(other in token_clean for other in ("BREAKER", "BUSBAR", "BUS_BAR")):
+            return False
+        return any(k in token_clean for k in ("VT", "PT", "VOLTAGE_TRANSFORMER", "POTENTIAL_TRANSFORMER", "CHAMBER"))
+
+    return comp_clean in token_clean or token_clean in comp_clean
+
+
+def find_pregenerated_prpd_graph(
+    survey_root: Path | str | None,
+    feeder_or_tx_dir: Path | None = None,
+    panel_no: int | None = None,
+    feeder_no: str = "",
+    panel_name: str = "",
+    compartment: str | None = None,
+    tech: str = "US",
+) -> Path | None:
+    """Locate an existing pre-rendered PRPD graph in RAW DATA/US+TEV/graphs/ or survey_root/graphs/."""
+    candidate_dirs: list[Path] = []
+    if survey_root:
+        s_path = Path(survey_root)
+        candidate_dirs.extend([
+            s_path / "graphs",
+            s_path.parent / "US+TEV" / "graphs",
+            s_path / "US+TEV" / "graphs",
+            s_path.parent / "graphs",
+        ])
+    if feeder_or_tx_dir:
+        f_path = Path(feeder_or_tx_dir)
+        candidate_dirs.extend([
+            f_path.parent.parent / "US+TEV" / "graphs",
+            f_path.parent.parent.parent / "US+TEV" / "graphs",
+            f_path.parent.parent / "graphs",
+        ])
+
+    valid_graph_dirs = [d for d in candidate_dirs if d.is_dir()]
+    if not valid_graph_dirs:
+        return None
+
+    tech_suffix = f"_{tech.upper()}.PNG"
+
+    feeder_folder_tokens: list[str] = []
+    if feeder_or_tx_dir:
+        feeder_folder_tokens.append(_clean_survey_token(feeder_or_tx_dir.name))
+    if feeder_no:
+        feeder_folder_tokens.append(_clean_survey_token(feeder_no))
+    if panel_name:
+        feeder_folder_tokens.append(_clean_survey_token(panel_name))
+    if panel_no:
+        feeder_folder_tokens.append(f"PANEL_{panel_no}")
+        feeder_folder_tokens.append(f"PANEL{panel_no}")
+
+    for g_dir in valid_graph_dirs:
+        for f in g_dir.iterdir():
+            if not f.is_file() or not f.name.upper().endswith(tech_suffix):
+                continue
+            f_stem = f.stem.upper()
+
+            # Delimited word/token boundary regex matching to avoid 1 vs 31/21 collisions
+            matches_feeder = False
+            for tok in feeder_folder_tokens:
+                if not tok:
+                    continue
+                pattern = rf"(?:^|_){re.escape(tok)}(?:_|$)"
+                if re.search(pattern, f_stem):
+                    matches_feeder = True
+                    break
+
+            if not matches_feeder and feeder_or_tx_dir:
+                clean_name = _clean_survey_token(feeder_or_tx_dir.name)
+                tokens = [t for t in clean_name.split("_") if len(t) >= 2]
+                if tokens and all(re.search(rf"(?:^|_){re.escape(t)}(?:_|$)", f_stem) for t in tokens):
+                    matches_feeder = True
+
+            if not matches_feeder:
+                continue
+
+            if compartment:
+                comp_candidate = f_stem
+                if tech_suffix.startswith("_"):
+                    comp_candidate = re.sub(rf"_{tech.upper()}$", "", comp_candidate)
+                if _matches_compartment(compartment, comp_candidate):
+                    return f
+            else:
+                return f
+
+    return None
+
+
+def find_latest_measurement_dir(
+    feeder_or_tx_dir: Path,
+    tech_type: str,
+    compartment: str | None = None,
+) -> Path | None:
+    """Find the latest timestamped measurement directory containing valid payload.
+
+    When `compartment` is provided, inspects `measurement_metadata.js` ($COMPONENT) in candidate
+    measurement folders to find the one matching the compartment (e.g. CIRCUIT_BREAKER, CABLE_BOX,
+    UPPER_BUSBARS). If no matching compartment is found, falls back gracefully to the latest directory.
+    """
     if not feeder_or_tx_dir or not feeder_or_tx_dir.exists():
         return None
 
@@ -1249,15 +1432,26 @@ def find_latest_measurement_dir(feeder_or_tx_dir: Path, tech_type: str) -> Path 
     # Sort descending by timestamp / name
     candidate_dirs.sort(key=lambda x: x.name, reverse=True)
 
+    valid_dirs: list[Path] = []
     for d in candidate_dirs:
         payload_file = d / target_payload
         html_file = d / target_html
         if (payload_file.exists() and payload_file.stat().st_size > 0) or (
             html_file.exists() and html_file.stat().st_size > 0
         ):
-            return d
+            valid_dirs.append(d)
 
-    return None
+    if not valid_dirs:
+        return None
+
+    if compartment:
+        for d in valid_dirs:
+            comp_tok = extract_measurement_component(d)
+            if comp_tok and _matches_compartment(compartment, comp_tok):
+                return d
+
+    # Graceful fallback: latest valid directory
+    return valid_dirs[0]
 
 
 def generate_prpd_graphs_for_swg_panel(
@@ -1298,45 +1492,93 @@ def generate_prpd_graphs_for_swg_panel(
     us_png: Path | None = None
     tev_png: Path | None = None
 
+    comp_slug = f"_{_clean_survey_token(compartment).lower()}" if compartment else ""
+    us_out = output_dir / f"prpd_swg_panel{panel_no}{comp_slug}_us.png"
+    tev_out = output_dir / f"prpd_swg_panel{panel_no}{comp_slug}_tev.png"
+
+    # Step 1: Check for pre-generated graph in RAW DATA/US+TEV/graphs/
+    if should_gen_us:
+        pre_us = find_pregenerated_prpd_graph(
+            survey_root=survey_root,
+            feeder_or_tx_dir=feeder_dir,
+            panel_no=panel_no,
+            feeder_no=feeder_no,
+            panel_name=panel_name,
+            compartment=compartment,
+            tech="US",
+        )
+        if pre_us and not is_blank_or_invalid_image(pre_us):
+            try:
+                if pre_us.resolve() != us_out.resolve():
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(pre_us), str(us_out))
+                    us_png = us_out
+                else:
+                    us_png = pre_us
+            except Exception:
+                us_png = pre_us
+
+    if should_gen_tev:
+        pre_tev = find_pregenerated_prpd_graph(
+            survey_root=survey_root,
+            feeder_or_tx_dir=feeder_dir,
+            panel_no=panel_no,
+            feeder_no=feeder_no,
+            panel_name=panel_name,
+            compartment=compartment,
+            tech="TEV",
+        )
+        if pre_tev and not is_blank_or_invalid_image(pre_tev):
+            try:
+                if pre_tev.resolve() != tev_out.resolve():
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(pre_tev), str(tev_out))
+                    tev_png = tev_out
+                else:
+                    tev_png = pre_tev
+            except Exception:
+                tev_png = pre_tev
+
+    if (not should_gen_us or us_png is not None) and (not should_gen_tev or tev_png is not None):
+        return us_png, tev_png
+
+    # Step 2: Render via Option B or Option C
     if mode == "option_b":
         # 1. Ultrasonic Graph (Option B) - Skipped if compartment is non-US or include_us is False
-        if should_gen_us:
-            us_dir = find_latest_measurement_dir(feeder_dir, "US")
+        if should_gen_us and us_png is None:
+            us_dir = find_latest_measurement_dir(feeder_dir, "US", compartment=compartment)
             if us_dir:
                 us_file = us_dir / "ultrasonic_phase_plot.js"
                 if us_file.exists():
                     try:
                         events = decode_ultrasonic_phase_plot(us_file)
-                        us_out = output_dir / f"prpd_swg_panel{panel_no}_us.png"
                         us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
                     except Exception:
                         us_png = None
 
         # 2. TEV Graph (Option B) - Skipped if compartment is non-TEV or include_tev is False
-        if should_gen_tev:
-            tev_dir = find_latest_measurement_dir(feeder_dir, "TEV")
+        if should_gen_tev and tev_png is None:
+            tev_dir = find_latest_measurement_dir(feeder_dir, "TEV", compartment=compartment)
             if tev_dir:
                 tev_file = tev_dir / "eventData.js"
                 if tev_file.exists():
                     try:
                         events = decode_tev_event_data(tev_file)
-                        tev_out = output_dir / f"prpd_swg_panel{panel_no}_tev.png"
                         tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
                     except Exception:
                         tev_png = None
     else:
         # Option C: Headless Chrome
-        us_dir = find_latest_measurement_dir(feeder_dir, "US") if should_gen_us else None
-        tev_dir = find_latest_measurement_dir(feeder_dir, "TEV") if should_gen_tev else None
+        us_dir = find_latest_measurement_dir(feeder_dir, "US", compartment=compartment) if (should_gen_us and us_png is None) else None
+        tev_dir = find_latest_measurement_dir(feeder_dir, "TEV", compartment=compartment) if (should_gen_tev and tev_png is None) else None
         if not us_dir and not tev_dir:
-            return None, None
+            return us_png, tev_png
 
         def _do_render(port: int, chrome: str) -> tuple[Path | None, Path | None]:
-            u_png, t_png = None, None
-            if us_dir:
+            u_png, t_png = us_png, tev_png
+            if us_dir and u_png is None:
                 us_html = us_dir / "Ultrasonic.html"
                 if us_html.exists():
-                    us_out = output_dir / f"prpd_swg_panel{panel_no}_us.png"
                     u_png = render_prpd_option_c_image(
                         html_file=us_html,
                         output_png=us_out,
@@ -1344,10 +1586,9 @@ def generate_prpd_graphs_for_swg_panel(
                         http_port=port,
                         chrome_path=chrome,
                     )
-            if tev_dir:
+            if tev_dir and t_png is None:
                 tev_html = tev_dir / "TEV.html"
                 if tev_html.exists():
-                    tev_out = output_dir / f"prpd_swg_panel{panel_no}_tev.png"
                     t_png = render_prpd_option_c_image(
                         html_file=tev_html,
                         output_png=tev_out,
@@ -1361,7 +1602,7 @@ def generate_prpd_graphs_for_swg_panel(
             resolved_chrome = chrome_path or find_chrome_executable()
         except FileNotFoundError as exc:
             logging.warning("Option C rendering skipped: %s", exc)
-            return None, None
+            return us_png, tev_png
 
         if http_port is not None:
             us_png, tev_png = _do_render(http_port, resolved_chrome)
@@ -1706,39 +1947,120 @@ def generate_all_substation_prpd_graphs(
         try:
             with SurveyHttpServer(survey_path, temp_dir=out_path) as port:
                 for panel_idx, feeder_dir in swg_panels.items():
-                    us_png: Path | None = None
-                    tev_png: Path | None = None
+                    us_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_Ultrasonic" in d.name]
+                    us_comp_dirs: dict[str, Path] = {}
+                    for d in sorted(us_candidates, key=lambda x: x.name, reverse=True):
+                        c_tok = extract_measurement_component(d)
+                        if c_tok and c_tok not in us_comp_dirs:
+                            us_comp_dirs[c_tok] = d
 
-                    us_meas = find_latest_measurement_dir(feeder_dir, "US")
-                    if us_meas:
-                        us_html = us_meas / "Ultrasonic.html"
-                        if us_html.exists():
-                            us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
-                            us_png = render_prpd_option_c_image(
-                                html_file=us_html,
-                                output_png=us_out,
-                                survey_root=survey_path,
-                                http_port=port,
-                                chrome_path=chrome_path,
-                            )
+                    tev_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_TEV" in d.name]
+                    tev_comp_dirs: dict[str, Path] = {}
+                    for d in sorted(tev_candidates, key=lambda x: x.name, reverse=True):
+                        c_tok = extract_measurement_component(d)
+                        if c_tok and c_tok not in tev_comp_dirs:
+                            tev_comp_dirs[c_tok] = d
 
-                    tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
-                    if tev_meas:
-                        tev_html = tev_meas / "TEV.html"
-                        if tev_html.exists():
-                            tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
-                            tev_png = render_prpd_option_c_image(
-                                html_file=tev_html,
-                                output_png=tev_out,
-                                survey_root=survey_path,
-                                http_port=port,
-                                chrome_path=chrome_path,
-                            )
+                    distinct_comps = sorted(set(us_comp_dirs.keys()) | set(tev_comp_dirs.keys()))
 
-                    catalog["swg"][panel_idx] = {
-                        "us": us_png,
-                        "tev": tev_png,
-                    }
+                    if len(distinct_comps) > 1:
+                        comp_map: dict[str, dict[str, Path | None]] = {}
+                        for comp in distinct_comps:
+                            u_png: Path | None = None
+                            t_png: Path | None = None
+                            comp_slug = f"_{comp.lower()}"
+
+                            pre_u = find_pregenerated_prpd_graph(survey_path, feeder_dir, panel_no=panel_idx, compartment=comp, tech="US")
+                            if pre_u and not is_blank_or_invalid_image(pre_u):
+                                u_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_us.png"
+                                if pre_u.resolve() != u_out.resolve():
+                                    shutil.copy2(str(pre_u), str(u_out))
+                                    u_png = u_out
+                                else:
+                                    u_png = pre_u
+                            elif comp in us_comp_dirs:
+                                u_meas = us_comp_dirs[comp]
+                                u_html = u_meas / "Ultrasonic.html"
+                                if u_html.exists():
+                                    u_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_us.png"
+                                    u_png = render_prpd_option_c_image(
+                                        html_file=u_html,
+                                        output_png=u_out,
+                                        survey_root=survey_path,
+                                        http_port=port,
+                                        chrome_path=chrome_path,
+                                    )
+
+                            pre_t = find_pregenerated_prpd_graph(survey_path, feeder_dir, panel_no=panel_idx, compartment=comp, tech="TEV")
+                            if pre_t and not is_blank_or_invalid_image(pre_t):
+                                t_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_tev.png"
+                                if pre_t.resolve() != t_out.resolve():
+                                    shutil.copy2(str(pre_t), str(t_out))
+                                    t_png = t_out
+                                else:
+                                    t_png = pre_t
+                            elif comp in tev_comp_dirs:
+                                t_meas = tev_comp_dirs[comp]
+                                t_html = t_meas / "TEV.html"
+                                if t_html.exists():
+                                    t_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_tev.png"
+                                    t_png = render_prpd_option_c_image(
+                                        html_file=t_html,
+                                        output_png=t_out,
+                                        survey_root=survey_path,
+                                        http_port=port,
+                                        chrome_path=chrome_path,
+                                    )
+
+                            comp_map[comp] = {"us": u_png, "tev": t_png}
+
+                        default_us = comp_map.get("CIRCUIT_BREAKER", {}).get("us") or next((v["us"] for v in comp_map.values() if v.get("us")), None)
+                        default_tev = comp_map.get("CIRCUIT_BREAKER", {}).get("tev") or next((v["tev"] for v in comp_map.values() if v.get("tev")), None)
+                        catalog["swg"][panel_idx] = {
+                            "us": default_us,
+                            "tev": default_tev,
+                            "compartments": comp_map,
+                        }
+                    else:
+                        us_png = None
+                        tev_png = None
+
+                        us_meas = find_latest_measurement_dir(feeder_dir, "US")
+                        if us_meas:
+                            us_html = us_meas / "Ultrasonic.html"
+                            if us_html.exists():
+                                us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
+                                us_png = render_prpd_option_c_image(
+                                    html_file=us_html,
+                                    output_png=us_out,
+                                    survey_root=survey_path,
+                                    http_port=port,
+                                    chrome_path=chrome_path,
+                                )
+
+                        tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
+                        if tev_meas:
+                            tev_html = tev_meas / "TEV.html"
+                            if tev_html.exists():
+                                tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
+                                tev_png = render_prpd_option_c_image(
+                                    html_file=tev_html,
+                                    output_png=tev_out,
+                                    survey_root=survey_path,
+                                    http_port=port,
+                                    chrome_path=chrome_path,
+                                )
+
+                        comp_dict = {}
+                        if distinct_comps:
+                            comp_dict[distinct_comps[0]] = {"us": us_png, "tev": tev_png}
+
+                        catalog["swg"][panel_idx] = {
+                            "us": us_png,
+                            "tev": tev_png,
+                        }
+                        if comp_dict:
+                            catalog["swg"][panel_idx]["compartments"] = comp_dict
 
                 for tx_idx, tx_dir in [(k, v) for k, v in tx_units.items() if isinstance(k, int)]:
                     us_png = None
@@ -1779,35 +2101,112 @@ def generate_all_substation_prpd_graphs(
     else:
         # Option B generation (Native Python FlatBuffers/JSON decoding)
         for panel_idx, feeder_dir in swg_panels.items():
-            us_png = None
-            tev_png = None
+            us_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_Ultrasonic" in d.name]
+            us_comp_dirs = {}
+            for d in sorted(us_candidates, key=lambda x: x.name, reverse=True):
+                c_tok = extract_measurement_component(d)
+                if c_tok and c_tok not in us_comp_dirs:
+                    us_comp_dirs[c_tok] = d
 
-            us_meas = find_latest_measurement_dir(feeder_dir, "US")
-            if us_meas:
-                us_file = us_meas / "ultrasonic_phase_plot.js"
-                if us_file.exists():
-                    try:
-                        events = decode_ultrasonic_phase_plot(us_file)
-                        us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
-                        us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
-                    except Exception:
-                        us_png = None
+            tev_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_TEV" in d.name]
+            tev_comp_dirs = {}
+            for d in sorted(tev_candidates, key=lambda x: x.name, reverse=True):
+                c_tok = extract_measurement_component(d)
+                if c_tok and c_tok not in tev_comp_dirs:
+                    tev_comp_dirs[c_tok] = d
 
-            tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
-            if tev_meas:
-                tev_file = tev_meas / "eventData.js"
-                if tev_file.exists():
-                    try:
-                        events = decode_tev_event_data(tev_file)
-                        tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
-                        tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
-                    except Exception:
-                        tev_png = None
+            distinct_comps = sorted(set(us_comp_dirs.keys()) | set(tev_comp_dirs.keys()))
 
-            catalog["swg"][panel_idx] = {
-                "us": us_png,
-                "tev": tev_png,
-            }
+            if len(distinct_comps) > 1:
+                comp_map = {}
+                for comp in distinct_comps:
+                    u_png = None
+                    t_png = None
+                    comp_slug = f"_{comp.lower()}"
+
+                    pre_u = find_pregenerated_prpd_graph(survey_path, feeder_dir, panel_no=panel_idx, compartment=comp, tech="US")
+                    if pre_u and not is_blank_or_invalid_image(pre_u):
+                        u_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_us.png"
+                        if pre_u.resolve() != u_out.resolve():
+                            shutil.copy2(str(pre_u), str(u_out))
+                            u_png = u_out
+                        else:
+                            u_png = pre_u
+                    elif comp in us_comp_dirs:
+                        u_meas = us_comp_dirs[comp]
+                        u_file = u_meas / "ultrasonic_phase_plot.js"
+                        if u_file.exists():
+                            try:
+                                events = decode_ultrasonic_phase_plot(u_file)
+                                u_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_us.png"
+                                u_png = generate_prpd_figure(events, tech_type="US", output_path=u_out)
+                            except Exception:
+                                u_png = None
+
+                    pre_t = find_pregenerated_prpd_graph(survey_path, feeder_dir, panel_no=panel_idx, compartment=comp, tech="TEV")
+                    if pre_t and not is_blank_or_invalid_image(pre_t):
+                        t_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_tev.png"
+                        if pre_t.resolve() != t_out.resolve():
+                            shutil.copy2(str(pre_t), str(t_out))
+                            t_png = t_out
+                        else:
+                            t_png = pre_t
+                    elif comp in tev_comp_dirs:
+                        t_meas = tev_comp_dirs[comp]
+                        t_file = t_meas / "eventData.js"
+                        if t_file.exists():
+                            try:
+                                events = decode_tev_event_data(t_file)
+                                t_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_tev.png"
+                                t_png = generate_prpd_figure(events, tech_type="TEV", output_path=t_out)
+                            except Exception:
+                                t_png = None
+
+                    comp_map[comp] = {"us": u_png, "tev": t_png}
+
+                default_us = comp_map.get("CIRCUIT_BREAKER", {}).get("us") or next((v["us"] for v in comp_map.values() if v.get("us")), None)
+                default_tev = comp_map.get("CIRCUIT_BREAKER", {}).get("tev") or next((v["tev"] for v in comp_map.values() if v.get("tev")), None)
+                catalog["swg"][panel_idx] = {
+                    "us": default_us,
+                    "tev": default_tev,
+                    "compartments": comp_map,
+                }
+            else:
+                us_png = None
+                tev_png = None
+
+                us_meas = find_latest_measurement_dir(feeder_dir, "US")
+                if us_meas:
+                    us_file = us_meas / "ultrasonic_phase_plot.js"
+                    if us_file.exists():
+                        try:
+                            events = decode_ultrasonic_phase_plot(us_file)
+                            us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
+                            us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
+                        except Exception:
+                            us_png = None
+
+                tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
+                if tev_meas:
+                    tev_file = tev_meas / "eventData.js"
+                    if tev_file.exists():
+                        try:
+                            events = decode_tev_event_data(tev_file)
+                            tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
+                            tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
+                        except Exception:
+                            tev_png = None
+
+                comp_dict = {}
+                if distinct_comps:
+                    comp_dict[distinct_comps[0]] = {"us": us_png, "tev": tev_png}
+
+                catalog["swg"][panel_idx] = {
+                    "us": us_png,
+                    "tev": tev_png,
+                }
+                if comp_dict:
+                    catalog["swg"][panel_idx]["compartments"] = comp_dict
 
         for tx_idx, tx_dir in [(k, v) for k, v in tx_units.items() if isinstance(k, int)]:
             us_png = None
@@ -1884,13 +2283,16 @@ __all__ = [
     "ThreadedTCPServer",
     "TxUnitsDict",
     "_discover_substation_assets",
+    "_matches_compartment",
     "build_prpd_inline_images",
     "decode_tev_event_data",
     "decode_ultrasonic_phase_plot",
     "discover_ultratev_survey_dir",
+    "extract_measurement_component",
     "find_chrome_executable",
     "find_free_port",
     "find_latest_measurement_dir",
+    "find_pregenerated_prpd_graph",
     "find_swg_feeder_survey_dir",
     "find_tx_survey_dir",
     "generate_all_substation_prpd_graphs",
