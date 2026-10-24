@@ -357,8 +357,6 @@ def test_word_com_document_compiler_session_batch_reuse(tmp_path: Path):
 
     # Verify 2 distinct Add() calls creating fresh OLE containers per ADR 0002
     assert mock_word.Documents.Add.call_count == 2
-    assert mock_doc1.Saved is False
-    assert mock_doc2.Saved is False
     mock_doc1.SaveAs2.assert_called_once_with(str(out1.resolve()))
     mock_doc2.SaveAs2.assert_called_once_with(str(out2.resolve()))
     mock_doc1.Close.assert_called_once_with(False)

@@ -70,6 +70,10 @@ graph TD
     T119["#119: Record signature layout registry in domain context and verify e2e export"]
     T120["#120: Exclude Column K from PT measurement detection in PpuTestsheetParser - Closed"]
     T121["#121: Verify PT compartment elimination on panels 1-4 for CJRT/MPU/G00008 - Closed"]
+    T122["#122: Align switchgear survey discovery with testsheet feeder and link numbers"]
+    T123["#123: Discover 33kV PTX and LTX transformer survey directories"]
+    T124["#124: Resolve compartment-specific ultrasound graphs and verify 22-10-2026 reports"]
+    T125["#125: Restore per-page template recopy-paste sequence for unique ActiveX CIRViewer isolation - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -94,6 +98,13 @@ graph TD
     T92 --> T120
     T120 --> T121
     T121 --> T103
+    T101 --> T122
+    T101 --> T123
+    T122 --> T124
+    T123 --> T124
+    T124 --> T103
+    T101 --> T125
+    T125 --> T103
     T97 --> T103
     T99 --> T103
     T100 --> T103
@@ -244,6 +255,38 @@ graph TD
 - **Ticket File**: [tickets/121-verify-pt-compartment-elimination-kuala-tahan.md](./tickets/121-verify-pt-compartment-elimination-kuala-tahan.md)
 - **Delivers**: Regenerate and verify Full Report deliverable package for CJRT/MPU/G00008 (MINI PPU KUALA TAHAN 33/11kV), ensuring PT COMPARTMENT is generated strictly for Panel 5 (PANEL 31 - TX 5MVA) and eliminated from Panels 1 to 4.
 
+### #122: fix(prpd): align switchgear survey discovery with testsheet feeder and link numbers
+- **Status**: Open
+- **GitHub Issue**: [#122](https://github.com/adamlarGit/pahang-cli/issues/122)
+- **Blocked by**: #101
+- **Ticket File**: [tickets/122-align-switchgear-survey-discovery-with-testsheet-feeder-numbers.md](./tickets/122-align-switchgear-survey-discovery-with-testsheet-feeder-numbers.md)
+- **Delivers**: Align switchgear survey discovery in `_discover_substation_assets` and `find_swg_feeder_survey_dir` to match testsheet feeder numbers and names.
+
+### #123: feat(prpd): discover 33kV PTX and LTX transformer survey directories
+- **Status**: Open
+- **GitHub Issue**: [#123](https://github.com/adamlarGit/pahang-cli/issues/123)
+- **Blocked by**: #101
+- **Ticket File**: [tickets/123-discover-33kv-ptx-and-ltx-transformer-survey-directories.md](./tickets/123-discover-33kv-ptx-and-ltx-transformer-survey-directories.md)
+- **Delivers**: Transformer survey directory discovery recognizing 33kV `PTX` and `LTX` directories and mapping them to transformer specs.
+
+### #124: fix(full-report): resolve compartment-specific ultrasound graphs and verify 22-10-2026 reports
+- **Status**: Open
+- **GitHub Issue**: [#124](https://github.com/adamlarGit/pahang-cli/issues/124)
+- **Blocked by**: #122, #123
+- **Ticket File**: [tickets/124-resolve-compartment-specific-ultrasound-graphs-and-verify-22-10-2026.md](./tickets/124-resolve-compartment-specific-ultrasound-graphs-and-verify-22-10-2026.md)
+- **Delivers**: Resolve compartment-specific ultrasound graphs (Breaker, Cable, Busbar) without duplicating single panel-wide graphs on 22-10-2026 reports.
+
+### #125: fix(compiler): restore per-page template recopy-paste sequence for unique ActiveX CIRViewer isolation (#ADR-0002)
+- **Status**: Closed
+- **GitHub Issue**: [#125](https://github.com/adamlarGit/pahang-cli/issues/125)
+- **Blocked by**: None
+- **Ticket File**: [tickets/125-restore-per-page-template-recopy-paste-sequence.md](./tickets/125-restore-per-page-template-recopy-paste-sequence.md)
+- **Delivers**: Restore the standard Word COM per-page copy-and-paste ingestion lifecycle in `src/quick_report/compiler.py` and Full Report assembly to ensure Microsoft Word's native ActiveX container engine assigns unique incremental identifiers to embedded FLIR `CIRViewer` controls without image crosstalk.
+- [x] Align the Word COM copy-paste ingestion sequence in `src/quick_report/compiler.py` and `src/full_report/` with the standard manual process (individual copy from source/template, paste into destination document) so Word's native OLE container assigns unique counters.
+- [x] All pages containing the FLIR IR plugin across multi-part Full Reports (e.g. Parts 01 through 06 in `FULL REPORT/JERANTUT/01. OCTOBER/22-10-2026`) have isolated ActiveX controls.
+- [x] Modifying an IR thermal image or parameters on the first page in Microsoft Word does not modify or link to subsequent pages.
+- [x] Verify fix against `MINI PPU KUALA TAHAN 33/11kV` and `MINI PPU MERTING 33/11kV` deliverables and automated tests.
+
 ---
 
 ## Decisions so far
@@ -335,6 +378,10 @@ graph TD
 - **Q88**: Regression verification enforces a 100% green gate: the entire `pytest` automated test suite across unit, adapter, workflow, and integration tests must pass with zero failures and zero 11kV regressions. Handled in #103.
 - **Q89**: Milestone completion mandates executing manual end-to-end dry-run inspection (`inspect()`) across all relevant workflows against the live 33kV benchmark dataset (`C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER`) without errors or unhandled exceptions. Handled in #103.
 - **Q90**: ADR 0007 and `CONTEXT.md` explicitly document out-of-scope non-goals: no voltage tiers beyond 11kV and 33kV (e.g. 132kV/275kV), no mutation of client-supplied Excel structure or templates, and no support for deprecated unstandardized 33kV sheet naming variants (`33kV (1)`). Handled in #103.
+- **Q91**: Switchgear survey directory discovery in `_discover_substation_assets` and `find_swg_feeder_survey_dir` must match directories using testsheet feeder numbers (`panel.panel_feeder_no`) and names (`panel.name`) rather than assuming `digits[0]` is a 1-based sequential panel index. Handled in #122.
+- **Q92**: Transformer survey directory discovery in `_discover_substation_assets` and `find_tx_survey_dir` must recognize 33kV `PTX` and `LTX` directories and map them to their corresponding transformer specs. Handled in #123.
+- **Q93**: `SwitchgearScanAdapter` and `TransformerScanAdapter` must resolve compartment-specific ultrasound graphs (Breaker, Cable, Busbar) without duplicating single panel-wide graphs, verified on live 22-10-2026 reports. Handled in #124.
+- **Q94**: Standard Word COM per-page copy-and-paste ingestion lifecycle from template must be restored to generate unique native ActiveX CIRViewer control counters without programmatic renaming. Handled in #125.
 
 ---
 

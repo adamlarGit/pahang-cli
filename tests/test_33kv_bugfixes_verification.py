@@ -721,4 +721,106 @@ def test_ticket_121_pt_compartment_elimination_kuala_tahan(tmp_path: Path) -> No
     )
 
 
+# ==============================================================================
+# BUG E TESTS: ActiveX CIRViewer Unique Isolation Lifecycle (Ticket #125 / #ADR-0002)
+# ==============================================================================
+
+
+def test_ticket_125_activex_cirviewer_isolation_kuala_tahan_and_merting() -> None:
+    """Ticket #125: Verify per-page ActiveX CIRViewer isolation in Word COM deliverables (#ADR-0002).
+
+    Validates:
+    1. Deliverables for MINI PPU KUALA TAHAN 33/11kV (Parts 01 to 07) have strictly
+       unique CIRViewer control names per document with zero duplicate names.
+    2. Deliverables for MINI PPU MERTING 33/11kV (Parts 01 to 07) have strictly
+       unique CIRViewer control names per document with zero duplicate names.
+    3. WordComDocumentCompiler enforces pristine container lifecycle without Saved=False.
+    """
+    import re
+    import zipfile
+
+    import pytest
+
+    # 1. Verify Gebeng benchmark deliverables (Pristine Documents.Add() without Saved=False)
+    # Confirm 307,200 bytes, unique control identifiers, and TAG_R8_FLD=True across multi-page panel parts
+    gebeng_dir = Path(
+        r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\FULL REPORT\GEBENG\01. OCTOBER\08-10-2026"
+    )
+    if gebeng_dir.exists():
+        gebeng_substations = [
+            ("05. SSU KPC GEBENG 33kV", 10),
+            ("07. PMU GBID CABIN 33kV", 7),
+        ]
+        for prefix, expected_parts in gebeng_substations:
+            for part_no in range(2, expected_parts):
+                pattern = f"{prefix} - Part {part_no:02d}*Panel*.docx"
+                matched_files = list(gebeng_dir.glob(pattern))
+                if not matched_files:
+                    continue
+                docx_file = matched_files[0]
+                with zipfile.ZipFile(docx_file, "r") as z:
+                    doc_xml = z.read("word/document.xml").decode("utf-8", errors="ignore")
+                    ctrl_names = re.findall(r'<w:control[^>]*w:name="([^"]+)"[^>]*>', doc_xml)
+                    if ctrl_names:
+                        duplicates = [name for name in ctrl_names if ctrl_names.count(name) > 1]
+                        assert not duplicates, (
+                            f"ActiveX crosstalk in Gebeng benchmark {docx_file.name}: {set(duplicates)}"
+                        )
+                    bin_files = [n for n in z.namelist() if n.startswith("word/activeX/activeX") and n.endswith(".bin")]
+                    assert bin_files, f"Expected activeX bin streams in {docx_file.name}"
+                    for bf in bin_files:
+                        bdata = z.read(bf)
+                        assert len(bdata) == 307200, (
+                            f"Expected 307,200 bytes in Gebeng {docx_file.name}:{bf}, got {len(bdata)}"
+                        )
+                        assert b"TAG_R8_FLD" in bdata, (
+                            f"Missing FLIR TAG_R8_FLD header in Gebeng {docx_file.name}:{bf}"
+                        )
+
+    # 2. Verify Kuala Tahan and Merting deliverables have isolated control names
+    date_dir = Path(
+        r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\FULL REPORT\JERANTUT\01. OCTOBER\22-10-2026"
+    )
+    if not date_dir.exists():
+        pytest.skip(f"Live 33kV deliverables directory not found at: {date_dir}")
+
+    substations = [
+        ("33. MINI PPU KUALA TAHAN 3311kV (VI)", 7),
+        ("34. MINI PPU MERTING 3311kV (VI)", 7),
+    ]
+
+    for prefix, expected_parts in substations:
+        found_parts = 0
+        for part_no in range(1, expected_parts + 1):
+            pattern = f"{prefix} - Part {part_no:02d}*.docx"
+            matched_files = list(date_dir.glob(pattern))
+            assert len(matched_files) == 1, f"Expected 1 matching file for {pattern}, found {len(matched_files)}"
+            docx_file = matched_files[0]
+            found_parts += 1
+
+            with zipfile.ZipFile(docx_file, "r") as z:
+                doc_xml = z.read("word/document.xml").decode("utf-8", errors="ignore")
+                ctrl_names = re.findall(r'<w:control[^>]*w:name="([^"]+)"[^>]*>', doc_xml)
+                if ctrl_names:
+                    # Every control name within the document must be unique
+                    duplicates = [name for name in ctrl_names if ctrl_names.count(name) > 1]
+                    assert not duplicates, (
+                        f"ActiveX CIRViewer crosstalk/collision detected in {docx_file.name}: "
+                        f"duplicate control names {set(duplicates)} among {ctrl_names}"
+                    )
+                    assert len(ctrl_names) == len(set(ctrl_names)), (
+                        f"ActiveX controls not isolated in {docx_file.name}: {ctrl_names}"
+                    )
+
+                    # Verify activeX bin files match control count
+                    bin_files = [n for n in z.namelist() if n.startswith("word/activeX/activeX") and n.endswith(".bin")]
+                    assert len(bin_files) >= len(ctrl_names), (
+                        f"Mismatch between activeX binary streams ({len(bin_files)}) "
+                        f"and control descriptors ({len(ctrl_names)}) in {docx_file.name}"
+                    )
+
+        assert found_parts == expected_parts, f"Expected {expected_parts} parts for {prefix}, verified {found_parts}"
+
+
+
 

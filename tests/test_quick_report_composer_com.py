@@ -37,7 +37,6 @@ def test_compile_document_com_recopy_paste(tmp_path: Path):
     compiler.compile([p1, p2], out)
 
     mock_word.Documents.Add.assert_called_once()
-    assert mock_main_doc.Saved is False
     assert mock_word.Documents.Open.call_count == 2
     mock_part_doc1.Content.Copy.assert_called_once()
     mock_part_doc1.Close.assert_called_once_with(False)
@@ -71,7 +70,6 @@ def test_compile_document_with_external_word_app(tmp_path: Path):
     compiler.compile([p1], out)
 
     mock_word.Documents.Add.assert_called_once()
-    assert mock_main_doc.Saved is False
     mock_part_doc.Content.Copy.assert_called_once()
     mock_part_doc.Close.assert_called_once_with(False)
     assert mock_rng.PasteAndFormat.call_count == 1 or mock_rng.Paste.call_count == 1
@@ -842,8 +840,8 @@ def test_safe_close_document_logs_warning_on_fallback_failure(caplog):
     assert any("Failed to close fallback document" in record.message for record in caplog.records)
 
 
-def test_compile_marks_compilation_document_dirty_before_opening_parts(tmp_path: Path):
-    """Verify WordComDocumentCompiler marks compilation document dirty (Saved=False) so Word COM does not auto-close it."""
+def test_compile_preserves_pristine_document_state_for_activex_isolation(tmp_path: Path):
+    """Verify WordComDocumentCompiler leaves Documents.Add() container pristine without setting Saved=False (#ADR-0002)."""
     part1_path = tmp_path / "part1.docx"
     part1_path.touch()
     out = tmp_path / "out.docx"
@@ -870,8 +868,9 @@ def test_compile_marks_compilation_document_dirty_before_opening_parts(tmp_path:
     compiler.compile([part1_path], out)
 
     mock_word.Documents.Add.assert_called_once()
-    assert mock_main_doc.Saved is False
-    assert saved_state_at_open == [False]
+    # Pristine container invariant per ADR 0002: Saved must NOT be set to False
+    assert mock_main_doc.Saved is not False
+    assert False not in saved_state_at_open
 
 
 @pytest.mark.parametrize("part_count", [1, 2])
