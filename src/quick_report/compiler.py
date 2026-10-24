@@ -301,13 +301,12 @@ class WordComDocumentCompiler:
         word_app = self._word_app
         main_doc = None
         try:
+            main_doc = word_app.Documents.Add()
             for idx, part in enumerate(parts):
                 part_path = str(Path(part).resolve())
                 part_doc = None
                 try:
                     part_doc = word_app.Documents.Open(part_path, False, True)
-                    if main_doc is None:
-                        main_doc = word_app.Documents.Add()
 
                     # Atomic copy-paste handshake with pre-copy zeroing and range expansion assertion (Ticket #44 / Seam 3)
                     for attempt in range(1, 4):

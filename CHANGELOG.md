@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Word COM ActiveX CIRViewer Isolation & Pristine Container Lifecycle (`fix(compiler)`, `src/quick_report/compiler.py`, `docs/adr/0002-word-com-activex-report-compilation.md`, `tests/quick_report/test_workflow.py`, `tests/test_quick_report_composer_com.py`, `tests/test_33kv_bugfixes_verification.py`)**:
-  - Reverted `Saved = False` modification on `Documents.Add()` container in `WordComDocumentCompiler.compile()`, preventing Word OLE serialization from stripping the 4KB FLIR Tools+ header (`TAG_R8_FLD`) and restoring 307,200-byte ActiveX binary streams across multi-page switchgear panels and defect deliverables (ADR 0002).
-  - Deferred `word_app.Documents.Add()` container creation until after opening the first document part, naturally preventing Word COM from auto-closing pristine `Document1` without altering container dirty state or triggering `RPC_E_DISCONNECTED`.
+  - Reverted `Saved = False` modification on `Documents.Add()` container in `WordComDocumentCompiler.compile()`, preventing Word OLE serialization from stripping the 4KB FLIR Tools+ header (`TAG_R8_FLD`) and restoring 307,200-byte ActiveX binary streams and active IR image objects across multi-page switchgear panels and defect deliverables (ADR 0002).
+  - Preserved standard `Documents.Add()` container initialization order and removed obsolete `Saved = False` assertions from test suites.
   - Fixes #125.
 - **33kV Testsheet Signature Calibration (`fix(signatures)`, `src/workflows/replace_signatures.py`, `tests/test_postprocessing_33kv.py`)**:
   - Calibrated `SIGNATURE_LAYOUT_REGISTRY` TwoCellAnchor bounds for Switchgear (`col=4..6, row=75..80` for Vendor; `col=11..13, row=74..79` for TNB) and Transformer (`col=5..7, row=72..76` for Vendor; `col=17..19, row=72..76` for TNB) sheets.
