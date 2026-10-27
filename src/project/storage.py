@@ -12,6 +12,7 @@ import zipfile
 
 import config
 from src.core.normalizers import format_month_folder
+from src.core.path_utils import safe_path
 from src.project.models import HealthCheckItem, WorkspaceHealth
 
 logger = logging.getLogger(__name__)
@@ -557,9 +558,8 @@ class LocalWorkspaceStorage(WorkspaceStorage):
         return sorted(other_folders, key=lambda p: p.name, reverse=True)
 
     def ensure_directory(self, path: Path | str) -> Path:
-        p = Path(path)
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+        os.makedirs(safe_path(path), exist_ok=True)
+        return Path(path)
 
     def get_engr_33kv_cba_path(self, year: str = "") -> Path:
         """Resolve statewide contract 750-39 workbook path.

@@ -76,7 +76,7 @@ graph TD
     T125["#125: Restore per-page template recopy-paste sequence for unique ActiveX CIRViewer isolation - Closed"]
     T126["#126: Align 33kV raw material destination hierarchy with RAW DATA subfolder - Closed"]
     T127["#127: Polymorphic US and US+TEV discovery across graph, audio, and sound embedding workflows - Closed"]
-    T128["#128: Windows MAX_PATH hardening for deep raw data extraction in RawMaterialLoader"]
+    T128["#128: Windows MAX_PATH hardening for deep raw data extraction in RawMaterialLoader - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -396,6 +396,7 @@ graph TD
 - **Q94**: Standard Word COM per-page copy-and-paste ingestion lifecycle from template must be restored to generate unique native ActiveX CIRViewer control counters without programmatic renaming. Handled in #125.
 - **Q95**: 33kV raw material destination resolution in `RawMaterialTransformer` appends `RAW DATA/` to match 11kV directory hierarchy parity, defaults brand new 33kV surveys to `RAW DATA/US/`, and migrates legacy loose root folders into `RAW DATA/` in `RawMaterialLoader`. Handled in #126.
 - **Q96**: Survey discovery and output destination resolution support polymorphic `US` (33kV) and `US+TEV` (11kV) structures across PRPD graph discovery, standalone US+TEV graph generation, and audio extraction workflows with centralized `resolve_survey_container_dir()` helper. Handled in #127.
+- **Q97**: Windows MAX_PATH (>260 chars) immunity is centralized via `safe_path()` in `src.core.path_utils`, hardened into `LocalWorkspaceStorage.ensure_directory`, and applied throughout `RawMaterialLoader` (directory provisioning, photo copying, zip extraction, and legacy consolidation) with COM workflows strictly untouched. Handled in #128.
 
 ---
 

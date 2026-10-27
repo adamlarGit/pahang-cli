@@ -41,6 +41,7 @@ from src.core.contract import (
     is_swg_compartment_tev_eligible,
     is_swg_compartment_us_eligible,
 )
+from src.core.path_utils import safe_path
 
 logger = logging.getLogger(__name__)
 
@@ -209,16 +210,6 @@ def find_chrome_executable() -> str:
         "No Google Chrome or Microsoft Edge executable found. "
         "Please install Google Chrome or Microsoft Edge, or set the CHROME_PATH environment variable."
     )
-
-
-def safe_path(p: Path | str) -> str:
-    """Ensure Windows extended-length path compatibility (\\\\?\\)."""
-    s = str(Path(p).resolve())
-    if os.name == "nt" and not s.startswith("\\\\?\\"):
-        if s.startswith("\\\\"):
-            return "\\\\?\\UNC\\" + s.lstrip("\\")
-        return "\\\\?\\" + s
-    return s
 
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):

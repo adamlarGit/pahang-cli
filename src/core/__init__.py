@@ -1,6 +1,7 @@
 """Core module for Pahang CLI."""
 
 from src.core.contract import ContractScope
+from src.core.path_utils import safe_path
 from src.core.normalizers import (
     extract_background_temperature,
     format_busbar_position,
@@ -77,6 +78,7 @@ __all__ = [
     "resolve_overview_compartments",
     "resolve_panel_compartments",
     "resolve_switchgear_archetype",
+    "safe_path",
 ]
 
 

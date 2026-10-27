@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ import openpyxl
 
 logger = logging.getLogger(__name__)
 
+from src.core.path_utils import safe_path
 from src.core.normalizers import (
     format_month_folder,
     normalize_date_str,
@@ -774,39 +776,44 @@ class RawMaterialLoader:
 
     def _copy_files(self, instructions: Sequence[CopyInstruction]) -> None:
         for instruction in instructions:
-            shutil.copy2(instruction.source_path, instruction.dest_path)
+            shutil.copy2(safe_path(instruction.source_path), safe_path(instruction.dest_path))
 
     def _extract_archives(self, instructions: Sequence[ExtractInstruction]) -> None:
         for instruction in instructions:
-            if instruction.dest_dir.exists():
-                shutil.rmtree(instruction.dest_dir)
-            instruction.dest_dir.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(instruction.source_archive, "r") as z:
-                z.extractall(instruction.dest_dir)
+            dest = safe_path(instruction.dest_dir)
+            if os.path.exists(dest):
+                shutil.rmtree(dest)
+            os.makedirs(dest, exist_ok=True)
+            with zipfile.ZipFile(safe_path(instruction.source_archive), "r") as z:
+                z.extractall(dest)
 
     def _migrate_legacy_substation_folders(self, substation_dir: Path) -> None:
         """Migrate legacy loose IR/, DG/, US/, and US+TEV/ folders directly under substation_dir into RAW DATA/."""
-        if not substation_dir.exists() or not substation_dir.is_dir() or substation_dir.name.upper() == "RAW DATA":
+        sub_safe = safe_path(substation_dir)
+        if not os.path.exists(sub_safe) or not os.path.isdir(sub_safe) or substation_dir.name.upper() == "RAW DATA":
             return
 
         raw_data_dir = substation_dir / "RAW DATA"
+        raw_data_safe = safe_path(raw_data_dir)
         legacy_names = ("IR", "DG", "US", "US+TEV")
 
         for name in legacy_names:
             loose_dir = substation_dir / name
-            if not loose_dir.exists() or not loose_dir.is_dir():
+            loose_safe = safe_path(loose_dir)
+            if not os.path.exists(loose_safe) or not os.path.isdir(loose_safe):
                 continue
 
             target_dir = raw_data_dir / name
-            raw_data_dir.mkdir(parents=True, exist_ok=True)
+            target_safe = safe_path(target_dir)
+            os.makedirs(raw_data_safe, exist_ok=True)
 
             try:
-                if not target_dir.exists():
-                    shutil.move(str(loose_dir), str(target_dir))
+                if not os.path.exists(target_safe):
+                    shutil.move(loose_safe, target_safe)
                 else:
                     self._merge_directory_contents(loose_dir, target_dir)
-                    if loose_dir.exists():
-                        shutil.rmtree(str(loose_dir))
+                    if os.path.exists(loose_safe):
+                        shutil.rmtree(loose_safe)
             except OSError as ex:
                 logger.warning(
                     "Failed to migrate legacy loose folder %s into %s: %s",
@@ -816,24 +823,32 @@ class RawMaterialLoader:
                 )
 
     def _merge_directory_contents(self, src: Path, dst: Path) -> None:
-        """Recursively merge contents of src directory into dst directory and remove src."""
-        dst.mkdir(parents=True, exist_ok=True)
-        for item in src.iterdir():
+        """Recursively merge contents of src directory into dst directory.
+
+        Subdirectories and files are merged into dst. The caller is responsible
+        for managing removal of the root src directory after merging.
+        """
+        dst_safe = safe_path(dst)
+        os.makedirs(dst_safe, exist_ok=True)
+        src_path = Path(safe_path(src))
+        for item in src_path.iterdir():
             dest_item = dst / item.name
+            item_safe = safe_path(item)
+            dest_safe = safe_path(dest_item)
             if item.is_dir():
-                if dest_item.exists() and dest_item.is_dir():
+                if os.path.exists(dest_safe) and os.path.isdir(dest_safe):
                     self._merge_directory_contents(item, dest_item)
                 else:
-                    if dest_item.exists() and dest_item.is_file():
-                        dest_item.unlink()
-                    shutil.move(str(item), str(dest_item))
+                    if os.path.exists(dest_safe) and os.path.isfile(dest_safe):
+                        os.unlink(dest_safe)
+                    shutil.move(item_safe, dest_safe)
             elif item.is_file():
-                if dest_item.exists():
-                    if dest_item.is_dir():
-                        shutil.rmtree(str(dest_item), ignore_errors=True)
-                    elif dest_item.is_file():
-                        dest_item.unlink()
-                shutil.move(str(item), str(dest_item))
+                if os.path.exists(dest_safe):
+                    if os.path.isdir(dest_safe):
+                        shutil.rmtree(dest_safe, ignore_errors=True)
+                    elif os.path.isfile(dest_safe):
+                        os.unlink(dest_safe)
+                shutil.move(item_safe, dest_safe)
 
 
 
