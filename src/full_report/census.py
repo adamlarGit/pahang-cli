@@ -647,7 +647,24 @@ class ExecutiveSummaryCensusBuilder:
         defects: Sequence[CbmDefectRecord] = (),
     ) -> list[CensusRowItem]:
         """Assemble exhaustive census row items across all physical equipment groups."""
-        swgs = package.switchgears
+        def _swg_voltage_sort_key(s: Any) -> int:
+            r = str(getattr(s, "rating", "") or "").upper()
+            t = str(getattr(s, "switchgear_type", "") or "").upper()
+            m = str(getattr(s, "model", "") or "").upper()
+            v_cls = getattr(s, "voltage_class", None)
+            if (
+                v_cls == VoltageClass.KV_33
+                or "33" in r
+                or "36" in r
+                or "33" in t
+                or "36" in t
+                or "33" in m
+                or "GIS" in t
+            ):
+                return 0
+            return 1
+
+        swgs = sorted(package.switchgears, key=_swg_voltage_sort_key)
         txs = package.transformers
         lvdbs = package.lvdb_specs
         bbs = package.battery_banks

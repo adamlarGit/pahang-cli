@@ -323,6 +323,28 @@ class PlanDocumentChunk:
     parts: tuple[PlanPartItem, ...] = ()
 
 
+def sort_switchgears_by_voltage(swgs: Sequence[Any]) -> list[Any]:
+    """Sort switchgears so 33kV/36kV lineups precede 11kV/22kV lineups."""
+    def _rank(s: Any) -> int:
+        r = str(getattr(s, "rating", "") or "").upper()
+        t = str(getattr(s, "switchgear_type", "") or "").upper()
+        m = str(getattr(s, "model", "") or "").upper()
+        v_cls = getattr(s, "voltage_class", None)
+        if (
+            v_cls == VoltageClass.KV_33
+            or "33" in r
+            or "36" in r
+            or "33" in t
+            or "36" in t
+            or "33" in m
+            or "GIS" in t
+        ):
+            return 0
+        return 1
+
+    return sorted(swgs, key=_rank)
+
+
 class MultiPartPartitionPolicy:
     """Partition planned parts into document chunks based on switchgear archetype.
 
@@ -434,6 +456,7 @@ class MultiPartPartitionPolicy:
             swgs = getattr(actual_pkg, "switchgears", ())
             if not swgs and getattr(actual_pkg, "switchgear", None):
                 swgs = (actual_pkg.switchgear,)
+            swgs = sort_switchgears_by_voltage(swgs)
             total_panels = 0
             for swg in swgs:
                 panels = getattr(swg, "panels", ())
@@ -447,7 +470,8 @@ class MultiPartPartitionPolicy:
                 or getattr(actual_pkg, "battery_banks", ())
             )
             bop_count = 1 if has_bop else 0
-            return True, 1 + total_panels + bop_count
+            overview_chunks_count = len(swgs) if len(swgs) > 1 else 0
+            return True, 1 + overview_chunks_count + total_panels + bop_count
         return False, 1
 
     @classmethod
@@ -467,8 +491,35 @@ class MultiPartPartitionPolicy:
         parts_list = list(plan.parts)
         chunks: list[PlanDocumentChunk] = []
 
+        pkg = plan.package
+        if hasattr(pkg, "data") and getattr(pkg, "data", None) is not None:
+            pkg = getattr(pkg.data, "equipment", pkg)
+        elif hasattr(pkg, "equipment"):
+            pkg = getattr(pkg, "equipment", pkg)
+
+        swgs = getattr(pkg, "switchgears", ())
+        if not swgs and getattr(pkg, "switchgear", None):
+            swgs = (pkg.switchgear,)
+        swgs = sort_switchgears_by_voltage(swgs)
+        is_multi_lineup = len(swgs) > 1
+
+        is_33kv = bool(
+            getattr(plan, "is_33kv", False)
+            or getattr(pkg, "voltage_class", None) == VoltageClass.KV_33
+            or any(
+                getattr(s, "voltage_class", None) == VoltageClass.KV_33
+                or getattr(s, "archetype", None) == SwitchgearArchetype.GIS_CUBICLE
+                or "33" in getattr(s, "switchgear_type", "")
+                or "33" in getattr(s, "rating", "")
+                for s in swgs
+            )
+        )
+        include_voltage = is_multi_lineup or is_33kv
+
         # --- Chunk 1: Summary ---
-        # Front Page, Census, VI Summary (if present), Switchgear Overview pages
+        # Front Page, Census, VI Summary (if present)
+        # Note: Switchgear Overview pages are included in Chunk 1 ONLY for single lineup (backward compatibility)
+        # For multi-switchgear substations (Option A / Ticket #130), each lineup has a dedicated overview chunk.
         summary_types = {PlanPartType.FRONT_PAGE, PlanPartType.CENSUS, PlanPartType.VI_SUMMARY}
         summary_parts: list[PlanPartItem] = []
         remaining_parts: list[PlanPartItem] = []
@@ -477,7 +528,8 @@ class MultiPartPartitionPolicy:
             if p.part_type in summary_types:
                 summary_parts.append(p)
             elif (
-                p.part_type == PlanPartType.SCAN_PAGE
+                not is_multi_lineup
+                and p.part_type == PlanPartType.SCAN_PAGE
                 and p.is_overview
                 and p.is_switchgear
             ):
@@ -498,31 +550,7 @@ class MultiPartPartitionPolicy:
             )
         )
 
-        # --- Chunks 2..N+1: Per-panel across all switchgear lineups ---
-        pkg = plan.package
-        if hasattr(pkg, "data") and getattr(pkg, "data", None) is not None:
-            pkg = getattr(pkg.data, "equipment", pkg)
-        elif hasattr(pkg, "equipment"):
-            pkg = getattr(pkg, "equipment", pkg)
-
-        swgs = getattr(pkg, "switchgears", ())
-        if not swgs and getattr(pkg, "switchgear", None):
-            swgs = (pkg.switchgear,)
-
-        is_33kv = bool(
-            getattr(plan, "is_33kv", False)
-            or getattr(pkg, "voltage_class", None) == VoltageClass.KV_33
-            or any(
-                getattr(s, "voltage_class", None) == VoltageClass.KV_33
-                or getattr(s, "archetype", None) == SwitchgearArchetype.GIS_CUBICLE
-                or "33" in getattr(s, "switchgear_type", "")
-                or "33" in getattr(s, "rating", "")
-                for s in swgs
-            )
-        )
-        is_multi_lineup = len(swgs) > 1
-        include_voltage = is_multi_lineup or is_33kv
-
+        # --- Chunks 2..N+1: Per-switchgear overview & per-panel chunks ---
         for swg_idx, swg in enumerate(swgs, 1):
             swg_eq_id = f"swg{swg_idx}"
             board = SwitchgearTopologyEngine.classify_board(
@@ -535,7 +563,56 @@ class MultiPartPartitionPolicy:
             v_cls = getattr(swg, "voltage_class", None) or board.voltage_class
             voltage_str = v_cls.value if hasattr(v_cls, "value") else str(v_cls)
             if not voltage_str or voltage_str == "None":
-                voltage_str = "33kV" if is_33kv else "11kV"
+                swg_rating = str(getattr(swg, "rating", "") or "")
+                voltage_str = "33kV" if ("33" in swg_rating or "36" in swg_rating) else ("33kV" if is_33kv else "11kV")
+
+            # Option A: In multi-switchgear substations, dedicate an overview chunk per lineup
+            if is_multi_lineup:
+                swg_overview_parts: list[PlanPartItem] = []
+                new_remaining: list[PlanPartItem] = []
+                for p in remaining_parts:
+                    if (
+                        p.part_type == PlanPartType.SCAN_PAGE
+                        and p.is_overview
+                        and p.is_switchgear
+                    ):
+                        p_eq_id = (
+                            getattr(p, "equipment_id", "")
+                            or (p.scan_item.equipment_id if p.scan_item else "")
+                            or (p.interleaved_part.equipment_id if p.interleaved_part else "")
+                        )
+                        if not p_eq_id or p_eq_id == swg_eq_id:
+                            swg_overview_parts.append(p)
+                        else:
+                            new_remaining.append(p)
+                    else:
+                        new_remaining.append(p)
+                remaining_parts = new_remaining
+
+                if swg_overview_parts:
+                    chunk_idx += 1
+                    raw_swg_type = getattr(swg, "switchgear_type", "") or "Switchgear"
+                    clean_swg_type = sanitize_filename(
+                        raw_swg_type.replace("/", "-").replace("\\", "-").replace(":", "-")
+                    ).strip()
+                    v_clean = voltage_str.strip()
+                    if clean_swg_type.upper().startswith(v_clean.upper()):
+                        label = f"Part {chunk_idx:02d} - Switchgear {swg_idx} ({clean_swg_type}) Overview"
+                    elif clean_swg_type:
+                        label = f"Part {chunk_idx:02d} - Switchgear {swg_idx} ({v_clean} - {clean_swg_type}) Overview"
+                    else:
+                        label = f"Part {chunk_idx:02d} - Switchgear {swg_idx} ({v_clean}) Overview"
+
+                    output_filename = f"{stem} - {label}.docx"
+                    chunks.append(
+                        PlanDocumentChunk(
+                            chunk_index=chunk_idx,
+                            label=label,
+                            output_filename=output_filename,
+                            destination_path=dest_dir / output_filename,
+                            parts=tuple(swg_overview_parts),
+                        )
+                    )
 
             panels = getattr(swg, "panels", ())
             for panel in panels:
@@ -546,7 +623,7 @@ class MultiPartPartitionPolicy:
                 panel_parts: list[PlanPartItem] = []
 
                 # Collect scan pages and CBM defects belonging to this panel
-                new_remaining: list[PlanPartItem] = []
+                new_remaining = []
                 for p in remaining_parts:
                     belongs_to_panel = False
                     if p.part_type in (PlanPartType.SCAN_PAGE, PlanPartType.CBM_DEFECT):
@@ -1026,6 +1103,7 @@ class FullReportPlanBuilder:
             swgs_to_adapt = getattr(actual_pkg, "switchgears", ())
             if not swgs_to_adapt and getattr(actual_pkg, "switchgear", None):
                 swgs_to_adapt = (actual_pkg.switchgear,)
+            swgs_to_adapt = sort_switchgears_by_voltage(swgs_to_adapt)
             for swg_idx, swg in enumerate(swgs_to_adapt, 1):
                 swg_is_33kv = (
                     getattr(swg, "voltage_class", None) == VoltageClass.KV_33

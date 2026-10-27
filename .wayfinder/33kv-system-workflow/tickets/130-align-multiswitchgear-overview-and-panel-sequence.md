@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #130: feat(full-report): align multi-switchgear overview and panel sequence across summary census and document chunks
 
 ## Parent
@@ -23,10 +23,10 @@ Implement strict multi-switchgear generation sequence prioritizing 33kV before 1
   - Verify document chunk partitioning, naming, and page contents on dual-switchgear substations (e.g. `CJEN/PMU/J00001`).
 
 ## Acceptance criteria
-- [ ] Multi-part partitioning produces dedicated overview chunks per switchgear lineup: Part 01 Summary, 33kV Overview, 33kV Panels, 11kV Overview, 11kV Panels, and TX/Condition.
-- [ ] Census summary tables order 33kV lineup before 11kV lineup.
-- [ ] Document chunk indices and labels reflect Option A structure cleanly.
-- [ ] All unit and plan builder tests in `tests/test_full_report_workflow.py` pass.
+- [x] Multi-part partitioning produces dedicated overview chunks per switchgear lineup: Part 01 Summary, 33kV Overview, 33kV Panels, 11kV Overview, 11kV Panels, and TX/Condition.
+- [x] Census summary tables order 33kV lineup before 11kV lineup.
+- [x] Document chunk indices and labels reflect Option A structure cleanly.
+- [x] All unit and plan builder tests in `tests/test_full_report_workflow.py` pass.
 
 ## Blocked by
 #129

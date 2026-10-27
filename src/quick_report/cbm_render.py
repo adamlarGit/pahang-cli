@@ -127,7 +127,14 @@ def _preserve_blank_render_values(value):
 
 def _process_inline_images(doc: DocxTemplate, context: dict) -> None:
     """Recursively convert file path images (like PRPD graphs) into InlineImage instances."""
+    seen: set[int] = set()
+
     def _convert(obj: Any) -> None:
+        if id(obj) in seen:
+            return
+        if isinstance(obj, (dict, list)):
+            seen.add(id(obj))
+
         if isinstance(obj, dict):
             for k, v in list(obj.items()):
                 if isinstance(v, InlineImage):

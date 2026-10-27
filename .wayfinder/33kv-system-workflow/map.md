@@ -78,7 +78,7 @@ graph TD
     T127["#127: Polymorphic US and US+TEV discovery across graph, audio, and sound embedding workflows - Closed"]
     T128["#128: Windows MAX_PATH hardening for deep raw data extraction in RawMaterialLoader - Closed"]
     T129["#129: Switchgear-scoped survey discovery and PRPD catalog for multi-switchgear substations - Closed"]
-    T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks"]
+    T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -337,12 +337,15 @@ graph TD
 - [x] Passes all test suites in `tests/test_prpd_generator.py` and `tests/test_full_report_scan_adapters.py`.
 
 ### #130: feat(full-report): align multi-switchgear overview and panel sequence across summary census and document chunks
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#130](https://github.com/adamlarGit/pahang-cli/issues/130)
 - **Blocked by**: #129
 - **Ticket File**: [tickets/130-align-multiswitchgear-overview-and-panel-sequence.md](./tickets/130-align-multiswitchgear-overview-and-panel-sequence.md)
 - **Delivers**: Implement strict multi-switchgear generation sequence prioritizing 33kV before 11kV, with separate overview documents per switchgear lineup (Option A): Part 01 Summary, Part 02 Switchgear 1 (33kV) Overview, 33kV Panels, Switchgear 2 (11kV) Overview, 11kV Panels, and Transformers/Condition, with aligned executive summary census ordering.
-- [ ] Multi-part partitioning produces dedicated overview chunks per switchgear lineup: Part 01 Summary, 33kV Overview, 33kV Panels, 11kV Overview, 11kV Panels, and TX/Condition.
+- [x] Multi-part partitioning produces dedicated overview chunks per switchgear lineup: Part 01 Summary, 33kV Overview, 33kV Panels, 11kV Overview, 11kV Panels, and TX/Condition.
+- [x] Census summary tables order 33kV lineup before 11kV lineup.
+- [x] Document chunk indices and labels reflect Option A structure cleanly.
+- [x] All unit and plan builder tests in `tests/test_full_report_workflow.py` pass.
 - [ ] Census summary tables order 33kV lineup before 11kV lineup.
 - [ ] Document chunk indices and labels reflect Option A structure cleanly.
 - [ ] All unit and plan builder tests in `tests/test_full_report_workflow.py` pass.

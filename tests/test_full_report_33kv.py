@@ -239,32 +239,36 @@ class TestMultiPartPartitionPolicy33kv:
         assert plan.output_filename.startswith("06. PPU TELUK KALONG 33kV")
 
         chunks = MultiPartPartitionPolicy.partition(plan)
-        # Expected chunks:
-        # Part 01: Summary (Front Page, Census, Overviews for both lineups)
-        # Part 02: Panel 1 (33kV GIS)
-        # Part 03: Panel 2 (33kV GIS)
-        # Part 04: Panel 1 (11kV VCB)
-        # Part 05: Panel 2 (11kV VCB)
-        # Part 06: Panel 3 (11kV VCB)
-        # Part 07: TX and Condition (Power Transformer, Condition, Sticker)
-        assert len(chunks) == 7
+        # Expected chunks (Ticket #130 Option A: separate overview chunks per switchgear lineup):
+        # Part 01: Summary (Front Page, Census, Visual Defect Summary)
+        # Part 02: Switchgear 1 (33kV GIS) Overview
+        # Part 03: Panel 1 (33kV GIS)
+        # Part 04: Panel 2 (33kV GIS)
+        # Part 05: Switchgear 2 (11kV VCB) Overview
+        # Part 06: Panel 1 (11kV VCB)
+        # Part 07: Panel 2 (11kV VCB)
+        # Part 08: Panel 3 (11kV VCB)
+        # Part 09: TX and Condition (Power Transformer, Condition, Sticker)
+        assert len(chunks) == 9
 
         labels = [c.label for c in chunks]
         assert labels[0] == "Part 01 - Summary"
-        assert "Part 02 - Panel 1 (33kV - INCOMING 33kV)" in labels[1] or "Part 02 - Panel 1 (INCOMING 33kV)" in labels[1]
-        assert "Part 04 - Panel 1 (11kV - TX1 INCOMING)" in labels[3]
-        assert "Part 05 - Panel 2 (11kV - FEEDER 1)" in labels[4]
-        assert labels[6] == "Part 07 - TX and Condition"
+        assert "Part 02 - Switchgear 1" in labels[1] and "Overview" in labels[1]
+        assert "Part 03 - Panel 1 (33kV - INCOMING 33kV)" in labels[2] or "Part 03 - Panel 1 (INCOMING 33kV)" in labels[2]
+        assert "Part 05 - Switchgear 2" in labels[4] and "Overview" in labels[4]
+        assert "Part 06 - Panel 1 (11kV - TX1 INCOMING)" in labels[5]
+        assert "Part 07 - Panel 2 (11kV - FEEDER 1)" in labels[6]
+        assert labels[8] == "Part 09 - TX and Condition"
 
         # Verify summary chunk contains front page and census
         summary_types = [p.part_type for p in chunks[0].parts]
         assert PlanPartType.FRONT_PAGE in summary_types
         assert PlanPartType.CENSUS in summary_types
 
-        # Verify equipment_id isolation: Chunk 2 has swg1 parts, Chunk 4 has swg2 parts
-        p1_swg33_parts = chunks[1].parts
+        # Verify equipment_id isolation: Chunk 3 has swg1 parts, Chunk 6 has swg2 parts
+        p1_swg33_parts = chunks[2].parts
         assert all(getattr(p, "equipment_id", "") in ("swg1", "") for p in p1_swg33_parts)
-        p1_swg11_parts = chunks[3].parts
+        p1_swg11_parts = chunks[5].parts
         assert all(getattr(p, "equipment_id", "") in ("swg2", "") for p in p1_swg11_parts)
 
     def test_dual_voltage_11kv_switchgear_preserves_standard_compartments(self, tmp_path: Path) -> None:

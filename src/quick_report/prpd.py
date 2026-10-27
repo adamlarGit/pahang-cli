@@ -2641,8 +2641,6 @@ def generate_all_substation_prpd_graphs(
     if is_multi:
         for s_idx in swg_panels.lineups:
             catalog["swg"][f"swg{s_idx}"] = catalog["swg"][s_idx]
-    else:
-        catalog["swg"]["swg1"] = catalog["swg"]
 
     if switchgears:
         for s_idx, swg in enumerate(switchgears, 1):
