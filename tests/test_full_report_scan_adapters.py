@@ -1611,7 +1611,7 @@ def test_33kv_mini_ppu_part07_tx_scanning_pages_prpd(
     ]
 
     for ts_path, survey_path in substations:
-        if not (ts_path.exists() and survey_path.exists()):
+        if not (ts_path.exists() and survey_path.exists() and any(survey_path.iterdir())):
             pytest.skip(f"Test data missing for {ts_path.stem}")
 
         data = PpuTestsheetParser().extract_testsheet_data(ts_path)
@@ -1724,7 +1724,7 @@ def test_switchgear_scan_adapter_33kv_kuala_tahan_and_merting_end_to_end(tmp_pat
     ]
 
     for ts_path, survey_path in substations:
-        if not (ts_path.exists() and survey_path.exists()):
+        if not (ts_path.exists() and survey_path.exists() and any(survey_path.iterdir())):
             pytest.skip(f"Test data missing for {ts_path.stem}")
 
         data = PpuTestsheetParser().extract_testsheet_data(ts_path)
@@ -1783,6 +1783,53 @@ def test_switchgear_scan_adapter_33kv_kuala_tahan_and_merting_end_to_end(tmp_pat
                 assert h_cb != h_cable, f"Breaker and Cable graph contents identical for panel {p_no} in {ts_path.stem}"
                 assert h_cable != h_busbar, f"Cable and Busbar graph contents identical for panel {p_no} in {ts_path.stem}"
                 assert h_cb != h_busbar, f"Breaker and Busbar graph contents identical for panel {p_no} in {ts_path.stem}"
+
+
+def test_switchgear_scan_adapter_33kv_gebeng_us_prpd_graphs(tmp_path: Path):
+    """Verify compartment-specific ultrasound graphs for 33kV GIS at SSU KPC GEBENG."""
+    from src.quick_report.prpd import generate_all_substation_prpd_graphs, discover_ultratev_survey_dir
+    from src.testsheet.parsers.ppu import PpuTestsheetParser
+
+    ts_path = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\GEBENG\01. OCTOBER\08-10-2026\05. SSU KPC GEBENG 33kV (VI).xlsx")
+    raw_dir = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\GEBENG\01. OCTOBER\08-10-2026\05. SSU KPC GEBENG 33kV (VI)\RAW DATA")
+
+    if not (ts_path.exists() and raw_dir.exists()):
+        pytest.skip("Test data missing for SSU KPC GEBENG")
+
+    data = PpuTestsheetParser().extract_testsheet_data(ts_path)
+    swg = data.equipment.switchgears[0]
+    survey_path = discover_ultratev_survey_dir(raw_dir)
+    assert survey_path is not None, "UltraTEV survey root not discovered"
+
+    out_dir = tmp_path / "prpd"
+    catalog = generate_all_substation_prpd_graphs(
+        survey_root=survey_path,
+        output_dir=out_dir,
+        mode="option_b",
+        panels=swg.panels,
+    )
+
+    # Asserts that catalog['swg'] is populated for panels
+    panel_keys = [k for k in catalog["swg"] if isinstance(k, int)]
+    assert len(panel_keys) == len(swg.panels), f"Expected {len(swg.panels)} panels in catalog, got {len(panel_keys)}"
+
+    adapter = SwitchgearScanAdapter(
+        swg=swg,
+        substation_info={"date": "08/10/2026", "time": "08:34", "ambient": "30", "humidity": "60"},
+        survey_root=survey_path,
+        prpd_catalog=catalog,
+        prpd_mode="option_b",
+        is_33kv=True,
+    )
+    result = adapter.adapt()
+
+    p4_items = [it for it in result.items if it.panel_no == 4]
+    assert len(p4_items) > 0
+    cb_item = next(it for it in p4_items if it.component_name == "BREAKER COMPARTMENT")
+    us_prpd = cb_item.context["panel"]["us"]["prpd"]
+    assert us_prpd != "", "Panel 4 Breaker US PRPD graph was empty"
+    assert Path(us_prpd).exists(), f"PRPD file does not exist: {us_prpd}"
+
 
 
 

@@ -726,7 +726,7 @@ def _is_survey_dir(p: Path) -> bool:
             return False
         if (p / "survey_summary.js").exists() or (p / "survey_metadata.js").exists():
             return True
-        prefixes = ("SWG", "VCB", "RMU", "TX", "PTX", "LTX")
+        prefixes = ("SWG", "VCB", "RMU", "GIS", "TX", "PTX", "LTX")
         return any(
             c.is_dir() and (c.name.upper().startswith(prefixes) or "TRANSFORMER" in c.name.upper())
             for c in p.iterdir()
@@ -764,12 +764,12 @@ def discover_ultratev_survey_dir(raw_data_dir: Path | str | None) -> Path | None
                 if child.is_dir() and _is_survey_dir(child):
                     return child
 
-    # Deep search fallback for any folder containing survey_summary.js or SWG/VCB/RMU/PTX/LTX
+    # Deep search fallback for any folder containing survey_summary.js or SWG/VCB/RMU/GIS/PTX/LTX
     try:
         for child in sorted(raw_path.rglob("survey_summary.js"), reverse=True):
             if child.parent.is_dir():
                 return child.parent
-        for pattern in ("SWG*", "VCB*", "RMU*", "PTX*", "LTX*"):
+        for pattern in ("SWG*", "VCB*", "RMU*", "GIS*", "PTX*", "LTX*"):
             for child in sorted(raw_path.rglob(pattern), reverse=True):
                 parent = child.parent
                 if parent.is_dir() and _is_survey_dir(parent):
@@ -914,7 +914,7 @@ def discover_survey_measurements(survey_root: Path | str) -> list[DiscoveredMeas
         return discovered
 
     # Tier 2: Deterministic Traversal Fallback
-    eq_prefixes = ("SWG", "VCB", "RMU", "TX")
+    eq_prefixes = ("SWG", "VCB", "RMU", "GIS", "TX")
     try:
         candidate_eq_dirs = [
             d for d in sorted(root.iterdir(), key=lambda p: p.name.upper())
@@ -997,8 +997,8 @@ def find_swg_feeder_survey_dir(
     feeder_no: str = "",
     panel_name: str = "",
 ) -> Path | None:
-    """Find the target SWG/VCB/RMU feeder survey directory using multi-tier precedence."""
-    swg_prefixes = ("SWG", "VCB", "RMU")
+    """Find the target SWG/VCB/RMU/GIS feeder survey directory using multi-tier precedence."""
+    swg_prefixes = ("SWG", "VCB", "RMU", "GIS")
     try:
         swg_dirs = [
             d for d in survey_root.iterdir()
@@ -1010,8 +1010,8 @@ def find_swg_feeder_survey_dir(
     if not swg_dirs:
         return None
 
-    # Canonical exact "SWG", "VCB", "RMU" precede numbered variants
-    swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU") else 1, d.name.upper()))
+    # Canonical exact "SWG", "VCB", "RMU", "GIS" precede numbered variants
+    swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU", "GIS") else 1, d.name.upper()))
 
     candidate_subdirs: list[Path] = []
     for s_dir in swg_dirs:
@@ -1771,8 +1771,8 @@ def _discover_substation_assets(
     if not survey_path.exists():
         return swg_panels, tx_units
 
-    # 1. SWG / VCB / RMU Feeders & Panels
-    swg_prefixes = ("SWG", "VCB", "RMU")
+    # 1. SWG / VCB / RMU / GIS Feeders & Panels
+    swg_prefixes = ("SWG", "VCB", "RMU", "GIS")
     try:
         swg_dirs = [
             d for d in survey_path.iterdir()
@@ -1780,7 +1780,7 @@ def _discover_substation_assets(
         ]
     except OSError:
         swg_dirs = []
-    swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU") else 1, d.name.upper()))
+    swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU", "GIS") else 1, d.name.upper()))
 
     candidate_feeders: list[Path] = []
     for s_dir in swg_dirs:
