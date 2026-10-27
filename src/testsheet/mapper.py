@@ -79,7 +79,7 @@ def parse_equipment_index(tnb_location: str) -> tuple[str, int]:
         return "TX", int(m_tx.group(1))
 
     # Local TX
-    if re.search(r"(?:^|/)TX/L(?:OCAL)?TX", norm):
+    if re.search(r"(?:^|/)(?:TX/)?L(?:OCAL)?[_\s]?TX\d*", norm):
         return "TX", 5
 
     # Feeder Pillar: /FP/FPN or FP/FPN or FPN
@@ -570,13 +570,17 @@ class PpuReadingMapper(ReadingMapperStrategy):
         ):
             return None
 
-        # 3. Power Transformer Meters -> TX
+        # 3. Power Transformer & Local Transformer Meters -> TX
         if (
             meter.startswith("TH_PTX")
             or meter.startswith("US_PTX")
+            or meter.startswith("TH_LTX")
             or meter.startswith("US_LTX")
             or "_PTX" in meter
+            or "_LTX" in meter
+            or "LTX" in meter
             or "/TX/" in norm_loc
+            or norm_loc.endswith("/LTX")
         ):
             return self._resolve_transformer(meter, norm_loc)
 
@@ -621,7 +625,68 @@ class PpuReadingMapper(ReadingMapperStrategy):
         return ("11kV (Main)", "U6")
 
     def _resolve_transformer(self, meter: str, norm_loc: str) -> tuple[str, str] | None:
-        """Resolve Power Transformer measurements on TX sheet."""
+        """Resolve Power Transformer or Local Transformer measurements on TX sheet.
+
+        Strict Separation Rule:
+        - PTX meters (TH_PTX*, US_PTX*, etc.) belong strictly to Power Transformers (slots 1..4).
+          They must NEVER map to Slot 5 (Local TX), even if norm_loc contains /LTX.
+        - LTX meters (TH_LTX*, US_LTX*, etc.) belong strictly to Local Transformer (Slot 5: rows 26 & 45).
+          They infer Slot 5 even if norm_loc is generic or lacks /TX/LTX.
+        """
+        is_ltx = (
+            meter.startswith("TH_LTX")
+            or meter.startswith("US_LTX")
+            or "_LTX" in meter
+            or "LTX" in meter
+        )
+        is_ptx = (
+            meter.startswith("TH_PTX")
+            or meter.startswith("US_PTX")
+            or "_PTX" in meter
+            or "PTX" in meter
+        )
+
+        if is_ltx and is_ptx:
+            return None
+
+        # -------------------------------------------------------------
+        # A. Local Transformer (Slot 5: Part 1 Row 26, Part 2 Row 45)
+        # -------------------------------------------------------------
+        if is_ltx:
+            p1_row, p2_row = self.TX_SLOT_ROWS[5]
+
+            # Part 1: Ultrasound
+            if meter.startswith("US_LTX_LV"):
+                return ("TX", f"N{p1_row}")
+            if meter.startswith("US_LTX_HV") or meter.startswith("US_LTX"):
+                return ("TX", f"J{p1_row}")
+
+            # Part 1: HV Cable Thermal (supports TH_LTX_HV_* and TH_LTXHV_*)
+            if "LTX_HV" in meter or "LTXHV" in meter:
+                col = self._extract_column_from_suffix(meter, ("R", "S", "T", "U"))
+                return ("TX", f"{col}{p1_row}") if col else None
+
+            # Part 1: LV Cable Thermal (supports TH_LTX_LV_* and TH_LTXLV_*)
+            if "LTX_LV" in meter or "LTXLV" in meter:
+                col = self._extract_column_from_suffix(meter, ("W", "X", "Y", "Z"))
+                return ("TX", f"{col}{p1_row}") if col else None
+
+            # Part 2: Main Tank / Body Thermal (supports TH_LTX_MT_*, TH_LTXMT_*, TH_LTX_BODY_*, TH_LTXBODY_*)
+            if (
+                "LTX_MT" in meter
+                or "LTXMT" in meter
+                or "LTX_BODY" in meter
+                or "LTXBODY" in meter
+                or "LTX_TANK" in meter
+            ):
+                col = self._extract_column_from_suffix(meter, ("R", "S", "T", "U"))
+                return ("TX", f"{col}{p2_row}") if col else None
+
+            return None
+
+        # -------------------------------------------------------------
+        # B. Power Transformer (Slots 1..4)
+        # -------------------------------------------------------------
         tx_slot = 1
         if norm_loc:
             try:
@@ -631,41 +696,48 @@ class PpuReadingMapper(ReadingMapperStrategy):
             except ValueError:
                 pass
 
-        p1_row, p2_row = self.TX_SLOT_ROWS.get(tx_slot, (14, 33))
+        # Strict PTX separation: PTX meters belong to PTX sections (slots 1..4), NEVER to Local TX (slot 5)
+        if tx_slot == 5 or "/LTX" in norm_loc or "LOCAL" in norm_loc:
+            return None
+
+        if tx_slot not in self.TX_SLOT_ROWS or tx_slot not in (1, 2, 3, 4):
+            return None
+
+        p1_row, p2_row = self.TX_SLOT_ROWS[tx_slot]
 
         # Part 1: Ultrasound
-        if meter.startswith("US_PTX_HV") or meter.startswith("US_LTX_HV"):
+        if meter.startswith("US_PTX_HV"):
             return ("TX", f"J{p1_row}")
-        if meter.startswith("US_PTX_LV") or meter.startswith("US_LTX_LV"):
+        if meter.startswith("US_PTX_LV"):
             return ("TX", f"N{p1_row}")
 
-        # Part 1: HV Cable Thermal
-        if "PTXHV" in meter or "LTXHV" in meter:
+        # Part 1: HV Cable Thermal (supports PTXHV and PTX_HV)
+        if "PTXHV" in meter or "PTX_HV" in meter:
             col = self._extract_column_from_suffix(meter, ("R", "S", "T", "U"))
             return ("TX", f"{col}{p1_row}") if col else None
 
-        # Part 1: LV Cable Thermal
-        if "PTXLV" in meter or "LTXLV" in meter:
+        # Part 1: LV Cable Thermal (supports PTXLV and PTX_LV)
+        if "PTXLV" in meter or "PTX_LV" in meter:
             col = self._extract_column_from_suffix(meter, ("W", "X", "Y", "Z"))
             return ("TX", f"{col}{p1_row}") if col else None
 
         # Part 2: Main Tank / Body
-        if "PTXMT" in meter or "PTX_BODY" in meter or "TX_BODY" in meter:
+        if "PTXMT" in meter or "PTX_MT" in meter or "PTX_BODY" in meter or "TX_BODY" in meter:
             col = self._extract_column_from_suffix(meter, ("R", "S", "T", "U"))
             return ("TX", f"{col}{p2_row}") if col else None
 
         # Part 2: Cooling Fins
-        if "PTXFIN" in meter:
+        if "PTXFIN" in meter or "PTX_FIN" in meter:
             col = self._extract_column_from_suffix(meter, ("X", "Y", "Z", "AA"))
             return ("TX", f"{col}{p2_row}") if col else None
 
         # Part 2: Marshalling Kiosk
-        if "PTXMK" in meter:
+        if "PTXMK" in meter or "PTX_MK" in meter:
             col = self._extract_column_from_suffix(meter, ("F", "G", "H", "I"))
             return ("TX", f"{col}{p2_row}") if col else None
 
         # Part 2: Conservator Tank
-        if "PTXCT" in meter:
+        if "PTXCT" in meter or "PTX_CT" in meter:
             col = self._extract_column_from_suffix(meter, ("L", "M", "N", "O"))
             return ("TX", f"{col}{p2_row}") if col else None
 
@@ -883,7 +955,9 @@ class TestsheetReadingMapper(ReadingMapperStrategy):
             or m.startswith("HEATER_33KV_")
             or m.startswith("TH_PTX")
             or m.startswith("US_PTX")
+            or m.startswith("TH_LTX")
             or m.startswith("US_LTX")
+            or "_LTX" in m
             or m.startswith("BG_TEM_TX")
             or m.startswith("VI_NER_")
             or m.startswith("VI_FCBL_")

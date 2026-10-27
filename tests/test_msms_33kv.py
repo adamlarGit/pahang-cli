@@ -287,7 +287,33 @@ def test_ppu_mapper_coordinate_resolution() -> None:
     assert mapper.get_target("TH_PTXHV_AVG_P31VV", "CGBG/PPUAPMM/TX/PTX2") == ("TX", "U17")
     assert mapper.get_target("TH_PTXMT_AVG_P31VV", "CGBG/PPUAPMM/TX/PTX2") == ("TX", "U36")
 
-    # 4. Visual Inspection and checklist status meters -> None (handled semantically via visual findings, matching PCE)
+    # 4. Local Transformer (Slot 5: Part 1 row 26, Part 2 row 45)
+    # Both underscore and non-underscore meter conventions resolve to Slot 5
+    assert mapper.get_target("TH_LTX_HV_AVG_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "U26")
+    assert mapper.get_target("TH_LTX_HV_MAX_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "S26")
+    assert mapper.get_target("TH_LTX_HV_REF_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "R26")
+    assert mapper.get_target("TH_LTX_HV_DEL_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "T26")
+    assert mapper.get_target("TH_LTX_LV_AVG_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "Z26")
+    assert mapper.get_target("TH_LTX_LV_MAX_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "X26")
+    assert mapper.get_target("TH_LTX_LV_REF_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "W26")
+    assert mapper.get_target("TH_LTX_LV_DEL_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "Y26")
+    assert mapper.get_target("US_LTX_HV_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "J26")
+    assert mapper.get_target("US_LTX_LV_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "N26")
+    # Body thermals at row 45
+    assert mapper.get_target("TH_LTX_MT_AVG_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "U45")
+    assert mapper.get_target("TH_LTXMT_AVG_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "U45")
+    assert mapper.get_target("TH_LTX_BODY_AVG_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "U45")
+    assert mapper.get_target("TH_LTX_BODY_MAX_P31VV", "CKLS/MPUKECHAU/TX/LTX") == ("TX", "S45")
+    # Automatic slot inference from meter name without /TX/LTX in location
+    assert mapper.get_target("TH_LTX_HV_AVG_P31VV", "CKTN/PPUSMAB") == ("TX", "U26")
+    assert mapper.get_target("TH_LTX_LV_AVG_P31VV", "CKTN/PPUSMAB") == ("TX", "Z26")
+
+    # 5. Strict PTX vs LTX Separation: PTX meters must NEVER map to Slot 5 (Local TX)
+    assert mapper.get_target("TH_PTXHV_AVG_P31VV", "CCHL/PMUBTNG/TX/LTX") is None
+    assert mapper.get_target("TH_PTXMT_AVG_P31VV", "CCHL/PMUBTNG/TX/LTX") is None
+    assert mapper.get_target("US_PTX_HV_P31VV", "CCHL/PMUBTNG/TX/LTX") is None
+
+    # 6. Visual Inspection and checklist status meters -> None (handled semantically via visual findings, matching PCE)
     assert mapper.get_target("VI_NER_EARTH", "CGBG/PPUAPMM") is None
     assert mapper.get_target("VI_PTX_OILLEAK1", "CGBG/PPUAPMM/TX/PTX1") is None
     assert mapper.get_target("HEATER_33KV_STATUS", "CGBG/PPUAPMM/33KV/1") is None
@@ -519,6 +545,12 @@ def test_populate_data_msms_33kv_end_to_end(mock_33kv_env: ProjectEnvironment, t
     ws_tx["U33"] = 43.5     # TH_PTXMT_AVG_P31VV (TX 1)
     ws_tx["J14"] = 0        # US_PTX_HV_P31VV (TX 1)
 
+    # Local TX (Slot 5: row 26 & 45)
+    ws_tx["U26"] = 39.5     # TH_LTX_HV_AVG_P31VV
+    ws_tx["Z26"] = 41.2     # TH_LTX_LV_AVG_P31VV
+    ws_tx["U45"] = 44.8     # TH_LTX_BODY_AVG_P31VV
+    ws_tx["J26"] = 0        # US_LTX_HV_P31VV
+
     wb.save(wb_path)
     wb.close()
 
@@ -574,6 +606,11 @@ def test_populate_data_msms_33kv_end_to_end(mock_33kv_env: ProjectEnvironment, t
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/PTX1,TH_PTXHV_AVG_P31VV,,,,GAUGE\n",
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/PTX1,TH_PTXMT_AVG_P31VV,,,,GAUGE\n",
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/PTX1,US_PTX_HV_P31VV,,,,GAUGE\n",
+        # Local Transformer gauge meters
+        ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/LTX,TH_LTX_HV_AVG_P31VV,,,,GAUGE\n",
+        ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/LTX,TH_LTX_LV_AVG_P31VV,,,,GAUGE\n",
+        ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/LTX,TH_LTX_BODY_AVG_P31VV,,,,GAUGE\n",
+        ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM/TX/LTX,US_LTX_HV_P31VV,,,,GAUGE\n",
         # Background temperature meter
         ",2026-10-07T12:00:00+08:00,T1SUB33,W1616898,CGBG/PPUAPMM,BG_TEM_11_ROOM_P31VV,,,,GAUGE\n",
     ]
@@ -651,6 +688,12 @@ def test_populate_data_msms_33kv_end_to_end(mock_33kv_env: ProjectEnvironment, t
     assert records["TH_PTXHV_AVG_P31VV"]["TNBNEWREADING"] == "36.8"
     assert records["TH_PTXMT_AVG_P31VV"]["TNBNEWREADING"] == "43.5"
     assert records["US_PTX_HV_P31VV"]["TNBNEWREADING"] == "0"
+
+    # Local Transformer meters populated
+    assert records["TH_LTX_HV_AVG_P31VV"]["TNBNEWREADING"] == "39.5"
+    assert records["TH_LTX_LV_AVG_P31VV"]["TNBNEWREADING"] == "41.2"
+    assert records["TH_LTX_BODY_AVG_P31VV"]["TNBNEWREADING"] == "44.8"
+    assert records["US_LTX_HV_P31VV"]["TNBNEWREADING"] == "0"
 
     # Background ambient temperature populated
     assert records["BG_TEM_11_ROOM_P31VV"]["TNBNEWREADING"] == "30.5"

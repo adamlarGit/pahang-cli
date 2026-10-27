@@ -644,41 +644,24 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                 break
 
             b_val = ws[f"B{r}"].value
-            b_str = str(b_val).strip() if b_val is not None else ""
-            c_raw = clean_val(ws[f"C{r}"].value) or ""
-            d_raw = clean_val(ws[f"D{r}"].value) or ""
+            c_val = ws[f"C{r}"].value
+            d_val = ws[f"D{r}"].value
 
-            # Detect layout: live testsheet layout vs testsheet factory layout
-            # In live layout: Col B is panel_no (e.g. 1, 2, "1", "2" -> pure digits)
-            # In factory layout: Col B is feeder_no (e.g. "3P1", "1K1" -> feeder token)
-            b_is_digits = b_str.isdigit()
+            b_str = clean_val(b_val) or ""
+            c_raw = clean_val(c_val) or ""
+            d_raw = clean_val(d_val) or ""
 
-            if b_is_digits:
-                # Live testsheet layout: Col B is panel_no, Col C is feeder_code, Col D is feeder_name
-                panel_feeder_no = c_raw
-                feeder_name = d_raw
-                is_factory_layout = False
-            elif b_str:
-                # Factory layout: Col B is feeder_no, Col C is name, Col D is status
+            # Check if this sheet uses legacy mock factory layout (Col B is feeder_no, Col C is name, Col D is status)
+            # In canonical layout: Col D is feeder name (never a status keyword) and Col F/G are breaker position/status.
+            is_mock_layout = (
+                d_raw.upper() in ("CLOSE", "OPEN", "TRIP")
+                and clean_val(ws[f"F{r}"].value) is None
+                and clean_val(ws[f"G{r}"].value) is None
+            )
+
+            if is_mock_layout:
                 panel_feeder_no = b_str
                 feeder_name = c_raw
-                is_factory_layout = True
-            else:
-                # Col B is empty
-                if d_raw.upper() in ("CLOSE", "OPEN", "TRIP", "SERVICE", "TEST", "RACK IN", "RACK OUT"):
-                    panel_feeder_no = ""
-                    feeder_name = c_raw
-                    is_factory_layout = True
-                else:
-                    panel_feeder_no = c_raw
-                    feeder_name = d_raw
-                    is_factory_layout = False
-
-            # Unpopulated template bays (blank panel no and feeder name) are skipped
-            if not panel_feeder_no and not feeder_name:
-                continue
-
-            if is_factory_layout:
                 status = d_raw or clean_val(ws[f"E{r}"].value) or ""
                 load_raw = clean_val(ws[f"F{r}"].value) or ""
                 cable_type = clean_val(ws[f"G{r}"].value) or clean_val(ws[f"E{r}"].value) or ""
@@ -687,17 +670,50 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                 busbar_position = ""
                 breaker_serial = clean_val(ws[f"V{r}"].value) or clean_val(ws[f"I{r}"].value) or ""
             else:
+                # Canonical 33kV/11kV testsheet layout:
+                # Col B: No. (Row sequence: 1, 2, 3...)
+                # Col C: Panel / Feeder No.
+                # Col D: Feeder Name
+                # Col E: Cable Type
+                # Col F: Breaker Position (CB Position)
+                # Col G: Breaker Status
+                # Col H: Busbar Position
+                # Col I: Load (A)
+                # Col J: Heater (A)
+                # Col K: Compartment Label
+                # Col V: Remarks / Serial No.
+
+                # Normalize feeder number (strip trailing '.0' if float from openpyxl)
+                panel_feeder_no = c_raw
+                if panel_feeder_no.endswith(".0") and panel_feeder_no[:-2].isdigit():
+                    panel_feeder_no = panel_feeder_no[:-2]
+
+                feeder_name = d_raw
+
+                # Fallback: if Col C is empty, but Col B has a non-numeric token (e.g. "3P1", "5S5")
+                if not panel_feeder_no and b_str and not b_str.replace(".0", "").isdigit():
+                    panel_feeder_no = b_str
+
+                # Unpopulated template bays (both feeder name and feeder no are blank) are skipped
+                if not panel_feeder_no and not feeder_name:
+                    continue
+
                 # Cable Type: Col E
                 cable_type = clean_val(ws[f"E{r}"].value) or ""
 
                 # Breaker Position & Status: Col F & Col G
+                # Format: {{CB Position}}/{{breaker position}}
                 breaker_pos = clean_val(ws[f"F{r}"].value) or ""
                 status_val = clean_val(ws[f"G{r}"].value) or ""
-                if any(t in switchgear_type.upper() for t in ("VCB", "GIS")):
-                    if breaker_pos and status_val and breaker_pos.upper() != status_val.upper() and "/" not in status_val:
-                        status = f"{breaker_pos}/{status_val}"
+
+                if breaker_pos and status_val:
+                    if "/" not in breaker_pos and "/" not in status_val:
+                        if breaker_pos.upper() != status_val.upper():
+                            status = f"{breaker_pos}/{status_val}"
+                        else:
+                            status = status_val
                     else:
-                        status = status_val or breaker_pos or ""
+                        status = status_val if "/" in status_val else breaker_pos
                 else:
                     status = status_val or breaker_pos or ""
 

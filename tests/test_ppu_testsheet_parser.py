@@ -439,6 +439,71 @@ def test_ppu_breaker_readings_isolated_from_cable_sub_row(tmp_path: Path) -> Non
     assert panel.cable_us_reading == "9.5"
 
 
+def test_ppu_canonical_panel_columns_and_compound_breaker_status(tmp_path: Path) -> None:
+    """Verify canonical 33kV testsheet column mapping:
+    - Col C: Feeder No
+    - Col D: Feeder Name
+    - Col E: Cable Type
+    - Col F: CB Position (e.g. SERVICE)
+    - Col G: Breaker Status (e.g. CLOSE) -> compound 'SERVICE/CLOSE'
+    - Col H: Busbar Position (e.g. MAIN)
+    - Col I: Load (A)
+    - Col J: Heater (A)
+    """
+    parser = PpuTestsheetParser()
+    wb_path = tmp_path / "10. PPU CANONICAL COLUMNS.xlsx"
+
+    panel_custom = [
+        {
+            "feeder_no": "32",
+            "name": "TX 33/11kV 5MVA",
+            "breaker_position": "SERVICE",
+            "status": "CLOSE",
+            "cable_type": "NOT ACCESSIBLE",
+            "busbar_position": "MAIN",
+            "load_amp": "92/600",
+            "heater_amp": "0.63",
+        },
+        {
+            "feeder_no": "2",
+            "name": "SG. BANGKONG",
+            "breaker_position": "SERVICE",
+            "status": "TRIP",
+            "cable_type": "NOT ACCESSIBLE",
+            "busbar_position": "MAIN",
+            "load_amp": "0/300",
+            "heater_amp": "",
+        },
+    ]
+
+    create_ppu_testsheet_workbook(
+        path=wb_path,
+        has_33kv=True,
+        has_11kv=False,
+        panels_33kv=panel_custom,
+    )
+
+    data = parser.extract_testsheet_data(wb_path)
+    swg = data.equipment.switchgears[0]
+    assert len(swg.panels) == 2
+
+    p1, p2 = swg.panels
+    assert p1.panel_feeder_no == "32"
+    assert p1.name == "TX 33/11kV 5MVA"
+    assert p1.cable_type == "NOT ACCESSIBLE"
+    assert p1.status == "SERVICE/CLOSE"
+    assert p1.busbar_position == "MAIN"
+    assert p1.load_amp == "92"
+    assert p1.heater_amp == "0.63"
+
+    assert p2.panel_feeder_no == "2"
+    assert p2.name == "SG. BANGKONG"
+    assert p2.status == "SERVICE/TRIP"
+    assert p2.busbar_position == "MAIN"
+    assert p2.load_amp == "0"
+
+
+
 def test_ppu_gps_coordinate_extraction(tmp_path: Path) -> None:
     import openpyxl
     parser = PpuTestsheetParser()

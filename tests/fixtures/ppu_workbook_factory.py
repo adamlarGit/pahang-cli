@@ -117,13 +117,24 @@ def create_ppu_testsheet_workbook(
             if idx >= 8:
                 break
             r = 15 + idx * 6
-            ws[f"B{r}"] = p.get("feeder_no", "")
-            ws[f"C{r}"] = p.get("name", "")
-            ws[f"D{r}"] = p.get("status", "CLOSE")
-            ws[f"F{r}"] = p.get("load_amp", "")
-            ws[f"G{r}"] = p.get("cable_type", "")
-            ws[f"H{r}"] = p.get("heater_amp", "")
-            ws[f"J{r}"] = p.get("panel_type", "")
+            ws[f"B{r}"] = idx + 1
+            ws[f"C{r}"] = p.get("feeder_no", "")
+            ws[f"D{r}"] = p.get("name", "")
+            ws[f"E{r}"] = p.get("cable_type", "")
+
+            raw_status = p.get("status", "CLOSE")
+            if "/" in raw_status:
+                b_pos, b_stat = raw_status.split("/", 1)
+                ws[f"F{r}"] = b_pos.strip()
+                ws[f"G{r}"] = b_stat.strip()
+            else:
+                ws[f"F{r}"] = p.get("breaker_position", "")
+                ws[f"G{r}"] = raw_status
+
+            ws[f"H{r}"] = p.get("busbar_position", "MAIN")
+            ws[f"I{r}"] = p.get("load_amp", "")
+            ws[f"J{r}"] = p.get("heater_amp", "")
+            ws[f"K{r}"] = "BREAKER"
             ws[f"V{r}"] = p.get("breaker_serial", "")
 
             # TEV and Ultrasound readings

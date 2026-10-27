@@ -41,7 +41,7 @@ Monthly tracking folder inside station directories strictly formatted as `<INDEX
 Daily inspection folder inside month folders formatted as `DD-MM-YYYY` (e.g., `01-05-2026`, `09-05-2026`). In the CLI and workflows, operators select an existing inspection date folder from `TESTSHEET/<STATION>/<MONTH>/<DD-MM-YYYY>/`. The folder name itself represents the canonical date of the inspection run.
 
 ### InitialSubstationFolder
-The numerical PE subdirectory (`001/`, `002/`, `003/`) created inside `RAW MATERIAL/<STATION>/<MONTH>/<DD-MM-YYYY>/` during initial raw material sorting. Contains `RAW DATA/` with `IR/`, `DG/`, and `US+TEV/` subfolders.
+The substation subdirectory (e.g. `001/` for 11kV or `<PE_NUM_3DIGITS>. <SUBSTATION_NAME> (<DEFECT_SUFFIX>)` for 33kV) created inside `RAW MATERIAL/<STATION>/<MONTH>/<DD-MM-YYYY>/` during initial raw material sorting. Strictly contains a `RAW DATA/` subfolder with `IR/`, `DG/`, and `US/` (or `US+TEV/`) subdirectories across both 11kV and 33kV voltage classes, establishing architectural hierarchy parity.
 
 ### DefectStatusSuffix
 Dynamic technology defect indicator suffix appended to Quick Reports, testsheets, and raw material folders during post-processing. Calculated by querying master ENGR worksheets (`QR03 VI` for visual defects -> `"VI"`, `QR03 CBA` for diagnostic defects -> `"IR"`, `"US"`, `"TEV"`). Joined in strict order `(IR+US+TEV+VI)`. If no defects exist, suffix is empty (`""`).
@@ -99,12 +99,18 @@ A standalone utility workflow that scans a target folder for PDFs, sorts them in
 The matching rule for discovering and pairing UltraTEV raw data archives (`.zip` files or directories in `TESTSHEET/<STATION>/<MONTH>/<DD-MM-YYYY>/UNSORTED RAW DATA/US+TEV/` or `US/` or root `UNSORTED RAW DATA/`) to a `SubstationTestsheetPackage`. Evaluates PE number token matching across filename delimiters (`_083-`, `_083_`, `083-`, `083_`, `_083.`, `_083`), supporting 2-digit zero-padded tokens (`01_`, `05_`), and disambiguating candidate archives across stations via `normalize_substation_tokens()`.
 
 ### UsTevDestinationFolder
-The extracted UltraTEV survey folder created under `RAW MATERIAL/<STATION>/<MONTH>/<DD-MM-YYYY>/<SUBSTATION_FOLDER>/US+TEV/<ZIP_STEM>/` (or `.../US/<ZIP_STEM>/` if an existing `US` folder is present). For 11kV, `<SUBSTATION_FOLDER>` is strictly `<PE_NUM_3DIGITS>/RAW DATA`. For 33kV, `<SUBSTATION_FOLDER>` defaults to the testsheet stem (e.g. `01. PPU APMM 33-11kV (VI)`) or resolves to an existing matched directory. Contains uncompressed instrument survey assets (`index.html`, `survey_metadata.js`, `survey_summary.js`, `resources/`, and equipment directories).
+The extracted UltraTEV survey folder created under `RAW MATERIAL/<STATION>/<MONTH>/<DD-MM-YYYY>/<SUBSTATION_FOLDER>/RAW DATA/<SURVEY_CONTAINER>/<ZIP_STEM>/` (where `<SURVEY_CONTAINER>` defaults to `US` for 33kV projects or when `US` already exists, and `US+TEV` for 11kV distribution projects). Contains uncompressed instrument survey assets (`index.html`, `survey_metadata.js`, `survey_summary.js`, `resources/`, and equipment directories).
 
 ### UsTevCardinalityPolicy
 Archive cardinality policy for US+TEV surveys:
 - **11kV**: Strict 1-to-1 archive enforcement. Each substation PE package must match at most one `.zip` archive. If multiple matching zip files are discovered for a single PE number, the workflow raises a validation error to prevent misattribution.
 - **33kV**: Multi-board archive support. A substation may contain multiple switchgear voltage boards (e.g. `01_PPU_APMM_33KV.zip` and `01_PPU_APMM_11KV.zip`). All matching archives are extracted idempotently into individual `<ZIP_STEM>` subdirectories.
+
+### ConsolidatedMultiBoardSurvey
+A consolidated UltraTEV survey package formed when multiple independent voltage board or asset surveys (e.g. `GIS 33KV`, `VCB 11KV`, and power transformers `PTX/LTX`) for a single PMU or multi-voltage substation are merged into a canonical survey directory (such as `<SUBSTATION>/RAW DATA/US/<TIMESTAMP>_PMU-...-33-11kV/`).
+- **Asset Sequence**: Preserves physical substation hierarchy and voltage grading (`GIS 33KV` -> `VCB 11KV` -> `PTX 3` -> `PTX4` -> `LTX`).
+- **Manifest Synthesis**: Unifies `survey_summary.js` (`assets` list) and `survey_metadata.js` (`$GROUP_SWGR` blocks and chronological `Trend` environmental telemetry) while sharing the static `resources/` viewer engine.
+- **Relative Link Integrity**: Preserves 3-level relative path resolution (`../../../resources/`, `../../../survey_metadata.js`) from individual measurement `.html` detail files.
 
 ### SubstationStemInfo & parse_substation_stem
 The structured representation in `src/project/storage.py` for parsing 33kV and legacy substation stem names into `substation_number`, `station_type` (`PPU`, `PMU`, `SSU`, `PE`), `name` (e.g. `APMM`, `KIIP (SSU CAMEL POWER)`), `voltage_token` (e.g. `33-11kV`, `275-132-33-11kV`, `33kV`), and `defect_suffix` (e.g. `(VI)`, `(IR+US+TEV+VI)`).
@@ -119,7 +125,7 @@ Clean-overwrite policy for US+TEV destination folders. When extracting a zip arc
 The standalone utility workflow (`src/workflows/us_tev_graphs.py`) responsible for generating PRPD survey graphs independently for operator-selected substations without compiling reports. Discovers candidate substations across selected inspection dates, extracts measurements using a two-tier discovery engine (manifest-driven with deterministic filesystem fallback), renders graphs in either Option C (headless Chromium) or Option B (Matplotlib), and writes output images to the canonical destination.
 
 ### UsTevGraphOutputDirectory
-The canonical destination directory strictly located at `<SUBSTATION_FOLDER>/RAW DATA/US+TEV/graphs/`. Holds generated PRPD survey graphs, ensuring complete isolation from report templates and preserving vendor raw files while supporting idempotent graph overwrites.
+The canonical destination directory strictly located at `<SUBSTATION_FOLDER>/RAW DATA/<SURVEY_CONTAINER>/graphs/` (where `<SURVEY_CONTAINER>` dynamically matches the active survey data container, resolving to `US/graphs/` when survey data resides in `US`, and `US+TEV/graphs/` when in `US+TEV`). Holds generated PRPD survey graphs, ensuring complete isolation from report templates and preserving vendor raw files while supporting idempotent graph overwrites.
 
 ### UsTevCandidate
 An immutable dataclass (`src/workflows/us_tev_graphs.py`) representing an eligible substation candidate discovered during US+TEV graph generation:
@@ -363,7 +369,7 @@ The post-processing assembly policy (`src/workflows/full_report_postprocessing.p
 The standalone utility workflow (`src/workflows/us_audio.py`) responsible for generating 16-bit PCM WAV audio files and retroactively embedding sound annotations into Quick Report and Full Report deliverable PDFs. Operates under three execution modes (`"export_wav"`, `"embed_pdf"`, `"both"`), discovers candidate substations across selected inspection dates, processes measurements via `convert_24bit_wav_to_16bit_pcm` and `embed_survey_ultrasound_into_pdf`, and provides isolated error handling across batch runs.
 
 ### UsAudioOutputDirectory
-The canonical destination directory strictly located at `<SUBSTATION>/RAW DATA/US+TEV/sounds/`. Holds standalone converted 16-bit PCM WAV audio files generated by `UsAudioWorkflow`, using exact PRPD graph naming grammar (`{meas.label}.wav`) to guarantee 100% naming parity and avoid collision across multiple inspection components.
+The canonical destination directory strictly located at `<SUBSTATION>/RAW DATA/<SURVEY_CONTAINER>/sounds/` (where `<SURVEY_CONTAINER>` resolves to `US/sounds/` when survey data resides in `US`, and `US+TEV/sounds/` when in `US+TEV`). Holds standalone converted 16-bit PCM WAV audio files generated by `UsAudioWorkflow`, using exact PRPD graph naming grammar (`{meas.label}.wav`) to guarantee 100% naming parity and avoid collision across multiple inspection components.
 
 ### UsTevAudioResiliencePolicy
 The non-blocking graceful skip policy governing ultrasound audio operations when US+TEV survey folders or individual compartment recordings are absent. If an inspection lacks ultrasound raw data due to disk space constraints or instrument omission, pipelines and workflows log an informative notice and proceed cleanly without interrupting report compilation, post-processing, or batch processing.
@@ -396,6 +402,11 @@ The domain model and classification policy governing transformers on 33kV testsh
 
 ### SwitchgearDiagonalBordersPolicy
 The diagonal border scanning policy governing blank-cell strikethroughs across switchgear testsheet worksheets in `src/workflows/diagonal_borders.py`. Applies the primary feeder measurement grid (`C15:U62`) and Overview Panel thermal grid (`L63:P74`) to Main switchgear sheets (`33kV (Main)` and `11kV (Main)`), while restricting Extra switchgear sheets (`33kV (Extra)`, `11kV (Extra)`) to `C15:U62` and preserving Visual Inspection sheets strictly unslashed.
+
+### WindowsMaxPathPolicy
+The architectural filesystem isolation policy governing deep directory paths on Windows hosts:
+1. **Disk I/O and Archive Operations**: File copying (`shutil.copy2`), directory provisioning (`os.makedirs`), directory purging (`shutil.rmtree`), and archive extraction (`zipfile.ZipFile.extractall`) operate through Win32 extended-length paths via `safe_path()` (`\\?\` for local drive paths and `\\?\UNC\` for network shares), immunizing operations against Windows MAX_PATH (260 character) limits in deep `RAW MATERIAL` survey trees.
+2. **Word & Excel COM Automation Isolation**: Microsoft Word and Excel COM Automation (`win32com.client`) strictly reject `\\?\` path prefixes with COM exceptions. COM workflows (`ComDocumentConverter`) are strictly descoped and excluded from `safe_path` wrapping because COM conversions operate exclusively on report deliverables (`QUICK REPORT/`, `FULL REPORT/`, `TESTSHEET/`), which max out at 156–204 characters (well below the 260-character limit) and never touch `RAW MATERIAL`.
 
 
 
