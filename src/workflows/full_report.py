@@ -891,7 +891,9 @@ class FullReportWorkflow:
 
         eq_pkg = self._resolve_equipment_package(pkg)
         panels = []
+        switchgears = []
         if eq_pkg and getattr(eq_pkg, "switchgears", None):
+            switchgears = list(eq_pkg.switchgears)
             for swg in eq_pkg.switchgears:
                 if getattr(swg, "panels", None):
                     panels.extend(swg.panels)
@@ -908,6 +910,7 @@ class FullReportWorkflow:
                         output_dir=prpd_dir,
                         mode=prpd_mode,
                         panels=panels,
+                        switchgears=switchgears,
                     )
                 except Exception as exc:
                     logger.warning("Failed to generate PRPD graphs for %s: %s", st_name, exc)

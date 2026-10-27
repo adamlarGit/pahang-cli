@@ -912,14 +912,27 @@ class SwitchgearScanAdapter:
         entry = None
         if self.prpd_catalog and "swg" in self.prpd_catalog:
             swg_cat = self.prpd_catalog["swg"]
-            if panel_no in swg_cat:
-                entry = swg_cat[panel_no]
+            # Detect if swg_cat is scoped by switchgear lineup
+            lineup_cat = None
+            if self.swg_index in swg_cat and isinstance(swg_cat[self.swg_index], dict) and "us" not in swg_cat[self.swg_index]:
+                lineup_cat = swg_cat[self.swg_index]
+            elif f"swg{self.swg_index}" in swg_cat and isinstance(swg_cat[f"swg{self.swg_index}"], dict) and "us" not in swg_cat[f"swg{self.swg_index}"]:
+                lineup_cat = swg_cat[f"swg{self.swg_index}"]
+            elif f"swg_{self.swg_index}" in swg_cat and isinstance(swg_cat[f"swg_{self.swg_index}"], dict) and "us" not in swg_cat[f"swg_{self.swg_index}"]:
+                lineup_cat = swg_cat[f"swg_{self.swg_index}"]
+            else:
+                lineup_cat = swg_cat
+
+            if panel_no in lineup_cat:
+                entry = lineup_cat[panel_no]
             elif feeder_no:
                 clean_f = str(feeder_no).strip()
-                if f"feeder_{clean_f}" in swg_cat:
-                    entry = swg_cat[f"feeder_{clean_f}"]
-                elif clean_f in swg_cat:
-                    entry = swg_cat[clean_f]
+                if f"feeder_{clean_f}" in lineup_cat:
+                    entry = lineup_cat[f"feeder_{clean_f}"]
+                elif clean_f in lineup_cat:
+                    entry = lineup_cat[clean_f]
+            elif f"swg{self.swg_index}_p{panel_no}" in swg_cat:
+                entry = swg_cat[f"swg{self.swg_index}_p{panel_no}"]
 
             if entry is not None:
                 us_p = None
@@ -941,6 +954,10 @@ class SwitchgearScanAdapter:
                         clean_comp_slug = re.sub(r"[^\w]+", "_", compartment.upper()).strip("_").lower()
                         if f"tev_{clean_comp_slug}" in entry:
                             tev_p = entry[f"tev_{clean_comp_slug}"]
+
+                    # Prevent fallback to headless Chrome when compartment was cataloged as unmeasured
+                    if us_p is None and tev_p is None and isinstance(comp_dict, dict):
+                        return "", ""
 
                 if us_p is not None or tev_p is not None:
                     return (
@@ -968,6 +985,9 @@ class SwitchgearScanAdapter:
                     compartment=compartment,
                     include_tev=should_gen_tev,
                     include_us=should_gen_us,
+                    swg_idx=self.swg_index,
+                    voltage_class=getattr(self.swg, "rating", None) or getattr(self, "voltage_class", None),
+                    switchgear_type=getattr(self.swg, "switchgear_type", None),
                 )
                 if us_png or tev_png:
                     return (

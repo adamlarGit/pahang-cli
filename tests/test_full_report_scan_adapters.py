@@ -1831,6 +1831,117 @@ def test_switchgear_scan_adapter_33kv_gebeng_us_prpd_graphs(tmp_path: Path):
     assert Path(us_prpd).exists(), f"PRPD file does not exist: {us_prpd}"
 
 
+def test_switchgear_scan_adapter_dual_switchgear_resolution(tmp_path: Path):
+    """Ticket #129: Verify SwitchgearScanAdapter resolves waveforms using swg_index without lineup contamination."""
+    p1_swg1 = tmp_path / "prpd_swg1_panel1_us.png"
+    p1_swg2 = tmp_path / "prpd_swg2_panel1_us.png"
+    p1_swg1.write_bytes(b"swg1")
+    p1_swg2.write_bytes(b"swg2")
+
+    catalog = {
+        "swg": {
+            1: {
+                1: {"us": p1_swg1, "tev": None},
+            },
+            2: {
+                1: {"us": p1_swg2, "tev": None},
+            },
+        }
+    }
+
+    swg1 = SwitchgearScanSpec(
+        switchgear_type="GIS",
+        rating="33kV",
+        panels=(SwitchgearPanelScanSpec(panel_no=1, name="BURSTING PANEL", compartments=("BREAKER COMPARTMENT",)),),
+    )
+    swg2 = SwitchgearScanSpec(
+        switchgear_type="VCB",
+        rating="11kV",
+        panels=(SwitchgearPanelScanSpec(panel_no=1, name="INCOMER TX", compartments=("BREAKER COMPARTMENT",)),),
+    )
+
+    ad1 = SwitchgearScanAdapter(
+        swg=swg1,
+        swg_index=1,
+        prpd_catalog=catalog,
+    )
+    res1 = ad1.adapt()
+    p_items1 = [it for it in res1.items if not it.is_overview]
+    assert len(p_items1) == 1
+    us1 = p_items1[0].context["panel"]["us"]["prpd"]
+
+    ad2 = SwitchgearScanAdapter(
+        swg=swg2,
+        swg_index=2,
+        prpd_catalog=catalog,
+    )
+    res2 = ad2.adapt()
+    p_items2 = [it for it in res2.items if not it.is_overview]
+    assert len(p_items2) == 1
+    us2 = p_items2[0].context["panel"]["us"]["prpd"]
+
+    assert us1 == str(p1_swg1)
+    assert us2 == str(p1_swg2)
+    assert us1 != us2
+
+
+def test_switchgear_scan_adapter_dual_switchgear_jengka_live(tmp_path: Path):
+    """Ticket #129: End-to-end verification on CJEN/PMU/J00001 (40. PMU JENGKA 132-11-33kV)."""
+    from src.quick_report.prpd import generate_all_substation_prpd_graphs, discover_ultratev_survey_dir
+    from src.testsheet.parsers.ppu import PpuTestsheetParser
+
+    ts_path = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JENGKA\01. OCTOBER\25-10-2026\40. PMU JENGKA 132-11-33kV (VI).xlsx")
+    raw_dir = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JENGKA\01. OCTOBER\25-10-2026\40. PMU JENGKA 132-11-33kV (VI)\RAW DATA")
+
+    if not (ts_path.exists() and raw_dir.exists()):
+        pytest.skip("Test data missing for PMU JENGKA")
+
+    survey_path = discover_ultratev_survey_dir(raw_dir)
+    assert survey_path is not None, "UltraTEV survey root not discovered"
+
+    data = PpuTestsheetParser().extract_testsheet_data(ts_path)
+    swgs = data.equipment.switchgears
+    assert len(swgs) == 2, f"Expected 2 switchgears, got {len(swgs)}"
+
+    out_dir = tmp_path / "prpd_jengka"
+    catalog = generate_all_substation_prpd_graphs(
+        survey_root=survey_path,
+        output_dir=out_dir,
+        mode="option_b",
+        switchgears=swgs,
+    )
+
+    assert "swg" in catalog
+    assert 1 in catalog["swg"], "SWG 1 missing from catalog"
+    assert 2 in catalog["swg"], "SWG 2 missing from catalog"
+
+    # SWG 1 (33kV GIS) has 8 panels
+    swg1_panel_keys = [k for k in catalog["swg"][1] if isinstance(k, int)]
+    assert len(swg1_panel_keys) == 8, f"Expected 8 panels for SWG 1, got {len(swg1_panel_keys)}"
+
+    # SWG 2 (11kV VCB) has 29 panels
+    swg2_panel_keys = [k for k in catalog["swg"][2] if isinstance(k, int)]
+    assert len(swg2_panel_keys) == 29, f"Expected 29 panels for SWG 2, got {len(swg2_panel_keys)}"
+
+    # Adapters resolve respective lineups
+    ad1 = SwitchgearScanAdapter(
+        swg=swgs[0],
+        swg_index=1,
+        prpd_catalog=catalog,
+    )
+    res1 = ad1.adapt()
+    assert len(res1.items) > 0
+
+    ad2 = SwitchgearScanAdapter(
+        swg=swgs[1],
+        swg_index=2,
+        prpd_catalog=catalog,
+    )
+    res2 = ad2.adapt()
+    assert len(res2.items) > 0
+
+
+
 
 
 

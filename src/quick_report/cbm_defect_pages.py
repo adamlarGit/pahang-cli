@@ -20,6 +20,15 @@ def _resolve_panels_from_pe_info(pe_info: dict[str, Any]) -> list[Any] | None:
     return panels
 
 
+def _resolve_switchgears_from_pe_info(pe_info: dict[str, Any]) -> list[Any] | None:
+    swgs = pe_info.get("switchgears")
+    if not swgs:
+        eq_pkg = pe_info.get("equipment_package") or pe_info.get("equipment_specs")
+        if eq_pkg and getattr(eq_pkg, "switchgears", None):
+            swgs = list(eq_pkg.switchgears)
+    return swgs
+
+
 def build_cbm_defect_page_context(pe_info: dict[str, Any]) -> dict[str, Any]:
     """Build the base context for CBM defect pages."""
     return pe_info.copy()
@@ -58,6 +67,7 @@ class CbmDefectPageBuilder:
                         output_dir=Path(prpd_out),
                         mode=pe_info.get("prpd_mode", "option_c"),
                         panels=_resolve_panels_from_pe_info(pe_info),
+                        switchgears=_resolve_switchgears_from_pe_info(pe_info),
                     )
                     pe_info["prpd_catalog"] = prpd_catalog
 
@@ -162,6 +172,7 @@ def generate_cbm_defect_pages(
                 output_dir=pe_info_copy["prpd_output_dir"],
                 mode=pe_info_copy.get("prpd_mode", "option_c"),
                 panels=_resolve_panels_from_pe_info(pe_info_copy),
+                switchgears=_resolve_switchgears_from_pe_info(pe_info_copy),
             )
             pe_info_copy["prpd_catalog"] = prpd_catalog
 

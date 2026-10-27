@@ -12,6 +12,7 @@ import docx
 from docxtpl import DocxTemplate, InlineImage
 from PIL import Image
 import pytest
+from unittest.mock import Mock
 
 from src.quick_report.prpd import (
     OPTION_C_INJECTION_TEMPLATE,
@@ -1699,6 +1700,174 @@ def test_find_pregenerated_prpd_graph_polymorphic_us_and_us_tev(tmp_path: Path):
         tech="US",
     )
     assert found_feeder == graph_file
+
+
+def test_discover_substation_assets_dual_switchgear_scoping(tmp_path: Path):
+    """Ticket #129: Verify _discover_substation_assets scopes feeders per switchgear lineup without collision."""
+    survey_root = tmp_path / "SURVEY_DUAL"
+    gis_dir = survey_root / "GIS_33kV"
+    vcb_dir = survey_root / "VCB_11kV"
+
+    (gis_dir / "2L5_FEEDER_2").mkdir(parents=True)
+    (gis_dir / "4L5_FEEDER_4").mkdir(parents=True)
+    (vcb_dir / "1_INCOMER_TX").mkdir(parents=True)
+    (vcb_dir / "2_TNB").mkdir(parents=True)
+
+    swg1 = Mock(
+        switchgear_type="GIS",
+        rating="36kV",
+        panels=[
+            Mock(panel_no=1, panel_feeder_no="2L5", name="FEEDER 2"),
+            Mock(panel_no=2, panel_feeder_no="4L5", name="FEEDER 4"),
+        ],
+    )
+    swg2 = Mock(
+        switchgear_type="VCB",
+        rating="12kV",
+        panels=[
+            Mock(panel_no=1, panel_feeder_no="1", name="INCOMER TX"),
+            Mock(panel_no=2, panel_feeder_no="2", name="TNB"),
+        ],
+    )
+
+    swg_panels, tx_units = _discover_substation_assets(survey_root, switchgears=[swg1, swg2])
+
+    assert hasattr(swg_panels, "lineups")
+    assert len(swg_panels.lineups) == 2
+    assert 1 in swg_panels.lineups
+    assert 2 in swg_panels.lineups
+
+    # Verify SWG 1 (33kV GIS) panels
+    assert (1, 1) in swg_panels
+    assert swg_panels[(1, 1)].name == "2L5_FEEDER_2"
+    assert swg_panels[(1, 2)].name == "4L5_FEEDER_4"
+
+    # Verify SWG 2 (11kV VCB) panels
+    assert (2, 1) in swg_panels
+    assert swg_panels[(2, 1)].name == "1_INCOMER_TX"
+    assert swg_panels[(2, 2)].name == "2_TNB"
+
+    # Verify no collision: (1, 1) and (2, 1) are distinct
+    assert swg_panels[(1, 1)] != swg_panels[(2, 1)]
+
+
+def test_generate_all_substation_prpd_graphs_dual_switchgear(tmp_path: Path):
+    """Ticket #129: Verify generate_all_substation_prpd_graphs outputs scoped catalog and filenames."""
+    survey_root = tmp_path / "SURVEY_DUAL_PRPD"
+    gis_dir = survey_root / "GIS_33kV"
+    vcb_dir = survey_root / "VCB_11kV"
+
+    f_gis = gis_dir / "2L5_FEEDER"
+    f_gis.mkdir(parents=True)
+    meas_gis = f_gis / "20261025T100000_Ultrasonic"
+    meas_gis.mkdir(parents=True)
+    (meas_gis / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[10.0, 50, 1]]};', encoding="utf-8")
+
+    f_vcb = vcb_dir / "1_INCOMER"
+    f_vcb.mkdir(parents=True)
+    meas_vcb = f_vcb / "20261025T110000_Ultrasonic"
+    meas_vcb.mkdir(parents=True)
+    (meas_vcb / "ultrasonic_phase_plot.js").write_text('var ultra_events = {"data": [[20.0, 60, 1]]};', encoding="utf-8")
+
+    swg1 = Mock(
+        switchgear_type="GIS",
+        rating="36kV",
+        panels=[Mock(panel_no=1, panel_feeder_no="2L5", name="FEEDER")],
+    )
+    swg2 = Mock(
+        switchgear_type="VCB",
+        rating="12kV",
+        panels=[Mock(panel_no=1, panel_feeder_no="1", name="INCOMER")],
+    )
+
+    out_dir = tmp_path / "out_dual_prpd"
+    catalog = generate_all_substation_prpd_graphs(
+        survey_root=survey_root,
+        output_dir=out_dir,
+        mode="option_b",
+        switchgears=[swg1, swg2],
+    )
+
+    assert "swg" in catalog
+    assert 1 in catalog["swg"]
+    assert 2 in catalog["swg"]
+
+    # Scoped panel 1 entries
+    entry1 = catalog["swg"][1][1]
+    entry2 = catalog["swg"][2][1]
+    assert entry1["us"] is not None
+    assert entry2["us"] is not None
+    assert entry1["us"] != entry2["us"]
+
+    # Verify isolated filenames with swg index
+    assert "prpd_swg1_panel1" in entry1["us"].name
+    assert "prpd_swg2_panel1" in entry2["us"].name
+
+    # Check feeder aliases within lineups
+    assert "feeder_2L5" in catalog["swg"][1]
+    assert "feeder_1" in catalog["swg"][2]
+    assert catalog["swg"][1]["feeder_2L5"] == entry1
+    assert catalog["swg"][2]["feeder_1"] == entry2
+
+
+def test_switchgear_scan_adapter_unmeasured_compartment_early_return(tmp_path: Path, monkeypatch):
+    """Ticket #129: Verify SwitchgearScanAdapter does not trigger headless Chrome when compartment was unmeasured."""
+    from src.full_report.scan_adapters import SwitchgearScanAdapter
+    from src.full_report.models import SwitchgearScanSpec, SwitchgearPanelScanSpec
+
+    dummy_png = tmp_path / "prpd_cb_us.png"
+    dummy_png.write_bytes(b"dummy")
+
+    catalog = {
+        "swg": {
+            1: {
+                "us": dummy_png,
+                "tev": None,
+                "compartments": {
+                    "CIRCUIT_BREAKER": {"us": dummy_png, "tev": None},
+                },
+            }
+        }
+    }
+
+    swg = SwitchgearScanSpec(
+        switchgear_type="VCB",
+        rating="11kV",
+        panels=(
+            SwitchgearPanelScanSpec(
+                panel_no=1,
+                name="FEEDER 1",
+                compartments=("BREAKER COMPARTMENT", "CABLE COMPARTMENT"),
+            ),
+        ),
+    )
+
+    called_chrome = []
+    def mock_gen_prpd(*args, **kwargs):
+        called_chrome.append(True)
+        return None, None
+
+    monkeypatch.setattr(
+        "src.full_report.scan_adapters.generate_prpd_graphs_for_swg_panel",
+        mock_gen_prpd,
+    )
+
+    adapter = SwitchgearScanAdapter(
+        swg=swg,
+        prpd_catalog=catalog,
+        survey_root=tmp_path / "FAKE_SURVEY",
+    )
+
+    # 1. BREAKER COMPARTMENT was measured -> resolves dummy_png
+    us_cb, _ = adapter._resolve_prpd(panel_no=1, compartment="BREAKER COMPARTMENT")
+    assert us_cb == str(dummy_png)
+    assert len(called_chrome) == 0
+
+    # 2. CABLE COMPARTMENT was unmeasured -> early returns ("", "") without invoking Chrome
+    us_cable, _ = adapter._resolve_prpd(panel_no=1, compartment="CABLE COMPARTMENT")
+    assert us_cable == ""
+    assert len(called_chrome) == 0
+
 
 
 

@@ -991,32 +991,122 @@ def discover_survey_measurements(survey_root: Path | str) -> list[DiscoveredMeas
 
 
 
+def _resolve_target_swg_dirs(
+    swg_dirs: Sequence[Path],
+    swg_idx: int | None = None,
+    voltage_class: str | None = None,
+    switchgear_type: str | None = None,
+) -> list[Path]:
+    """Filter candidate switchgear directories to match specific lineup context."""
+    if not swg_dirs or len(swg_dirs) <= 1:
+        return list(swg_dirs)
+
+    scores: list[tuple[int, Path]] = []
+    v_clean = str(voltage_class or "").upper()
+    t_clean = str(switchgear_type or "").upper()
+
+    for d in swg_dirs:
+        score = 0
+        d_up = d.name.upper()
+
+        # Voltage matching (33kV, 36kV, 11kV, 12kV, 22kV)
+        if "33" in v_clean or "36" in v_clean:
+            if "33" in d_up or "36" in d_up:
+                score += 15
+            elif "11" in d_up or "12" in d_up:
+                score -= 10
+        elif "11" in v_clean or "12" in v_clean:
+            if "11" in d_up or "12" in d_up:
+                score += 15
+            elif "33" in d_up or "36" in d_up:
+                score -= 10
+
+        # Switchgear type matching (GIS, VCB, RMU)
+        if t_clean:
+            if t_clean in d_up:
+                score += 12
+            else:
+                for typ in ("GIS", "VCB", "RMU"):
+                    if typ in t_clean and typ in d_up:
+                        score += 12
+
+        # Index matching (swg_idx: 1 or 2)
+        if swg_idx is not None:
+            if f"SWG{swg_idx}" in d_up or f"SWG_{swg_idx}" in d_up:
+                score += 8
+            elif f"{swg_idx}" in d_up:
+                score += 4
+            # 33kV typically corresponds to lineup 1 in dual PPU/PMU setups
+            if swg_idx == 1 and ("33" in d_up or "GIS" in d_up):
+                score += 5
+            elif swg_idx == 2 and ("11" in d_up or "VCB" in d_up):
+                score += 5
+
+        scores.append((score, d))
+
+    max_score = max(s[0] for s in scores)
+    if max_score > 0:
+        return [d for score, d in scores if score == max_score]
+    return list(swg_dirs)
+
+
 def find_swg_feeder_survey_dir(
     survey_root: Path,
     panel_no: int,
     feeder_no: str = "",
     panel_name: str = "",
+    *,
+    swg_idx: int | None = None,
+    voltage_class: str | None = None,
+    switchgear_type: str | None = None,
+    target_swg_dir: Path | None = None,
+    excluded_dirs: set[Path] | None = None,
 ) -> Path | None:
     """Find the target SWG/VCB/RMU/GIS feeder survey directory using multi-tier precedence."""
     swg_prefixes = ("SWG", "VCB", "RMU", "GIS")
-    try:
-        swg_dirs = [
-            d for d in survey_root.iterdir()
-            if d.is_dir() and d.name.upper().startswith(swg_prefixes)
-        ]
-    except OSError:
-        return None
+    if target_swg_dir and target_swg_dir.is_dir():
+        swg_dirs = [target_swg_dir]
+    else:
+        try:
+            swg_dirs = [
+                d for d in survey_root.iterdir()
+                if d.is_dir() and d.name.upper().startswith(swg_prefixes)
+            ]
+        except OSError:
+            return None
 
-    if not swg_dirs:
-        return None
+        if not swg_dirs:
+            return None
+
+        # Filter if lineup context is provided and multiple directories exist
+        if len(swg_dirs) > 1 and (swg_idx is not None or voltage_class or switchgear_type):
+            swg_dirs = _resolve_target_swg_dirs(
+                swg_dirs,
+                swg_idx=swg_idx,
+                voltage_class=voltage_class,
+                switchgear_type=switchgear_type,
+            )
 
     # Canonical exact "SWG", "VCB", "RMU", "GIS" precede numbered variants
     swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU", "GIS") else 1, d.name.upper()))
 
+    seen_resolved: set[Path] = set()
     candidate_subdirs: list[Path] = []
     for s_dir in swg_dirs:
         try:
-            candidate_subdirs.extend([d for d in s_dir.iterdir() if d.is_dir()])
+            for d in sorted(s_dir.iterdir(), key=lambda p: (0 if p.resolve() == p else 1, -len(p.name))):
+                if not d.is_dir():
+                    continue
+                try:
+                    resolved = d.resolve()
+                except Exception:
+                    resolved = d
+                if resolved in seen_resolved:
+                    continue
+                if excluded_dirs and (d in excluded_dirs or resolved in excluded_dirs):
+                    continue
+                seen_resolved.add(resolved)
+                candidate_subdirs.append(resolved)
         except OSError:
             continue
 
@@ -1027,9 +1117,9 @@ def find_swg_feeder_survey_dir(
     raw_name = str(panel_name or "").strip()
     clean_pname = re.sub(r"[-_ ]+", "_", raw_name.upper()).strip("_")
     clean_feeder = re.sub(r"[-_ ]+", "_", raw_feeder.upper()).strip("_")
-    feeder_digits = re.findall(r"\d+", clean_feeder)
-    feeder_int_str = str(int(feeder_digits[0])) if feeder_digits else ""
-    pname_tokens = [w for w in re.split(r"[^A-Z0-9]+", raw_name.upper()) if len(w) >= 2]
+    is_pure_digits = clean_feeder.isdigit()
+    feeder_int_str = str(int(clean_feeder)) if is_pure_digits else ""
+    pname_tokens = [w for w in re.split(r"[^A-Z0-9]+", raw_name.upper()) if len(w) >= 2 or w.isdigit()]
 
     # Pre-normalize candidate directories: (path, d_upper, d_norm)
     normalized_candidates: list[tuple[Path, str, str]] = []
@@ -1043,9 +1133,9 @@ def find_swg_feeder_survey_dir(
     if clean_feeder and clean_pname:
         for d, d_upper, d_norm in normalized_candidates:
             prefix_match = (
-                re.match(rf"^0*{re.escape(feeder_int_str or clean_feeder)}[_\-\s]", d_upper)
+                (feeder_int_str and re.match(rf"^0*{re.escape(feeder_int_str)}[_\-\s]", d_upper))
+                or re.match(rf"^{re.escape(clean_feeder)}[_\-\s]", d_upper)
                 or d_norm.startswith(f"{clean_feeder}_")
-                or (feeder_int_str and d_norm.startswith(f"{feeder_int_str}_"))
             )
             if prefix_match:
                 if clean_pname in d_norm or (pname_tokens and all(t in d_norm for t in pname_tokens)):
@@ -1078,15 +1168,30 @@ def find_swg_feeder_survey_dir(
         for d, d_upper, d_norm in normalized_candidates:
             if d_norm in target_variants or d_upper in target_variants:
                 return d
-            if re.match(rf"^0*{re.escape(feeder_int_str or clean_feeder)}[_\-\s]", d_upper):
+            if feeder_int_str and re.match(rf"^0*{re.escape(feeder_int_str)}[_\-\s]", d_upper):
+                return d
+            if re.match(rf"^{re.escape(clean_feeder)}[_\-\s]", d_upper):
                 return d
 
-    # Tier 3: Panel name match (exact, ends with, or all significant tokens)
+    # Tier 3: Panel name match (exact, ends with, suffix _1 variant, or all significant tokens)
     if clean_pname:
+        # Pass 3a: Exact name match across all candidates
         for d, d_upper, d_norm in normalized_candidates:
             if d_norm == clean_pname or d_upper == raw_name.upper():
                 return d
-            if d_norm.endswith(f"_{clean_pname}") or clean_pname in d_norm:
+        # Pass 3b: Suffix match
+        for d, d_upper, d_norm in normalized_candidates:
+            if d_norm.endswith(f"_{clean_pname}"):
+                return d
+        # Pass 3c: Suffix _1 variant (e.g. TRANSITION_PANEL_1 matches TRANSITION_PANEL)
+        clean_no_1 = re.sub(r"_0*1$", "", clean_pname)
+        if clean_no_1 != clean_pname:
+            for d, d_upper, d_norm in normalized_candidates:
+                if d_norm == clean_no_1 or d_upper == clean_no_1:
+                    return d
+        # Pass 3d: Substring / token match
+        for d, d_upper, d_norm in normalized_candidates:
+            if clean_pname in d_norm:
                 return d
             if pname_tokens and len(pname_tokens) >= 2 and all(t in d_norm for t in pname_tokens):
                 return d
@@ -1337,6 +1442,8 @@ def find_pregenerated_prpd_graph(
     panel_name: str = "",
     compartment: str | None = None,
     tech: str = "US",
+    *,
+    swg_idx: int | None = None,
 ) -> Path | None:
     """Locate an existing pre-rendered PRPD graph in RAW DATA/US+TEV/graphs/ or survey_root/graphs/."""
     candidate_dirs: list[Path] = []
@@ -1376,6 +1483,9 @@ def find_pregenerated_prpd_graph(
     if panel_no:
         feeder_folder_tokens.append(f"PANEL_{panel_no}")
         feeder_folder_tokens.append(f"PANEL{panel_no}")
+        if swg_idx:
+            feeder_folder_tokens.append(f"SWG{swg_idx}_PANEL_{panel_no}")
+            feeder_folder_tokens.append(f"SWG{swg_idx}_PANEL{panel_no}")
 
     for g_dir in valid_graph_dirs:
         for f in g_dir.iterdir():
@@ -1476,6 +1586,9 @@ def generate_prpd_graphs_for_swg_panel(
     compartment: str | None = None,
     include_tev: bool = True,
     include_us: bool = True,
+    swg_idx: int | None = None,
+    voltage_class: str | None = None,
+    switchgear_type: str | None = None,
 ) -> tuple[Path | None, Path | None]:
     """Generate US and TEV PRPD PNG graph images for a switchgear panel.
 
@@ -1492,6 +1605,9 @@ def generate_prpd_graphs_for_swg_panel(
         panel_no=panel_no,
         feeder_no=feeder_no,
         panel_name=panel_name,
+        swg_idx=swg_idx,
+        voltage_class=voltage_class,
+        switchgear_type=switchgear_type,
     )
     if not feeder_dir:
         return None, None
@@ -1502,8 +1618,9 @@ def generate_prpd_graphs_for_swg_panel(
     tev_png: Path | None = None
 
     comp_slug = f"_{_clean_survey_token(compartment).lower()}" if compartment else ""
-    us_out = output_dir / f"prpd_swg_panel{panel_no}{comp_slug}_us.png"
-    tev_out = output_dir / f"prpd_swg_panel{panel_no}{comp_slug}_tev.png"
+    swg_tag = f"swg{swg_idx}_" if swg_idx is not None else "swg_"
+    us_out = output_dir / f"prpd_{swg_tag}panel{panel_no}{comp_slug}_us.png"
+    tev_out = output_dir / f"prpd_{swg_tag}panel{panel_no}{comp_slug}_tev.png"
 
     # Step 1: Check for pre-generated graph in RAW DATA/US+TEV/graphs/
     if should_gen_us:
@@ -1515,6 +1632,7 @@ def generate_prpd_graphs_for_swg_panel(
             panel_name=panel_name,
             compartment=compartment,
             tech="US",
+            swg_idx=swg_idx,
         )
         if pre_us and not is_blank_or_invalid_image(pre_us):
             try:
@@ -1536,6 +1654,7 @@ def generate_prpd_graphs_for_swg_panel(
             panel_name=panel_name,
             compartment=compartment,
             tech="TEV",
+            swg_idx=swg_idx,
         )
         if pre_tev and not is_blank_or_invalid_image(pre_tev):
             try:
@@ -1722,6 +1841,67 @@ def generate_prpd_graphs_for_transformer(
     return us_png, tev_png
 
 
+class SwgPanelsDict(dict):
+    """Dictionary mapping discovered switchgear feeder directories per panel and switchgear lineup.
+
+    Supports:
+    - Single switchgear: swg_panels[panel_no] -> Path
+    - Lineup-scoped tuple lookup: swg_panels[(swg_idx, panel_no)] -> Path
+    - Direct lineup access: swg_panels.lineups[swg_idx][panel_no] -> Path
+    - Lineup retrieval: swg_panels.get_lineup(swg_idx) -> dict[int, Path]
+    - Fallback / alias access: swg_panels[f"swg{swg_idx}_p{panel_no}"] -> Path
+    """
+
+    def __init__(
+        self,
+        *args,
+        lineups: dict[int, dict[int, Path]] | None = None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.lineups: dict[int, dict[int, Path]] = lineups or {}
+
+    def get_lineup(self, swg_idx: int) -> dict[int, Path]:
+        """Return the panels mapping for a specific switchgear lineup."""
+        return self.lineups.get(swg_idx, {})
+
+    def __getitem__(self, key: Any) -> Any:
+        if isinstance(key, tuple) and len(key) == 2:
+            swg_idx, p_no = key
+            if swg_idx in self.lineups and p_no in self.lineups[swg_idx]:
+                return self.lineups[swg_idx][p_no]
+        if isinstance(key, str) and key.startswith("swg") and "_p" in key:
+            try:
+                parts = key[3:].split("_p")
+                swg_idx, p_no = int(parts[0]), int(parts[1])
+                if swg_idx in self.lineups and p_no in self.lineups[swg_idx]:
+                    return self.lineups[swg_idx][p_no]
+            except Exception:
+                pass
+        if key in self:
+            return super().__getitem__(key)
+        if isinstance(key, int) and key in self.lineups:
+            return self.lineups[key]
+        return super().__getitem__(key)
+
+    def __contains__(self, key: object) -> bool:
+        if isinstance(key, tuple) and len(key) == 2:
+            swg_idx, p_no = key
+            return swg_idx in self.lineups and p_no in self.lineups[swg_idx]
+        if isinstance(key, str) and key.startswith("swg") and "_p" in key:
+            try:
+                parts = key[3:].split("_p")
+                swg_idx, p_no = int(parts[0]), int(parts[1])
+                return swg_idx in self.lineups and p_no in self.lineups[swg_idx]
+            except Exception:
+                pass
+        if super().__contains__(key):
+            return True
+        if isinstance(key, int) and key in self.lineups:
+            return True
+        return False
+
+
 class TxUnitsDict(dict):
     """Dictionary mapping transformer indices with case-insensitive string alias support ('ptx', 'ltx')."""
 
@@ -1753,23 +1933,23 @@ class TxUnitsDict(dict):
 def _discover_substation_assets(
     survey_root: Path | str,
     panels: Sequence[Any] | None = None,
-) -> tuple[dict[int, Path], dict[int, Path]]:
+    switchgears: Sequence[Any] | None = None,
+) -> tuple[SwgPanelsDict | dict[int, Path], dict[int, Path]]:
     """Scan SWG feeders (with panel number regex and collision resolution) and TX folders once.
 
-    When `panels` sequence from the testsheet is provided, matches candidate survey directories
-    against panel feeder numbers and feeder names avoiding sequential index collision.
+    When `panels` or `switchgears` is provided, matches candidate survey directories against
+    lineup specs and panel feeder numbers/names, avoiding sequential index collision between lineups.
 
     Returns:
         (swg_panels, tx_units) where:
-        - swg_panels: dict[panel_idx: int, feeder_dir: Path]
+        - swg_panels: SwgPanelsDict mapping panel_idx (and (swg_idx, panel_idx)) to feeder_dir
         - tx_units: dict[tx_idx: int, tx_dir: Path]
     """
     survey_path = Path(survey_root)
-    swg_panels: dict[int, Path] = {}
     tx_units: dict[int, Path] = {}
 
     if not survey_path.exists():
-        return swg_panels, tx_units
+        return SwgPanelsDict(), tx_units
 
     # 1. SWG / VCB / RMU / GIS Feeders & Panels
     swg_prefixes = ("SWG", "VCB", "RMU", "GIS")
@@ -1780,65 +1960,196 @@ def _discover_substation_assets(
         ]
     except OSError:
         swg_dirs = []
-    swg_dirs.sort(key=lambda d: (0 if d.name.upper() in ("SWG", "VCB", "RMU", "GIS") else 1, d.name.upper()))
 
-    candidate_feeders: list[Path] = []
-    for s_dir in swg_dirs:
-        try:
-            candidate_feeders.extend([d for d in s_dir.iterdir() if d.is_dir()])
-        except OSError:
-            continue
+    def _swg_dir_sort_key(d: Path):
+        u = d.name.upper()
+        volt_rank = 0 if "33" in u else (1 if "11" in u else 2)
+        canon_rank = 0 if u in ("SWG", "VCB", "RMU", "GIS") else 1
+        return (volt_rank, canon_rank, u)
 
-    if panels:
-        matched_feeders: set[Path] = set()
-        for panel in panels:
-            p_no = getattr(panel, "panel_no", None)
-            if p_no is None:
-                continue
+    swg_dirs.sort(key=_swg_dir_sort_key)
+
+    # 1b. Build lineup specs: list of (swg_idx, swg_obj, list_of_panels)
+    lineup_specs: list[tuple[int, Any, list[Any]]] = []
+    if switchgears:
+        for idx, swg in enumerate(switchgears, 1):
+            p_list = list(getattr(swg, "panels", None) or [])
+            lineup_specs.append((idx, swg, p_list))
+    elif panels:
+        # Check if panels sequence contains multiple lineups (e.g. panel_no restarts)
+        lineups_panels: list[list[Any]] = []
+        current_lineup: list[Any] = []
+        prev_no = 0
+        for p in panels:
+            p_no = getattr(p, "panel_no", None)
             try:
                 p_no = int(p_no)
             except (ValueError, TypeError):
-                continue
-            if p_no <= 0:
-                continue
-
-            p_feeder = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "").strip()
-            p_name = str(getattr(panel, "name", "") or "").strip()
-
-            feeder_dir = find_swg_feeder_survey_dir(
-                survey_root=survey_path,
-                panel_no=p_no,
-                feeder_no=p_feeder,
-                panel_name=p_name,
-            )
-            if feeder_dir and feeder_dir not in matched_feeders:
-                swg_panels[p_no] = feeder_dir
-                matched_feeders.add(feeder_dir)
-
-        # For any unmatched candidate feeders, assign next free indices
-        for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
-            if feeder_dir in matched_feeders:
-                continue
-            next_idx = 1
-            while next_idx in swg_panels:
-                next_idx += 1
-            swg_panels[next_idx] = feeder_dir
-            matched_feeders.add(feeder_dir)
-    else:
-        for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
-            digits = re.findall(r"\d+", feeder_dir.name)
-            if digits:
-                try:
-                    panel_idx = int(digits[0])
-                except ValueError:
-                    panel_idx = len(swg_panels) + 1
+                p_no = 0
+            if current_lineup and p_no <= prev_no and p_no > 0:
+                lineups_panels.append(current_lineup)
+                current_lineup = [p]
             else:
-                panel_idx = len(swg_panels) + 1
+                current_lineup.append(p)
+            if p_no > 0:
+                prev_no = p_no
+        if current_lineup:
+            lineups_panels.append(current_lineup)
 
-            while panel_idx in swg_panels:
-                panel_idx += 1
+        for idx, p_list in enumerate(lineups_panels, 1):
+            lineup_specs.append((idx, None, p_list))
+    else:
+        if swg_dirs:
+            for idx, s_dir in enumerate(swg_dirs, 1):
+                lineup_specs.append((idx, None, []))
+        else:
+            lineup_specs.append((1, None, []))
 
-            swg_panels[panel_idx] = feeder_dir
+    lineups_dict: dict[int, dict[int, Path]] = {}
+
+    for swg_idx, swg_obj, p_list in lineup_specs:
+        target_dirs = _resolve_target_swg_dirs(
+            swg_dirs,
+            swg_idx=swg_idx,
+            voltage_class=getattr(swg_obj, "rating", None),
+            switchgear_type=getattr(swg_obj, "switchgear_type", None),
+        ) if swg_dirs else []
+
+        target_dir = None
+        if target_dirs:
+            if len(target_dirs) == 1:
+                target_dir = target_dirs[0]
+            elif swg_idx <= len(target_dirs):
+                target_dir = target_dirs[swg_idx - 1]
+            else:
+                target_dir = target_dirs[0]
+
+        seen_cand: set[Path] = set()
+        candidate_feeders: list[Path] = []
+        raw_candidates: list[Path] = []
+        if target_dir and target_dir.is_dir():
+            try:
+                raw_candidates = list(target_dir.iterdir())
+            except OSError:
+                raw_candidates = []
+        elif not swg_dirs:
+            raw_candidates = []
+        else:
+            for s_dir in swg_dirs:
+                try:
+                    raw_candidates.extend(list(s_dir.iterdir()))
+                except OSError:
+                    continue
+
+        for d in sorted(raw_candidates, key=lambda p: (0 if p.resolve() == p else 1, -len(p.name))):
+            if not d.is_dir():
+                continue
+            try:
+                res = d.resolve()
+            except Exception:
+                res = d
+            if res not in seen_cand:
+                seen_cand.add(res)
+                candidate_feeders.append(res)
+
+        lineup_panels: dict[int, Path] = {}
+        matched_feeders: set[Path] = set()
+        matched_resolved: set[Path] = set()
+
+        if p_list:
+            for panel in p_list:
+                p_no = getattr(panel, "panel_no", None)
+                if p_no is None:
+                    continue
+                try:
+                    p_no = int(p_no)
+                except (ValueError, TypeError):
+                    continue
+                if p_no <= 0:
+                    continue
+
+                p_feeder = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "").strip()
+                p_name = str(getattr(panel, "name", "") or "").strip()
+
+                feeder_dir = find_swg_feeder_survey_dir(
+                    survey_root=survey_path,
+                    panel_no=p_no,
+                    feeder_no=p_feeder,
+                    panel_name=p_name,
+                    swg_idx=swg_idx,
+                    voltage_class=getattr(swg_obj, "rating", None),
+                    switchgear_type=getattr(swg_obj, "switchgear_type", None),
+                    target_swg_dir=target_dir,
+                    excluded_dirs=matched_feeders,
+                )
+                if feeder_dir and feeder_dir not in matched_feeders:
+                    lineup_panels[p_no] = feeder_dir
+                    matched_feeders.add(feeder_dir)
+                    try:
+                        matched_resolved.add(feeder_dir.resolve())
+                    except Exception:
+                        pass
+
+            for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
+                if feeder_dir in matched_feeders:
+                    continue
+                try:
+                    f_res = feeder_dir.resolve()
+                    if f_res in matched_resolved:
+                        continue
+                except Exception:
+                    pass
+                next_idx = 1
+                while next_idx in lineup_panels:
+                    next_idx += 1
+                lineup_panels[next_idx] = feeder_dir
+                matched_feeders.add(feeder_dir)
+                try:
+                    matched_resolved.add(feeder_dir.resolve())
+                except Exception:
+                    pass
+        else:
+            seen_resolved: set[Path] = set()
+            for feeder_dir in sorted(candidate_feeders, key=lambda d: d.name):
+                try:
+                    f_res = feeder_dir.resolve()
+                    if f_res in seen_resolved:
+                        continue
+                except Exception:
+                    pass
+                    pass
+                digits = re.findall(r"\d+", feeder_dir.name)
+                if digits:
+                    try:
+                        panel_idx = int(digits[0])
+                    except ValueError:
+                        panel_idx = len(lineup_panels) + 1
+                else:
+                    panel_idx = len(lineup_panels) + 1
+
+                while panel_idx in lineup_panels:
+                    panel_idx += 1
+
+                lineup_panels[panel_idx] = feeder_dir
+                try:
+                    seen_resolved.add(feeder_dir.resolve())
+                except Exception:
+                    pass
+
+        lineups_dict[swg_idx] = lineup_panels
+
+    is_multi = len(lineups_dict) > 1
+
+    if not is_multi:
+        swg_panels = SwgPanelsDict(lineups_dict.get(1, {}), lineups=lineups_dict)
+    else:
+        swg_panels = SwgPanelsDict(lineups=lineups_dict)
+        for swg_idx, p_dict in lineups_dict.items():
+            for p_no, f_dir in p_dict.items():
+                swg_panels[(swg_idx, p_no)] = f_dir
+                swg_panels[f"swg{swg_idx}_p{p_no}"] = f_dir
+            swg_panels[swg_idx] = p_dict
+            swg_panels[f"swg{swg_idx}"] = p_dict
 
     # 2. Transformer (TX) units
     candidate_tx_indices: set[int] = set()
@@ -1902,26 +2213,35 @@ def generate_all_substation_prpd_graphs(
     output_dir: Path | str,
     mode: str = "option_c",
     panels: Sequence[Any] | None = None,
+    switchgears: Sequence[Any] | None = None,
 ) -> dict[str, Any]:
     """Discover all SWG feeders and TX units and generate all PRPD PNG graphs in one pass.
 
     Supports mode='option_c' (Headless Chrome) and mode='option_b' (Native Python).
-    When `panels` is provided, discovery aligns panels using testsheet feeder numbers and names.
+    When `panels` or `switchgears` is provided, discovery aligns panels per switchgear lineup,
+    scoping catalog entries per lineup without overwriting shared panel numbers.
 
     Returns structured catalog:
-    {
-        "swg": {
-            1: {"us": Path(...), "tev": Path(...)},
-            2: {"us": Path(...), "tev": Path(...)},
-            ...
-        },
-        "tx": {
-            1: {"us": Path(...), "tev": Path(...) or None},
-            ...
-        }
-    }
+    - Single switchgear:
+      {
+          "swg": {
+              1: {"us": Path(...), "tev": Path(...), "compartments": ...},
+              ...
+          },
+          "tx": { ... }
+      }
+    - Multi-switchgear:
+      {
+          "swg": {
+              1: { 1: {"us": ..., "tev": ...}, ... },
+              2: { 1: {"us": ..., "tev": ...}, ... },
+              "swg1": ..., "swg2": ...,
+              "swg1_p1": ..., "swg2_p1": ...,
+          },
+          "tx": { ... }
+      }
     """
-    catalog: dict[str, dict[int, dict[str, Path | None]]] = {
+    catalog: dict[str, Any] = {
         "swg": {},
         "tx": {},
     }
@@ -1935,10 +2255,25 @@ def generate_all_substation_prpd_graphs(
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    swg_panels, tx_units = _discover_substation_assets(survey_path, panels=panels)
+    swg_panels, tx_units = _discover_substation_assets(
+        survey_path,
+        panels=panels,
+        switchgears=switchgears,
+    )
+    is_multi = hasattr(swg_panels, "lineups") and len(swg_panels.lineups) > 1
 
-    for panel_idx in swg_panels:
-        catalog["swg"][panel_idx] = {"us": None, "tev": None}
+    if is_multi:
+        for s_idx, p_dict in swg_panels.lineups.items():
+            catalog["swg"][s_idx] = {}
+            for p_no in p_dict:
+                if isinstance(p_no, int):
+                    catalog["swg"][s_idx][p_no] = {"us": None, "tev": None}
+    else:
+        single_p = swg_panels.lineups.get(1, swg_panels) if hasattr(swg_panels, "lineups") else swg_panels
+        for p_no in single_p:
+            if isinstance(p_no, int):
+                catalog["swg"][p_no] = {"us": None, "tev": None}
+
     for tx_idx in tx_units:
         if isinstance(tx_idx, int):
             catalog["tx"][tx_idx] = {"us": None, "tev": None}
@@ -1955,121 +2290,144 @@ def generate_all_substation_prpd_graphs(
         SurveyHttpServer.register_temp_dir(out_path)
         try:
             with SurveyHttpServer(survey_path, temp_dir=out_path) as port:
-                for panel_idx, feeder_dir in swg_panels.items():
-                    us_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_Ultrasonic" in d.name]
-                    us_comp_dirs: dict[str, Path] = {}
-                    for d in sorted(us_candidates, key=lambda x: x.name, reverse=True):
-                        c_tok = extract_measurement_component(d)
-                        if c_tok and c_tok not in us_comp_dirs:
-                            us_comp_dirs[c_tok] = d
+                lineup_items = swg_panels.lineups.items() if is_multi else [(1, single_p)]
+                for swg_idx, panels_dict in lineup_items:
+                    target_catalog = catalog["swg"][swg_idx] if is_multi else catalog["swg"]
+                    for panel_idx, feeder_dir in panels_dict.items():
+                        if not isinstance(panel_idx, int):
+                            continue
+                        us_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_Ultrasonic" in d.name]
+                        us_comp_dirs: dict[str, Path] = {}
+                        for d in sorted(us_candidates, key=lambda x: x.name, reverse=True):
+                            c_tok = extract_measurement_component(d)
+                            if c_tok and c_tok not in us_comp_dirs:
+                                us_comp_dirs[c_tok] = d
 
-                    tev_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_TEV" in d.name]
-                    tev_comp_dirs: dict[str, Path] = {}
-                    for d in sorted(tev_candidates, key=lambda x: x.name, reverse=True):
-                        c_tok = extract_measurement_component(d)
-                        if c_tok and c_tok not in tev_comp_dirs:
-                            tev_comp_dirs[c_tok] = d
+                        tev_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_TEV" in d.name]
+                        tev_comp_dirs: dict[str, Path] = {}
+                        for d in sorted(tev_candidates, key=lambda x: x.name, reverse=True):
+                            c_tok = extract_measurement_component(d)
+                            if c_tok and c_tok not in tev_comp_dirs:
+                                tev_comp_dirs[c_tok] = d
 
-                    distinct_comps = sorted(set(us_comp_dirs.keys()) | set(tev_comp_dirs.keys()))
+                        distinct_comps = sorted(set(us_comp_dirs.keys()) | set(tev_comp_dirs.keys()))
+                        swg_tag = f"swg{swg_idx}_" if (is_multi or swg_idx > 1) else "swg_"
 
-                    if len(distinct_comps) > 1:
-                        comp_map: dict[str, dict[str, Path | None]] = {}
-                        for comp in distinct_comps:
-                            u_png: Path | None = None
-                            t_png: Path | None = None
-                            comp_slug = f"_{comp.lower()}"
+                        if len(distinct_comps) > 1:
+                            comp_map: dict[str, dict[str, Path | None]] = {}
+                            for comp in distinct_comps:
+                                u_png: Path | None = None
+                                t_png: Path | None = None
+                                comp_slug = f"_{comp.lower()}"
 
-                            pre_u = find_pregenerated_prpd_graph(survey_path, feeder_dir, panel_no=panel_idx, compartment=comp, tech="US")
-                            if pre_u and not is_blank_or_invalid_image(pre_u):
-                                u_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_us.png"
-                                if pre_u.resolve() != u_out.resolve():
-                                    shutil.copy2(str(pre_u), str(u_out))
-                                    u_png = u_out
-                                else:
-                                    u_png = pre_u
-                            elif comp in us_comp_dirs:
-                                u_meas = us_comp_dirs[comp]
-                                u_html = u_meas / "Ultrasonic.html"
-                                if u_html.exists():
-                                    u_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_us.png"
-                                    u_png = render_prpd_option_c_image(
-                                        html_file=u_html,
-                                        output_png=u_out,
+                                pre_u = find_pregenerated_prpd_graph(
+                                    survey_path,
+                                    feeder_dir,
+                                    panel_no=panel_idx,
+                                    compartment=comp,
+                                    tech="US",
+                                    swg_idx=swg_idx,
+                                )
+                                if pre_u and not is_blank_or_invalid_image(pre_u):
+                                    u_out = out_path / f"prpd_{swg_tag}panel{panel_idx}{comp_slug}_us.png"
+                                    if pre_u.resolve() != u_out.resolve():
+                                        shutil.copy2(str(pre_u), str(u_out))
+                                        u_png = u_out
+                                    else:
+                                        u_png = pre_u
+                                elif comp in us_comp_dirs:
+                                    u_meas = us_comp_dirs[comp]
+                                    u_html = u_meas / "Ultrasonic.html"
+                                    if u_html.exists():
+                                        u_out = out_path / f"prpd_{swg_tag}panel{panel_idx}{comp_slug}_us.png"
+                                        u_png = render_prpd_option_c_image(
+                                            html_file=u_html,
+                                            output_png=u_out,
+                                            survey_root=survey_path,
+                                            http_port=port,
+                                            chrome_path=chrome_path,
+                                        )
+
+                                pre_t = find_pregenerated_prpd_graph(
+                                    survey_path,
+                                    feeder_dir,
+                                    panel_no=panel_idx,
+                                    compartment=comp,
+                                    tech="TEV",
+                                    swg_idx=swg_idx,
+                                )
+                                if pre_t and not is_blank_or_invalid_image(pre_t):
+                                    t_out = out_path / f"prpd_{swg_tag}panel{panel_idx}{comp_slug}_tev.png"
+                                    if pre_t.resolve() != t_out.resolve():
+                                        shutil.copy2(str(pre_t), str(t_out))
+                                        t_png = t_out
+                                    else:
+                                        t_png = pre_t
+                                elif comp in tev_comp_dirs:
+                                    t_meas = tev_comp_dirs[comp]
+                                    t_html = t_meas / "TEV.html"
+                                    if t_html.exists():
+                                        t_out = out_path / f"prpd_{swg_tag}panel{panel_idx}{comp_slug}_tev.png"
+                                        t_png = render_prpd_option_c_image(
+                                            html_file=t_html,
+                                            output_png=t_out,
+                                            survey_root=survey_path,
+                                            http_port=port,
+                                            chrome_path=chrome_path,
+                                        )
+
+                                comp_map[comp] = {"us": u_png, "tev": t_png}
+
+                            default_us = comp_map.get("CIRCUIT_BREAKER", {}).get("us") or next((v["us"] for v in comp_map.values() if v.get("us")), None)
+                            default_tev = comp_map.get("CIRCUIT_BREAKER", {}).get("tev") or next((v["tev"] for v in comp_map.values() if v.get("tev")), None)
+                            target_catalog[panel_idx] = {
+                                "us": default_us,
+                                "tev": default_tev,
+                                "compartments": comp_map,
+                            }
+                        else:
+                            us_png = None
+                            tev_png = None
+
+                            us_meas = find_latest_measurement_dir(feeder_dir, "US")
+                            if us_meas:
+                                us_html = us_meas / "Ultrasonic.html"
+                                if us_html.exists():
+                                    us_out = out_path / f"prpd_{swg_tag}panel{panel_idx}_us.png"
+                                    us_png = render_prpd_option_c_image(
+                                        html_file=us_html,
+                                        output_png=us_out,
                                         survey_root=survey_path,
                                         http_port=port,
                                         chrome_path=chrome_path,
                                     )
 
-                            pre_t = find_pregenerated_prpd_graph(survey_path, feeder_dir, panel_no=panel_idx, compartment=comp, tech="TEV")
-                            if pre_t and not is_blank_or_invalid_image(pre_t):
-                                t_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_tev.png"
-                                if pre_t.resolve() != t_out.resolve():
-                                    shutil.copy2(str(pre_t), str(t_out))
-                                    t_png = t_out
-                                else:
-                                    t_png = pre_t
-                            elif comp in tev_comp_dirs:
-                                t_meas = tev_comp_dirs[comp]
-                                t_html = t_meas / "TEV.html"
-                                if t_html.exists():
-                                    t_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_tev.png"
-                                    t_png = render_prpd_option_c_image(
-                                        html_file=t_html,
-                                        output_png=t_out,
+                            tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
+                            if tev_meas:
+                                tev_html = tev_meas / "TEV.html"
+                                if tev_html.exists():
+                                    tev_out = out_path / f"prpd_{swg_tag}panel{panel_idx}_tev.png"
+                                    tev_png = render_prpd_option_c_image(
+                                        html_file=tev_html,
+                                        output_png=tev_out,
                                         survey_root=survey_path,
                                         http_port=port,
                                         chrome_path=chrome_path,
                                     )
 
-                            comp_map[comp] = {"us": u_png, "tev": t_png}
+                            comp_dict = {}
+                            if distinct_comps:
+                                comp_dict[distinct_comps[0]] = {"us": us_png, "tev": tev_png}
 
-                        default_us = comp_map.get("CIRCUIT_BREAKER", {}).get("us") or next((v["us"] for v in comp_map.values() if v.get("us")), None)
-                        default_tev = comp_map.get("CIRCUIT_BREAKER", {}).get("tev") or next((v["tev"] for v in comp_map.values() if v.get("tev")), None)
-                        catalog["swg"][panel_idx] = {
-                            "us": default_us,
-                            "tev": default_tev,
-                            "compartments": comp_map,
-                        }
-                    else:
-                        us_png = None
-                        tev_png = None
+                            target_catalog[panel_idx] = {
+                                "us": us_png,
+                                "tev": tev_png,
+                            }
+                            if comp_dict:
+                                target_catalog[panel_idx]["compartments"] = comp_dict
 
-                        us_meas = find_latest_measurement_dir(feeder_dir, "US")
-                        if us_meas:
-                            us_html = us_meas / "Ultrasonic.html"
-                            if us_html.exists():
-                                us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
-                                us_png = render_prpd_option_c_image(
-                                    html_file=us_html,
-                                    output_png=us_out,
-                                    survey_root=survey_path,
-                                    http_port=port,
-                                    chrome_path=chrome_path,
-                                )
-
-                        tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
-                        if tev_meas:
-                            tev_html = tev_meas / "TEV.html"
-                            if tev_html.exists():
-                                tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
-                                tev_png = render_prpd_option_c_image(
-                                    html_file=tev_html,
-                                    output_png=tev_out,
-                                    survey_root=survey_path,
-                                    http_port=port,
-                                    chrome_path=chrome_path,
-                                )
-
-                        comp_dict = {}
-                        if distinct_comps:
-                            comp_dict[distinct_comps[0]] = {"us": us_png, "tev": tev_png}
-
-                        catalog["swg"][panel_idx] = {
-                            "us": us_png,
-                            "tev": tev_png,
-                        }
-                        if comp_dict:
-                            catalog["swg"][panel_idx]["compartments"] = comp_dict
+                        if is_multi:
+                            catalog["swg"][f"swg{swg_idx}_p{panel_idx}"] = target_catalog[panel_idx]
 
                 for tx_idx, tx_dir in [(k, v) for k, v in tx_units.items() if isinstance(k, int)]:
                     us_png = None
@@ -2109,113 +2467,136 @@ def generate_all_substation_prpd_graphs(
             SurveyHttpServer.unregister_temp_dir(out_path)
     else:
         # Option B generation (Native Python FlatBuffers/JSON decoding)
-        for panel_idx, feeder_dir in swg_panels.items():
-            us_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_Ultrasonic" in d.name]
-            us_comp_dirs = {}
-            for d in sorted(us_candidates, key=lambda x: x.name, reverse=True):
-                c_tok = extract_measurement_component(d)
-                if c_tok and c_tok not in us_comp_dirs:
-                    us_comp_dirs[c_tok] = d
+        lineup_items = swg_panels.lineups.items() if is_multi else [(1, single_p)]
+        for swg_idx, panels_dict in lineup_items:
+            target_catalog = catalog["swg"][swg_idx] if is_multi else catalog["swg"]
+            for panel_idx, feeder_dir in panels_dict.items():
+                if not isinstance(panel_idx, int):
+                    continue
+                us_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_Ultrasonic" in d.name]
+                us_comp_dirs = {}
+                for d in sorted(us_candidates, key=lambda x: x.name, reverse=True):
+                    c_tok = extract_measurement_component(d)
+                    if c_tok and c_tok not in us_comp_dirs:
+                        us_comp_dirs[c_tok] = d
 
-            tev_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_TEV" in d.name]
-            tev_comp_dirs = {}
-            for d in sorted(tev_candidates, key=lambda x: x.name, reverse=True):
-                c_tok = extract_measurement_component(d)
-                if c_tok and c_tok not in tev_comp_dirs:
-                    tev_comp_dirs[c_tok] = d
+                tev_candidates = [d for d in feeder_dir.iterdir() if d.is_dir() and "_TEV" in d.name]
+                tev_comp_dirs = {}
+                for d in sorted(tev_candidates, key=lambda x: x.name, reverse=True):
+                    c_tok = extract_measurement_component(d)
+                    if c_tok and c_tok not in tev_comp_dirs:
+                        tev_comp_dirs[c_tok] = d
 
-            distinct_comps = sorted(set(us_comp_dirs.keys()) | set(tev_comp_dirs.keys()))
+                distinct_comps = sorted(set(us_comp_dirs.keys()) | set(tev_comp_dirs.keys()))
+                swg_tag = f"swg{swg_idx}_" if (is_multi or swg_idx > 1) else "swg_"
 
-            if len(distinct_comps) > 1:
-                comp_map = {}
-                for comp in distinct_comps:
-                    u_png = None
-                    t_png = None
-                    comp_slug = f"_{comp.lower()}"
+                if len(distinct_comps) > 1:
+                    comp_map = {}
+                    for comp in distinct_comps:
+                        u_png = None
+                        t_png = None
+                        comp_slug = f"_{comp.lower()}"
 
-                    pre_u = find_pregenerated_prpd_graph(survey_path, feeder_dir, panel_no=panel_idx, compartment=comp, tech="US")
-                    if pre_u and not is_blank_or_invalid_image(pre_u):
-                        u_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_us.png"
-                        if pre_u.resolve() != u_out.resolve():
-                            shutil.copy2(str(pre_u), str(u_out))
-                            u_png = u_out
-                        else:
-                            u_png = pre_u
-                    elif comp in us_comp_dirs:
-                        u_meas = us_comp_dirs[comp]
-                        u_file = u_meas / "ultrasonic_phase_plot.js"
-                        if u_file.exists():
+                        pre_u = find_pregenerated_prpd_graph(
+                            survey_path,
+                            feeder_dir,
+                            panel_no=panel_idx,
+                            compartment=comp,
+                            tech="US",
+                            swg_idx=swg_idx,
+                        )
+                        if pre_u and not is_blank_or_invalid_image(pre_u):
+                            u_out = out_path / f"prpd_{swg_tag}panel{panel_idx}{comp_slug}_us.png"
+                            if pre_u.resolve() != u_out.resolve():
+                                shutil.copy2(str(pre_u), str(u_out))
+                                u_png = u_out
+                            else:
+                                u_png = pre_u
+                        elif comp in us_comp_dirs:
+                            u_meas = us_comp_dirs[comp]
+                            u_file = u_meas / "ultrasonic_phase_plot.js"
+                            if u_file.exists():
+                                try:
+                                    events = decode_ultrasonic_phase_plot(u_file)
+                                    u_out = out_path / f"prpd_{swg_tag}panel{panel_idx}{comp_slug}_us.png"
+                                    u_png = generate_prpd_figure(events, tech_type="US", output_path=u_out)
+                                except Exception:
+                                    u_png = None
+
+                        pre_t = find_pregenerated_prpd_graph(
+                            survey_path,
+                            feeder_dir,
+                            panel_no=panel_idx,
+                            compartment=comp,
+                            tech="TEV",
+                            swg_idx=swg_idx,
+                        )
+                        if pre_t and not is_blank_or_invalid_image(pre_t):
+                            t_out = out_path / f"prpd_{swg_tag}panel{panel_idx}{comp_slug}_tev.png"
+                            if pre_t.resolve() != t_out.resolve():
+                                shutil.copy2(str(pre_t), str(t_out))
+                                t_png = t_out
+                            else:
+                                t_png = pre_t
+                        elif comp in tev_comp_dirs:
+                            t_meas = tev_comp_dirs[comp]
+                            t_file = t_meas / "eventData.js"
+                            if t_file.exists():
+                                try:
+                                    events = decode_tev_event_data(t_file)
+                                    t_out = out_path / f"prpd_{swg_tag}panel{panel_idx}{comp_slug}_tev.png"
+                                    t_png = generate_prpd_figure(events, tech_type="TEV", output_path=t_out)
+                                except Exception:
+                                    t_png = None
+
+                        comp_map[comp] = {"us": u_png, "tev": t_png}
+
+                    default_us = comp_map.get("CIRCUIT_BREAKER", {}).get("us") or next((v["us"] for v in comp_map.values() if v.get("us")), None)
+                    default_tev = comp_map.get("CIRCUIT_BREAKER", {}).get("tev") or next((v["tev"] for v in comp_map.values() if v.get("tev")), None)
+                    target_catalog[panel_idx] = {
+                        "us": default_us,
+                        "tev": default_tev,
+                        "compartments": comp_map,
+                    }
+                else:
+                    us_png = None
+                    tev_png = None
+
+                    us_meas = find_latest_measurement_dir(feeder_dir, "US")
+                    if us_meas:
+                        us_file = us_meas / "ultrasonic_phase_plot.js"
+                        if us_file.exists():
                             try:
-                                events = decode_ultrasonic_phase_plot(u_file)
-                                u_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_us.png"
-                                u_png = generate_prpd_figure(events, tech_type="US", output_path=u_out)
+                                events = decode_ultrasonic_phase_plot(us_file)
+                                us_out = out_path / f"prpd_{swg_tag}panel{panel_idx}_us.png"
+                                us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
                             except Exception:
-                                u_png = None
+                                us_png = None
 
-                    pre_t = find_pregenerated_prpd_graph(survey_path, feeder_dir, panel_no=panel_idx, compartment=comp, tech="TEV")
-                    if pre_t and not is_blank_or_invalid_image(pre_t):
-                        t_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_tev.png"
-                        if pre_t.resolve() != t_out.resolve():
-                            shutil.copy2(str(pre_t), str(t_out))
-                            t_png = t_out
-                        else:
-                            t_png = pre_t
-                    elif comp in tev_comp_dirs:
-                        t_meas = tev_comp_dirs[comp]
-                        t_file = t_meas / "eventData.js"
-                        if t_file.exists():
+                    tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
+                    if tev_meas:
+                        tev_file = tev_meas / "eventData.js"
+                        if tev_file.exists():
                             try:
-                                events = decode_tev_event_data(t_file)
-                                t_out = out_path / f"prpd_swg_panel{panel_idx}{comp_slug}_tev.png"
-                                t_png = generate_prpd_figure(events, tech_type="TEV", output_path=t_out)
+                                events = decode_tev_event_data(tev_file)
+                                tev_out = out_path / f"prpd_{swg_tag}panel{panel_idx}_tev.png"
+                                tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
                             except Exception:
-                                t_png = None
+                                tev_png = None
 
-                    comp_map[comp] = {"us": u_png, "tev": t_png}
+                    comp_dict = {}
+                    if distinct_comps:
+                        comp_dict[distinct_comps[0]] = {"us": us_png, "tev": tev_png}
 
-                default_us = comp_map.get("CIRCUIT_BREAKER", {}).get("us") or next((v["us"] for v in comp_map.values() if v.get("us")), None)
-                default_tev = comp_map.get("CIRCUIT_BREAKER", {}).get("tev") or next((v["tev"] for v in comp_map.values() if v.get("tev")), None)
-                catalog["swg"][panel_idx] = {
-                    "us": default_us,
-                    "tev": default_tev,
-                    "compartments": comp_map,
-                }
-            else:
-                us_png = None
-                tev_png = None
+                    target_catalog[panel_idx] = {
+                        "us": us_png,
+                        "tev": tev_png,
+                    }
+                    if comp_dict:
+                        target_catalog[panel_idx]["compartments"] = comp_dict
 
-                us_meas = find_latest_measurement_dir(feeder_dir, "US")
-                if us_meas:
-                    us_file = us_meas / "ultrasonic_phase_plot.js"
-                    if us_file.exists():
-                        try:
-                            events = decode_ultrasonic_phase_plot(us_file)
-                            us_out = out_path / f"prpd_swg_panel{panel_idx}_us.png"
-                            us_png = generate_prpd_figure(events, tech_type="US", output_path=us_out)
-                        except Exception:
-                            us_png = None
-
-                tev_meas = find_latest_measurement_dir(feeder_dir, "TEV")
-                if tev_meas:
-                    tev_file = tev_meas / "eventData.js"
-                    if tev_file.exists():
-                        try:
-                            events = decode_tev_event_data(tev_file)
-                            tev_out = out_path / f"prpd_swg_panel{panel_idx}_tev.png"
-                            tev_png = generate_prpd_figure(events, tech_type="TEV", output_path=tev_out)
-                        except Exception:
-                            tev_png = None
-
-                comp_dict = {}
-                if distinct_comps:
-                    comp_dict[distinct_comps[0]] = {"us": us_png, "tev": tev_png}
-
-                catalog["swg"][panel_idx] = {
-                    "us": us_png,
-                    "tev": tev_png,
-                }
-                if comp_dict:
-                    catalog["swg"][panel_idx]["compartments"] = comp_dict
+                if is_multi:
+                    catalog["swg"][f"swg{swg_idx}_p{panel_idx}"] = target_catalog[panel_idx]
 
         for tx_idx, tx_dir in [(k, v) for k, v in tx_units.items() if isinstance(k, int)]:
             us_png = None
@@ -2256,13 +2637,42 @@ def generate_all_substation_prpd_graphs(
                 catalog["tx"][alias_name.lower()] = catalog["tx"][target_idx]
                 catalog["tx"][alias_name.upper()] = catalog["tx"][target_idx]
 
-    if panels:
-        for panel in panels:
-            p_no = getattr(panel, "panel_no", None)
-            p_feeder = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "").strip()
-            if p_no is not None and p_no in catalog["swg"] and p_feeder:
-                catalog["swg"][f"feeder_{p_feeder}"] = catalog["swg"][p_no]
-                catalog["swg"][p_feeder] = catalog["swg"][p_no]
+    # Map lineup and feeder aliases in catalog["swg"]
+    if is_multi:
+        for s_idx in swg_panels.lineups:
+            catalog["swg"][f"swg{s_idx}"] = catalog["swg"][s_idx]
+    else:
+        catalog["swg"]["swg1"] = catalog["swg"]
+
+    if switchgears:
+        for s_idx, swg in enumerate(switchgears, 1):
+            target_dict = catalog["swg"].get(s_idx, {}) if is_multi else catalog["swg"]
+            for panel in getattr(swg, "panels", None) or ():
+                p_no = getattr(panel, "panel_no", None)
+                p_feeder = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "").strip()
+                if p_no is not None and p_no in target_dict and p_feeder:
+                    target_dict[f"feeder_{p_feeder}"] = target_dict[p_no]
+                    target_dict[p_feeder] = target_dict[p_no]
+    elif panels:
+        if is_multi:
+            # Map across discovered lineups
+            for s_idx, p_dict in swg_panels.lineups.items():
+                target_dict = catalog["swg"].get(s_idx, {})
+                for panel in panels:
+                    p_no = getattr(panel, "panel_no", None)
+                    p_feeder = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "").strip()
+                    if p_no is not None and p_no in target_dict and p_feeder:
+                        target_dict[f"feeder_{p_feeder}"] = target_dict[p_no]
+                        target_dict[p_feeder] = target_dict[p_no]
+        else:
+            for panel in panels:
+                p_no = getattr(panel, "panel_no", None)
+                p_feeder = str(getattr(panel, "panel_feeder_no", "") or getattr(panel, "feeder_no", "") or "").strip()
+                if p_no is not None and p_no in catalog["swg"] and p_feeder:
+                    catalog["swg"][f"feeder_{p_feeder}"] = catalog["swg"][p_no]
+                    catalog["swg"][p_feeder] = catalog["swg"][p_no]
+
+    return catalog
 
     return catalog
 
@@ -2290,6 +2700,7 @@ __all__ = [
     "OPTION_C_INJECTION_TEMPLATE",
     "SURVEY_CONTAINER_NAMES",
     "SurveyHttpServer",
+    "SwgPanelsDict",
     "ThreadedTCPServer",
     "TxUnitsDict",
     "_discover_substation_assets",

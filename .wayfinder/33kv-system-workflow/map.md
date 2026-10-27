@@ -77,6 +77,8 @@ graph TD
     T126["#126: Align 33kV raw material destination hierarchy with RAW DATA subfolder - Closed"]
     T127["#127: Polymorphic US and US+TEV discovery across graph, audio, and sound embedding workflows - Closed"]
     T128["#128: Windows MAX_PATH hardening for deep raw data extraction in RawMaterialLoader - Closed"]
+    T129["#129: Switchgear-scoped survey discovery and PRPD catalog for multi-switchgear substations - Closed"]
+    T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -109,8 +111,10 @@ graph TD
     T125 --> T126
     T126 --> T127
     T126 --> T128
-    T127 --> T103
-    T128 --> T103
+    T127 --> T129
+    T128 --> T129
+    T129 --> T130
+    T130 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -299,6 +303,50 @@ graph TD
 - [x] Modifying an IR thermal image or parameters on the first page in Microsoft Word does not modify or link to subsequent pages.
 - [x] Verify fix against `MINI PPU KUALA TAHAN 33/11kV` and `MINI PPU MERTING 33/11kV` deliverables and automated tests.
 
+### #126: fix(storage): align 33kV raw material destination hierarchy with RAW DATA subfolder
+- **Status**: Closed
+- **GitHub Issue**: [#126](https://github.com/adamlarGit/pahang-cli/issues/126)
+- **Blocked by**: #125
+- **Ticket File**: [tickets/126-align-33kv-raw-material-hierarchy.md](./tickets/126-align-33kv-raw-material-hierarchy.md)
+- **Delivers**: Align 33kV raw material destination hierarchy in `RawMaterialTransformer` by appending `RAW DATA/` to match 11kV directory hierarchy parity, defaulting new 33kV surveys to `RAW DATA/US/`, and migrating legacy loose folders into `RAW DATA/` in `RawMaterialLoader`.
+
+### #127: feat(survey): Polymorphic US and US+TEV discovery across graph, audio, and sound embedding workflows
+- **Status**: Closed
+- **GitHub Issue**: [#127](https://github.com/adamlarGit/pahang-cli/issues/127)
+- **Blocked by**: #126
+- **Ticket File**: [tickets/127-polymorphic-us-and-us-tev-discovery.md](./tickets/127-polymorphic-us-and-us-tev-discovery.md)
+- **Delivers**: Polymorphic `US` and `US+TEV` structure discovery across PRPD graph discovery, standalone US+TEV graph generation, and audio extraction workflows with centralized `resolve_survey_container_dir()` helper.
+
+### #128: fix(storage): Windows MAX_PATH hardening for deep raw data extraction in RawMaterialLoader
+- **Status**: Closed
+- **GitHub Issue**: [#128](https://github.com/adamlarGit/pahang-cli/issues/128)
+- **Blocked by**: #126
+- **Ticket File**: [tickets/128-windows-max-path-hardening.md](./tickets/128-windows-max-path-hardening.md)
+- **Delivers**: Extended path `\\?\` prefixing via `safe_path()` in `src.core.path_utils`, hardened `LocalWorkspaceStorage.ensure_directory`, and applied throughout `RawMaterialLoader` with COM workflows strictly untouched.
+
+### #129: feat(survey): switchgear-scoped UltraTEV survey discovery and PRPD catalog for multi-switchgear substations
+- **Status**: Closed
+- **GitHub Issue**: [#129](https://github.com/adamlarGit/pahang-cli/issues/129)
+- **Blocked by**: #127, #128
+- **Ticket File**: [tickets/129-switchgear-scoped-survey-prpd-catalog.md](./tickets/129-switchgear-scoped-survey-prpd-catalog.md)
+- **Delivers**: Enable accurate, collision-free US and TEV PRPD graph generation and attachment for substations with multiple switchgear lineups (e.g. 33kV GIS and 11kV VCB sharing panel indices 1..8) with switchgear-scoped feeder discovery, catalog indexing (`catalog["swg"][swg_idx][panel_no]`), isolated graph filenames (`prpd_swg{swg_idx}_panel{panel_no}_...`), and adapter waveform resolution.
+- [x] `_discover_substation_assets` discovers feeders scoped to each switchgear lineup without overwriting shared panel numbers.
+- [x] `catalog["swg"]` indexes graphs per switchgear lineup (`swg_index`).
+- [x] Generated PRPD image filenames include switchgear index (`prpd_swg{swg_idx}_panel{panel_no}_...`).
+- [x] `SwitchgearScanAdapter._resolve_prpd` correctly pulls waveforms for both 33kV and 11kV panels without cross-lineup graph contamination.
+- [x] Passes all test suites in `tests/test_prpd_generator.py` and `tests/test_full_report_scan_adapters.py`.
+
+### #130: feat(full-report): align multi-switchgear overview and panel sequence across summary census and document chunks
+- **Status**: Open
+- **GitHub Issue**: [#130](https://github.com/adamlarGit/pahang-cli/issues/130)
+- **Blocked by**: #129
+- **Ticket File**: [tickets/130-align-multiswitchgear-overview-and-panel-sequence.md](./tickets/130-align-multiswitchgear-overview-and-panel-sequence.md)
+- **Delivers**: Implement strict multi-switchgear generation sequence prioritizing 33kV before 11kV, with separate overview documents per switchgear lineup (Option A): Part 01 Summary, Part 02 Switchgear 1 (33kV) Overview, 33kV Panels, Switchgear 2 (11kV) Overview, 11kV Panels, and Transformers/Condition, with aligned executive summary census ordering.
+- [ ] Multi-part partitioning produces dedicated overview chunks per switchgear lineup: Part 01 Summary, 33kV Overview, 33kV Panels, 11kV Overview, 11kV Panels, and TX/Condition.
+- [ ] Census summary tables order 33kV lineup before 11kV lineup.
+- [ ] Document chunk indices and labels reflect Option A structure cleanly.
+- [ ] All unit and plan builder tests in `tests/test_full_report_workflow.py` pass.
+
 ---
 
 ## Decisions so far
@@ -397,6 +445,8 @@ graph TD
 - **Q95**: 33kV raw material destination resolution in `RawMaterialTransformer` appends `RAW DATA/` to match 11kV directory hierarchy parity, defaults brand new 33kV surveys to `RAW DATA/US/`, and migrates legacy loose root folders into `RAW DATA/` in `RawMaterialLoader`. Handled in #126.
 - **Q96**: Survey discovery and output destination resolution support polymorphic `US` (33kV) and `US+TEV` (11kV) structures across PRPD graph discovery, standalone US+TEV graph generation, and audio extraction workflows with centralized `resolve_survey_container_dir()` helper. Handled in #127.
 - **Q97**: Windows MAX_PATH (>260 chars) immunity is centralized via `safe_path()` in `src.core.path_utils`, hardened into `LocalWorkspaceStorage.ensure_directory`, and applied throughout `RawMaterialLoader` (directory provisioning, photo copying, zip extraction, and legacy consolidation) with COM workflows strictly untouched. Handled in #128.
+- **Q98**: Multi-switchgear survey discovery and PRPD catalog scoping by switchgear index (`catalog["swg"][swg_idx][panel_no]`) and isolated image filenames (`prpd_swg{swg_idx}_panel{panel_no}_...`) to avoid panel index collisions on multi-switchgear substations like `CJEN/PMU/J00001`. Handled in #129.
+- **Q99**: Multi-switchgear overview document chunk sequence (Option A) generating separate overview chunks per switchgear lineup (`Part 02 - Switchgear 1 (33kV) Overview.docx`, `Part 11 - Switchgear 2 (11kV) Overview.docx`) and prioritizing 33kV before 11kV in document chunks and census summary tables. Handled in #130.
 
 ---
 
