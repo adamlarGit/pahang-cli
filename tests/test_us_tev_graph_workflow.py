@@ -14,7 +14,9 @@ from src.workflows.us_tev_graphs import (
     BrowserPrerequisiteError,
     UsTevGraphWorkflow,
     UsTevWorkflowSummary,
+    discover_us_tev_candidate_substations,
     generate_substation_graphs,
+    resolve_us_tev_graphs_output_dir,
 )
 
 
@@ -242,3 +244,82 @@ def test_output_directory_resolution_for_nested_survey_archive(tmp_path: Path):
     assert summary_2.total_substations == 1
     assert summary_2.total_graphs == 2
     assert (canonical_graphs_dir / "VCB_PANEL_1_CIRCUIT_BREAKER_TEV.png").exists()
+
+
+def test_resolve_us_tev_graphs_output_dir_2_level_bounded_check(tmp_path: Path):
+    """Ticket #127: Verify 2-level bounded container check for US and US+TEV output resolution."""
+    # Level 1: survey_dir.name is US
+    p_us = tmp_path / "PE_001" / "RAW DATA" / "US"
+    assert resolve_us_tev_graphs_output_dir(p_us) == p_us / "graphs"
+
+    # Level 1: survey_dir.name is US+TEV
+    p_us_tev = tmp_path / "PE_002" / "RAW DATA" / "US+TEV"
+    assert resolve_us_tev_graphs_output_dir(p_us_tev) == p_us_tev / "graphs"
+
+    # Level 2: survey_dir.parent.name is US
+    p_us_nested = p_us / "20261022_SURVEY"
+    assert resolve_us_tev_graphs_output_dir(p_us_nested) == p_us / "graphs"
+
+    # Level 2: survey_dir.parent.name is US+TEV
+    p_us_tev_nested = p_us_tev / "20260917_SURVEY"
+    assert resolve_us_tev_graphs_output_dir(p_us_tev_nested) == p_us_tev / "graphs"
+
+    # Neither container detected -> raises ValueError
+    p_invalid = tmp_path / "PE_003" / "RAW DATA" / "OTHER_CONTAINER" / "SURVEY"
+    with pytest.raises(ValueError, match="Neither 'US' nor 'US\\+TEV' container detected"):
+        resolve_us_tev_graphs_output_dir(p_invalid)
+
+
+def test_run_substation_polymorphic_33kv_us(tmp_path: Path):
+    """Ticket #127: Verify run_substation resolves output to <SUBSTATION>/RAW DATA/US/graphs/ for 33kV."""
+    sub_raw_us = tmp_path / "PE_33KV" / "RAW DATA" / "US"
+    _setup_synthetic_survey(sub_raw_us)
+
+    workflow = UsTevGraphWorkflow(mode="option_b")
+    paths = workflow.run_substation(sub_raw_us)
+    assert len(paths) == 2
+    canonical_graphs_dir = sub_raw_us / "graphs"
+    assert canonical_graphs_dir.exists()
+    for p in paths:
+        assert p.parent == canonical_graphs_dir
+        assert p.exists()
+
+
+def test_run_substation_raises_value_error_on_invalid_container(tmp_path: Path):
+    """Ticket #127: Verify run_substation raises ValueError if neither US nor US+TEV container is detected."""
+    sub_raw_invalid = tmp_path / "PE_INVALID" / "RAW DATA" / "OTHER"
+    _setup_synthetic_survey(sub_raw_invalid)
+
+    workflow = UsTevGraphWorkflow(mode="option_b")
+    with pytest.raises(ValueError, match="Neither 'US' nor 'US\\+TEV' container detected"):
+        workflow.run_substation(sub_raw_invalid)
+
+
+def test_run_batch_resilience_isolates_invalid_container(tmp_path: Path):
+    """Ticket #127: Verify SubstationIsolatedBatchResiliencePolicy isolates ValueError from invalid container."""
+    # Sub 1: Valid US+TEV (11kV)
+    survey1 = tmp_path / "SUB1" / "RAW DATA" / "US+TEV"
+    _setup_synthetic_survey(survey1)
+
+    # Sub 2: Invalid container (raises ValueError)
+    survey_invalid = tmp_path / "SUB_INVALID" / "RAW DATA" / "OTHER"
+    _setup_synthetic_survey(survey_invalid)
+
+    # Sub 3: Valid US (33kV)
+    survey3 = tmp_path / "SUB3" / "RAW DATA" / "US"
+    _setup_synthetic_survey(survey3)
+
+    workflow = UsTevGraphWorkflow(mode="option_b")
+    batch = [
+        ("Substation 1", survey1),
+        ("Substation Invalid", survey_invalid),
+        ("Substation 3", survey3),
+    ]
+
+    summary = workflow.run_batch(batch)
+    assert summary.total_substations == 3
+    assert summary.total_graphs == 4  # 2 from sub1, 2 from sub3
+    assert len(summary.errors) == 1
+    assert "Substation Invalid" in summary.errors[0]
+    assert "Neither 'US' nor 'US+TEV' container detected" in summary.errors[0]
+

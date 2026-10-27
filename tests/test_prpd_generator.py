@@ -25,6 +25,7 @@ from src.quick_report.prpd import (
     find_chrome_executable,
     find_free_port,
     find_latest_measurement_dir,
+    find_pregenerated_prpd_graph,
     find_swg_feeder_survey_dir,
     find_tx_survey_dir,
     generate_all_substation_prpd_graphs,
@@ -1383,7 +1384,7 @@ def test_discover_22_10_2026_substations_regression():
     # 1. Kuala Tahan
     ts_kt = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI).xlsx")
     survey_kt = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI)\RAW DATA\US")
-    if not (ts_kt.exists() and survey_kt.exists()):
+    if not (ts_kt.exists() and survey_kt.exists() and any(survey_kt.iterdir())):
         pytest.skip("Kuala Tahan 22-10-2026 test files not found")
 
     data_kt = PpuTestsheetParser().extract_testsheet_data(ts_kt)
@@ -1400,7 +1401,7 @@ def test_discover_22_10_2026_substations_regression():
     # 2. Merting
     ts_m = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI).xlsx")
     survey_m = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\RAW MATERIAL\JERANTUT\01. OCTOBER\22-10-2026\34. MINI PPU MERTING 33-11kV (VI)\RAW DATA\US")
-    if not (ts_m.exists() and survey_m.exists()):
+    if not (ts_m.exists() and survey_m.exists() and any(survey_m.iterdir())):
         pytest.skip("Merting 22-10-2026 test files not found")
 
     data_m = PpuTestsheetParser().extract_testsheet_data(ts_m)
@@ -1622,6 +1623,83 @@ def test_generate_prpd_graphs_for_swg_panel_compartment_slug(tmp_path: Path):
     assert us_cable.name == "prpd_swg_panel1_cable_compartment_us.png"
     assert us_busbar.name == "prpd_swg_panel1_busbar_compartment_us.png"
     assert len({us_cb, us_cable, us_busbar}) == 3
+
+
+def test_discover_ultratev_survey_dir_polymorphic_us_and_us_tev(tmp_path: Path):
+    """Ticket #127: Verify discover_ultratev_survey_dir discovers RAW DATA/US and direct US without fallback."""
+    # 1. 33kV structure with RAW DATA/US
+    sub_33kv = tmp_path / "SUB_33KV"
+    us_dir = sub_33kv / "RAW DATA" / "US"
+    (us_dir / "VCB" / "PANEL_1").mkdir(parents=True)
+    discovered = discover_ultratev_survey_dir(sub_33kv)
+    assert discovered == us_dir
+
+    # 2. Direct US structure
+    sub_direct = tmp_path / "SUB_DIRECT"
+    direct_us = sub_direct / "US"
+    (direct_us / "SWG" / "FEEDER_1").mkdir(parents=True)
+    discovered_direct = discover_ultratev_survey_dir(sub_direct)
+    assert discovered_direct == direct_us
+
+
+def test_discover_ultratev_survey_dir_preserves_us_tev_priority(tmp_path: Path):
+    """Ticket #127: Verify US+TEV is prioritized before US if both exist."""
+    sub = tmp_path / "SUB_DUAL"
+    us_tev = sub / "RAW DATA" / "US+TEV"
+    us = sub / "RAW DATA" / "US"
+    (us_tev / "VCB" / "PANEL_1").mkdir(parents=True)
+    (us / "VCB" / "PANEL_1").mkdir(parents=True)
+
+    discovered = discover_ultratev_survey_dir(sub)
+    assert discovered == us_tev
+
+
+def test_discover_ultratev_survey_dir_us_avoids_rglob(tmp_path: Path):
+    """Ticket #127: Verify discovery of US folder does not hit recursive rglob fallback."""
+    from unittest.mock import patch
+    sub_33kv = tmp_path / "SUB_33KV_FAST"
+    us_dir = sub_33kv / "RAW DATA" / "US"
+    (us_dir / "VCB").mkdir(parents=True)
+    (us_dir / "survey_summary.js").write_text("var survey_summary = {};\n", encoding="utf-8")
+
+    with patch.object(Path, "rglob", side_effect=AssertionError("rglob should not be called for canonical US")) as mock_rglob:
+        discovered = discover_ultratev_survey_dir(sub_33kv)
+        assert discovered == us_dir
+        mock_rglob.assert_not_called()
+
+
+def test_find_pregenerated_prpd_graph_polymorphic_us_and_us_tev(tmp_path: Path):
+    """Ticket #127: Verify find_pregenerated_prpd_graph discovers graphs in US/graphs alongside US+TEV/graphs."""
+    # 1. 33kV US structure
+    raw_data_us = tmp_path / "SUB_33KV" / "RAW DATA" / "US"
+    graphs_dir = raw_data_us / "graphs"
+    graphs_dir.mkdir(parents=True)
+    graph_file = graphs_dir / "VCB_PANEL_1_CIRCUIT_BREAKER_US.PNG"
+    graph_file.write_bytes(b"\x89PNG fake")
+
+    # Lookup from survey_root
+    found = find_pregenerated_prpd_graph(
+        survey_root=raw_data_us,
+        panel_no=1,
+        panel_name="VCB",
+        compartment="CIRCUIT_BREAKER",
+        tech="US",
+    )
+    assert found == graph_file
+
+    # Lookup from feeder directory
+    feeder_dir = raw_data_us / "VCB" / "PANEL_1"
+    feeder_dir.mkdir(parents=True)
+    found_feeder = find_pregenerated_prpd_graph(
+        survey_root=None,
+        feeder_or_tx_dir=feeder_dir,
+        panel_no=1,
+        panel_name="VCB",
+        compartment="CIRCUIT_BREAKER",
+        tech="US",
+    )
+    assert found_feeder == graph_file
+
 
 
 

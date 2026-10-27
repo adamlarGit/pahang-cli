@@ -93,7 +93,7 @@ def test_discover_us_tev_candidate_substations(tmp_path: Path):
     assert candidate.package.data.substation_name_erms == "PE TEST 1"
     assert candidate.raw_data_dir == raw_dir_1
     assert candidate.survey_dir == survey_1
-    assert candidate.output_dir == raw_dir_1 / "US+TEV" / "graphs"
+    assert candidate.output_dir == raw_dir_1 / "RAW DATA" / "US+TEV" / "graphs"
 
 
 def test_select_us_tev_substations_interactive():

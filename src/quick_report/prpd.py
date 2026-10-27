@@ -752,10 +752,12 @@ def discover_ultratev_survey_dir(raw_data_dir: Path | str | None) -> Path | None
     if not raw_path.exists():
         return None
 
-    # Check for direct US+TEV subfolder
+    # Check for direct US+TEV and US subfolders (preserving US+TEV 11kV priority)
     candidate_roots = [
         raw_path / "RAW DATA" / "US+TEV",
         raw_path / "US+TEV",
+        raw_path / "RAW DATA" / "US",
+        raw_path / "US",
         raw_path,
     ]
 
@@ -785,6 +787,18 @@ def discover_ultratev_survey_dir(raw_data_dir: Path | str | None) -> Path | None
         pass
 
     return None
+
+
+SURVEY_CONTAINER_NAMES: tuple[str, ...] = ("US+TEV", "US")
+
+
+def resolve_survey_container_dir(survey_dir: Path | str) -> Path:
+    """Resolve the 2-level bounded container directory ('US' or 'US+TEV') for a survey root."""
+    path = Path(survey_dir).resolve()
+    for candidate in (path, path.parent):
+        if candidate.name.upper() in SURVEY_CONTAINER_NAMES:
+            return candidate
+    raise ValueError(f"Neither 'US' nor 'US+TEV' container detected for survey directory: {survey_dir}")
 
 
 def _deduplicate_measurement_label(
@@ -1341,6 +1355,8 @@ def find_pregenerated_prpd_graph(
             s_path / "graphs",
             s_path.parent / "US+TEV" / "graphs",
             s_path / "US+TEV" / "graphs",
+            s_path.parent / "US" / "graphs",
+            s_path / "US" / "graphs",
             s_path.parent / "graphs",
         ])
     if feeder_or_tx_dir:
@@ -1348,6 +1364,8 @@ def find_pregenerated_prpd_graph(
         candidate_dirs.extend([
             f_path.parent.parent / "US+TEV" / "graphs",
             f_path.parent.parent.parent / "US+TEV" / "graphs",
+            f_path.parent.parent / "US" / "graphs",
+            f_path.parent.parent.parent / "US" / "graphs",
             f_path.parent.parent / "graphs",
         ])
 
@@ -2279,6 +2297,7 @@ def build_prpd_inline_images(
 
 __all__ = [
     "OPTION_C_INJECTION_TEMPLATE",
+    "SURVEY_CONTAINER_NAMES",
     "SurveyHttpServer",
     "ThreadedTCPServer",
     "TxUnitsDict",
@@ -2301,6 +2320,7 @@ __all__ = [
     "generate_prpd_graphs_for_transformer",
     "is_blank_or_invalid_image",
     "render_prpd_option_c_image",
+    "resolve_survey_container_dir",
     "safe_path",
 ]
 

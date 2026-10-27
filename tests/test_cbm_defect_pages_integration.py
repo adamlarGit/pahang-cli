@@ -455,3 +455,78 @@ def test_generate_cbm_defect_pages_panel_serial_number_docx_integration(tmp_path
     serial_cell_unlinked = doc_unlinked.tables[0].rows[13].cells[19].text.strip()
     assert serial_cell_unlinked == "-"
 
+
+def test_generate_cbm_defect_pages_33kv_us_polymorphic_discovery(tmp_path: Path):
+    """Ticket #127: Verify CBM defect page generation discovers 33kV RAW DATA/US O(1) without rglob fallback."""
+    from unittest.mock import patch
+    swg_spec = QUICK_REPORT_FAMILY_SPECS_BY_ID["swg"]
+    overview_tpl = Path("templates/QUICK REPORT/DEFECT IR US TEV/swg-overview.docx")
+    detail_tpl = Path("templates/QUICK REPORT/DEFECT IR US TEV/swg-panel.docx")
+
+    if not overview_tpl.exists() or not detail_tpl.exists():
+        pytest.skip("SWG templates not found.")
+
+    # 1. Setup mock 33kV raw survey folder under RAW DATA/US
+    sub_33kv = tmp_path / "SUB_33KV"
+    raw_survey = sub_33kv / "RAW DATA" / "US" / "20261022T100000_001-PE-TEST"
+    feeder1_dir = raw_survey / "VCB" / "PANEL_1"
+    us_run = feeder1_dir / "20261022T101000_Ultrasonic"
+    us_run.mkdir(parents=True)
+    _build_synthetic_us_file(us_run / "ultrasonic_phase_plot.js")
+
+    panel1 = SwitchgearPanelSpec(
+        panel_no=1,
+        panel_feeder_no="F01",
+        name="INCOMING 1",
+        us_reading="14.2",
+        us_char="CORONA",
+    )
+    swg_equipment = SwitchgearSpec(
+        switchgear_type="VCB",
+        manufacturer="TAMCO",
+        panels=(panel1,),
+    )
+    equipment_pkg = SubstationEquipmentPackage(switchgears=(swg_equipment,))
+
+    rec = CbmDefectRecord(
+        equipment="INCOMING 1",
+        technology="US",
+        defect_area="Cable Box",
+        us_reading="14.2",
+    )
+    group = CbmDefectGroup(
+        item_key="INCOMING 1",
+        item_suffix="",
+        defects=(rec,),
+        overview=rec,
+        detail_groups=(CbmDefectDetailGroup(role_id="panel_area", defects=(rec,)),),
+    )
+    plan = CbmDefectFamilyPlan(
+        spec=swg_spec,
+        overview_template=overview_tpl,
+        detail_templates=(("panel_area", detail_tpl),),
+        groups=(group,),
+    )
+
+    out_dir = tmp_path / "out_33kv"
+    pe_info = {
+        "raw_data_dir": sub_33kv,
+        "equipment": equipment_pkg,
+        "substation": {"name_erms": "PE 33KV TEST"},
+        "prpd_mode": "option_b",
+    }
+
+    # Verify rglob is NOT called when discovering 33kV US survey directory
+    with patch.object(Path, "rglob", side_effect=AssertionError("rglob should not be called for 33kV US")) as mock_rglob:
+        generated = generate_cbm_defect_pages(
+            plan=plan,
+            output_dir=out_dir,
+            substation_number=1,
+            pe_info=pe_info,
+        )
+        assert len(generated) == 2
+        for doc_path in generated:
+            assert doc_path.exists()
+        mock_rglob.assert_not_called()
+
+

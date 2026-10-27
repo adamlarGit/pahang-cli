@@ -31,6 +31,7 @@ from src.quick_report.prpd import (
     find_chrome_executable,
     generate_prpd_figure,
     render_prpd_option_c_image,
+    resolve_survey_container_dir,
 )
 from src.project.models import PrpdMode
 from src.testsheet.models import SubstationTestsheetPackage
@@ -147,6 +148,16 @@ def generate_substation_graphs(
     return generated_paths
 
 
+def resolve_us_tev_graphs_output_dir(survey_dir: Path | str) -> Path:
+    """Resolve canonical graphs output directory via 2-level bounded container check.
+
+    Checks survey_dir.name then survey_dir.parent.name for 'US' or 'US+TEV'.
+    Target: <SUBSTATION>/RAW DATA/<CONTAINER>/graphs/
+    Raises ValueError if neither container is detected.
+    """
+    return resolve_survey_container_dir(survey_dir) / "graphs"
+
+
 class UsTevGraphWorkflow:
     """Coordinates Phase-Resolved Partial Discharge (PRPD) graph generation across substations."""
 
@@ -175,16 +186,7 @@ class UsTevGraphWorkflow:
         if output_dir:
             out_path = Path(output_dir).resolve()
         else:
-            if resolved_root.parent.name.upper() == "US+TEV":
-                out_path = resolved_root.parent / "graphs"
-            elif resolved_root.name.upper() == "US+TEV":
-                out_path = resolved_root / "graphs"
-            elif s_root.parent.name.upper() == "US+TEV":
-                out_path = s_root.parent / "graphs"
-            elif s_root.name.upper() == "US+TEV":
-                out_path = s_root / "graphs"
-            else:
-                out_path = resolved_root / "graphs"
+            out_path = resolve_us_tev_graphs_output_dir(resolved_root)
 
         return generate_substation_graphs(resolved_root, out_path, self.mode)
 
@@ -209,20 +211,6 @@ class UsTevGraphWorkflow:
             path_obj = Path(raw_or_survey_dir).resolve()
             survey_root = discover_ultratev_survey_dir(path_obj) or path_obj
 
-            if explicit_output_dir is not None:
-                output_dir = Path(explicit_output_dir).resolve()
-            else:
-                if survey_root.parent.name.upper() == "US+TEV":
-                    output_dir = survey_root.parent / "graphs"
-                elif survey_root.name.upper() == "US+TEV":
-                    output_dir = survey_root / "graphs"
-                elif path_obj.parent.name.upper() == "US+TEV":
-                    output_dir = path_obj.parent / "graphs"
-                elif path_obj.name.upper() == "US+TEV":
-                    output_dir = path_obj / "graphs"
-                else:
-                    output_dir = survey_root / "graphs"
-
             item_label = (
                 _format_package_label(substation_item)
                 if hasattr(substation_item, "station") or hasattr(substation_item, "substation_number") or hasattr(substation_item, "data")
@@ -230,6 +218,11 @@ class UsTevGraphWorkflow:
             )
 
             try:
+                if explicit_output_dir is not None:
+                    output_dir = Path(explicit_output_dir).resolve()
+                else:
+                    output_dir = resolve_us_tev_graphs_output_dir(survey_root)
+
                 paths = self.run_substation(survey_root, output_dir)
                 count = len(paths)
                 summary.total_graphs += count
@@ -268,7 +261,7 @@ def discover_us_tev_candidate_substations(
         raw_dir_path = Path(raw_dir)
         survey_dir = discover_ultratev_survey_dir(raw_dir_path)
         if survey_dir is not None and survey_dir.exists():
-            output_dir = raw_dir_path / "US+TEV" / "graphs"
+            output_dir = resolve_us_tev_graphs_output_dir(survey_dir)
             candidates.append(
                 UsTevCandidate(
                     package=pkg,

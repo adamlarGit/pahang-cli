@@ -542,3 +542,86 @@ def test_embed_survey_ultrasound_multi_transition_disambiguation(tmp_path: Path)
             stream_len = len(verify_doc.xref_stream(sound_ref))
             assert stream_len == 600, f"Page {page_idx} expected 600 bytes (Panel 18), got {stream_len}"
 
+
+def test_resolve_sounds_output_dir_2_level_bounded_check(tmp_path: Path):
+    """Ticket #127: Verify resolve_sounds_output_dir 2-level bounded container check for US and US+TEV."""
+    # 1. Explicit sounds_output_dir always wins
+    explicit = tmp_path / "custom_sounds"
+    cand_explicit = UsAudioCandidate(sounds_output_dir=explicit)
+    assert cand_explicit.resolve_sounds_output_dir() == explicit
+
+    # 2. Level 1: survey_dir.name is US (33kV canonical)
+    p_us = tmp_path / "PE_001" / "RAW DATA" / "US"
+    cand_us = UsAudioCandidate(survey_dir=p_us)
+    assert cand_us.resolve_sounds_output_dir() == p_us / "sounds"
+
+    # 3. Level 1: survey_dir.name is US+TEV (11kV canonical)
+    p_us_tev = tmp_path / "PE_002" / "RAW DATA" / "US+TEV"
+    cand_us_tev = UsAudioCandidate(survey_dir=p_us_tev)
+    assert cand_us_tev.resolve_sounds_output_dir() == p_us_tev / "sounds"
+
+    # 4. Level 2: survey_dir.parent.name is US
+    p_us_nested = p_us / "20261022_SURVEY"
+    cand_us_nested = UsAudioCandidate(survey_dir=p_us_nested)
+    assert cand_us_nested.resolve_sounds_output_dir() == p_us / "sounds"
+
+    # 5. Level 2: survey_dir.parent.name is US+TEV
+    p_us_tev_nested = p_us_tev / "20260917_SURVEY"
+    cand_us_tev_nested = UsAudioCandidate(survey_dir=p_us_tev_nested)
+    assert cand_us_tev_nested.resolve_sounds_output_dir() == p_us_tev / "sounds"
+
+    # 6. Neither container in survey_dir -> raises ValueError
+    p_invalid_survey = tmp_path / "PE_003" / "RAW DATA" / "OTHER_DIR" / "NESTED"
+    cand_invalid = UsAudioCandidate(survey_dir=p_invalid_survey)
+    with pytest.raises(ValueError, match="Neither 'US' nor 'US\\+TEV' container detected"):
+        cand_invalid.resolve_sounds_output_dir()
+
+    # 7. Fallback via raw_data_dir with US
+    sub_raw_us = tmp_path / "PE_004" / "RAW DATA"
+    (sub_raw_us / "US").mkdir(parents=True)
+    cand_raw_us = UsAudioCandidate(raw_data_dir=sub_raw_us)
+    assert cand_raw_us.resolve_sounds_output_dir() == sub_raw_us / "US" / "sounds"
+
+    # 8. Fallback via raw_data_dir with US+TEV
+    sub_raw_us_tev = tmp_path / "PE_005" / "RAW DATA"
+    (sub_raw_us_tev / "US+TEV").mkdir(parents=True)
+    cand_raw_us_tev = UsAudioCandidate(raw_data_dir=sub_raw_us_tev)
+    assert cand_raw_us_tev.resolve_sounds_output_dir() == sub_raw_us_tev / "US+TEV" / "sounds"
+
+    # 9. Fallback via raw_data_dir without US or US+TEV -> raises ValueError
+    sub_raw_empty = tmp_path / "PE_006" / "RAW DATA"
+    sub_raw_empty.mkdir(parents=True)
+    cand_raw_empty = UsAudioCandidate(raw_data_dir=sub_raw_empty)
+    with pytest.raises(ValueError, match="Neither 'US' nor 'US\\+TEV' container detected"):
+        cand_raw_empty.resolve_sounds_output_dir()
+
+    # 10. No directories provided at all -> raises ValueError
+    cand_none = UsAudioCandidate()
+    with pytest.raises(ValueError, match="Cannot resolve sounds output directory"):
+        cand_none.resolve_sounds_output_dir()
+
+
+def test_us_audio_workflow_export_wavs_33kv_us(tmp_path: Path):
+    """Ticket #127: Verify export_substation_16bit_wavs exports to US/sounds/ for 33kV datasets."""
+    sub_dir = tmp_path / "PE_33KV" / "RAW DATA" / "US"
+    survey_dir = _create_synthetic_survey(sub_dir, create_wav=True)
+
+    cand = UsAudioCandidate(
+        package=None,
+        raw_data_dir=tmp_path / "PE_33KV",
+        survey_dir=survey_dir,
+    )
+    # Output dir dynamically resolved to <SUBSTATION>/RAW DATA/US/sounds
+    assert cand.resolve_sounds_output_dir() == sub_dir / "sounds"
+
+    wf = UsAudioWorkflow(mode="export_wav")
+    wavs, sounds = wf.run_substation(cand)
+    assert wavs == 2
+    assert sounds == 0
+
+    canonical_sounds = sub_dir / "sounds"
+    assert canonical_sounds.exists()
+    assert (canonical_sounds / "VCB_PANEL_1_CIRCUIT_BREAKER_US.wav").exists()
+    assert (canonical_sounds / "VCB_PANEL_1_UPPER_BUSBARS_US.wav").exists()
+
+

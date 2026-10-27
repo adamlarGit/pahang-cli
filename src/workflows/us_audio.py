@@ -44,6 +44,7 @@ from src.quick_report.prpd import (
     DiscoveredMeasurement,
     discover_survey_measurements,
     discover_ultratev_survey_dir,
+    resolve_survey_container_dir,
 )
 from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 
@@ -77,24 +78,33 @@ class UsAudioCandidate:
     def resolve_sounds_output_dir(self) -> Path:
         """Resolve canonical destination directory for exported 16-bit WAV files.
 
-        Anchors to <SUBSTATION>/RAW DATA/US+TEV/sounds/.
+        Anchors to <SUBSTATION>/RAW DATA/<CONTAINER>/sounds/ using a 2-level bounded container check.
+        Raises ValueError if neither 'US' nor 'US+TEV' container is detected.
         """
         if self.sounds_output_dir is not None:
             return Path(self.sounds_output_dir)
 
         if self.survey_dir is not None:
-            survey_path = Path(self.survey_dir)
-            if survey_path.name.upper() == "US+TEV":
-                return survey_path / "sounds"
-            return survey_path / "sounds"
+            return resolve_survey_container_dir(self.survey_dir) / "sounds"
 
         if self.raw_data_dir is not None:
             raw_path = Path(self.raw_data_dir)
-            if (raw_path / "US+TEV").is_dir():
-                return raw_path / "US+TEV" / "sounds"
-            if (raw_path / "RAW DATA" / "US+TEV").is_dir():
-                return raw_path / "RAW DATA" / "US+TEV" / "sounds"
-            return raw_path / "US+TEV" / "sounds"
+            discovered = discover_ultratev_survey_dir(raw_path)
+            if discovered is not None:
+                try:
+                    return resolve_survey_container_dir(discovered) / "sounds"
+                except ValueError:
+                    pass
+
+            for container in ("US+TEV", "US"):
+                if (raw_path / container).is_dir():
+                    return raw_path / container / "sounds"
+                if (raw_path / "RAW DATA" / container).is_dir():
+                    return raw_path / "RAW DATA" / container / "sounds"
+
+            raise ValueError(
+                f"Neither 'US' nor 'US+TEV' container detected in raw_data_dir: {self.raw_data_dir}"
+            )
 
         raise ValueError(
             "Cannot resolve sounds output directory: candidate has no sounds_output_dir, "
@@ -242,7 +252,7 @@ def embed_survey_ultrasound_into_pdf(
 
     if survey_root is None:
         logger.info(
-            "US+TEV raw survey folder not present for %s; skipping sound embedding",
+            "US/US+TEV raw survey folder not present for %s; skipping sound embedding",
             target_pdf,
         )
         return 0
@@ -250,7 +260,7 @@ def embed_survey_ultrasound_into_pdf(
     survey_path = Path(survey_root).resolve()
     if not survey_path.is_dir():
         logger.info(
-            "US+TEV raw survey folder not present for %s; skipping sound embedding",
+            "US/US+TEV raw survey folder not present for %s; skipping sound embedding",
             target_pdf,
         )
         return 0
@@ -358,7 +368,7 @@ class UsAudioWorkflow:
                 wavs_exported += len(wav_paths)
             else:
                 logger.info(
-                    "US+TEV raw survey folder not present for candidate %s; skipping WAV export",
+                    "US/US+TEV raw survey folder not present for candidate %s; skipping WAV export",
                     candidate.display_name,
                 )
 
