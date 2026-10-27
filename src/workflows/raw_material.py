@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 from dataclasses import dataclass
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Sequence
 import zipfile
 import openpyxl
+
+logger = logging.getLogger(__name__)
 
 from src.core.normalizers import (
     format_month_folder,
@@ -101,6 +104,7 @@ class TransformationPlan:
     dg_count: int
     extract_instructions: tuple[ExtractInstruction, ...] = ()
     us_tev_count: int = 0
+    substation_dir: Path | None = None
 
 
 class RawMaterialPreflightGuard:
@@ -631,15 +635,30 @@ class RawMaterialTransformer:
         is_33kv = is_33kv_package(environment, package)
         substation_folder_name = package.testsheet_path.stem if is_33kv else f"{package.substation_number:03d}"
         substation_dest_dir = self._resolve_substation_dest_dir(environment, package, substation_folder_name)
+        substation_dir = substation_dest_dir.parent
 
         ir_dest_dir = substation_dest_dir / "IR"
         dg_dest_dir = substation_dest_dir / "DG"
 
-        # Check if destination already has substation_dest_dir / "US"; if so, maintain "US", else "US+TEV"
-        if (substation_dest_dir / "US").exists() and (substation_dest_dir / "US").is_dir():
-            us_tev_dest_dir = substation_dest_dir / "US"
+        # Determine US or US+TEV destination directory
+        if is_33kv:
+            has_existing_us_tev = (
+                (substation_dest_dir / "US+TEV").exists()
+                or (substation_dir / "US+TEV").exists()
+            )
+            has_existing_us = (
+                (substation_dest_dir / "US").exists()
+                or (substation_dir / "US").exists()
+            )
+            if has_existing_us_tev and not has_existing_us:
+                us_tev_dest_dir = substation_dest_dir / "US+TEV"
+            else:
+                us_tev_dest_dir = substation_dest_dir / "US"
         else:
-            us_tev_dest_dir = substation_dest_dir / "US+TEV"
+            if (substation_dest_dir / "US").exists() and (substation_dest_dir / "US").is_dir():
+                us_tev_dest_dir = substation_dest_dir / "US"
+            else:
+                us_tev_dest_dir = substation_dest_dir / "US+TEV"
 
         directories_to_create = (ir_dest_dir, dg_dest_dir, us_tev_dest_dir)
 
@@ -673,6 +692,7 @@ class RawMaterialTransformer:
             ir_count=len(filtered_ir),
             dg_count=len(filtered_dg),
             us_tev_count=len(extract_instructions),
+            substation_dir=substation_dir,
         )
 
     def _resolve_substation_dest_dir(
@@ -700,9 +720,10 @@ class RawMaterialTransformer:
                     except ValueError:
                         continue
                     if child_num == package.substation_number:
-                        return child
+                        return child / "RAW DATA"
 
-            return date_dir / package.testsheet_path.stem
+            dest_folder = date_dir / package.testsheet_path.stem
+            return dest_folder / "RAW DATA"
 
         return date_dir / f"{package.substation_number:03d}" / "RAW DATA"
 
@@ -732,6 +753,14 @@ class RawMaterialLoader:
         self, environment: ProjectEnvironment, plan: TransformationPlan
     ) -> tuple[int, int, int]:
         """Provision directories on disk, copy photos, and extract US+TEV archives."""
+        substation_dir = plan.substation_dir or (
+            plan.directories_to_create[0].parent.parent
+            if plan.directories_to_create
+            else None
+        )
+        if substation_dir:
+            self._migrate_legacy_substation_folders(substation_dir)
+
         self._provision_directories(environment, plan.directories_to_create)
         self._copy_files(plan.copy_instructions)
         self._extract_archives(plan.extract_instructions)
@@ -754,6 +783,57 @@ class RawMaterialLoader:
             instruction.dest_dir.mkdir(parents=True, exist_ok=True)
             with zipfile.ZipFile(instruction.source_archive, "r") as z:
                 z.extractall(instruction.dest_dir)
+
+    def _migrate_legacy_substation_folders(self, substation_dir: Path) -> None:
+        """Migrate legacy loose IR/, DG/, US/, and US+TEV/ folders directly under substation_dir into RAW DATA/."""
+        if not substation_dir.exists() or not substation_dir.is_dir() or substation_dir.name.upper() == "RAW DATA":
+            return
+
+        raw_data_dir = substation_dir / "RAW DATA"
+        legacy_names = ("IR", "DG", "US", "US+TEV")
+
+        for name in legacy_names:
+            loose_dir = substation_dir / name
+            if not loose_dir.exists() or not loose_dir.is_dir():
+                continue
+
+            target_dir = raw_data_dir / name
+            raw_data_dir.mkdir(parents=True, exist_ok=True)
+
+            try:
+                if not target_dir.exists():
+                    shutil.move(str(loose_dir), str(target_dir))
+                else:
+                    self._merge_directory_contents(loose_dir, target_dir)
+                    if loose_dir.exists():
+                        shutil.rmtree(str(loose_dir))
+            except OSError as ex:
+                logger.warning(
+                    "Failed to migrate legacy loose folder %s into %s: %s",
+                    loose_dir,
+                    target_dir,
+                    ex,
+                )
+
+    def _merge_directory_contents(self, src: Path, dst: Path) -> None:
+        """Recursively merge contents of src directory into dst directory and remove src."""
+        dst.mkdir(parents=True, exist_ok=True)
+        for item in src.iterdir():
+            dest_item = dst / item.name
+            if item.is_dir():
+                if dest_item.exists() and dest_item.is_dir():
+                    self._merge_directory_contents(item, dest_item)
+                else:
+                    if dest_item.exists() and dest_item.is_file():
+                        dest_item.unlink()
+                    shutil.move(str(item), str(dest_item))
+            elif item.is_file():
+                if dest_item.exists():
+                    if dest_item.is_dir():
+                        shutil.rmtree(str(dest_item), ignore_errors=True)
+                    elif dest_item.is_file():
+                        dest_item.unlink()
+                shutil.move(str(item), str(dest_item))
 
 
 

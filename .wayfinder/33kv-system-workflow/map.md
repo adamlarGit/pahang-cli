@@ -74,6 +74,9 @@ graph TD
     T123["#123: Discover 33kV PTX and LTX transformer survey directories - Closed"]
     T124["#124: Resolve compartment-specific ultrasound graphs and verify 22-10-2026 reports - Closed"]
     T125["#125: Restore per-page template recopy-paste sequence for unique ActiveX CIRViewer isolation - Closed"]
+    T126["#126: Align 33kV raw material destination hierarchy with RAW DATA subfolder - Closed"]
+    T127["#127: Polymorphic US and US+TEV discovery across graph, audio, and sound embedding workflows"]
+    T128["#128: Windows MAX_PATH hardening for deep raw data extraction in RawMaterialLoader"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -102,7 +105,12 @@ graph TD
     T101 --> T123
     T122 --> T124
     T123 --> T124
-    T124 --> T103
+    T124 --> T125
+    T125 --> T126
+    T126 --> T127
+    T126 --> T128
+    T127 --> T103
+    T128 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -386,6 +394,7 @@ graph TD
 - **Q92**: Transformer survey directory discovery in `_discover_substation_assets` and `find_tx_survey_dir` must recognize 33kV `PTX` and `LTX` directories and map them to their corresponding transformer specs. Handled in #123.
 - **Q93**: `SwitchgearScanAdapter` and `TransformerScanAdapter` must resolve compartment-specific ultrasound graphs (Breaker, Cable, Busbar) without duplicating single panel-wide graphs, verified on live 22-10-2026 reports. Handled in #124.
 - **Q94**: Standard Word COM per-page copy-and-paste ingestion lifecycle from template must be restored to generate unique native ActiveX CIRViewer control counters without programmatic renaming. Handled in #125.
+- **Q95**: 33kV raw material destination resolution in `RawMaterialTransformer` appends `RAW DATA/` to match 11kV directory hierarchy parity, defaults brand new 33kV surveys to `RAW DATA/US/`, and migrates legacy loose root folders into `RAW DATA/` in `RawMaterialLoader`. Handled in #126.
 
 ---
 

@@ -19,6 +19,7 @@ from src.workflows.models import RawMaterialRequest
 from src.workflows.raw_material import (
     RawMaterialExtractor,
     RawMaterialFilter,
+    RawMaterialLoader,
     RawMaterialTransformer,
     RawMaterialWorkflow,
 )
@@ -259,7 +260,15 @@ def test_resolve_substation_dest_dir_33kv_default_to_testsheet_stem(tmp_path: Pa
     )
 
     dest_dir = transformer._resolve_substation_dest_dir(env, pkg, "001")
-    expected = tmp_path / "RAW MATERIAL" / "KUANTAN" / "01. JANUARY" / "15-01-2026" / "01. PPU APMM 33-11kV (VI)"
+    expected = (
+        tmp_path
+        / "RAW MATERIAL"
+        / "KUANTAN"
+        / "01. JANUARY"
+        / "15-01-2026"
+        / "01. PPU APMM 33-11kV (VI)"
+        / "RAW DATA"
+    )
     assert dest_dir == expected
 
 
@@ -293,7 +302,7 @@ def test_resolve_substation_dest_dir_33kv_existing_dir_resolved(tmp_path: Path) 
     )
 
     dest_dir = transformer._resolve_substation_dest_dir(env, pkg, "001")
-    assert dest_dir == existing
+    assert dest_dir == existing / "RAW DATA"
 
 
 def test_build_plan_33kv_existing_us_folder_preference(tmp_path: Path) -> None:
@@ -334,9 +343,13 @@ def test_build_plan_33kv_existing_us_folder_preference(tmp_path: Path) -> None:
         matched_us_tevs=[tmp_path / "01_PPU_APMM_33KV.zip"],
     )
 
+    expected_us_dir = sub_dir / "RAW DATA" / "US"
     assert len(plan.extract_instructions) == 1
-    assert plan.extract_instructions[0].dest_dir == us_dir / "01_PPU_APMM_33KV"
-    assert us_dir in plan.directories_to_create
+    assert plan.extract_instructions[0].dest_dir == expected_us_dir / "01_PPU_APMM_33KV"
+    assert expected_us_dir in plan.directories_to_create
+    # build_plan is pure: does not mutate disk
+    assert us_dir.exists()
+    assert not expected_us_dir.exists()
 
 
 def test_build_plan_33kv_multi_board_extract_instructions(tmp_path: Path) -> None:
@@ -381,6 +394,19 @@ def test_build_plan_33kv_multi_board_extract_instructions(tmp_path: Path) -> Non
     assert len(plan.extract_instructions) == 2
     dest_stems = [inst.dest_dir.name for inst in plan.extract_instructions]
     assert dest_stems == ["01_PPU_APMM_33KV", "01_PPU_APMM_11KV"]
+    expected_us_dir = (
+        tmp_path
+        / "RAW MATERIAL"
+        / "KUANTAN"
+        / "01. JANUARY"
+        / "15-01-2026"
+        / "01. PPU APMM 33-11kV (VI)"
+        / "RAW DATA"
+        / "US"
+    )
+    assert plan.extract_instructions[0].dest_dir == expected_us_dir / "01_PPU_APMM_33KV"
+    assert plan.extract_instructions[1].dest_dir == expected_us_dir / "01_PPU_APMM_11KV"
+    assert expected_us_dir in plan.directories_to_create
 
 
 def test_filter_ir_dg_blank_bounds_resilience() -> None:
@@ -475,11 +501,183 @@ def test_raw_material_workflow_33kv_e2e_multi_board(tmp_path: Path) -> None:
     assert result.us_tev_extracted_count == 2
 
     dest_sub = tmp_path / "RAW MATERIAL" / "KUANTAN" / "01. JANUARY" / "15-01-2026" / "01. PPU APMM 33-11kV (VI)"
-    assert (dest_sub / "IR" / "FLIR0001.jpg").exists()
-    assert (dest_sub / "IR" / "FLIR0002.jpg").exists()
-    assert (dest_sub / "DG" / "IMG_0001.jpg").exists()
-    assert (dest_sub / "US+TEV" / "01_PPU_APMM_33KV" / "33kv.txt").exists()
-    assert (dest_sub / "US+TEV" / "01_PPU_APMM_11KV" / "11kv.txt").exists()
+    raw_data_dir = dest_sub / "RAW DATA"
+    assert (raw_data_dir / "IR" / "FLIR0001.jpg").exists()
+    assert (raw_data_dir / "IR" / "FLIR0002.jpg").exists()
+    assert (raw_data_dir / "DG" / "IMG_0001.jpg").exists()
+    assert (raw_data_dir / "US" / "01_PPU_APMM_33KV" / "33kv.txt").exists()
+    assert (raw_data_dir / "US" / "01_PPU_APMM_11KV" / "11kv.txt").exists()
+    assert not (dest_sub / "IR").exists()
+    assert not (dest_sub / "DG").exists()
+    assert not (dest_sub / "US").exists()
+    assert not (dest_sub / "US+TEV").exists()
+
+
+def test_legacy_loose_folders_migrated_to_raw_data(tmp_path: Path) -> None:
+    loader = RawMaterialLoader()
+
+    date_dir = tmp_path / "RAW MATERIAL" / "KUANTAN" / "01. JANUARY" / "15-01-2026"
+    sub_dir = date_dir / "01. PPU APMM 33-11kV (VI)"
+    loose_ir = sub_dir / "IR"
+    loose_dg = sub_dir / "DG"
+    loose_us = sub_dir / "US"
+    loose_ustev = sub_dir / "US+TEV"
+
+    loose_ir.mkdir(parents=True)
+    loose_dg.mkdir(parents=True)
+    loose_us.mkdir(parents=True)
+    loose_ustev.mkdir(parents=True)
+
+    (loose_ir / "legacy_ir.jpg").write_text("ir")
+    (loose_dg / "legacy_dg.jpg").write_text("dg")
+    (loose_us / "board_33" / "sub").mkdir(parents=True)
+    (loose_us / "board_33" / "sub" / "data.txt").write_text("us data")
+    (loose_ustev / "legacy_tev.txt").write_text("tev")
+
+    loader._migrate_legacy_substation_folders(sub_dir)
+
+    # Verify legacy folders moved into RAW DATA
+    raw_data_dir = sub_dir / "RAW DATA"
+    assert (raw_data_dir / "IR" / "legacy_ir.jpg").read_text() == "ir"
+    assert (raw_data_dir / "DG" / "legacy_dg.jpg").read_text() == "dg"
+    assert (raw_data_dir / "US" / "board_33" / "sub" / "data.txt").read_text() == "us data"
+    assert (raw_data_dir / "US+TEV" / "legacy_tev.txt").read_text() == "tev"
+
+    # Verify loose folders removed from root
+    assert not loose_ir.exists()
+    assert not loose_dg.exists()
+    assert not loose_us.exists()
+    assert not loose_ustev.exists()
+
+
+def test_loader_execute_plan_migrates_legacy_folders(tmp_path: Path) -> None:
+    loader = RawMaterialLoader()
+    meta = ProjectMetadata(
+        key="pahang_33kv_2026",
+        name="Pahang 33kV",
+        po_number="PO123",
+        state="Pahang",
+        voltage_type="33kV",
+        year="2026",
+        cycle="1",
+        technologies=("IR", "DG", "US", "TEV", "VI"),
+        base_path=str(tmp_path),
+    )
+    storage = LocalWorkspaceStorage(tmp_path, voltage_type="33kV")
+    env = ProjectEnvironment(metadata=meta, storage=storage)
+
+    date_dir = tmp_path / "RAW MATERIAL" / "KUANTAN" / "01. JANUARY" / "15-01-2026"
+    sub_dir = date_dir / "01. PPU APMM 33-11kV (VI)"
+    loose_ir = sub_dir / "IR"
+    loose_ir.mkdir(parents=True)
+    (loose_ir / "old_photo.jpg").write_text("old photo")
+
+    pkg = SubstationTestsheetPackage(
+        substation_number=1,
+        station="KUANTAN",
+        month="01. JANUARY",
+        date_str="15-01-2026",
+        testsheet_path=tmp_path / "01. PPU APMM 33-11kV (VI).xlsx",
+        unsorted_raw_data_dir=tmp_path / "UNSORTED",
+    )
+
+    transformer = RawMaterialTransformer()
+    plan = transformer.build_plan(
+        environment=env,
+        package=pkg,
+        filtered_ir=(),
+        filtered_dg=(),
+    )
+
+    loader.execute_plan(env, plan)
+
+    assert not loose_ir.exists()
+    assert (sub_dir / "RAW DATA" / "IR" / "old_photo.jpg").read_text() == "old photo"
+
+
+def test_build_plan_33kv_existing_raw_data_us_tev_preserved(tmp_path: Path) -> None:
+    transformer = RawMaterialTransformer()
+    meta = ProjectMetadata(
+        key="pahang_33kv_2026",
+        name="Pahang 33kV",
+        po_number="PO123",
+        state="Pahang",
+        voltage_type="33kV",
+        year="2026",
+        cycle="1",
+        technologies=("IR", "DG", "US", "TEV", "VI"),
+        base_path=str(tmp_path),
+    )
+    storage = LocalWorkspaceStorage(tmp_path, voltage_type="33kV")
+    env = ProjectEnvironment(metadata=meta, storage=storage)
+
+    date_dir = tmp_path / "RAW MATERIAL" / "KUANTAN" / "01. JANUARY" / "15-01-2026"
+    sub_dir = date_dir / "01. PPU APMM 33-11kV (VI)"
+    raw_data_ustev = sub_dir / "RAW DATA" / "US+TEV"
+    raw_data_ustev.mkdir(parents=True)
+
+    pkg = SubstationTestsheetPackage(
+        substation_number=1,
+        station="KUANTAN",
+        month="01. JANUARY",
+        date_str="15-01-2026",
+        testsheet_path=tmp_path / "01. PPU APMM 33-11kV (VI).xlsx",
+        unsorted_raw_data_dir=tmp_path / "UNSORTED",
+    )
+
+    plan = transformer.build_plan(
+        environment=env,
+        package=pkg,
+        filtered_ir=(),
+        filtered_dg=(),
+        matched_us_tevs=[tmp_path / "01_PPU_APMM_33KV.zip"],
+    )
+
+    assert plan.extract_instructions[0].dest_dir == raw_data_ustev / "01_PPU_APMM_33KV"
+    assert raw_data_ustev in plan.directories_to_create
+
+
+def test_build_plan_11kv_defaults_to_us_tev_and_keeps_hierarchy(tmp_path: Path) -> None:
+    transformer = RawMaterialTransformer()
+    meta = ProjectMetadata(
+        key="pahang_11kv_2026",
+        name="Pahang 11kV",
+        po_number="PO123",
+        state="Pahang",
+        voltage_type="11kV",
+        year="2026",
+        cycle="1",
+        technologies=("IR", "DG", "US", "TEV"),
+        base_path=str(tmp_path),
+    )
+    storage = LocalWorkspaceStorage(tmp_path, voltage_type="11kV")
+    env = ProjectEnvironment(metadata=meta, storage=storage)
+
+    pkg = SubstationTestsheetPackage(
+        substation_number=83,
+        station="KUANTAN",
+        month="01. JANUARY",
+        date_str="15-01-2026",
+        testsheet_path=tmp_path / "083. PE MEDAN WARISAN 2.xlsx",
+        unsorted_raw_data_dir=tmp_path / "UNSORTED",
+    )
+
+    plan = transformer.build_plan(
+        environment=env,
+        package=pkg,
+        filtered_ir=[(tmp_path / "FLIR0001.jpg", 1)],
+        filtered_dg=[(tmp_path / "IMG_0001.jpg", 1)],
+        matched_us_tevs=[tmp_path / "083_PE.zip"],
+    )
+
+    expected_base = tmp_path / "RAW MATERIAL" / "KUANTAN" / "01. JANUARY" / "15-01-2026" / "083" / "RAW DATA"
+    assert expected_base / "IR" in plan.directories_to_create
+    assert expected_base / "DG" in plan.directories_to_create
+    assert expected_base / "US+TEV" in plan.directories_to_create
+    assert plan.copy_instructions[0].dest_path == expected_base / "IR" / "FLIR0001.jpg"
+    assert plan.copy_instructions[1].dest_path == expected_base / "DG" / "IMG_0001.jpg"
+    assert plan.extract_instructions[0].dest_dir == expected_base / "US+TEV" / "083_PE"
+
 
 
 
