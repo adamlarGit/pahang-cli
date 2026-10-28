@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #132: fix(testsheet): parse LTX model from column W in sheet TX and normalize H/S to HERMETICALLY SEAL
 
 ## Parent

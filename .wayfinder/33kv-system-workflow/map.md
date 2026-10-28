@@ -80,7 +80,7 @@ graph TD
     T129["#129: Switchgear-scoped survey discovery and PRPD catalog for multi-switchgear substations - Closed"]
     T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks - Closed"]
     T131["#131: Sanitize LINK BOX compartment metadata and voltage grading - Closed"]
-    T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Open"]
+    T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -363,7 +363,7 @@ graph TD
 - [x] Unit tests for 33kV and 11kV Link Box context generation in `tests/test_full_report_scan_adapters.py`.
 
 ### #132: fix(testsheet): parse LTX model from column W in sheet TX and normalize H/S
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#132](https://github.com/adamlarGit/pahang-cli/issues/132)
 - **Blocked by**: #131
 - **Ticket File**: [tickets/132-parse-ltx-model-from-column-w.md](./tickets/132-parse-ltx-model-from-column-w.md)
