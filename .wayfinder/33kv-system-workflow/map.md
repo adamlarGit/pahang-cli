@@ -81,7 +81,7 @@ graph TD
     T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks - Closed"]
     T131["#131: Sanitize LINK BOX compartment metadata and voltage grading - Closed"]
     T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Closed"]
-    T133["#133: Differentiate PTX and LTX transformer numbering in 33kV reports - Open"]
+    T133["#133: Differentiate PTX and LTX transformer numbering in 33kV reports - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -376,7 +376,7 @@ graph TD
 - [x] Unit tests verify extraction of Slot 5 local transformer model across candidate testsheets.
 
 ### #133: feat(full-report): differentiate PTX and LTX transformer numbering in 33kV reports
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#133](https://github.com/adamlarGit/pahang-cli/issues/133)
 - **Blocked by**: #132
 - **Ticket File**: [tickets/133-differentiate-ptx-and-ltx-transformer-numbering.md](./tickets/133-differentiate-ptx-and-ltx-transformer-numbering.md)

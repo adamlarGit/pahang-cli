@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #133: feat(full-report): differentiate PTX and LTX transformer numbering in 33kV reports
 
 ## Parent
