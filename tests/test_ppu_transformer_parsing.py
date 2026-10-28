@@ -276,7 +276,7 @@ def test_extract_tx_sheet_power_and_local_transformers(tmp_path: Path) -> None:
     assert not isinstance(local_tx, PowerTransformerSpec)
     assert local_tx.tx_id == "LOCAL TX"
     assert local_tx.rating_kva == "300kVA"
-    assert local_tx.model == "H/S"
+    assert local_tx.model == "HERMETICALLY SEAL"
     assert local_tx.manufacturer == "MTM"
     assert local_tx.serial_no == "T1/579/07/3584"
     assert local_tx.load_amp == "1"
@@ -432,7 +432,7 @@ def test_extract_tx_sheet_real_field_workbook() -> None:
     assert type(ltx) is TransformerSpec
     assert ltx.tx_id in ("LOCAL TX", "Local TX")
     assert ltx.rating_kva == "300kVA"
-    assert ltx.model == "H/S"
+    assert ltx.model == "HERMETICALLY SEAL"
     assert ltx.manufacturer == "MTM"
     assert ltx.serial_no == "T1/579/07/3584"
 
@@ -444,3 +444,114 @@ def test_extract_tx_sheet_real_field_workbook() -> None:
     assert lvdb.serial_no == "OFP AL 11"
     assert lvdb.model == "J-SLOTTED"
     assert lvdb.manufacturer == "TOPRANK"
+
+
+def test_get_tx_model_slot5_column_w_extraction() -> None:
+    """Verify _get_tx_model extracts model from column W when V contains 'MODEL:' (Ticket #132)."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    # Layout A: V6='MODEL:', W6='H/S'
+    ws["T6"] = "LOCAL TX"
+    ws["U6"] = None
+    ws["V6"] = "MODEL:"
+    ws["W6"] = "H/S"
+
+    # With extended cols ('T', 'U', 'V', 'W')
+    assert PpuTestsheetParser._get_tx_model(ws, ("T", "U", "V", "W")) == "H/S"
+    # With old truncated cols ('T', 'U', 'V'), it fails to capture W6
+    assert PpuTestsheetParser._get_tx_model(ws, ("T", "U", "V")) == ""
+
+    # Layout B: V6='MODEL:', W6='C/T'
+    ws["W6"] = "C/T"
+    assert PpuTestsheetParser._get_tx_model(ws, ("T", "U", "V", "W")) == "C/T"
+
+    # Layout C: U6='Model:', V6='H/S', W6=None (APMM layout)
+    ws["U6"] = "Model:"
+    ws["V6"] = "H/S"
+    ws["W6"] = None
+    assert PpuTestsheetParser._get_tx_model(ws, ("T", "U", "V", "W")) == "H/S"
+
+
+def test_transformer_spec_model_normalization_hs_and_ct() -> None:
+    """Verify TransformerSpec and PowerTransformerSpec normalize model aliases upon spec creation (Ticket #132)."""
+    tx_hs = TransformerSpec(model="H/S")
+    assert tx_hs.model == "HERMETICALLY SEAL"
+
+    tx_ct = TransformerSpec(model="C/T")
+    assert tx_ct.model == "CONSERVATOR TANK"
+
+    ptx_hs = PowerTransformerSpec(model="H/S")
+    assert ptx_hs.model == "HERMETICALLY SEAL"
+
+    ptx_custom = PowerTransformerSpec(model="15-201")
+    assert ptx_custom.model == "15-201"
+
+
+def test_extract_tx_sheet_slot5_column_w_jengka_layout(tmp_path: Path) -> None:
+    """Verify PpuTestsheetParser extracts Slot 5 Local TX model from column W and normalizes H/S (Ticket #132)."""
+    wb_path = tmp_path / "40. PMU JENGKA 132-11-33kV (VI).xlsx"
+    local_tx_spec = {
+        "tx_id": "LOCAL TX",
+        "model": "H/S",
+        "model_col": "W",
+        "manufacturer": "EWT",
+        "rating": "300kVA",
+        "serial_no": "EWT63508",
+        "load_amp": "1",
+        "cable_type": "XLPE",
+        "hv_cable_thermal": {"tmin": "36.0", "tmax": "36.3", "delta_t": "0.3", "avg": "36.15"},
+        "lv_cable_thermal": {"tmin": "33.8", "tmax": "33.9", "delta_t": "0.1", "avg": "33.85"},
+        "body_temp": {"tmin": "39.3", "tmax": "40.5", "delta_t": "1.2", "avg": "39.9"},
+    }
+
+    create_ppu_testsheet_workbook(
+        path=wb_path,
+        local_tx=local_tx_spec,
+    )
+
+    parser = PpuTestsheetParser()
+    data = parser.extract_testsheet_data(wb_path)
+    pkg = data.equipment
+
+    assert len(pkg.transformers) == 1
+    ltx = pkg.transformers[0]
+    assert type(ltx) is TransformerSpec
+    assert ltx.tx_id == "LOCAL TX"
+    assert ltx.model == "HERMETICALLY SEAL"
+    assert ltx.manufacturer == "EWT"
+    assert ltx.rating_kva == "300kVA"
+    assert ltx.serial_no == "EWT63508"
+
+
+def test_extract_tx_sheet_candidate_real_field_workbooks() -> None:
+    """Verify extraction of Slot 5 local transformer model across all candidate real field testsheets (Ticket #132)."""
+    candidates = [
+        Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JENGKA\01. OCTOBER\25-10-2026\40. PMU JENGKA 132-11-33kV (VI).xlsx"),
+        Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JENGKA\01. OCTOBER\22-10-2026\37. MINI PPU JENGKA 13 33-11kV (VI).xlsx"),
+        Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JENGKA\01. OCTOBER\22-10-2026\38. MINI PPU  LOJI AIR JENGKA (VI).xlsx"),
+        Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\19-10-2026\32. PMU JERANTUT 132-33-11kV (VI).xlsx"),
+    ]
+
+    tested_any = False
+    parser = PpuTestsheetParser()
+
+    for p in candidates:
+        if not p.exists():
+            continue
+        tested_any = True
+        data = parser.extract_testsheet_data(p)
+        # Find local transformer (non-power or tx_id containing LOCAL)
+        local_txs = [
+            t for t in data.equipment.transformers
+            if "LOCAL" in t.tx_id.upper() or not isinstance(t, PowerTransformerSpec)
+        ]
+        assert len(local_txs) >= 1, f"Expected local TX in {p.name}"
+        ltx = local_txs[0]
+        assert ltx.model == "HERMETICALLY SEAL", f"Failed for {p.name}: got '{ltx.model}'"
+
+    if not tested_any:
+        pytest.skip("No candidate real field testsheets found on filesystem")
+

@@ -520,7 +520,11 @@ def create_ppu_testsheet_workbook(
         # Local TX (Slot 5: Row 26 & Row 45)
         if local_tx is not None:
             ltx = local_tx
-            if "model" in ltx:
+            if ltx.get("model_col") == "W":
+                ws_tx["U6"] = None
+                ws_tx["V6"] = "MODEL:"
+                ws_tx["W6"] = ltx.get("model", "")
+            elif "model" in ltx:
                 ws_tx["V6"] = ltx["model"]
             if "manufacturer" in ltx:
                 ws_tx["U7"] = ltx["manufacturer"]

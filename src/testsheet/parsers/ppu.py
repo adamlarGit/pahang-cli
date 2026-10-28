@@ -15,6 +15,7 @@ from src.core.normalizers import (
     format_humidity_str,
     format_load_amp,
     format_testsheet_time,
+    normalize_tx_model,
     parse_background_temp,
 )
 from src.testsheet.models import (
@@ -1073,7 +1074,7 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             {"slot_id": 2, "default_tx_id": "TX 2", "cols": ("K", "L", "M"), "part1_row": 17, "part2_row": 36, "unit_hint": "MVA"},
             {"slot_id": 3, "default_tx_id": "TX 3", "cols": ("N", "O", "P"), "part1_row": 20, "part2_row": 39, "unit_hint": "MVA"},
             {"slot_id": 4, "default_tx_id": "TX 4", "cols": ("Q", "R", "S"), "part1_row": 23, "part2_row": 42, "unit_hint": "MVA"},
-            {"slot_id": 5, "default_tx_id": "LOCAL TX", "cols": ("T", "U", "V"), "part1_row": 26, "part2_row": 45, "unit_hint": "KVA"},
+            {"slot_id": 5, "default_tx_id": "LOCAL TX", "cols": ("T", "U", "V", "W"), "part1_row": 26, "part2_row": 45, "unit_hint": "KVA"},
         ]
 
         transformers: list[TransformerSpec] = []
@@ -1104,7 +1105,7 @@ class PpuTestsheetParser(TestsheetParserStrategy):
         mfg = self._get_tx_meta_val(ws, 7, cols, r"(?:2\.1\s*)?Manufacturer\s*[:.]*")
         rating = self._get_tx_meta_val(ws, 8, cols, r"(?:2\.2\s*)?Rating\s*(?:\([^\)]*\))?\s*[:.]*")
         sn = self._get_tx_meta_val(ws, 9, cols, r"(?:2\.3\s*)?Serial\s*No\.?\s*[:.]*")
-        model = self._get_tx_model(ws, cols)
+        model = normalize_tx_model(self._get_tx_model(ws, cols))
 
         p1_name = clean_val(ws[f"C{part1_row}"].value) if part1_row <= ws.max_row else None
         p2_name = clean_val(ws[f"C{part2_row}"].value) if part2_row <= ws.max_row else None

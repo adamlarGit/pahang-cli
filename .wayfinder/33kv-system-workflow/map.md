@@ -80,6 +80,7 @@ graph TD
     T129["#129: Switchgear-scoped survey discovery and PRPD catalog for multi-switchgear substations - Closed"]
     T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks - Closed"]
     T131["#131: Sanitize LINK BOX compartment metadata and voltage grading - Closed"]
+    T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Open"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -116,7 +117,8 @@ graph TD
     T128 --> T129
     T129 --> T130
     T130 --> T131
-    T131 --> T103
+    T131 --> T132
+    T132 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -359,6 +361,17 @@ graph TD
 - [x] Preserve parent panel link number, name, load, and thermals.
 - [x] Ensure ultrasound and TEV cells continue to be blanked.
 - [x] Unit tests for 33kV and 11kV Link Box context generation in `tests/test_full_report_scan_adapters.py`.
+
+### #132: fix(testsheet): parse LTX model from column W in sheet TX and normalize H/S
+- **Status**: Open
+- **GitHub Issue**: [#132](https://github.com/adamlarGit/pahang-cli/issues/132)
+- **Blocked by**: #131
+- **Ticket File**: [tickets/132-parse-ltx-model-from-column-w.md](./tickets/132-parse-ltx-model-from-column-w.md)
+- **Delivers**: Slot 5 column definition extended to include column W (`'T', 'U', 'V', 'W'`) in `PpuTestsheetParser._extract_tx_sheet()`, parsing LTX model from cell W6 when V6 is `MODEL:`, and normalizing model abbreviation `H/S` to `HERMETICALLY SEAL` (and `C/T` to `CONSERVATOR TANK`) in `TransformerSpec`.
+- [x] In `src/testsheet/parsers/ppu.py`, Slot 5 column definition is updated to include column `W` (e.g. `cols: ('T', 'U', 'V', 'W')`).
+- [x] `_get_tx_model()` successfully extracts values located in cell `W6` when `V6` is `MODEL:`.
+- [x] `TransformerSpec.model` is populated with `HERMETICALLY SEAL` when `W6` has `H/S` (or `CONSERVATOR TANK` when `W6` has `C/T`).
+- [x] Unit tests verify extraction of Slot 5 local transformer model across candidate testsheets.
 
 ---
 

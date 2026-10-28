@@ -145,8 +145,13 @@ class TransformerSpec:
     remarks: str = ""
 
     def __post_init__(self) -> None:
-        if not self.model and self.type:
+        norm_model = normalize_tx_model(self.model)
+        if norm_model:
+            object.__setattr__(self, "model", norm_model)
+        elif self.type:
             object.__setattr__(self, "model", normalize_tx_model(self.type))
+        else:
+            object.__setattr__(self, "model", norm_model)
 
 
 @dataclass(frozen=True)
