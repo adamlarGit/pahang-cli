@@ -1069,6 +1069,33 @@ def format_busbar_position(
     return "-"
 
 
+def normalize_serial_number(val: object | None) -> str:
+    """Normalize equipment or breaker serial number string.
+
+    - Strips leading 'SN:' or 'S/N:' prefix (case-insensitive, with optional whitespace).
+    - Cleans surrounding whitespace.
+    - Resolves sentinel / empty values ('-', 'NONE', 'N/A', 'NULL', '', 'SN:', 'SN:   ') to ''.
+    - If multiline text is supplied, extracts the serial number from the first line.
+    """
+    if val is None or _is_null_or_empty(val):
+        return ""
+
+    s = str(val).strip()
+    if not s or s.lower() in _NULL_SENTINELS:
+        return ""
+
+    first_line = s.splitlines()[0].strip() if "\n" in s or "\r" in s else s
+
+    m = re.match(r"^(?:SN|S/N)\s*:\s*(.*)$", first_line, re.IGNORECASE)
+    if m:
+        first_line = m.group(1).strip()
+
+    if not first_line or first_line.lower() in _NULL_SENTINELS:
+        return ""
+
+    return first_line
+
+
 def is_eligible_rmu_type(switchgear_type: str | None) -> bool:
     """Check whether switchgear type is an eligible RMU board.
 
@@ -1097,23 +1124,13 @@ def format_switchgear_overview_serial(
       'VCB', 'GIS', 'AIS', 'GCB', 'OCB').
     - Only 'RMU SF6', 'MRMU', and 'RMU CB' display their board serial number in overview scan pages.
     - If eligible and serial number is present (non-blank, non-sentinel), returns the
-      cleaned serial number (stripping any 'SN:' prefix). Otherwise returns '-'.
+      cleaned serial number. Otherwise returns '-'.
     """
     if not is_eligible_rmu_type(switchgear_type):
         return "-"
 
-    if _is_null_or_empty(serial_no):
-        return "-"
-
-    s = str(serial_no).strip()
-    m = re.match(r"^SN\s*:\s*(.*)$", s, re.IGNORECASE)
-    if m:
-        s = m.group(1).strip()
-
-    if not s or s.lower() in _NULL_SENTINELS:
-        return "-"
-
-    return s
+    norm_sn = normalize_serial_number(serial_no)
+    return norm_sn if norm_sn else "-"
 
 
 _CHARGER_PREFIX_RE = re.compile(
@@ -1432,6 +1449,7 @@ __all__ = [
     "normalize_for_csv",
     "normalize_for_excel",
     "normalize_for_report",
+    "normalize_serial_number",
     "normalize_substation_tokens",
     "normalize_tx_model",
     "normalize_us_characteristic",

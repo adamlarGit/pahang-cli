@@ -16,6 +16,7 @@ from src.core.normalizers import (
     format_load_amp,
     format_testsheet_time,
     is_eligible_rmu_type,
+    normalize_serial_number,
     normalize_tx_model,
     parse_background_temp,
 )
@@ -50,19 +51,7 @@ logger = logging.getLogger(__name__)
 _GPS_COORD_RE = re.compile(r"\d+\.\d+.*,\s*\d+\.\d+")
 
 
-def _extract_rmu_serial(val: Any) -> str:
-    """Extract serial number from cell value, stripping SN: prefix if present."""
-    cleaned = clean_val(val)
-    if not cleaned:
-        return ""
-    s = str(cleaned).strip()
-    if not s or s.lower() in ("-", "none", "n/a", "null"):
-        return ""
-    m = re.search(r"SN\s*:\s*([^\n\r]+)", s, re.IGNORECASE)
-    if m:
-        extracted = m.group(1).strip()
-        return "" if extracted.lower() in ("-", "none", "n/a", "null") else extracted
-    return s
+_extract_rmu_serial = normalize_serial_number
 
 
 def classify_transformer_rating(
@@ -768,22 +757,23 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             norm_load = format_load_amp(load_raw)
             load_amp = "" if norm_load == "-" else norm_load
 
-            if breaker_serial and "SN:" in breaker_serial.upper():
-                m_sn = re.search(r"SN\s*:\s*([^\n\r]+)", breaker_serial, re.I)
-                if m_sn:
-                    breaker_serial = m_sn.group(1).strip()
-            elif not breaker_serial:
+            breaker_serial = (
+                normalize_serial_number(breaker_serial)
+                if ("SN:" in breaker_serial.upper() or "S/N:" in breaker_serial.upper())
+                else breaker_serial
+            )
+            if breaker_serial.lower() in ("-", "none", "n/a", "null"):
+                breaker_serial = ""
+
+            if not breaker_serial:
                 for sub_r in range(r, r + 6):
                     if sub_r <= ws.max_row:
                         val = clean_val(ws[f"V{sub_r}"].value)
-                        if val and "SN:" in val.upper():
-                            m_sn = re.search(r"SN\s*:\s*([^\n\r]+)", val, re.I)
-                            if m_sn:
-                                breaker_serial = m_sn.group(1).strip()
+                        if val and ("SN:" in str(val).upper() or "S/N:" in str(val).upper()):
+                            sub_sn = normalize_serial_number(val)
+                            if sub_sn:
+                                breaker_serial = sub_sn
                                 break
-
-            if breaker_serial.lower() in ("-", "none", "n/a", "null"):
-                breaker_serial = ""
 
             # Ticket #135: In 33kV RMU testsheets, propagate sheet-level V15 serial
             # to any panel on that sheet whose serial number is empty.

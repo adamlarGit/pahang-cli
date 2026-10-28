@@ -794,6 +794,52 @@ def test_ppu_rmu_extracts_v15_serial_and_propagates_to_blank_panels(tmp_path: Pa
     assert meta.equipment.switchgears[0].serial_no == "2023-RMU-001"
 
 
+def test_ppu_rmu_bare_sn_prefix_does_not_propagate_to_panels(tmp_path: Path) -> None:
+    """Ticket #135 Review: Bare 'SN:' or 'SN:   ' in V15 normalizes to '' and does not propagate to panels."""
+    wb_path = tmp_path / "23. MINI PPU BARE SN.xlsx"
+    wb = create_ppu_testsheet_workbook(
+        path=wb_path,
+        has_33kv=True,
+        has_11kv=False,
+        panels_33kv=[
+            {
+                "feeder_no": "3P1",
+                "name": "INCOMING 1",
+                "breaker_serial": "",
+            },
+            {
+                "feeder_no": "3P2",
+                "name": "TRANSFORMER 1",
+                "breaker_serial": "",
+            },
+        ],
+        swg_33kv_details={
+            "manufacturer": "TAMCO",
+            "switchgear_type": "RMU SF6",
+            "model": "VRN2A",
+            "serial_no": "20.10.2023",
+        },
+    )
+    ws = wb["33kV (Main)"]
+    ws["L9"] = "20.10.2023"
+    ws["V15"] = "SN:   "
+    ws["V21"] = "SN:"
+    wb.save(wb_path)
+
+    parser = PpuTestsheetParser()
+    data = parser.extract_testsheet_data(wb_path)
+    swg = data.equipment.switchgears[0]
+    assert swg.switchgear_type == "RMU SF6"
+    assert swg.serial_no == ""
+    assert len(swg.panels) == 2
+    assert swg.panels[0].serial_no == ""
+    assert swg.panels[1].serial_no == ""
+
+    meta = parser.extract_testsheet_metadata(wb_path)
+    assert meta.equipment.switchgears[0].serial_no == ""
+
+
+
 
 
 

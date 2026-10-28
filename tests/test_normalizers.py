@@ -27,6 +27,7 @@ from src.core.normalizers import (
     normalize_for_csv,
     normalize_for_excel,
     normalize_for_report,
+    normalize_serial_number,
     normalize_tx_model,
     normalize_us_characteristic,
     parse_background_temp,
@@ -1025,6 +1026,52 @@ def test_is_eligible_rmu_type() -> None:
     assert is_eligible_rmu_type("OCB") is False
     assert is_eligible_rmu_type(None) is False
     assert is_eligible_rmu_type("") is False
+
+
+def test_normalize_serial_number() -> None:
+    # 1. Null, empty, and sentinel values
+    assert normalize_serial_number(None) == ""
+    assert normalize_serial_number("") == ""
+    assert normalize_serial_number("   ") == ""
+    assert normalize_serial_number("-") == ""
+    assert normalize_serial_number("--") == ""
+    assert normalize_serial_number("---") == ""
+    assert normalize_serial_number("NONE") == ""
+    assert normalize_serial_number("none") == ""
+    assert normalize_serial_number("N/A") == ""
+    assert normalize_serial_number("n/a") == ""
+    assert normalize_serial_number("NULL") == ""
+    assert normalize_serial_number("null") == ""
+
+    # 2. Bare SN: or S/N: prefix without serial must normalize to ""
+    assert normalize_serial_number("SN:") == ""
+    assert normalize_serial_number("SN:   ") == ""
+    assert normalize_serial_number("S/N:") == ""
+    assert normalize_serial_number("S/N:   ") == ""
+    assert normalize_serial_number("sn:") == ""
+    assert normalize_serial_number("s/n:   ") == ""
+    assert normalize_serial_number("SN: -") == ""
+    assert normalize_serial_number("SN: NONE") == ""
+    assert normalize_serial_number("SN: N/A") == ""
+    assert normalize_serial_number("SN: null") == ""
+
+    # 3. Valid serial numbers with SN: or S/N: prefixes
+    assert normalize_serial_number("SN: 210045") == "210045"
+    assert normalize_serial_number("S/N: 210045") == "210045"
+    assert normalize_serial_number("SN : 210045") == "210045"
+    assert normalize_serial_number("s/n:  RMU-9988 ") == "RMU-9988"
+    assert normalize_serial_number("SN:CB-7766") == "CB-7766"
+
+    # 4. Bare serial numbers without prefix
+    assert normalize_serial_number("210045") == "210045"
+    assert normalize_serial_number("SN-998811") == "SN-998811"
+    assert normalize_serial_number("CB-3301") == "CB-3301"
+    assert normalize_serial_number(12345) == "12345"
+
+    # 5. Multiline remarks with SN prefix
+    assert normalize_serial_number("SN: 2023-RMU-01\nSome inspection remark") == "2023-RMU-01"
+    assert normalize_serial_number("2023-RMU-01\r\nAdditional notes") == "2023-RMU-01"
+
 
 
 
