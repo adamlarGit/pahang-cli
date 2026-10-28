@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #134: docs(domain): record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md
 
 ## Parent
@@ -18,9 +18,9 @@ Record the authoritative domain models agreed during the grilling session in `CO
    - Details propagation across `Tx No.` cell, scan page item titles, CBM defect pages, while preserving Table 26 placards and verbatim VI defect texts.
 
 ## Acceptance criteria
-- [ ] `CONTEXT.md` contains formal entries for `LinkBoxSanitizationPolicy` and `TransformerDesignationPolicy`.
-- [ ] All field mappings and rules match the agreed domain contracts.
-- [ ] No regression or contradiction with existing ADRs or glossary definitions.
+- [x] `CONTEXT.md` contains formal entries for `LinkBoxSanitizationPolicy` and `TransformerDesignationPolicy`.
+- [x] All field mappings and rules match the agreed domain contracts.
+- [x] No regression or contradiction with existing ADRs or glossary definitions.
 
 ## Blocked by
 #133

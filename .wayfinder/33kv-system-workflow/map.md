@@ -82,7 +82,7 @@ graph TD
     T131["#131: Sanitize LINK BOX compartment metadata and voltage grading - Closed"]
     T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Closed"]
     T133["#133: Differentiate PTX and LTX transformer numbering in 33kV reports - Closed"]
-    T134["#134: Record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md - Open"]
+    T134["#134: Record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -392,14 +392,14 @@ graph TD
 - [x] Unit and regression tests verify transformer numbering across PMU/PPU and standard distribution packages.
 
 ### #134: docs(domain): record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#134](https://github.com/adamlarGit/pahang-cli/issues/134)
 - **Blocked by**: #133
 - **Ticket File**: [tickets/134-record-domain-policies-in-context.md](./tickets/134-record-domain-policies-in-context.md)
 - **Delivers**: Formal domain entries in `CONTEXT.md` for `LinkBoxSanitizationPolicy` (field overrides, parent panel attribute preservation, US/TEV blanking) and `TransformerDesignationPolicy` (`PTX{n}`, `LTX`, `TX{n}` hierarchy, Slot 1–5 coordinates, Column W model origin, shorthand expansion, and report propagation).
-- [ ] `CONTEXT.md` contains formal entries for `LinkBoxSanitizationPolicy` and `TransformerDesignationPolicy`.
-- [ ] All field mappings and rules match the agreed domain contracts.
-- [ ] No regression or contradiction with existing ADRs or glossary definitions.
+- [x] `CONTEXT.md` contains formal entries for `LinkBoxSanitizationPolicy` and `TransformerDesignationPolicy`.
+- [x] All field mappings and rules match the agreed domain contracts.
+- [x] No regression or contradiction with existing ADRs or glossary definitions.
 
 ---
 
