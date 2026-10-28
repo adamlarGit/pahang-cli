@@ -79,7 +79,7 @@ graph TD
     T128["#128: Windows MAX_PATH hardening for deep raw data extraction in RawMaterialLoader - Closed"]
     T129["#129: Switchgear-scoped survey discovery and PRPD catalog for multi-switchgear substations - Closed"]
     T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks - Closed"]
-    T131["#131: Sanitize LINK BOX compartment metadata and voltage grading"]
+    T131["#131: Sanitize LINK BOX compartment metadata and voltage grading - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -350,7 +350,7 @@ graph TD
 - [x] All unit and plan builder tests in `tests/test_full_report_workflow.py` pass.
 
 ### #131: feat(full-report): sanitize LINK BOX compartment metadata and voltage grading
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#131](https://github.com/adamlarGit/pahang-cli/issues/131)
 - **Blocked by**: #130
 - **Ticket File**: [tickets/131-sanitize-link-box-compartment-metadata.md](./tickets/131-sanitize-link-box-compartment-metadata.md)

@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #131: feat(full-report): sanitize LINK BOX compartment metadata and voltage grading
 
 ## Parent
