@@ -29,7 +29,7 @@ from src.full_report.models import (
     SwitchgearScanSpec,
     TransformerScanSpec,
 )
-from src.core.topology import SwitchgearArchetype
+from src.core.topology import SwitchgearArchetype, VoltageClass
 from src.testsheet.models import SwitchgearPanelSpec, SwitchgearSpec
 from src.full_report.photo_resolver import PhotoPair, RawPhotoResolver
 from src.full_report.scan_adapters import (
@@ -1939,6 +1939,136 @@ def test_switchgear_scan_adapter_dual_switchgear_jengka_live(tmp_path: Path):
     )
     res2 = ad2.adapt()
     assert len(res2.items) > 0
+
+
+def test_link_box_compartment_metadata_sanitization(mock_substation_info: dict[str, str]) -> None:
+    """Ticket #131: Verify LINK BOX compartment sanitizes switchgear metadata and voltage grading."""
+    # 1. 33kV Switchgear with LINK BOX compartment
+    panel_33kv = SwitchgearPanelScanSpec(
+        panel_no=2,
+        name="PMU GEBENG (7L5)",
+        panel_feeder_no="3S5",
+        serial_no="39000589/10/016",
+        load_amp=120.0,
+        status="SERVICE/CLOSE",
+        heater_amp="0.5",
+        busbar_position="MAIN",
+        cable_type="XLPE",
+        compartments=("BREAKER COMPARTMENT", "LINK BOX"),
+    )
+    swg_33kv = SwitchgearScanSpec(
+        switchgear_type="GIS",
+        manufacturer="EPE",
+        model="VGA-32",
+        rating="36kV",
+        serial_no="SWG-GIS-001",
+        archetype=SwitchgearArchetype.GIS_CUBICLE,
+        overview_compartments=("OVERVIEW",),
+        panels=(panel_33kv,),
+        voltage_class=VoltageClass.KV_33,
+    )
+
+    ad_33kv = SwitchgearScanAdapter(
+        swg=swg_33kv,
+        substation_info=mock_substation_info,
+        is_33kv=True,
+    )
+    res_33kv = ad_33kv.adapt()
+    items_33kv = {item.component_name: item for item in res_33kv.items if not item.is_overview}
+
+    # Verify standard compartment (BREAKER COMPARTMENT) retains switchgear attributes
+    cb_item = items_33kv["BREAKER COMPARTMENT"]
+    assert cb_item.context["swg"]["type"] == "GIS"
+    assert cb_item.context["swg"]["manufacturer"] == "EPE"
+    assert cb_item.context["swg"]["model"] == "VGA-32"
+    assert cb_item.context["swg"]["rating"] == "36kV"
+    assert cb_item.context["panel"]["area"] == "BREAKER COMPARTMENT"
+    assert cb_item.context["panel"]["serialnumber"] == "39000589/10/016"
+    assert cb_item.context["panel"]["serial_no"] == "39000589/10/016"
+    assert cb_item.context["panel"]["heateramp"] == "ON:0.50A/OFF:0.0A"
+    assert cb_item.context["panel"]["breakerstatus"] == "SERVICE/CLOSE"
+    assert cb_item.context["panel"]["busbarposition"] == "MAIN"
+    assert cb_item.context["panel"]["cabletype"] == "XLPE"
+    assert cb_item.context["panel"]["linknumber"] == "3S5"
+    assert cb_item.context["panel"]["name"] == "PMU GEBENG (7L5)"
+    assert cb_item.context["panel"]["loadamp"] == "120"
+
+    # Verify LINK BOX compartment sanitizes switchgear metadata and voltage grading
+    lb_item_33kv = items_33kv["LINK BOX"]
+    assert lb_item_33kv.context["swg"]["type"] == "LINK BOX"
+    assert lb_item_33kv.context["swg"]["manufacturer"] == "-"
+    assert lb_item_33kv.context["swg"]["model"] == "-"
+    assert lb_item_33kv.context["swg"]["rating"] == "33kV"
+    assert lb_item_33kv.context["panel"]["area"] == "-"
+    assert lb_item_33kv.context["panel"]["serialnumber"] == "-"
+    assert lb_item_33kv.context["panel"]["serial_no"] == "-"
+    assert lb_item_33kv.context["panel"]["heateramp"] == "-"
+    assert lb_item_33kv.context["panel"]["breakerstatus"] == "-"
+    assert lb_item_33kv.context["panel"]["busbarposition"] == "-"
+    assert lb_item_33kv.context["panel"]["cabletype"] == "-"
+    # Preserved fields
+    assert lb_item_33kv.context["panel"]["linknumber"] == "3S5"
+    assert lb_item_33kv.context["panel"]["name"] == "PMU GEBENG (7L5)"
+    assert lb_item_33kv.context["panel"]["loadamp"] == "120"
+    # TEV / US blanking flags
+    assert lb_item_33kv.context["__blank_us__"] is True
+    assert lb_item_33kv.context["is_us_active"] is False
+    assert lb_item_33kv.context["__blank_tev__"] is True
+    assert lb_item_33kv.context["is_tev_active"] is False
+    assert lb_item_33kv.context["us"]["reading"] == ""
+    assert lb_item_33kv.context["tev"]["reading"] == ""
+
+    # 2. 11kV Switchgear with LINK BOX compartment
+    panel_11kv = SwitchgearPanelScanSpec(
+        panel_no=1,
+        name="FEEDER 1",
+        panel_feeder_no="1K1",
+        serial_no="SN-VCB-111",
+        load_amp=85.0,
+        status="SERVICE/CLOSE",
+        heater_amp="0.4",
+        busbar_position="TOP",
+        cable_type="PILC",
+        compartments=("LINK BOX",),
+    )
+    swg_11kv = SwitchgearScanSpec(
+        switchgear_type="VCB",
+        manufacturer="TAMCO",
+        model="GV3",
+        rating="12kV",
+        serial_no="SWG-VCB-002",
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        overview_compartments=("OVERVIEW",),
+        panels=(panel_11kv,),
+        voltage_class=VoltageClass.KV_11,
+    )
+    ad_11kv = SwitchgearScanAdapter(
+        swg=swg_11kv,
+        substation_info=mock_substation_info,
+        is_33kv=False,
+    )
+    res_11kv = ad_11kv.adapt()
+    lb_item_11kv = [item for item in res_11kv.items if item.component_name == "LINK BOX"][0]
+
+    assert lb_item_11kv.context["swg"]["type"] == "LINK BOX"
+    assert lb_item_11kv.context["swg"]["manufacturer"] == "-"
+    assert lb_item_11kv.context["swg"]["model"] == "-"
+    assert lb_item_11kv.context["swg"]["rating"] == "11kV"
+    assert lb_item_11kv.context["panel"]["area"] == "-"
+    assert lb_item_11kv.context["panel"]["serialnumber"] == "-"
+    assert lb_item_11kv.context["panel"]["serial_no"] == "-"
+    assert lb_item_11kv.context["panel"]["heateramp"] == "-"
+    assert lb_item_11kv.context["panel"]["breakerstatus"] == "-"
+    assert lb_item_11kv.context["panel"]["busbarposition"] == "-"
+    assert lb_item_11kv.context["panel"]["cabletype"] == "-"
+    assert lb_item_11kv.context["panel"]["linknumber"] == "1K1"
+    assert lb_item_11kv.context["panel"]["name"] == "FEEDER 1"
+    assert lb_item_11kv.context["panel"]["loadamp"] == "85"
+    assert lb_item_11kv.context["__blank_us__"] is True
+    assert lb_item_11kv.context["is_us_active"] is False
+    assert lb_item_11kv.context["__blank_tev__"] is True
+    assert lb_item_11kv.context["is_tev_active"] is False
+
 
 
 

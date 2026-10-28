@@ -84,6 +84,7 @@ def build_switchgear_panel_scan_spec(
         load_amp=panel.load_amp,
         heater_amp=panel.heater_amp,
         cable_type=panel.cable_type,
+        busbar_position=getattr(panel, "busbar_position", ""),
         us_reading=panel.us_reading,
         us_char=panel.us_char,
         tev_reading=panel.tev_reading,
@@ -250,6 +251,7 @@ class SwitchgearPanelScanSpec:
     load_amp: str = ""
     heater_amp: str = ""
     cable_type: str = ""
+    busbar_position: str = ""
     us_reading: str = ""
     us_char: str = ""
     tev_reading: str = ""

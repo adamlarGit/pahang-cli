@@ -807,26 +807,59 @@ class SwitchgearScanAdapter:
                 else:
                     link_no = _clean_str(panel.panel_feeder_no or str(p_no))
 
+                is_link_box = comp_name.strip().upper() == "LINK BOX"
+
+                if is_link_box:
+                    swg_type = "LINK BOX"
+                    swg_mfg = "-"
+                    swg_model = "-"
+                    swg_rating = (
+                        "33kV"
+                        if (
+                            self.is_33kv
+                            or self.voltage_class == VoltageClass.KV_33
+                            or (self.voltage_class and "33" in str(self.voltage_class))
+                        )
+                        else "11kV"
+                    )
+                    panel_area = "-"
+                    panel_serial = "-"
+                    panel_heater = "-"
+                    panel_breaker = "-"
+                    panel_busbar = "-"
+                    panel_cable = "-"
+                else:
+                    swg_type = _clean_str(self.swg.switchgear_type, "RMU SF6")
+                    swg_mfg = _clean_str(self.swg.manufacturer)
+                    swg_model = _clean_str(self.swg.model)
+                    swg_rating = _clean_str(self.swg.rating)
+                    panel_area = comp_name
+                    panel_serial = _clean_str(panel.serial_no)
+                    panel_heater = h_amp
+                    panel_breaker = _clean_str(panel.status, "CLOSE")
+                    panel_busbar = bus_pos
+                    panel_cable = _clean_str(panel.cable_type)
+
                 panel_ctx = {
                     "substation": sub_ctx,
                     "swg": {
-                        "type": _clean_str(self.swg.switchgear_type, "RMU SF6"),
-                        "manufacturer": _clean_str(self.swg.manufacturer),
-                        "model": _clean_str(self.swg.model),
-                        "rating": _clean_str(self.swg.rating),
+                        "type": swg_type,
+                        "manufacturer": swg_mfg,
+                        "model": swg_model,
+                        "rating": swg_rating,
                         "serialnumber": _clean_str(self.swg.serial_no),
                     },
                     "panel": {
                         "name": p_name,
                         "linknumber": link_no,
                         "feeder_no": _clean_str(panel.panel_feeder_no or ""),
-                        "area": comp_name,
-                        "serialnumber": _clean_str(panel.serial_no),
-                        "serial_no": _clean_str(panel.serial_no),
-                        "heateramp": h_amp,
-                        "breakerstatus": _clean_str(panel.status, "CLOSE"),
-                        "busbarposition": bus_pos,
-                        "cabletype": _clean_str(panel.cable_type),
+                        "area": panel_area,
+                        "serialnumber": panel_serial,
+                        "serial_no": panel_serial,
+                        "heateramp": panel_heater,
+                        "breakerstatus": panel_breaker,
+                        "busbarposition": panel_busbar,
+                        "cabletype": panel_cable,
                         "loadamp": format_load_amp(panel.load_amp) if panel.load_amp else "-",
                         "analysis": BANNER_HEALTHY_ANALYSIS,
                         "recommendation": BANNER_HEALTHY_RECOMMENDATION,

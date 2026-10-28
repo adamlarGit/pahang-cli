@@ -79,6 +79,7 @@ graph TD
     T128["#128: Windows MAX_PATH hardening for deep raw data extraction in RawMaterialLoader - Closed"]
     T129["#129: Switchgear-scoped survey discovery and PRPD catalog for multi-switchgear substations - Closed"]
     T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks - Closed"]
+    T131["#131: Sanitize LINK BOX compartment metadata and voltage grading"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -114,7 +115,8 @@ graph TD
     T127 --> T129
     T128 --> T129
     T129 --> T130
-    T130 --> T103
+    T130 --> T131
+    T131 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -346,9 +348,17 @@ graph TD
 - [x] Census summary tables order 33kV lineup before 11kV lineup.
 - [x] Document chunk indices and labels reflect Option A structure cleanly.
 - [x] All unit and plan builder tests in `tests/test_full_report_workflow.py` pass.
-- [ ] Census summary tables order 33kV lineup before 11kV lineup.
-- [ ] Document chunk indices and labels reflect Option A structure cleanly.
-- [ ] All unit and plan builder tests in `tests/test_full_report_workflow.py` pass.
+
+### #131: feat(full-report): sanitize LINK BOX compartment metadata and voltage grading
+- **Status**: Open
+- **GitHub Issue**: [#131](https://github.com/adamlarGit/pahang-cli/issues/131)
+- **Blocked by**: #130
+- **Ticket File**: [tickets/131-sanitize-link-box-compartment-metadata.md](./tickets/131-sanitize-link-box-compartment-metadata.md)
+- **Delivers**: Sanitize LINK BOX scan page metadata in `SwitchgearScanAdapter.adapt()` (`swg.type='LINK BOX'`, `swg.manufacturer='-'`, `swg.model='-'`, `swg.rating='33kV'/'11kV'`, `panel.area='-'`, `panel.serialnumber='-'`, `panel.serial_no='-'`, `panel.heateramp='-'`, `panel.breakerstatus='-'`, `panel.busbarposition='-'`, `panel.cabletype='-'`), preserving parent panel feeder/name/load/IR readings while ensuring US/TEV blocks remain blanked.
+- [x] Override `swg` and `panel` context fields when `comp_name == 'LINK BOX'` in `SwitchgearScanAdapter.adapt()`.
+- [x] Preserve parent panel link number, name, load, and thermals.
+- [x] Ensure ultrasound and TEV cells continue to be blanked.
+- [x] Unit tests for 33kV and 11kV Link Box context generation in `tests/test_full_report_scan_adapters.py`.
 
 ---
 
