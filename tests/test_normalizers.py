@@ -18,8 +18,10 @@ from src.core.normalizers import (
     format_iso8601,
     format_load_amp,
     format_month_folder,
+    format_switchgear_overview_serial,
     format_temperature_float,
     format_testsheet_time,
+    is_eligible_rmu_type,
     normalize_date_str,
     normalize_fl_erms,
     normalize_for_csv,
@@ -969,6 +971,61 @@ def test_parse_battery_details() -> None:
     assert parse_battery_details("NONE") == ("", "", "")
     assert parse_battery_details("none") == ("", "", "")
     assert parse_battery_details("TBA") == ("", "", "")
+
+
+def test_format_switchgear_overview_serial() -> None:
+    # 1. Non-eligible switchgear types must return "-" regardless of serial_no
+    assert format_switchgear_overview_serial("GIS", "12345") == "-"
+    assert format_switchgear_overview_serial("VCB", "12345") == "-"
+    assert format_switchgear_overview_serial("AIS", "12345") == "-"
+    assert format_switchgear_overview_serial("GCB", "12345") == "-"
+    assert format_switchgear_overview_serial("OCB", "12345") == "-"
+    assert format_switchgear_overview_serial("RMU OIL", "12345") == "-"
+    assert format_switchgear_overview_serial("OIL RMU", "12345") == "-"
+    assert format_switchgear_overview_serial(None, "12345") == "-"
+    assert format_switchgear_overview_serial("", "12345") == "-"
+    assert format_switchgear_overview_serial("-", "12345") == "-"
+
+    # 2. Eligible RMU types with valid serial return cleaned serial number
+    assert format_switchgear_overview_serial("RMU SF6", "210045") == "210045"
+    assert format_switchgear_overview_serial("RMU SF6", "SN: 210045") == "210045"
+    assert format_switchgear_overview_serial("MRMU", "SN: MRMU-9988") == "MRMU-9988"
+    assert format_switchgear_overview_serial("MRMU", "MRMU-9988") == "MRMU-9988"
+    assert format_switchgear_overview_serial("RMU CB", "CB-7766") == "CB-7766"
+    assert format_switchgear_overview_serial("RMU CB", "SN: CB-7766") == "CB-7766"
+    assert format_switchgear_overview_serial("RMU", "SN-999") == "SN-999"
+    assert format_switchgear_overview_serial("33kV RMU", "2023-SN-11") == "2023-SN-11"
+
+    # 3. Eligible RMU types with empty or sentinel serial return "-"
+    assert format_switchgear_overview_serial("RMU SF6", "") == "-"
+    assert format_switchgear_overview_serial("RMU SF6", "   ") == "-"
+    assert format_switchgear_overview_serial("RMU SF6", None) == "-"
+    assert format_switchgear_overview_serial("RMU SF6", "-") == "-"
+    assert format_switchgear_overview_serial("RMU SF6", "None") == "-"
+    assert format_switchgear_overview_serial("RMU SF6", "N/A") == "-"
+    assert format_switchgear_overview_serial("RMU SF6", "SN: -") == "-"
+    assert format_switchgear_overview_serial("RMU SF6", "SN: ") == "-"
+
+
+def test_is_eligible_rmu_type() -> None:
+    assert is_eligible_rmu_type("RMU SF6") is True
+    assert is_eligible_rmu_type("MRMU") is True
+    assert is_eligible_rmu_type("RMU CB") is True
+    assert is_eligible_rmu_type("RMU") is True
+    assert is_eligible_rmu_type("33kV RMU") is True
+    assert is_eligible_rmu_type("RMU (SF6)") is True
+    assert is_eligible_rmu_type("MRMU SF6") is True
+
+    assert is_eligible_rmu_type("RMU OIL") is False
+    assert is_eligible_rmu_type("OIL RMU") is False
+    assert is_eligible_rmu_type("GIS") is False
+    assert is_eligible_rmu_type("VCB") is False
+    assert is_eligible_rmu_type("AIS") is False
+    assert is_eligible_rmu_type("GCB") is False
+    assert is_eligible_rmu_type("OCB") is False
+    assert is_eligible_rmu_type(None) is False
+    assert is_eligible_rmu_type("") is False
+
 
 
 

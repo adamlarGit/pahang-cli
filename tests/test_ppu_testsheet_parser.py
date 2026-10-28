@@ -695,6 +695,106 @@ def test_ppu_pt_measurement_detection_excludes_column_k(tmp_path: Path) -> None:
     assert p4.has_pt_measurement is True
 
 
+def test_ppu_non_rmu_does_not_extract_l9_into_serial_no(tmp_path: Path) -> None:
+    """Ticket #135: PPU parser must not read L9 into serial_no for non-RMU switchgear."""
+    wb_path = tmp_path / "01. SSU KIIP GIS.xlsx"
+    wb = create_ppu_testsheet_workbook(
+        path=wb_path,
+        has_33kv=True,
+        has_11kv=False,
+        panels_33kv=[
+            {
+                "feeder_no": "3P1",
+                "name": "INCOMING 33kV",
+                "breaker_serial": "SN: GIS-BRK-001",
+            },
+            {
+                "feeder_no": "3P2",
+                "name": "OUTGOING 33kV",
+                "breaker_serial": "",
+            },
+        ],
+        swg_33kv_details={
+            "manufacturer": "TAMCO",
+            "switchgear_type": "GIS",
+            "model": "GV3",
+            "serial_no": "LHS:9.5.23, RHS:9.5.23",
+        },
+    )
+    ws = wb["33kV (Main)"]
+    ws["L9"] = "LHS:9.5.23, RHS:9.5.23"
+    ws["V15"] = "SN: GIS-BRK-001"
+    ws["V21"] = None
+    wb.save(wb_path)
+
+    parser = PpuTestsheetParser()
+    data = parser.extract_testsheet_data(wb_path)
+    swg = data.equipment.switchgears[0]
+    assert swg.switchgear_type == "GIS"
+    # Board serial_no is empty for GIS (L9 ignored, V15 not used for board serial)
+    assert swg.serial_no == ""
+    # Panel 1 has its own breaker serial
+    assert swg.panels[0].serial_no == "GIS-BRK-001"
+    # Panel 2 remains empty (non-RMU panels do NOT inherit sheet V15)
+    assert swg.panels[1].serial_no == ""
+
+    meta = parser.extract_testsheet_metadata(wb_path)
+    assert meta.equipment.switchgears[0].serial_no == ""
+
+
+def test_ppu_rmu_extracts_v15_serial_and_propagates_to_blank_panels(tmp_path: Path) -> None:
+    """Ticket #135: RMU switchgear extracts serial from V15 and propagates to blank panels."""
+    wb_path = tmp_path / "22. MINI PPU KECHAU TUI.xlsx"
+    wb = create_ppu_testsheet_workbook(
+        path=wb_path,
+        has_33kv=True,
+        has_11kv=False,
+        panels_33kv=[
+            {
+                "feeder_no": "3P1",
+                "name": "INCOMING 1",
+                "breaker_serial": "SN: 2023-RMU-001",
+            },
+            {
+                "feeder_no": "3P2",
+                "name": "TRANSFORMER 1",
+                "breaker_serial": "",
+            },
+            {
+                "feeder_no": "3P3",
+                "name": "OUTGOING 1",
+                "breaker_serial": "SN: EXPLICIT-999",
+            },
+        ],
+        swg_33kv_details={
+            "manufacturer": "TAMCO",
+            "switchgear_type": "RMU SF6",
+            "model": "VRN2A",
+            "serial_no": "20.10.2023",
+        },
+    )
+    ws = wb["33kV (Main)"]
+    ws["L9"] = "20.10.2023"
+    ws["V15"] = "SN: 2023-RMU-001"
+    ws["V21"] = None
+    ws["V27"] = "SN: EXPLICIT-999"
+    wb.save(wb_path)
+
+    parser = PpuTestsheetParser()
+    data = parser.extract_testsheet_data(wb_path)
+    swg = data.equipment.switchgears[0]
+    assert swg.switchgear_type == "RMU SF6"
+    assert swg.serial_no == "2023-RMU-001"
+    assert len(swg.panels) == 3
+    assert swg.panels[0].serial_no == "2023-RMU-001"
+    assert swg.panels[1].serial_no == "2023-RMU-001"
+    assert swg.panels[2].serial_no == "EXPLICIT-999"
+
+    meta = parser.extract_testsheet_metadata(wb_path)
+    assert meta.equipment.switchgears[0].serial_no == "2023-RMU-001"
+
+
+
 
 
 

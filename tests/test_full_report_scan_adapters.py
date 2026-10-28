@@ -2431,6 +2431,94 @@ def test_table26_placards_and_visual_defects_preserved() -> None:
     assert verbatim_vi.description == "SILICA GEL IN POOR CONDITION – PTX1 - MAIN TANK"
 
 
+def test_switchgear_scan_adapter_overview_serial_dashed_for_non_rmu(mock_substation_info: dict[str, str]) -> None:
+    """Ticket #135: Overview scan pages for GIS, VCB, and RMU OIL must display '-' for serial number."""
+    # 1. SSU KIIP GIS switchgear with erroneous last-PM string or real serial
+    panel_gis = SwitchgearPanelScanSpec(
+        panel_no=1,
+        name="INCOMING 33kV",
+        serial_no="GIS-PANEL-001",
+        compartments=("CABLE COMPARTMENT",),
+    )
+    swg_gis = SwitchgearScanSpec(
+        switchgear_type="GIS",
+        manufacturer="TAMCO",
+        serial_no="LHS:9.5.23, RHS:9.5.23",
+        archetype=SwitchgearArchetype.GIS_CUBICLE,
+        overview_compartments=("OVERVIEW FRONT (LHS)", "OVERVIEW REAR (LHS)"),
+        panels=(panel_gis,),
+    )
+    adapter_gis = SwitchgearScanAdapter(swg=swg_gis, substation_info=mock_substation_info)
+    result_gis = adapter_gis.adapt()
+    overview_items_gis = [it for it in result_gis.items if it.is_overview]
+    assert len(overview_items_gis) == 2
+    for item in overview_items_gis:
+        assert item.context["swg"]["serialnumber"] == "-"
+
+    # 2. VCB switchgear with board serial
+    swg_vcb = SwitchgearScanSpec(
+        switchgear_type="VCB",
+        manufacturer="TAMCO",
+        serial_no="VCB-BOARD-999",
+        archetype=SwitchgearArchetype.VCB_CUBICLE,
+        overview_compartments=("OVERVIEW FRONT",),
+        panels=(panel_gis,),
+    )
+    adapter_vcb = SwitchgearScanAdapter(swg=swg_vcb, substation_info=mock_substation_info)
+    result_vcb = adapter_vcb.adapt()
+    overview_items_vcb = [it for it in result_vcb.items if it.is_overview]
+    assert len(overview_items_vcb) == 1
+    assert overview_items_vcb[0].context["swg"]["serialnumber"] == "-"
+
+    # 3. RMU OIL switchgear with board serial
+    swg_oil = SwitchgearScanSpec(
+        switchgear_type="RMU OIL",
+        manufacturer="LUCY",
+        serial_no="OIL-BOARD-888",
+        archetype=SwitchgearArchetype.RMU_OIL,
+        overview_compartments=("OVERVIEW FRONT",),
+        panels=(panel_gis,),
+    )
+    adapter_oil = SwitchgearScanAdapter(swg=swg_oil, substation_info=mock_substation_info)
+    result_oil = adapter_oil.adapt()
+    overview_items_oil = [it for it in result_oil.items if it.is_overview]
+    assert len(overview_items_oil) == 1
+    assert overview_items_oil[0].context["swg"]["serialnumber"] == "-"
+
+
+def test_switchgear_scan_adapter_overview_serial_preserved_for_eligible_rmu(mock_substation_info: dict[str, str]) -> None:
+    """Ticket #135: Overview scan pages for RMU SF6, MRMU, RMU CB, and generic RMU preserve board serial."""
+    panel_rmu = SwitchgearPanelScanSpec(
+        panel_no=1,
+        name="INCOMING",
+        serial_no="SN-PANEL-01",
+        compartments=("CABLE COMPARTMENT",),
+    )
+
+    test_cases = [
+        ("RMU SF6", "SN: ABB-SF6-2023", "ABB-SF6-2023"),
+        ("MRMU", "SCH-MRMU-9900", "SCH-MRMU-9900"),
+        ("RMU CB", "SN: RMUCB-1122", "RMUCB-1122"),
+        ("RMU", "GEN-RMU-5544", "GEN-RMU-5544"),
+    ]
+
+    for swg_type, raw_sn, expected_sn in test_cases:
+        swg = SwitchgearScanSpec(
+            switchgear_type=swg_type,
+            manufacturer="ABB",
+            serial_no=raw_sn,
+            archetype=SwitchgearArchetype.RMU_STANDARD,
+            overview_compartments=("OVERVIEW FRONT",),
+            panels=(panel_rmu,),
+        )
+        adapter = SwitchgearScanAdapter(swg=swg, substation_info=mock_substation_info)
+        result = adapter.adapt()
+        overview_items = [it for it in result.items if it.is_overview]
+        assert len(overview_items) == 1
+        assert overview_items[0].context["swg"]["serialnumber"] == expected_sn
+
+
+
 
 
 

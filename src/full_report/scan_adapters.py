@@ -31,6 +31,7 @@ from src.core.normalizers import (
     format_db_int,
     format_heater_amp,
     format_load_amp,
+    format_switchgear_overview_serial,
     format_testsheet_time,
     normalize_tx_id,
     normalize_tx_model,
@@ -657,7 +658,9 @@ class SwitchgearScanAdapter:
                         "model": _clean_str(self.swg.model),
                         "rating": _clean_str(self.swg.rating),
                         "area": ov_area,
-                        "serialnumber": _clean_str(self.swg.serial_no),
+                        "serialnumber": format_switchgear_overview_serial(
+                            self.swg.switchgear_type, self.swg.serial_no
+                        ),
                         "analysis": banner_analysis,
                         "recommendation": banner_rec,
                     },

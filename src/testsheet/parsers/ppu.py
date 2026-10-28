@@ -15,6 +15,7 @@ from src.core.normalizers import (
     format_humidity_str,
     format_load_amp,
     format_testsheet_time,
+    is_eligible_rmu_type,
     normalize_tx_model,
     parse_background_temp,
 )
@@ -47,6 +48,21 @@ from src.testsheet.parsers.common import (
 logger = logging.getLogger(__name__)
 
 _GPS_COORD_RE = re.compile(r"\d+\.\d+.*,\s*\d+\.\d+")
+
+
+def _extract_rmu_serial(val: Any) -> str:
+    """Extract serial number from cell value, stripping SN: prefix if present."""
+    cleaned = clean_val(val)
+    if not cleaned:
+        return ""
+    s = str(cleaned).strip()
+    if not s or s.lower() in ("-", "none", "n/a", "null"):
+        return ""
+    m = re.search(r"SN\s*:\s*([^\n\r]+)", s, re.IGNORECASE)
+    if m:
+        extracted = m.group(1).strip()
+        return "" if extracted.lower() in ("-", "none", "n/a", "null") else extracted
+    return s
 
 
 def classify_transformer_rating(
@@ -412,10 +428,12 @@ class PpuTestsheetParser(TestsheetParserStrategy):
             type_from_m6 = clean_val(ws_header["M6"].value) or ""
             year = clean_val(ws_header["L7"].value) or ""
             model = clean_val(ws_header["L8"].value) or ""
-            serial_no = clean_val(ws_header["L9"].value) or ""
             busbar_type = clean_val(ws_header["L10"].value) or ""
             rating = clean_val(ws_header["L11"].value) or ""
             swg_type = type_from_m6 or busbar_type or "VCB"
+            serial_no = ""
+            if is_eligible_rmu_type(swg_type):
+                serial_no = _extract_rmu_serial(ws_header["V15"].value)
             if any((manufacturer, year, model, serial_no, swg_type, rating)):
                 swg_meta = SwitchgearSpec(
                     switchgear_type=swg_type,
@@ -546,10 +564,12 @@ class PpuTestsheetParser(TestsheetParserStrategy):
         type_from_m6 = clean_val(ws_main["M6"].value) or ""
         manufactured_year = clean_val(ws_main["L7"].value) or ""
         model = clean_val(ws_main["L8"].value) or ""
-        serial_no = clean_val(ws_main["L9"].value) or ""
         busbar_type = clean_val(ws_main["L10"].value) or ""
         rating = clean_val(ws_main["L11"].value) or ""
         switchgear_type = type_from_m6 or busbar_type or "VCB"
+        serial_no = ""
+        if is_eligible_rmu_type(switchgear_type):
+            serial_no = _extract_rmu_serial(ws_main["V15"].value)
 
         # Panels extraction across main sheet and extra sheets
         panels: list[SwitchgearPanelSpec] = []
@@ -639,6 +659,10 @@ class PpuTestsheetParser(TestsheetParserStrategy):
         """Parse 6-row stride switchgear panels from Rows 15 to 62."""
         panels: list[SwitchgearPanelSpec] = []
         panel_idx = start_index
+
+        sheet_rmu_serial = ""
+        if is_eligible_rmu_type(switchgear_type):
+            sheet_rmu_serial = _extract_rmu_serial(ws["V15"].value)
 
         for r in range(15, 63, 6):
             if r > ws.max_row:
@@ -757,6 +781,14 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                             if m_sn:
                                 breaker_serial = m_sn.group(1).strip()
                                 break
+
+            if breaker_serial.lower() in ("-", "none", "n/a", "null"):
+                breaker_serial = ""
+
+            # Ticket #135: In 33kV RMU testsheets, propagate sheet-level V15 serial
+            # to any panel on that sheet whose serial number is empty.
+            if not breaker_serial and sheet_rmu_serial:
+                breaker_serial = sheet_rmu_serial
 
             # Ultrasound (Col T) and TEV (Col R / Col S) for Breaker Compartment (Row r)
             # Col U: Type of Characteristic (for TEV / US; defaults to "NORMAL" if empty)

@@ -1069,6 +1069,53 @@ def format_busbar_position(
     return "-"
 
 
+def is_eligible_rmu_type(switchgear_type: str | None) -> bool:
+    """Check whether switchgear type is an eligible RMU board.
+
+    Eligible types must contain 'RMU SF6', 'MRMU', 'RMU CB', or generic 'RMU',
+    and must NOT contain 'OIL'.
+    """
+    if not switchgear_type:
+        return False
+    st = str(switchgear_type).strip().upper()
+    if "OIL" in st:
+        return False
+    return "RMU" in st or "MRMU" in st
+
+
+def format_switchgear_overview_serial(
+    switchgear_type: str | None,
+    serial_no: str | None,
+) -> str:
+    """Format switchgear serial number for overview scan pages.
+
+    Domain Rule (Ticket #135):
+    - Switchgear overview serial numbers ('swg.serialnumber' in 'swg-overview.docx')
+      must be dashed '-' if switchgear type is not 'RMU SF6', 'MRMU', or 'RMU CB'
+      (or non-oil generic 'RMU').
+    - For 'RMU OIL', the overview serial must ALSO be dashed '-' (same behavior as
+      'VCB', 'GIS', 'AIS', 'GCB', 'OCB').
+    - Only 'RMU SF6', 'MRMU', and 'RMU CB' display their board serial number in overview scan pages.
+    - If eligible and serial number is present (non-blank, non-sentinel), returns the
+      cleaned serial number (stripping any 'SN:' prefix). Otherwise returns '-'.
+    """
+    if not is_eligible_rmu_type(switchgear_type):
+        return "-"
+
+    if _is_null_or_empty(serial_no):
+        return "-"
+
+    s = str(serial_no).strip()
+    m = re.match(r"^SN\s*:\s*(.*)$", s, re.IGNORECASE)
+    if m:
+        s = m.group(1).strip()
+
+    if not s or s.lower() in _NULL_SENTINELS:
+        return "-"
+
+    return s
+
+
 _CHARGER_PREFIX_RE = re.compile(
     r"^(?:B\s*/\s*C(?:\s*\d+)?|BC\s*\d*|CHARGER)\s*[:\-]\s*|^(?:BC\s*\d+)\s+",
     re.IGNORECASE,
@@ -1376,8 +1423,10 @@ __all__ = [
     "format_iso8601",
     "format_load_amp",
     "format_month_folder",
+    "format_switchgear_overview_serial",
     "format_temperature_float",
     "format_testsheet_time",
+    "is_eligible_rmu_type",
     "normalize_date_str",
     "normalize_fl_erms",
     "normalize_for_csv",
