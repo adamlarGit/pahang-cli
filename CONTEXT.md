@@ -408,11 +408,52 @@ The architectural filesystem isolation policy governing deep directory paths on 
 1. **Disk I/O and Archive Operations**: File copying (`shutil.copy2`), directory provisioning (`os.makedirs`), directory purging (`shutil.rmtree`), and archive extraction (`zipfile.ZipFile.extractall`) operate through Win32 extended-length paths via `safe_path()` (`\\?\` for local drive paths and `\\?\UNC\` for network shares), immunizing operations against Windows MAX_PATH (260 character) limits in deep `RAW MATERIAL` survey trees.
 2. **Word & Excel COM Automation Isolation**: Microsoft Word and Excel COM Automation (`win32com.client`) strictly reject `\\?\` path prefixes with COM exceptions. COM workflows (`ComDocumentConverter`) are strictly descoped and excluded from `safe_path` wrapping because COM conversions operate exclusively on report deliverables (`QUICK REPORT/`, `FULL REPORT/`, `TESTSHEET/`), which max out at 156–204 characters (well below the 260-character limit) and never touch `RAW MATERIAL`.
 
+### LinkBoxSanitizationPolicy
+The domain sanitization policy and data formatting rules governing switchgear compartments designated as `LINK BOX` across Full Report generation (`src/full_report/scan_adapters.py`, `SwitchgearScanAdapter.adapt()`):
+- **Physical Semantics**: A link box (cable link / sheath grounding box) is an external cable bonding and earthing enclosure mounted outside the primary switchgear bay, rather than an internal switchgear chamber. As such, switchgear cubicle properties (circuit breaker type, enclosure manufacturer, breaker serial number, anti-condensation heater, busbar connections, switchgear model) do not apply to it.
+- **Field Overrides**:
+  - `Equipment` (`swg.type`): Strictly overridden to `"LINK BOX"` (replacing switchgear cubicle types such as `"GIS"`, `"VCB"`, `"RMU SF6"`).
+  - `Manufacturer` (`swg.manufacturer`): Overridden to `"-"` (independent asset unverified from switchgear nameplate).
+  - `Model` (`swg.model`): Overridden to `"-"` (switchgear cubicle model does not apply).
+  - `Rating` (`swg.rating`): Overridden to the **system operating voltage** (`"33kV"` when `self.is_33kv` or voltage class is 33kV; `"11kV"` otherwise), rather than the switchgear design insulation rating (e.g. `"36kV"` or `"12kV"`).
+  - `Area` (`panel.area`): Overridden to `"-"` (repeating `"LINK BOX"` is redundant since Equipment is already labeled `"LINK BOX"`).
+  - `Serial No` (`panel.serialnumber`, `panel.serial_no`): Overridden to `"-"` (breaker serial belongs to the switchgear cubicle, not the external link box).
+  - `Heater (A)` (`panel.heateramp`): Overridden to `"-"` (link box contains no anti-condensation heater).
+  - `CB Position` / Breaker Status (`panel.breakerstatus`): Overridden to `"-"` (link box houses bonding links, not an operating circuit breaker).
+  - `Busbar Position` (`panel.busbarposition`): Overridden to `"-"` (link box bonds cable sheaths to station earth, completely isolated from switchgear busbars).
+  - `Cable Type` (`panel.cabletype`): Overridden to `"-"`.
+- **Preserved Parent Bay Attributes**:
+  - `Panel No` (`panel.linknumber`): Preserves parent feeder link number (e.g. `3S5`, `4S5`).
+  - `Panel Name` (`panel.name`): Preserves parent feeder name (e.g. `PMU GEBENG (7L5)`).
+  - `Load Current` (`panel.loadamp`): Preserves parent panel operating load current (e.g. `format_load_amp(panel.load_amp)`).
+  - `Thermal Readings`: Preserves infrared inspection data (`Spot 1`, `Spot 2`, `Avg`, `Delta T`, `Ambient`, and thermal photo number from `panel.link_box_photo`).
+- **Ultrasound & TEV Blanking Invariant**:
+  - Ultrasound (US): Enforced via `US_BLANKED_SWG_COMPARTMENTS` in `src/core/contract.py` (`is_swg_compartment_us_eligible("LINK BOX") -> False`). Table cells on `swg-panel.docx` are cleanly purged via `blank_swg_us_cells()`.
+  - Transient Earth Voltage (TEV): Enforced via `TEV_ELIGIBLE_SWG_COMPARTMENTS` in `src/core/contract.py` (`is_swg_compartment_tev_eligible("LINK BOX") -> False`). Table cells on `swg-panel.docx` are cleanly purged via `blank_swg_tev_cells()`.
 
-
-
-
-
-
+### TransformerDesignationPolicy
+The naming hierarchy and propagation policy governing transformer asset identification across PMU/PPU sub-transmission substations and standard distribution substations (`src/core/normalizers.py`, `src/testsheet/parsers/ppu.py`, `src/full_report/scan_adapters.py`, `src/quick_report/cbm_render.py`):
+- **Archetype Naming Hierarchy**:
+  1. **Power Transformers (`PTX{n}`)**: High-capacity main power transformers ($\ge 5$ MVA, e.g. 5 MVA, 7.5 MVA, 15 MVA, 30 MVA) stepping down transmission or sub-transmission voltages in PMU/PPU substations. Extracted from Slots 1–4 on sheet `TX` and instantiated as `PowerTransformerSpec`. Numbered sequentially as `PTX1`, `PTX2`, `PTX3`, `PTX4` via `normalize_tx_id(..., is_power_tx=True)`. Rendered using the 9-component scanning page layout (including Marshalling Kiosk, Conservator Tank, and Cooling Fins).
+  2. **Local Station Service Transformers (`LTX` / `LTX{n}`)**: Auxiliary step-down station service transformers (typically $100 - 1000$ kVA, e.g. 300 kVA, 500 kVA) supplying low-voltage AC power for substation auxiliary services. Extracted from Slot 5 on sheet `TX` (or with `LOCAL` / `LTX` in the identifier) and instantiated as standard `TransformerSpec`. Numbered as `LTX` when a single local transformer exists on site; numbered sequentially as `LTX1`, `LTX2` only if multiple local transformers exist on site. Rendered using the 7-component standard scanning page layout.
+  3. **Standard Distribution Transformers (`TX{n}`)**: Conventional distribution transformers (100–1000 kVA) in secondary distribution substations (SSU, PE at 11/0.415kV). Numbered sequentially as `TX1`, `TX2`, `TX3`, `TX4` via `normalize_tx_id()`.
+- **Testsheet Coordinate Origins (Sheet `TX` in 33kV Workbooks)**:
+  - Row 6 defines the 5 candidate transformer slots:
+    - Slot 1: Columns `G:J` (Header `TX 1`, rating in MVA $\to$ `PTX1`)
+    - Slot 2: Columns `K:M` (Header `TX 2`, rating in MVA $\to$ `PTX2`)
+    - Slot 3: Columns `N:P` (Header `TX 3`, rating in MVA $\to$ `PTX3`)
+    - Slot 4: Columns `Q:S` (Header `TX 4`, rating in MVA $\to$ `PTX4`)
+    - Slot 5: Columns `T:W` (Header `LOCAL TX`, rating in kVA $\to$ `LTX`)
+  - **LTX Model Column Origin**: In Slot 5, cell `V6` holds the label `MODEL:` and cell `W6` holds the model abbreviation. The parser column range strictly spans `("T", "U", "V", "W")` to prevent column truncation.
+  - **Shorthand Model Expansion (`normalize_tx_model`)**:
+    - `"H/S"`, `"HS"`, `"H.S."`, `"HERMETICALLY"`, `"HERMETICALLY SEAL"`, `"HERMETICALLY SEALED"` $\to$ `"HERMETICALLY SEAL"`
+    - `"C/T"`, `"CT"`, `"C.T."`, `"CONSERVATOR"`, `"CONSERVATOR TANK"` $\to$ `"CONSERVATOR TANK"`
+    - Populated onto `TransformerSpec.model` during testsheet extraction and domain model initialization.
+- **Propagation and Invariant Boundaries**:
+  - **Scan Page `Tx No.` Cell**: On transformer scan pages (`tx-overview.docx`, `tx-hv-sides.docx`, `tx-lv-sides.docx`), the `Tx No.` table cell consumes `tx.number` (derived from `normalize_tx_id`), rendering `PTX1`, `PTX2`, and `LTX` (or `TX1`, `TX2`).
+  - **Scan Page Item Titles**: Plan builder and scan adapter items format component scan page titles prefixed with the canonical identifier (e.g., `PTX1 - OVERVIEW`, `PTX1 - HV BUSHING`, `LTX - OVERVIEW`, `LTX - HV BUSHING`).
+  - **CBM Defect Headers & Forwarding Banners**: Defect parser headers (`CbmDefectHeaderParser`) and CBM defect rendering contexts (`_build_tx_render_context()`) resolve equipment IDs via `normalize_tx_id()`, labeling defect pages `PTX1` or `LTX`. Defect forwarding banners on overview scan pages match against the normalized archetype, strictly preventing cross-contamination between PTX and LTX.
+  - **Table 26 Placard Preservation**: Condition overview photo placards in Table 26 are preserved as `POWER TX1`, `POWER TX2`, `LOCAL TX` matching physical substation nameplate signage convention.
+  - **Visual Inspection Verbatim Preservation**: Visual inspection defect descriptions from testsheets (e.g. `SILICA GEL IN POOR CONDITION – PTX1 - MAIN TANK`) are preserved 100% verbatim without regex inference, normalization rewriting, or token substitution.
 
 

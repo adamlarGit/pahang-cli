@@ -82,6 +82,7 @@ graph TD
     T131["#131: Sanitize LINK BOX compartment metadata and voltage grading - Closed"]
     T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Closed"]
     T133["#133: Differentiate PTX and LTX transformer numbering in 33kV reports - Closed"]
+    T134["#134: Record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md - Open"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -120,7 +121,8 @@ graph TD
     T130 --> T131
     T131 --> T132
     T132 --> T133
-    T133 --> T103
+    T133 --> T134
+    T134 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -389,6 +391,16 @@ graph TD
 - [x] Visual inspection defect descriptions are unmodified.
 - [x] Unit and regression tests verify transformer numbering across PMU/PPU and standard distribution packages.
 
+### #134: docs(domain): record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md
+- **Status**: Open
+- **GitHub Issue**: [#134](https://github.com/adamlarGit/pahang-cli/issues/134)
+- **Blocked by**: #133
+- **Ticket File**: [tickets/134-record-domain-policies-in-context.md](./tickets/134-record-domain-policies-in-context.md)
+- **Delivers**: Formal domain entries in `CONTEXT.md` for `LinkBoxSanitizationPolicy` (field overrides, parent panel attribute preservation, US/TEV blanking) and `TransformerDesignationPolicy` (`PTX{n}`, `LTX`, `TX{n}` hierarchy, Slot 1–5 coordinates, Column W model origin, shorthand expansion, and report propagation).
+- [ ] `CONTEXT.md` contains formal entries for `LinkBoxSanitizationPolicy` and `TransformerDesignationPolicy`.
+- [ ] All field mappings and rules match the agreed domain contracts.
+- [ ] No regression or contradiction with existing ADRs or glossary definitions.
+
 ---
 
 ## Decisions so far
@@ -489,6 +501,8 @@ graph TD
 - **Q97**: Windows MAX_PATH (>260 chars) immunity is centralized via `safe_path()` in `src.core.path_utils`, hardened into `LocalWorkspaceStorage.ensure_directory`, and applied throughout `RawMaterialLoader` (directory provisioning, photo copying, zip extraction, and legacy consolidation) with COM workflows strictly untouched. Handled in #128.
 - **Q98**: Multi-switchgear survey discovery and PRPD catalog scoping by switchgear index (`catalog["swg"][swg_idx][panel_no]`) and isolated image filenames (`prpd_swg{swg_idx}_panel{panel_no}_...`) to avoid panel index collisions on multi-switchgear substations like `CJEN/PMU/J00001`. Handled in #129.
 - **Q99**: Multi-switchgear overview document chunk sequence (Option A) generating separate overview chunks per switchgear lineup (`Part 02 - Switchgear 1 (33kV) Overview.docx`, `Part 11 - Switchgear 2 (11kV) Overview.docx`) and prioritizing 33kV before 11kV in document chunks and census summary tables. Handled in #130.
+- **Q100**: Link Box sanitization policy formalizes field overrides: Equipment = `LINK BOX`, Manufacturer/Model/Area/Serial No/Heater/CB Position/Busbar Position/Cable Type = `-`, Rating = system operating voltage (`33kV` / `11kV`), preserving parent panel feeder, name, load, and thermals, with US/TEV blanking. Handled in #131 and recorded in #134.
+- **Q101**: Transformer designation policy formalizes transformer naming hierarchy across PMU/PPU and standard distribution substations (`PTX{n}` for power transformers $\ge 5$ MVA from Slots 1–4, `LTX` for local station service transformers from Slot 5 / `LOCAL` with `LTX{n}` for multi-unit configurations, and `TX{n}` for standard distribution units), testsheet coordinate origins (Sheet `TX`, row 6 headers, column W for LTX model, shorthand expansion `H/S` and `C/T`), and propagation across `Tx No.` cell, scan item titles, CBM defect pages, while preserving Table 26 placards and verbatim visual inspection descriptions. Handled in #132, #133, and recorded in #134.
 
 ---
 
