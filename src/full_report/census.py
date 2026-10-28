@@ -280,11 +280,13 @@ def _match_defects_for_tx_component(
             continue
 
         if total_transformers > 1:
-            norm_id = normalize_tx_id(tx.tx_id)
+            norm_id = normalize_tx_id(tx)
             target = f"{eq_upper} {eq_id_upper}".replace(" ", "")
-            m_target = re.search(r"(?:TX|TRANSFORMER)\s*[-_]?\s*(\d+)", f"{eq_upper} {eq_id_upper}")
-            if m_target:
-                target_tx_id = f"TX{m_target.group(1)}"
+            m_target = re.search(r"(?:PTX|LTX|TX|TRANSFORMER)\s*[-_]?\s*(\d*)", f"{eq_upper} {eq_id_upper}")
+            if m_target and m_target.group(1):
+                raw_token = m_target.group(0).upper()
+                prefix = "PTX" if ("PT" in raw_token or "POWER" in raw_token) else ("LTX" if ("LT" in raw_token or "LOCAL" in raw_token) else "TX")
+                target_tx_id = f"{prefix}{m_target.group(1)}"
                 if norm_id != target_tx_id:
                     continue
             elif norm_id not in target and (tx.tx_id or "").upper().replace(" ", "") not in target:
@@ -831,7 +833,7 @@ class ExecutiveSummaryCensusBuilder:
             group_num = current_group
             current_group += 1
 
-            tx_label = normalize_tx_id(tx.tx_id, default_idx=idx + 1)
+            tx_label = normalize_tx_id(tx, default_idx=idx + 1)
             mfg = (tx.manufacturer or "").strip()
             rating_raw = (tx.rating_kva or "").strip()
             if rating_raw.upper() in ("NOT ACCESSIBLE", "-", "N/A", "NONE", "NAN", ""):

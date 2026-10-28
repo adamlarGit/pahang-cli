@@ -613,31 +613,104 @@ def normalize_fl_erms(location: object) -> str:
     return s
 
 
-def normalize_tx_id(tx_id: str | int | None, default_idx: int = 1) -> str:
-    """Normalize transformer identifier into canonical 'TX1', 'TX2' format.
+def normalize_tx_id(
+    tx_id: str | int | Any | None,
+    default_idx: int = 1,
+    *,
+    is_power_tx: bool | None = None,
+    is_local_tx: bool | None = None,
+    tx_type: str | None = None,
+    total_local_count: int = 1,
+) -> str:
+    """Normalize transformer identifier into canonical format by asset archetype (Ticket #133).
+
+    Archetypes:
+        1. Power Transformers (PowerTransformerSpec, ratings >= 5 MVA from Slots 1-4)
+           -> 'PTX1', 'PTX2', 'PTX3', 'PTX4'.
+        2. Local Station Service Transformers (ratings in kVA from Slot 5 or with LOCAL in ID)
+           -> 'LTX' (and 'LTX1', 'LTX2' only if multiple local transformers exist on site).
+        3. Standard 11kV Distribution Transformers (in SSU/PE with standard TransformerSpec)
+           -> 'TX1', 'TX2'.
 
     Examples:
         'Tx 1' -> 'TX1'
         'TX 2' -> 'TX2'
         'Transformer 1' -> 'TX1'
         'TX1' -> 'TX1'
-        1 -> 'TX1'
-        None -> 'TX1' (with default_idx=1)
+        'PTX 1' -> 'PTX1'
+        'PTX1' -> 'PTX1'
+        'LOCAL TX' -> 'LTX'
+        'Local TX' -> 'LTX'
+        'LTX' -> 'LTX'
+        'TX 1' (with is_power_tx=True) -> 'PTX1'
+        'TX 1' (with is_local_tx=True) -> 'LTX'
     """
-    if tx_id is None:
+    if hasattr(tx_id, "tx_id") or (isinstance(tx_id, dict) and "tx_id" in tx_id):
+        if is_power_tx is None:
+            is_power_tx = type(tx_id).__name__ == "PowerTransformerSpec"
+        raw_id = getattr(tx_id, "tx_id", None) if hasattr(tx_id, "tx_id") else tx_id.get("tx_id")
+        if is_local_tx is None and not is_power_tx:
+            is_local_tx = bool(re.search(r"\b(LOCAL|LTX|LT)\b", str(raw_id or "").upper()))
+        tx_id = raw_id
+
+    s_raw = "" if tx_id is None else str(tx_id).strip()
+    s_upper = s_raw.upper()
+    is_blank = not s_raw or s_upper in ("-", "NONE", "N/A", "NAN")
+
+    if tx_type:
+        tt_upper = tx_type.strip().upper()
+        if "PT" in tt_upper or "POWER" in tt_upper:
+            is_power_tx = True
+        elif "LT" in tt_upper or "LOCAL" in tt_upper:
+            is_local_tx = True
+
+    # Detect archetype from string if not explicitly specified
+    if is_power_tx is None:
+        is_power_tx = bool(re.search(r"\b(?:PTX|POWER\s*TX)", s_upper))
+    if is_local_tx is None:
+        is_local_tx = not is_power_tx and bool(re.search(r"\b(?:LOCAL(?:\s*TX)?|LTX)", s_upper))
+
+    if is_blank:
+        if is_power_tx:
+            return f"PTX{default_idx}"
+        if is_local_tx:
+            return "LTX" if total_local_count <= 1 else f"LTX{default_idx}"
         return f"TX{default_idx}"
-    s = str(tx_id).strip()
-    if not s or s in ("-", "None", "N/A"):
-        return f"TX{default_idx}"
-    m = re.search(r"(?:TX|TRANSFORMER)\s*[-_]?\s*([A-Za-z0-9]+)", s, re.IGNORECASE)
+
+    if is_local_tx:
+        if total_local_count > 1:
+            m_num = re.search(r"(?:LOCAL(?:\s*TX)?|LTX|TX)?\s*[-_]?\s*(\d+)", s_upper)
+            if m_num and m_num.group(1):
+                return f"LTX{m_num.group(1)}"
+            return f"LTX{default_idx}"
+        # When only 1 local transformer exists on site, format as 'LTX'
+        # (unless string explicitly designates secondary local unit e.g. 'LOCAL TX 2' or 'LTX 2')
+        m_exp = re.search(r"\b(?:LOCAL(?:\s*TX)?|LTX)\s*[-_]?\s*([2-9]|\d{2,})\b", s_upper)
+        if m_exp:
+            return f"LTX{m_exp.group(1)}"
+        return "LTX"
+
+    if is_power_tx:
+        m = re.search(r"(?:PTX|POWER\s*TX|TX|TRANSFORMER)\s*[-_]?\s*([A-Za-z0-9]+)", s_upper)
+        if m:
+            return f"PTX{m.group(1)}"
+        if s_raw.isdigit():
+            return f"PTX{s_raw}"
+        d = re.findall(r"\d+", s_raw)
+        if d:
+            return f"PTX{d[0]}"
+        return f"PTX{default_idx}"
+
+    # Standard distribution transformers
+    m = re.search(r"(?:TX|TRANSFORMER)\s*[-_]?\s*([A-Za-z0-9]+)", s_raw, re.IGNORECASE)
     if m:
         return f"TX{m.group(1).upper()}"
-    if s.isdigit():
-        return f"TX{s}"
-    clean = re.sub(r"\s+", "", s).upper()
+    if s_raw.isdigit():
+        return f"TX{s_raw}"
+    clean = re.sub(r"\s+", "", s_raw).upper()
     if clean.startswith("TX"):
         return clean
-    return f"TX{s.upper()}"
+    return f"TX{s_raw.upper()}"
 
 
 TX_MODEL_MAP: dict[str, str] = {

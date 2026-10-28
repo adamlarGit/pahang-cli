@@ -258,13 +258,26 @@ def find_sliced_overview_page(
             if any(k in name_upper for k in ("SWG", "RMU", "VCB", "P00")):
                 if not any(f"SWG{d}" in name_upper for d in ("1", "2", "3", "4", "5") if d != inst_num):
                     return p
-        elif cat_upper in ("TX", "TRANSFORMER"):
-            if "TX" in name_upper or "S00" in name_upper:
-                # Disambiguate TX1 vs TX2
-                if f"TX{inst_num}" in name_upper or f"TX_{inst_num}" in name_upper or f"TX0{inst_num}" in name_upper:
-                    return p
-                if not any(f"TX{d}" in name_upper for d in ("1", "2", "3", "4") if d != inst_num):
-                    return p
+        elif cat_upper in ("TX", "TRANSFORMER", "PTX", "LTX"):
+            if any(k in name_upper for k in ("TX", "S00", "PTX", "LTX")):
+                if "LTX" in inst_clean or "LOCAL" in inst_clean:
+                    if "LTX" in name_upper or "LOCAL" in name_upper:
+                        return p
+                elif "PTX" in inst_clean or "POWER" in inst_clean:
+                    if (
+                        f"PTX{inst_num}" in name_upper
+                        or f"PTX_{inst_num}" in name_upper
+                        or f"TX{inst_num}" in name_upper
+                        or f"TX_{inst_num}" in name_upper
+                        or f"TX0{inst_num}" in name_upper
+                    ):
+                        return p
+                else:
+                    # Disambiguate TX1 vs TX2
+                    if f"TX{inst_num}" in name_upper or f"TX_{inst_num}" in name_upper or f"TX0{inst_num}" in name_upper:
+                        return p
+                    if not any(f"TX{d}" in name_upper for d in ("1", "2", "3", "4") if d != inst_num):
+                        return p
         elif cat_upper in ("FP", "LVDB", "FEEDER_PILLAR"):
             if any(k in name_upper for k in ("FP", "LVDB", "F00")):
                 # Disambiguate FP1 vs FP2
@@ -344,19 +357,40 @@ def _check_has_active_defect(
             if is_swg:
                 return True
 
-        elif cat_upper in ("TX", "TRANSFORMER"):
+        elif cat_upper in ("TX", "TRANSFORMER", "PTX", "LTX"):
             if is_tx:
+                target_is_power = bool(re.search(r"\b(?:PTX|POWER)", id_upper))
+                target_is_local = bool(re.search(r"\b(?:LTX|LOCAL)", id_upper))
+
+                d_is_power = bool(re.search(r"\b(?:PTX|POWER)", f"{combined_eq} {fname_upper}"))
+                d_is_local = bool(re.search(r"\b(?:LTX|LOCAL)", f"{combined_eq} {fname_upper}"))
+
+                # Prevent cross-contamination between PTX and LTX (Ticket #133)
+                if target_is_power and d_is_local and not d_is_power:
+                    continue
+                if target_is_local and d_is_power and not d_is_local:
+                    continue
+
                 # Extract explicit transformer instance number from defect record
                 found_nums = (
-                    re.findall(r"(?:TX|TRANSFORMER|S)\s*0*(\d+)", combined_eq)
+                    re.findall(r"(?:PTX|LTX|TX|TRANSFORMER|S)\s*0*(\d+)", combined_eq)
                     or re.findall(r"\b0*(\d+)\b", eq_id_upper)
-                    or re.findall(r"(?:TX|S)\s*0*(\d+)", fname_upper)
+                    or re.findall(r"(?:PTX|LTX|TX|S)\s*0*(\d+)", fname_upper)
                 )
+                if target_is_local:
+                    if d_is_local:
+                        if found_nums:
+                            if found_nums[0] == target_num:
+                                return True
+                        else:
+                            return True
+                    continue
+
                 if found_nums:
                     if found_nums[0] == target_num:
                         return True
                 else:
-                    # No explicit TX number: on single-TX station or for TX1, maps to TX1 (zero leakage to TX2)
+                    # No explicit TX number: on single-TX station or for TX1/PTX1, maps to unit 1 (zero leakage to TX2/PTX2)
                     if total_count <= 1 or target_num == "1":
                         return True
 
@@ -1062,6 +1096,7 @@ class TransformerScanAdapter:
         has_active_defect: bool | None = None,
         cbm_defects: Sequence[Any] | None = None,
         total_tx_count: int = 1,
+        total_local_count: int = 1,
         project_technologies: Sequence[str] | set[str] | None = None,
     ) -> None:
         self.tx = tx
@@ -1076,6 +1111,7 @@ class TransformerScanAdapter:
         self.sliced_overview_pages = sliced_overview_pages or ()
         self.cbm_defects = cbm_defects or ()
         self.total_tx_count = total_tx_count
+        self.total_local_count = total_local_count
         self.contract = (
             ContractScope.from_source(project_technologies)
             if project_technologies is not None
@@ -1083,7 +1119,31 @@ class TransformerScanAdapter:
         )
         self.project_technologies = self.contract.awarded_technologies
 
-        self.tx_id_str = normalize_tx_id(getattr(tx, "tx_id", None), default_idx=tx_index)
+        # Differentiate transformer identifiers by asset archetype (Ticket #133)
+        is_power_tx = isinstance(self.tx, PowerTransformerSpec)
+        tx_id_raw = getattr(tx, "tx_id", None)
+        tx_id_str_raw = str(tx_id_raw or "").upper()
+        is_local_tx = (
+            not is_power_tx
+            and (
+                bool(re.search(r"\b(LT|LTX|LOCAL)\b", tx_id_str_raw))
+                or (
+                    self.prpd_catalog
+                    and "tx" in self.prpd_catalog
+                    and ("ltx" in self.prpd_catalog["tx"] or "LTX" in self.prpd_catalog["tx"])
+                    and self.tx_index >= 2
+                )
+            )
+        )
+        self.is_power_tx = is_power_tx
+        self.is_local_tx = is_local_tx
+        self.tx_id_str = normalize_tx_id(
+            tx_id_raw,
+            default_idx=tx_index,
+            is_power_tx=is_power_tx,
+            is_local_tx=is_local_tx,
+            total_local_count=total_local_count,
+        )
         self.has_active_defect = _check_has_active_defect(
             category="tx",
             equipment_id=self.tx_id_str,
@@ -1693,11 +1753,43 @@ def adapt_equipment_package(
     txs = getattr(package, "transformers", ())
     if not txs and getattr(package, "transformer", None):
         txs = (package.transformer,)
-    for tx_idx, tx in enumerate(txs, 1):
+
+    power_txs = [t for t in txs if isinstance(t, PowerTransformerSpec)]
+    local_txs = [
+        t for t in txs
+        if not isinstance(t, PowerTransformerSpec)
+        and (
+            bool(re.search(r"\b(LT|LTX|LOCAL)\b", str(getattr(t, "tx_id", "") or "").upper()))
+            or (len(power_txs) > 0 and not isinstance(t, PowerTransformerSpec))
+        )
+    ]
+    total_local_count = len(local_txs)
+
+    ptx_idx = 0
+    ltx_idx = 0
+    std_tx_idx = 0
+
+    for tx in txs:
+        is_ptx = isinstance(tx, PowerTransformerSpec)
+        tx_id_upper = str(getattr(tx, "tx_id", "") or "").upper()
+        is_ltx = not is_ptx and (
+            bool(re.search(r"\b(LT|LTX|LOCAL)\b", tx_id_upper))
+            or len(power_txs) > 0
+        )
+        if is_ptx:
+            ptx_idx += 1
+            curr_idx = ptx_idx
+        elif is_ltx:
+            ltx_idx += 1
+            curr_idx = ltx_idx
+        else:
+            std_tx_idx += 1
+            curr_idx = std_tx_idx
+
         adapter = TransformerScanAdapter(
             tx=tx,
             substation_info=substation_info,
-            tx_index=tx_idx,
+            tx_index=curr_idx,
             photo_resolver=photo_resolver,
             survey_root=survey_root,
             prpd_catalog=prpd_catalog,
@@ -1705,6 +1797,8 @@ def adapt_equipment_package(
             templates_dir=templates_dir,
             sliced_overview_pages=sliced_overview_pages,
             cbm_defects=cbm_defects,
+            total_tx_count=len(txs),
+            total_local_count=total_local_count,
             project_technologies=project_technologies,
         )
         results.append(adapter.adapt())

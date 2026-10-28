@@ -17,6 +17,7 @@ from src.core.normalizers import (
     format_heater_amp,
     format_load_amp,
     format_temperature_float,
+    normalize_tx_id,
     normalize_tx_model,
     normalize_us_characteristic,
 )
@@ -369,11 +370,17 @@ def _find_matching_transformer(
         for tx in transformers:
             if tx.tx_id and tx.tx_id.strip().upper() == t:
                 return tx
+            if tx.tx_id and normalize_tx_id(tx.tx_id) == normalize_tx_id(t):
+                return tx
+        if "LOCAL" in t or "LTX" in t:
+            for tx in transformers:
+                if "LOCAL" in (tx.tx_id or "").upper() or "LTX" in (tx.tx_id or "").upper():
+                    return tx
         t_digits = re.findall(r"\d+", t)
         if t_digits:
             t_num = t_digits[0]
             for tx in transformers:
-                tx_digits = re.findall(r"\d+", tx.tx_id)
+                tx_digits = re.findall(r"\d+", tx.tx_id or "")
                 if tx_digits and tx_digits[0] == t_num:
                     return tx
     if len(transformers) == 1:
@@ -909,6 +916,11 @@ def _build_tx_render_context(
         tx_cable = equipment
 
     tx_number = record.equipment_id or resolved_item_key
+    if matched_tx:
+        is_ptx = type(matched_tx).__name__ == "PowerTransformerSpec"
+        tx_number = normalize_tx_id(matched_tx.tx_id, is_power_tx=is_ptx)
+    elif tx_number:
+        tx_number = normalize_tx_id(tx_number)
     tx_us_reading = (matched_tx.us_reading if matched_tx and matched_tx.us_reading else "") or _text_or_empty(record.us_reading)
     tx_us_char = (matched_tx.us_char if matched_tx and matched_tx.us_char else "") or _text_or_empty(record.us_char)
     tev_bg = _extract_tev_background(pe_info)

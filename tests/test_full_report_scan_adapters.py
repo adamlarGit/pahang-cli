@@ -2070,6 +2070,368 @@ def test_link_box_compartment_metadata_sanitization(mock_substation_info: dict[s
     assert lb_item_11kv.context["is_tev_active"] is False
 
 
+# ==============================================================================
+# 5. Ticket #133: PTX and LTX Transformer Numbering Differentiation Tests
+# ==============================================================================
+
+def test_normalize_tx_id_archetype_resolution() -> None:
+    """normalize_tx_id() differentiates Power Transformers (PTX), Local Transformers (LTX), and Distribution (TX)."""
+    from src.core.normalizers import normalize_tx_id
+    from src.testsheet.models import PowerTransformerSpec, TransformerSpec
+
+    # 1. Standard 11kV Distribution Transformers (TX1, TX2)
+    assert normalize_tx_id("TX 1") == "TX1"
+    assert normalize_tx_id("TX 2") == "TX2"
+    assert normalize_tx_id("Transformer 1") == "TX1"
+    assert normalize_tx_id("Transformer 2") == "TX2"
+    assert normalize_tx_id("TX1") == "TX1"
+    assert normalize_tx_id(1) == "TX1"
+    assert normalize_tx_id(2) == "TX2"
+    assert normalize_tx_id(None, default_idx=1) == "TX1"
+    assert normalize_tx_id(None, default_idx=2) == "TX2"
+
+    # 2. Power Transformers (PTX1, PTX2, PTX3, PTX4)
+    assert normalize_tx_id("PTX 1") == "PTX1"
+    assert normalize_tx_id("PTX1") == "PTX1"
+    assert normalize_tx_id("PTX 2") == "PTX2"
+    assert normalize_tx_id("PTX2") == "PTX2"
+    assert normalize_tx_id("POWER TX 1") == "PTX1"
+    assert normalize_tx_id("POWER TX 2") == "PTX2"
+    assert normalize_tx_id("TX 1", is_power_tx=True) == "PTX1"
+    assert normalize_tx_id("TX 2", is_power_tx=True) == "PTX2"
+    assert normalize_tx_id(1, is_power_tx=True) == "PTX1"
+    assert normalize_tx_id(2, is_power_tx=True) == "PTX2"
+    assert normalize_tx_id(None, default_idx=1, is_power_tx=True) == "PTX1"
+    assert normalize_tx_id("TX 1", tx_type="PTX") == "PTX1"
+    assert normalize_tx_id("TX 2", tx_type="PTX") == "PTX2"
+
+    # Spec object polymorphic resolution
+    ptx1 = PowerTransformerSpec(tx_id="TX 1", rating_kva="7.5MVA")
+    ptx2 = PowerTransformerSpec(tx_id="TX 2", rating_kva="7.5MVA")
+    assert normalize_tx_id(ptx1) == "PTX1"
+    assert normalize_tx_id(ptx2) == "PTX2"
+
+    # 3. Local Station Service Transformers (LTX, LTX1, LTX2)
+    assert normalize_tx_id("LOCAL TX") == "LTX"
+    assert normalize_tx_id("Local TX") == "LTX"
+    assert normalize_tx_id("LTX") == "LTX"
+    assert normalize_tx_id("LOCAL") == "LTX"
+    # Single local transformer on site resolves to LTX
+    assert normalize_tx_id("LOCAL TX 1") == "LTX"
+    assert normalize_tx_id("LOCAL TX 1", total_local_count=1) == "LTX"
+    assert normalize_tx_id("LOCAL TX", total_local_count=1) == "LTX"
+    # Explicit secondary local transformer or multiple local transformers on site
+    assert normalize_tx_id("LOCAL TX 2") == "LTX2"
+    assert normalize_tx_id("LTX 2") == "LTX2"
+    assert normalize_tx_id("LOCAL TX 1", total_local_count=2) == "LTX1"
+    assert normalize_tx_id("LOCAL TX 2", total_local_count=2) == "LTX2"
+    assert normalize_tx_id("TX 3", is_local_tx=True) == "LTX"
+    assert normalize_tx_id(None, default_idx=1, is_local_tx=True) == "LTX"
+
+    # Local spec object resolution
+    ltx_spec = TransformerSpec(tx_id="LOCAL TX", rating_kva="300kVA")
+    assert normalize_tx_id(ltx_spec) == "LTX"
+
+    # Standard distribution spec object resolution
+    std_spec1 = TransformerSpec(tx_id="TX 1", rating_kva="1000kVA")
+    std_spec2 = TransformerSpec(tx_id="TX 2", rating_kva="1000kVA")
+    assert normalize_tx_id(std_spec1) == "TX1"
+    assert normalize_tx_id(std_spec2) == "TX2"
+
+
+def test_transformer_scan_adapter_ptx_and_ltx_rendering(
+    mock_substation_info: dict[str, str],
+) -> None:
+    """TransformerScanAdapter renders PTX1, PTX2, and LTX on scan pages and item titles (Ticket #133)."""
+    from src.testsheet.models import PowerTransformerSpec, TransformerSpec
+
+    ptx1 = PowerTransformerSpec(
+        tx_id="TX 1",
+        rating_kva="7.5MVA",
+        manufacturer="MTM",
+        model="7.5-1",
+        serial_no="SN-PTX-01",
+    )
+    ptx2 = PowerTransformerSpec(
+        tx_id="TX 2",
+        rating_kva="7.5MVA",
+        manufacturer="MTM",
+        model="7.5-1",
+        serial_no="SN-PTX-02",
+    )
+    ltx = TransformerSpec(
+        tx_id="LOCAL TX",
+        rating_kva="300kVA",
+        manufacturer="EWT",
+        model="HERMETICALLY SEAL",
+        serial_no="SN-LTX-01",
+    )
+    tx_std = TransformerSpec(
+        tx_id="TX 1",
+        rating_kva="1000kVA",
+        manufacturer="TAMCO",
+        model="ONAN",
+        serial_no="SN-TX-01",
+    )
+
+    # 1. Power Transformer 1 -> PTX1
+    ad_ptx1 = TransformerScanAdapter(
+        tx=ptx1,
+        substation_info=mock_substation_info,
+        tx_index=1,
+    )
+    assert ad_ptx1.tx_id_str == "PTX1"
+    res_ptx1 = ad_ptx1.adapt()
+    assert res_ptx1.equipment_id == "PTX1"
+    for item in res_ptx1.items:
+        assert item.page_name.startswith("PTX1 - ")
+        assert item.context["tx"]["number"] == "PTX1"
+        assert item.context["tx"]["panel"] == "PTX1"
+        assert item.context["panel"]["name"] == "PTX1"
+
+    # 2. Power Transformer 2 -> PTX2
+    ad_ptx2 = TransformerScanAdapter(
+        tx=ptx2,
+        substation_info=mock_substation_info,
+        tx_index=2,
+    )
+    assert ad_ptx2.tx_id_str == "PTX2"
+    res_ptx2 = ad_ptx2.adapt()
+    assert res_ptx2.equipment_id == "PTX2"
+    for item in res_ptx2.items:
+        assert item.page_name.startswith("PTX2 - ")
+        assert item.context["tx"]["number"] == "PTX2"
+        assert item.context["tx"]["panel"] == "PTX2"
+
+    # 3. Local Station Service Transformer -> LTX
+    ad_ltx = TransformerScanAdapter(
+        tx=ltx,
+        substation_info=mock_substation_info,
+        tx_index=3,
+    )
+    assert ad_ltx.tx_id_str == "LTX"
+    res_ltx = ad_ltx.adapt()
+    assert res_ltx.equipment_id == "LTX"
+    for item in res_ltx.items:
+        assert item.page_name.startswith("LTX - ")
+        assert item.context["tx"]["number"] == "LTX"
+        assert item.context["tx"]["panel"] == "LTX"
+        assert item.context["panel"]["name"] == "LTX"
+
+    # 4. Standard Distribution Transformer -> TX1
+    ad_std = TransformerScanAdapter(
+        tx=tx_std,
+        substation_info=mock_substation_info,
+        tx_index=1,
+    )
+    assert ad_std.tx_id_str == "TX1"
+    res_std = ad_std.adapt()
+    assert res_std.equipment_id == "TX1"
+    for item in res_std.items:
+        assert item.page_name.startswith("TX1 - ")
+        assert item.context["tx"]["number"] == "TX1"
+
+
+def test_adapt_equipment_package_ptx_ltx_dispatch(
+    mock_substation_info: dict[str, str],
+) -> None:
+    """adapt_equipment_package preserves PTX1, PTX2, and LTX across multi-transformer 33kV packages."""
+    from src.testsheet.models import (
+        PowerTransformerSpec,
+        SubstationEquipmentPackage,
+        TransformerSpec,
+    )
+
+    ptx1 = PowerTransformerSpec(tx_id="TX 1", rating_kva="7.5MVA")
+    ptx2 = PowerTransformerSpec(tx_id="TX 2", rating_kva="7.5MVA")
+    ltx = TransformerSpec(tx_id="LOCAL TX", rating_kva="300kVA")
+
+    pkg_33kv = SubstationEquipmentPackage(
+        transformers=(ptx1, ptx2, ltx),
+        switchgears=(),
+    )
+
+    results_33kv = adapt_equipment_package(
+        package=pkg_33kv,
+        substation_info=mock_substation_info,
+    )
+
+    tx_results_33kv = [r for r in results_33kv if r.equipment_category == "tx"]
+    assert len(tx_results_33kv) == 3
+    assert tx_results_33kv[0].equipment_id == "PTX1"
+    assert tx_results_33kv[0].items[0].context["tx"]["number"] == "PTX1"
+    assert tx_results_33kv[0].items[0].page_name == "PTX1 - OVERVIEW"
+
+    assert tx_results_33kv[1].equipment_id == "PTX2"
+    assert tx_results_33kv[1].items[0].context["tx"]["number"] == "PTX2"
+    assert tx_results_33kv[1].items[0].page_name == "PTX2 - OVERVIEW"
+
+    assert tx_results_33kv[2].equipment_id == "LTX"
+    assert tx_results_33kv[2].items[0].context["tx"]["number"] == "LTX"
+    assert tx_results_33kv[2].items[0].page_name == "LTX - OVERVIEW"
+
+    # Verify standard distribution packages continue to produce TX1, TX2
+    tx1 = TransformerSpec(tx_id="TX 1", rating_kva="1000kVA")
+    tx2 = TransformerSpec(tx_id="TX 2", rating_kva="1000kVA")
+    pkg_11kv = SubstationEquipmentPackage(
+        transformers=(tx1, tx2),
+        switchgears=(),
+    )
+    results_11kv = adapt_equipment_package(
+        package=pkg_11kv,
+        substation_info=mock_substation_info,
+    )
+    tx_results_11kv = [r for r in results_11kv if r.equipment_category == "tx"]
+    assert len(tx_results_11kv) == 2
+    assert tx_results_11kv[0].equipment_id == "TX1"
+    assert tx_results_11kv[0].items[0].context["tx"]["number"] == "TX1"
+    assert tx_results_11kv[1].equipment_id == "TX2"
+    assert tx_results_11kv[1].items[0].context["tx"]["number"] == "TX2"
+
+
+def test_cbm_defect_attribution_and_forwarding_banner_ptx_ltx(
+    mock_substation_info: dict[str, str],
+) -> None:
+    """Active defect forwarding banner is isolated between PTX1, PTX2, and LTX without leakage."""
+    from src.core.shading import BANNER_DEFECT_FORWARDING, BANNER_HEALTHY_ANALYSIS
+    from src.testsheet.models import PowerTransformerSpec, TransformerSpec
+
+    ptx1 = PowerTransformerSpec(tx_id="TX 1", rating_kva="7.5MVA")
+    ptx2 = PowerTransformerSpec(tx_id="TX 2", rating_kva="7.5MVA")
+    ltx = TransformerSpec(tx_id="LOCAL TX", rating_kva="300kVA")
+
+    # Defect explicitly targeting PTX1
+    ptx1_defect = [
+        {
+            "equipment": "PTX",
+            "equipment_id": "PTX1",
+            "defect_area": "MAIN TANK",
+            "additional_remarks": "SILICA GEL IN POOR CONDITION",
+        }
+    ]
+
+    ad_ptx1 = TransformerScanAdapter(
+        tx=ptx1,
+        substation_info=mock_substation_info,
+        tx_index=1,
+        total_tx_count=3,
+        cbm_defects=ptx1_defect,
+    )
+    ad_ptx2 = TransformerScanAdapter(
+        tx=ptx2,
+        substation_info=mock_substation_info,
+        tx_index=2,
+        total_tx_count=3,
+        cbm_defects=ptx1_defect,
+    )
+    ad_ltx = TransformerScanAdapter(
+        tx=ltx,
+        substation_info=mock_substation_info,
+        tx_index=3,
+        total_tx_count=3,
+        cbm_defects=ptx1_defect,
+    )
+
+    res_ptx1 = ad_ptx1.adapt()
+    res_ptx2 = ad_ptx2.adapt()
+    res_ltx = ad_ltx.adapt()
+
+    # PTX1 overview has defect forwarding banner
+    assert res_ptx1.has_defect is True
+    assert res_ptx1.items[0].context["banner"]["analysis"] == BANNER_DEFECT_FORWARDING
+
+    # PTX2 overview remains healthy
+    assert res_ptx2.has_defect is False
+    assert res_ptx2.items[0].context["banner"]["analysis"] == BANNER_HEALTHY_ANALYSIS
+
+    # LTX overview remains healthy (zero defect leakage from PTX1)
+    assert res_ltx.has_defect is False
+    assert res_ltx.items[0].context["banner"]["analysis"] == BANNER_HEALTHY_ANALYSIS
+
+    # Local defect explicitly targeting LTX
+    ltx_defect = [
+        {
+            "equipment": "LTX",
+            "equipment_id": "LTX",
+            "defect_area": "HV BUSHING",
+            "additional_remarks": "HOTSPOT",
+        }
+    ]
+    ad_ptx1_rev = TransformerScanAdapter(
+        tx=ptx1,
+        substation_info=mock_substation_info,
+        tx_index=1,
+        total_tx_count=3,
+        cbm_defects=ltx_defect,
+    )
+    ad_ltx_rev = TransformerScanAdapter(
+        tx=ltx,
+        substation_info=mock_substation_info,
+        tx_index=3,
+        total_tx_count=3,
+        cbm_defects=ltx_defect,
+    )
+    assert ad_ptx1_rev.adapt().has_defect is False
+    assert ad_ltx_rev.adapt().has_defect is True
+    assert ad_ltx_rev.adapt().items[0].context["banner"]["analysis"] == BANNER_DEFECT_FORWARDING
+
+
+def test_table26_placards_and_visual_defects_preserved() -> None:
+    """Table 26 placards remain POWER TX1, POWER TX2, LOCAL TX and visual defects unmodified."""
+    from src.quick_report.substation_condition import PpuSubstationConditionPairBuilderPolicy
+    from src.testsheet.models import (
+        PowerTransformerSpec,
+        SubstationEquipmentPackage,
+        SubstationTestsheetPackage,
+        TestsheetData,
+        TransformerSpec,
+        VisualInspectionFinding,
+    )
+
+    ptx1 = PowerTransformerSpec(tx_id="TX 1", rating_kva="7.5MVA")
+    ptx2 = PowerTransformerSpec(tx_id="TX 2", rating_kva="7.5MVA")
+    ltx = TransformerSpec(tx_id="LOCAL TX", rating_kva="300kVA")
+
+    verbatim_vi = VisualInspectionFinding(
+        category="TRANSFORMER",
+        item_no="1",
+        description="SILICA GEL IN POOR CONDITION – PTX1 - MAIN TANK",
+        status="DEFECT",
+    )
+
+    eq_pkg = SubstationEquipmentPackage(
+        transformers=(ptx1, ptx2, ltx),
+    )
+    testsheet_data = TestsheetData(
+        substation_number=40,
+        substation_name_erms="PMU JENGKA 132/11/33kV",
+        equipment=eq_pkg,
+    )
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=Path("dummy.xlsx"),
+        unsorted_raw_data_dir=Path("dummy_dir"),
+        station="PMU JENGKA",
+        month="10. OCTOBER",
+        date_str="25-10-2026",
+        substation_number=40,
+        data=testsheet_data,
+    )
+
+    pairs = PpuSubstationConditionPairBuilderPolicy.build(pkg)
+
+    # Verify Table 26 placards
+    tx_pairs = [p for p in pairs if "TX" in p[0]]
+    assert tx_pairs == [
+        ("POWER TX1", "POWER TX1 NAMEPLATE"),
+        ("POWER TX2", "POWER TX2 NAMEPLATE"),
+        ("LOCAL TX", "LOCAL TX NAMEPLATE"),
+    ]
+
+    # Verify visual defect is 100% verbatim
+    assert verbatim_vi.description == "SILICA GEL IN POOR CONDITION – PTX1 - MAIN TANK"
+
+
+
 
 
 

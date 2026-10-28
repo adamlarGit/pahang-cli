@@ -1133,25 +1133,61 @@ class FullReportPlanBuilder:
             if not tx_list and getattr(actual_pkg, "transformer", None):
                 tx_list = [actual_pkg.transformer]
             total_tx_count = len(tx_list)
-            for tx_idx, tx in enumerate(tx_list, 1):
-                tx_id_str = f"tx{tx_idx}"
+            power_tx_list = [t for t in tx_list if isinstance(t, PowerTransformerSpec)]
+            local_tx_list = [
+                t for t in tx_list
+                if not isinstance(t, PowerTransformerSpec)
+                and (
+                    bool(re.search(r"\b(LT|LTX|LOCAL)\b", str(getattr(t, "tx_id", "") or "").upper()))
+                    or (len(power_tx_list) > 0 and not isinstance(t, PowerTransformerSpec))
+                )
+            ]
+            total_local_count = len(local_tx_list)
+
+            ptx_idx = 0
+            ltx_idx = 0
+            std_tx_idx = 0
+
+            for tx in tx_list:
+                is_ptx = isinstance(tx, PowerTransformerSpec)
+                tx_id_upper = str(getattr(tx, "tx_id", "") or "").upper()
+                is_ltx = not is_ptx and (
+                    bool(re.search(r"\b(LT|LTX|LOCAL)\b", tx_id_upper))
+                    or len(power_tx_list) > 0
+                )
+                if is_ptx:
+                    ptx_idx += 1
+                    curr_idx = ptx_idx
+                    archetype_id = f"ptx{curr_idx}"
+                elif is_ltx:
+                    ltx_idx += 1
+                    curr_idx = ltx_idx
+                    archetype_id = "ltx" if total_local_count <= 1 else f"ltx{curr_idx}"
+                else:
+                    std_tx_idx += 1
+                    curr_idx = std_tx_idx
+                    archetype_id = f"tx{curr_idx}"
+
+                tx_id_str = f"tx{curr_idx}"
                 tx_active = None
                 if has_active_defects:
-                    if tx_id_str in has_active_defects:
+                    if archetype_id in has_active_defects:
+                        tx_active = has_active_defects[archetype_id]
+                    elif tx_id_str in has_active_defects:
                         tx_active = has_active_defects[tx_id_str]
                     elif "tx" in has_active_defects and total_tx_count <= 1:
                         tx_active = has_active_defects["tx"]
                 if tx_active is None:
                     tx_active = self.evaluate_component_health(
                         "tx",
-                        equipment_id=tx_id_str,
+                        equipment_id=archetype_id,
                         cbm_defects=cbm_list,
                         total_count=total_tx_count,
                     )
                 ad = TransformerScanAdapter(
                     tx=tx,
                     substation_info=info,
-                    tx_index=tx_idx,
+                    tx_index=curr_idx,
                     photo_resolver=photo_resolver or self.photo_resolver,
                     survey_root=survey_root,
                     prpd_catalog=prpd_catalog,
@@ -1162,6 +1198,7 @@ class FullReportPlanBuilder:
                     has_active_defect=tx_active,
                     cbm_defects=cbm_list,
                     total_tx_count=total_tx_count,
+                    total_local_count=total_local_count,
                 )
                 adapted_items.append(ad.adapt())
 

@@ -81,6 +81,7 @@ graph TD
     T130["#130: Align multi-switchgear overview and panel sequence across summary census and document chunks - Closed"]
     T131["#131: Sanitize LINK BOX compartment metadata and voltage grading - Closed"]
     T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Closed"]
+    T133["#133: Differentiate PTX and LTX transformer numbering in 33kV reports - Open"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -118,7 +119,8 @@ graph TD
     T129 --> T130
     T130 --> T131
     T131 --> T132
-    T132 --> T103
+    T132 --> T133
+    T133 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -372,6 +374,20 @@ graph TD
 - [x] `_get_tx_model()` successfully extracts values located in cell `W6` when `V6` is `MODEL:`.
 - [x] `TransformerSpec.model` is populated with `HERMETICALLY SEAL` when `W6` has `H/S` (or `CONSERVATOR TANK` when `W6` has `C/T`).
 - [x] Unit tests verify extraction of Slot 5 local transformer model across candidate testsheets.
+
+### #133: feat(full-report): differentiate PTX and LTX transformer numbering in 33kV reports
+- **Status**: Open
+- **GitHub Issue**: [#133](https://github.com/adamlarGit/pahang-cli/issues/133)
+- **Blocked by**: #132
+- **Ticket File**: [tickets/133-differentiate-ptx-and-ltx-transformer-numbering.md](./tickets/133-differentiate-ptx-and-ltx-transformer-numbering.md)
+- **Delivers**: Transformer identifier differentiation by asset archetype (`PTX1`..`PTX4` for `PowerTransformerSpec` >= 5 MVA from Slots 1-4, `LTX` for local station service transformers from Slot 5 or with LOCAL in ID, and `TX1`..`TX2` for standard distribution transformers), applying to `Tx No.` cell, scan render item titles (`PTX1 - <COMP>`, `LTX - <COMP>`), CBM defect page headers and defect forwarding banners, while preserving Table 26 placards (`POWER TX1`, `POWER TX2`, `LOCAL TX`) and verbatim visual defect descriptions.
+- [x] `normalize_tx_id()` in `src/core/normalizers.py` or `TransformerScanAdapter` correctly resolves `PTX{n}` for `PowerTransformerSpec` and `LTX` for local station service transformers.
+- [x] Transformer scan pages render `PTX1`, `PTX2`, and `LTX` in the `Tx No.` cell.
+- [x] Component scan page item titles use `PTX1 - <COMPONENT>` and `LTX - <COMPONENT>`.
+- [x] Standard distribution transformers continue to resolve to `TX1`, `TX2`.
+- [x] Condition overview placards in Table 26 remain `POWER TX1`, `POWER TX2`, and `LOCAL TX`.
+- [x] Visual inspection defect descriptions are unmodified.
+- [x] Unit and regression tests verify transformer numbering across PMU/PPU and standard distribution packages.
 
 ---
 
