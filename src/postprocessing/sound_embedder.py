@@ -25,13 +25,26 @@ from src.quick_report.prpd import (
     find_tx_survey_dir,
 )
 
+_PT_VT_CHAMBER_KEYWORDS: tuple[str, ...] = (
+    "VT_CHAMBER",
+    "VT CHAMBER",
+    "PT_CHAMBER",
+    "PT CHAMBER",
+    "VOLTAGE_TRANSFORMER",
+    "VOLTAGE TRANSFORMER",
+    "POTENTIAL_TRANSFORMER",
+    "POTENTIAL TRANSFORMER",
+    "VT",
+    "PT",
+)
+
 # Canonical 1-to-1 chamber to component keyword mapping for switchgear cubicles
 CHAMBER_COMPONENT_KEYWORDS: dict[str, tuple[str, ...]] = {
     "BREAKER": ("CIRCUIT_BREAKER", "BREAKER"),
     "CABLE": ("CABLE_BOX", "CABLES", "CABLE"),
     "BUSBAR": ("BUSBAR", "UPPER_BUSBARS", "LOWER_BUSBARS"),
-    "PT": ("VT_CHAMBER", "VOLTAGE_TRANSFORMER", "VT", "PT"),
-    "VT": ("VT_CHAMBER", "VOLTAGE_TRANSFORMER", "VT", "PT"),
+    "PT": _PT_VT_CHAMBER_KEYWORDS,
+    "VT": _PT_VT_CHAMBER_KEYWORDS,
     "FUSE": ("FUSE", "CABLE_BOX", "CABLES", "CABLE"),
     "FRONT": ("CIRCUIT_BREAKER", "BREAKER", "CB"),
     "REAR": ("CABLE_BOX", "CABLES", "CABLE"),

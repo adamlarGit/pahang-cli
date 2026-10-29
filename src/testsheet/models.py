@@ -64,6 +64,10 @@ class SwitchgearPanelSpec:
     cable_tev_reading: str = ""
     cable_tev_ppc: str = ""
     cable_us_reading: str = ""
+    pt_tev_reading: str = ""
+    pt_tev_ppc: str = ""
+    pt_us_reading: str = ""
+    pt_us_char: str = ""
     photo_numbers: tuple[int, ...] = ()
     cable_photo: int | None = None
     breaker_photo: int | None = None

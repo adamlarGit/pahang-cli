@@ -942,13 +942,15 @@ def discover_survey_measurements(survey_root: Path | str) -> list[DiscoveredMeas
                     if m_start != -1:
                         meta_obj, _ = json.JSONDecoder().raw_decode(meta_content[m_start:])
                         mf_list = meta_obj.get("measurement_fields", [])
-                        if mf_list and isinstance(mf_list, list) and isinstance(mf_list[0], dict):
-                            for f in mf_list[0].get("fields", []):
-                                if isinstance(f, dict):
-                                    fname = f.get("fieldname")
-                                    fdata = f.get("data")
-                                    if fname:
-                                        meta_fields[fname] = fdata
+                        if mf_list and isinstance(mf_list, list):
+                            for group in mf_list:
+                                if isinstance(group, dict):
+                                    for f in group.get("fields", []):
+                                        if isinstance(f, dict):
+                                            fname = f.get("fieldname")
+                                            fdata = f.get("data")
+                                            if fname:
+                                                meta_fields[fname] = fdata
                 except Exception as meta_exc:
                     logger.debug("Failed reading %s: %s", meta_js, meta_exc)
 
@@ -1392,6 +1394,21 @@ def _matches_compartment(compartment: str | None, component_token: str | None) -
     if comp_clean == token_clean:
         return True
 
+    # Helper to check if a token represents PT / VT chamber variants using word boundaries
+    def _is_pt_vt_token(s: str) -> bool:
+        return bool(
+            re.search(r"(?:^|[\s\-_/])(PT|VT)(?:[\s\-_/]|$)", s)
+            or any(
+                k in s
+                for k in (
+                    "VOLTAGE_TRANSFORMER",
+                    "POTENTIAL_TRANSFORMER",
+                    "VT_CHAMBER",
+                    "PT_CHAMBER",
+                )
+            )
+        )
+
     # Breaker variants (CIRCUIT_BREAKER, BREAKER, FRONT_COMPARTMENT, FRONT)
     is_breaker_comp = (
         "BREAKER" in comp_clean
@@ -1399,7 +1416,7 @@ def _matches_compartment(compartment: str | None, component_token: str | None) -
     )
     if is_breaker_comp:
         # Exclude if another compartment indicator is present in token_clean
-        if any(other in token_clean for other in ("CABLE", "BUSBAR", "BUS_BAR", "VT", "PT", "CHAMBER")):
+        if any(other in token_clean for other in ("CABLE", "BUSBAR", "BUS_BAR", "CHAMBER")) or _is_pt_vt_token(token_clean):
             return False
         return "CIRCUIT_BREAKER" in token_clean or "BREAKER" in token_clean or token_clean in ("CIRCUIT_BREAKER", "BREAKER")
 
@@ -1413,23 +1430,23 @@ def _matches_compartment(compartment: str | None, component_token: str | None) -
         )
     )
     if is_cable_comp:
-        if any(other in token_clean for other in ("BUSBAR", "BUS_BAR", "BREAKER", "VT", "PT", "CHAMBER")):
+        if any(other in token_clean for other in ("BUSBAR", "BUS_BAR", "BREAKER", "CHAMBER")) or _is_pt_vt_token(token_clean):
             return False
         return any(k in token_clean for k in ("CABLE_BOX", "CABLE"))
 
     # Busbar variants (UPPER_BUSBARS, BUSBAR, BUSBARS, BUSBAR_COMPARTMENT)
     is_busbar_comp = "BUSBAR" in comp_clean or "BUS_BAR" in comp_clean
     if is_busbar_comp:
-        if any(other in token_clean for other in ("BREAKER", "CABLE", "VT", "PT")):
+        if any(other in token_clean for other in ("BREAKER", "CABLE")) or _is_pt_vt_token(token_clean):
             return False
         return "BUSBAR" in token_clean or "BUS_BAR" in token_clean
 
-    # PT / VT variants (PT_COMPARTMENT, VT_CHAMBER, PT, VT, VOLTAGE_TRANSFORMER)
-    is_pt_comp = any(k in comp_clean for k in ("PT", "VT", "VOLTAGE_TRANSFORMER", "POTENTIAL_TRANSFORMER", "CHAMBER"))
+    # PT / VT variants (PT_COMPARTMENT, VT_CHAMBER, PT, VT, VOLTAGE_TRANSFORMER, POTENTIAL_TRANSFORMER)
+    is_pt_comp = _is_pt_vt_token(comp_clean)
     if is_pt_comp:
         if any(other in token_clean for other in ("BREAKER", "BUSBAR", "BUS_BAR")):
             return False
-        return any(k in token_clean for k in ("VT", "PT", "VOLTAGE_TRANSFORMER", "POTENTIAL_TRANSFORMER", "CHAMBER"))
+        return _is_pt_vt_token(token_clean)
 
     return comp_clean in token_clean or token_clean in comp_clean
 
@@ -1451,6 +1468,9 @@ def find_pregenerated_prpd_graph(
         s_path = Path(survey_root)
         candidate_dirs.extend([
             s_path / "graphs",
+            s_path / "RAW DATA" / "US+TEV" / "graphs",
+            s_path / "RAW DATA" / "US" / "graphs",
+            s_path / "RAW DATA" / "graphs",
             s_path.parent / "US+TEV" / "graphs",
             s_path / "US+TEV" / "graphs",
             s_path.parent / "US" / "graphs",

@@ -173,17 +173,25 @@ def normalize_swg_compartment(compartment: str | None) -> str:
     if "FUSE" in comp_upper:
         return "FUSE COMPARTMENT"
 
-    # 6. Breaker (VCB / CB / Spout / Chamber)
-    if any(k in comp_upper for k in ("BREAKER", "VCB", "SPOUT", "CHAMBER")) or re.search(r"\bCB\b", comp_upper):
-        return "BREAKER COMPARTMENT"
-
-    # 7. PT / VT (Potential / Voltage Transformer)
+    # 6. PT / VT (Potential / Voltage Transformer / VT Chamber) before generic Breaker
     if (
-        re.search(r"\b(PT|VT)\b", comp_upper)
-        or "VOLTAGE TRANSFORMER" in comp_upper
-        or "POTENTIAL TRANSFORMER" in comp_upper
+        re.search(r"(?:^|[\s\-_/])(PT|VT)(?:[\s\-_/]|$)", comp_upper)
+        or any(k in comp_upper for k in (
+            "VOLTAGE TRANSFORMER",
+            "VOLTAGE_TRANSFORMER",
+            "POTENTIAL TRANSFORMER",
+            "POTENTIAL_TRANSFORMER",
+            "VT_CHAMBER",
+            "PT_CHAMBER",
+            "VT CHAMBER",
+            "PT CHAMBER",
+        ))
     ):
         return "PT COMPARTMENT"
+
+    # 7. Breaker (VCB / CB / Spout / Chamber)
+    if any(k in comp_upper for k in ("BREAKER", "VCB", "SPOUT", "CHAMBER")) or re.search(r"\bCB\b", comp_upper):
+        return "BREAKER COMPARTMENT"
 
     # 8. Cable (e.g. Cable Box, Cable Termination, Cable Lug)
     if "CABLE" in comp_upper:

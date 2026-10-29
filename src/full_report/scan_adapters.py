@@ -800,6 +800,12 @@ class SwitchgearScanAdapter:
                         tev_reading_val = panel.cable_tev_reading
                     if getattr(panel, "cable_tev_ppc", None):
                         tev_ppc_val = panel.cable_tev_ppc
+                elif comp_name == "PT COMPARTMENT":
+                    us_reading_val = getattr(panel, "pt_us_reading", "") or ""
+                    tev_reading_val = getattr(panel, "pt_tev_reading", "") or ""
+                    tev_ppc_val = getattr(panel, "pt_tev_ppc", "") or ""
+                    pt_char = getattr(panel, "pt_us_char", "")
+                    us_char_norm = normalize_us_characteristic(pt_char, default="NORMAL") if pt_char else "NORMAL"
 
                 if comp_us_active:
                     us_ctx = {

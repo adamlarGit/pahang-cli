@@ -796,6 +796,17 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                 cable_tev_ppc = clean_val(ws[f"S{r + 1}"].value) or ""
                 cable_us_reading = clean_val(ws[f"T{r + 1}"].value) or ""
 
+            # PT Compartment TEV and Ultrasound readings (Row r + 3)
+            pt_tev_reading = ""
+            pt_tev_ppc = ""
+            pt_us_reading = ""
+            pt_us_char = ""
+            if r + 3 <= ws.max_row:
+                pt_tev_reading = clean_val(ws[f"R{r + 3}"].value) or ""
+                pt_tev_ppc = clean_val(ws[f"S{r + 3}"].value) or ""
+                pt_us_reading = clean_val(ws[f"T{r + 3}"].value) or ""
+                pt_us_char = clean_val(ws[f"U{r + 3}"].value) or ""
+
             # Characteristic: Column U (empty if no defect -> defaults to "NORMAL")
             u_char = clean_val(ws[f"U{r}"].value) or ""
             if not u_char:
@@ -890,6 +901,10 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                 cable_tev_reading=cable_tev_reading,
                 cable_tev_ppc=cable_tev_ppc,
                 cable_us_reading=cable_us_reading,
+                pt_tev_reading=pt_tev_reading,
+                pt_tev_ppc=pt_tev_ppc,
+                pt_us_reading=pt_us_reading,
+                pt_us_char=pt_us_char,
                 breaker_photo=breaker_photo,
                 cable_photo=cable_photo,
                 busbar_photo=busbar_photo,
