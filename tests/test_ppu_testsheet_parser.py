@@ -900,10 +900,3 @@ def test_ppu_multiline_whitespace_and_control_chars_in_panels_and_headers(tmp_pa
     assert p3.panel_feeder_no == "3P3"
     assert p3.name == "AUX TX 33kV"
 
-
-
-
-
-
-
-

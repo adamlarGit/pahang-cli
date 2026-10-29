@@ -1,4 +1,4 @@
-<!-- status: in-progress -->
+<!-- status: closed -->
 # Ticket #137: fix(testsheet): normalize multiline whitespace and control characters in testsheet cell parsers
 
 ## Parent

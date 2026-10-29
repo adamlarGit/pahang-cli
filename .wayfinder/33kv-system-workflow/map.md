@@ -83,7 +83,7 @@ graph TD
     T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Closed"]
     T133["#133: Differentiate PTX and LTX transformer numbering in 33kV reports - Closed"]
     T134["#134: Record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md - Closed"]
-    T137["#137: Normalize multiline whitespace and control characters in testsheet cell parsers"]
+    T137["#137: Normalize multiline whitespace and control characters in testsheet cell parsers - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -404,7 +404,7 @@ graph TD
 - [x] No regression or contradiction with existing ADRs or glossary definitions.
 
 ### #137: fix(testsheet): normalize multiline whitespace and control characters in testsheet cell parsers
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#137](https://github.com/adamlarGit/pahang-cli/issues/137)
 - **Blocked by**: None
 - **Ticket File**: [tickets/137-normalize-multiline-whitespace-in-testsheet-parsers.md](./tickets/137-normalize-multiline-whitespace-in-testsheet-parsers.md)

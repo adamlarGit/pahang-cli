@@ -10,6 +10,8 @@ import re
 DATE_FOLDER_PATTERN = re.compile(
     r"^(?:\d{1,2}[-_./]\d{1,2}[-_./]\d{4}|\d{4}[-_./]\d{1,2}[-_./]\d{1,2})$"
 )
+_CONTROL_CHARS_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
 def is_date_folder_name(name: str) -> bool:
@@ -24,8 +26,8 @@ def normalize_fl_erms(val: object) -> str:
     s = str(val).strip()
     if s.endswith(".0"):
         s = s[:-2]
-    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", s)
-    return re.sub(r"\s+", " ", s).strip()
+    s = _CONTROL_CHARS_PATTERN.sub("", s)
+    return _WHITESPACE_PATTERN.sub(" ", s).strip()
 
 
 def clean_val(val: object) -> str | None:
@@ -37,9 +39,9 @@ def clean_val(val: object) -> str | None:
         return None
     s = str(val)
     # Strip non-whitespace control characters (e.g. \x00-\x08, \x0b, \x0c, \x0e-\x1f, \x7f)
-    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", s)
+    s = _CONTROL_CHARS_PATTERN.sub("", s)
     # Collapse all whitespace sequences (including \r\n, \r, \n, \t, and consecutive spaces) into a single space
-    s = re.sub(r"\s+", " ", s).strip()
+    s = _WHITESPACE_PATTERN.sub(" ", s).strip()
     if not s or s in ("-", "None", "NONE", "N/A", "#REF!", "nan"):
         return None
     return s
