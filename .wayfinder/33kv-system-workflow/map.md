@@ -83,6 +83,7 @@ graph TD
     T132["#132: Parse LTX model from column W in sheet TX and normalize H/S - Closed"]
     T133["#133: Differentiate PTX and LTX transformer numbering in 33kV reports - Closed"]
     T134["#134: Record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md - Closed"]
+    T137["#137: Normalize multiline whitespace and control characters in testsheet cell parsers"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -122,7 +123,8 @@ graph TD
     T131 --> T132
     T132 --> T133
     T133 --> T134
-    T134 --> T103
+    T134 --> T137
+    T137 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -400,6 +402,16 @@ graph TD
 - [x] `CONTEXT.md` contains formal entries for `LinkBoxSanitizationPolicy` and `TransformerDesignationPolicy`.
 - [x] All field mappings and rules match the agreed domain contracts.
 - [x] No regression or contradiction with existing ADRs or glossary definitions.
+
+### #137: fix(testsheet): normalize multiline whitespace and control characters in testsheet cell parsers
+- **Status**: Open
+- **GitHub Issue**: [#137](https://github.com/adamlarGit/pahang-cli/issues/137)
+- **Blocked by**: None
+- **Ticket File**: [tickets/137-normalize-multiline-whitespace-in-testsheet-parsers.md](./tickets/137-normalize-multiline-whitespace-in-testsheet-parsers.md)
+- **Delivers**: Normalization of multiline strings, carriage returns, newlines, and tabs (\r\n, \n, \r, \t) into single spaces across `clean_val` and all testsheet parsers (switchgear panels, feeder names, header metadata, transformers).
+- [x] Cell string cleaner collapses internal carriage returns, newlines, and tabs (\r\n, \n, \r, \t) into a single space and strips outer padding.
+- [x] Switchgear panel names, feeder names, and header metadata parsed from testsheets with multiline cell entries produce clean single-line strings.
+- [x] Unit tests verify multiline string normalization across clean_val and switchgear panel extraction without regressions on existing single-line, numeric, or empty cells.
 
 ---
 

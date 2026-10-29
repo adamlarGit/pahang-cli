@@ -74,6 +74,41 @@ def test_clean_val() -> None:
     assert clean_val("  RM CHEROH \t ") == "RM CHEROH"
 
 
+def test_clean_val_collapses_multiline_whitespace_and_control_chars() -> None:
+    """Test clean_val collapses internal \r\n, \n, \r, \t into single spaces and strips outer padding."""
+    # Carriage return and newline variants (Alt+Enter in Excel)
+    assert clean_val("33kV TRANSITION\n(BUS - SECTION)") == "33kV TRANSITION (BUS - SECTION)"
+    assert clean_val("33kV TRANSITION\r\n(BUS - SECTION)") == "33kV TRANSITION (BUS - SECTION)"
+    assert clean_val("33kV TRANSITION\r(BUS - SECTION)") == "33kV TRANSITION (BUS - SECTION)"
+    assert clean_val("33kV TRANSITION\t(BUS - SECTION)") == "33kV TRANSITION (BUS - SECTION)"
+
+    # Multiple consecutive and mixed whitespace sequences with padding
+    assert clean_val("  \r\n\t  33kV TRANSITION \t \r\n (BUS - SECTION)  \r\n  ") == "33kV TRANSITION (BUS - SECTION)"
+    assert clean_val("Line1\r\nLine2\r\nLine3") == "Line1 Line2 Line3"
+    assert clean_val("Feeder\r\n\t 1") == "Feeder 1"
+
+    # Control characters stripped
+    assert clean_val("Substation\x00Name") == "SubstationName"
+    assert clean_val("Substation\x0b \x0cName") == "Substation Name"
+
+    # Preservation of single-line and numeric values
+    assert clean_val("RM CHEROH") == "RM CHEROH"
+    assert clean_val("  RM CHEROH \t ") == "RM CHEROH"
+    assert clean_val(123) == "123"
+    assert clean_val(12.5) == "12.5"
+    assert clean_val(0) == "0"
+
+    # Empty and sentinels with whitespace/multiline padding
+    assert clean_val(None) is None
+    assert clean_val("") is None
+    assert clean_val("   \t \r\n ") is None
+    assert clean_val("NONE\r\n") is None
+    assert clean_val("-\n") is None
+    assert clean_val("N/A\t") is None
+    assert clean_val("#REF!\r") is None
+    assert clean_val("nan\n") is None
+
+
 def test_is_marked() -> None:
     """Test is_marked returns True for checkmarks and False for empty/NO/N-A/0."""
     assert is_marked("/") is True

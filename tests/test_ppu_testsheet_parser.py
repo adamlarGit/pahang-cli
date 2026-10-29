@@ -839,6 +839,69 @@ def test_ppu_rmu_bare_sn_prefix_does_not_propagate_to_panels(tmp_path: Path) -> 
     assert meta.equipment.switchgears[0].serial_no == ""
 
 
+def test_ppu_multiline_whitespace_and_control_chars_in_panels_and_headers(tmp_path: Path) -> None:
+    """Verify that multiline and control character strings in substation headers,
+    panel feeder numbers, and feeder names are collapsed to single-line strings.
+    """
+    parser = PpuTestsheetParser()
+    wb_path = tmp_path / "01. PPU MULTILINE.xlsx"
+
+    panels_33kv = [
+        {
+            "feeder_no": "3P1\n(INC)",
+            "name": "33kV TRANSITION\n(BUS - SECTION)",
+            "status": "CLOSE",
+            "breaker_serial": "SN-001\r\n",
+        },
+        {
+            "feeder_no": "3P2\r\n(OUT)",
+            "name": "FEEDER 2\r\nLINE",
+            "status": "CLOSE",
+            "breaker_serial": "SN-002",
+        },
+        {
+            "feeder_no": "3P3\t",
+            "name": "AUX TX\r\n\t 33kV",
+            "status": "CLOSE",
+            "breaker_serial": "SN-003",
+        },
+    ]
+
+    create_ppu_testsheet_workbook(
+        path=wb_path,
+        substation_name="33kV PPU\nTRANSITION SUBSTATION",
+        fl_number="CGBG-PPU-TRNS.0\r\n",
+        panels_33kv=panels_33kv,
+        panels_11kv=(),
+        has_11kv=False,
+    )
+
+    data = parser.extract_testsheet_data(wb_path)
+
+    # Substation header metadata should be clean single-line strings
+    assert data.substation_name_site == "33kV PPU TRANSITION SUBSTATION"
+    assert data.substation_name_erms == "33kV PPU TRANSITION SUBSTATION"
+    assert data.fl_site == "CGBG-PPU-TRNS.0"
+    assert data.fl_erms == "CGBG-PPU-TRNS"
+
+    # Switchgear panels should have clean single-line feeder numbers and names
+    swg = data.equipment.switchgears[0]
+    assert len(swg.panels) == 3
+
+    p1 = swg.panels[0]
+    assert p1.panel_feeder_no == "3P1 (INC)"
+    assert p1.name == "33kV TRANSITION (BUS - SECTION)"
+
+    p2 = swg.panels[1]
+    assert p2.panel_feeder_no == "3P2 (OUT)"
+    assert p2.name == "FEEDER 2 LINE"
+
+    p3 = swg.panels[2]
+    assert p3.panel_feeder_no == "3P3"
+    assert p3.name == "AUX TX 33kV"
+
+
+
 
 
 

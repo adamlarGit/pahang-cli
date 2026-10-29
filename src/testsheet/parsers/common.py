@@ -18,20 +18,28 @@ def is_date_folder_name(name: str) -> bool:
 
 
 def normalize_fl_erms(val: object) -> str:
-    """Strip whitespace, handle .0 float suffix from FL ERMS values."""
+    """Strip whitespace, handle .0 float suffix, and remove control characters from FL ERMS values."""
     if val is None:
         return ""
     s = str(val).strip()
     if s.endswith(".0"):
         s = s[:-2]
-    return s.replace("\t", "").strip()
+    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", s)
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def clean_val(val: object) -> str | None:
-    """Strip tabs/spaces, return None if empty/dash/NONE."""
+    """Collapse internal carriage returns, newlines, tabs, and spaces into single space, strip padding.
+
+    Returns None if empty, dash, or sentinel (e.g. 'NONE', 'N/A', '#REF!', 'nan').
+    """
     if val is None:
         return None
-    s = str(val).replace("\t", "").strip()
+    s = str(val)
+    # Strip non-whitespace control characters (e.g. \x00-\x08, \x0b, \x0c, \x0e-\x1f, \x7f)
+    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", s)
+    # Collapse all whitespace sequences (including \r\n, \r, \n, \t, and consecutive spaces) into a single space
+    s = re.sub(r"\s+", " ", s).strip()
     if not s or s in ("-", "None", "NONE", "N/A", "#REF!", "nan"):
         return None
     return s

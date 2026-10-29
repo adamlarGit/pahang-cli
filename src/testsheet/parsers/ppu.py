@@ -1391,8 +1391,7 @@ class PpuTestsheetParser(TestsheetParserStrategy):
                 return ""
             if isinstance(val, float):
                 return f"{round(val, 2):g}"
-            s = str(val).replace("\t", "").strip()
-            return "" if s in ("-", "None", "NONE", "N/A", "#REF!", "nan") else s
+            return clean_val(val) or ""
 
         return ThermalReadingSpec(
             tmin=_clean_temp(ws[f"{ref_col}{row}"].value),
