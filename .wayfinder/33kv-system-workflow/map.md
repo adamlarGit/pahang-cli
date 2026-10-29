@@ -84,6 +84,7 @@ graph TD
     T133["#133: Differentiate PTX and LTX transformer numbering in 33kV reports - Closed"]
     T134["#134: Record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md - Closed"]
     T137["#137: Normalize multiline whitespace and control characters in testsheet cell parsers - Closed"]
+    T138["#138: Harden filesystem path sanitization in Full Report intermediate parts and multi-part chunks - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -124,7 +125,8 @@ graph TD
     T132 --> T133
     T133 --> T134
     T134 --> T137
-    T137 --> T103
+    T137 --> T138
+    T138 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -413,6 +415,17 @@ graph TD
 - [x] Switchgear panel names, feeder names, and header metadata parsed from testsheets with multiline cell entries produce clean single-line strings.
 - [x] Unit tests verify multiline string normalization across clean_val and switchgear panel extraction without regressions on existing single-line, numeric, or empty cells.
 
+### #138: fix(full-report): harden filesystem path sanitization in full report intermediate parts and multi-part chunks
+- **Status**: Closed
+- **GitHub Issue**: [#138](https://github.com/adamlarGit/pahang-cli/issues/138)
+- **Blocked by**: None
+- **Ticket File**: [tickets/138-harden-filesystem-path-sanitization-in-full-report.md](./tickets/138-harden-filesystem-path-sanitization-in-full-report.md)
+- **Delivers**: Comprehensive sanitization of Windows-forbidden characters and ASCII control characters ([\x00-\x1f\r\n\t]) across `sanitize_filename`, `render_all()` intermediate docx part generation, and `MultiPartPartitionPolicy` / `PlanDocumentChunk` document compilation, preventing `[Errno 22] Invalid argument` on substations with complex or multiline panel names (e.g. SSU LYNAS 33kV).
+- [x] Intermediate scan part filename generation in plan_builder.py:render_all sanitizes all forbidden Windows characters and control characters ([\x00-\x1f\r\n\t]).
+- [x] Shared sanitize_filename utility strips/replaces ASCII control characters ([\x00-\x1f\r\n\t]) in addition to existing reserved characters ([<>:"/\\|?*]).
+- [x] Multi-part partition chunk labels and output filenames are sanitized against control characters and invalid filename characters.
+- [x] Regression test verifies that Full Report generation compiles all intermediate parts and multi-part chunk deliverables for SSU LYNAS 33kV without [Errno 22] Invalid argument or COM compilation failures.
+
 ---
 
 ## Decisions so far
@@ -515,6 +528,7 @@ graph TD
 - **Q99**: Multi-switchgear overview document chunk sequence (Option A) generating separate overview chunks per switchgear lineup (`Part 02 - Switchgear 1 (33kV) Overview.docx`, `Part 11 - Switchgear 2 (11kV) Overview.docx`) and prioritizing 33kV before 11kV in document chunks and census summary tables. Handled in #130.
 - **Q100**: Link Box sanitization policy formalizes field overrides: Equipment = `LINK BOX`, Manufacturer/Model/Area/Serial No/Heater/CB Position/Busbar Position/Cable Type = `-`, Rating = system operating voltage (`33kV` / `11kV`), preserving parent panel feeder, name, load, and thermals, with US/TEV blanking. Handled in #131 and recorded in #134.
 - **Q101**: Transformer designation policy formalizes transformer naming hierarchy across PMU/PPU and standard distribution substations (`PTX{n}` for power transformers $\ge 5$ MVA from Slots 1–4, `LTX` for local station service transformers from Slot 5 / `LOCAL` with `LTX{n}` for multi-unit configurations, and `TX{n}` for standard distribution units), testsheet coordinate origins (Sheet `TX`, row 6 headers, column W for LTX model, shorthand expansion `H/S` and `C/T`), and propagation across `Tx No.` cell, scan item titles, CBM defect pages, while preserving Table 26 placards and verbatim visual inspection descriptions. Handled in #132, #133, and recorded in #134.
+- **Q102**: Full report intermediate scan part filenames (`render_all()`), output chunk documents, and shared `sanitize_filename` strictly sanitize against Windows forbidden characters `[<>:"/\\|?*]` and ASCII control characters `[\x00-\x1f\r\n\t]`, eliminating `OSError: [Errno 22] Invalid argument` when compiling substations with complex or multiline panel names (such as SSU LYNAS 33kV). Handled in #138.
 
 ---
 

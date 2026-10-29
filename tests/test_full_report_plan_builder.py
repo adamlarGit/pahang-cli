@@ -1192,3 +1192,157 @@ def test_multipart_vcb_with_inline_defect_pages_partitioning(tmp_path: Path) -> 
     assert sum(len(c.parts) for c in chunks) == len(plan.parts)
     for c in chunks:
         assert c.output_filename == f"005. PE TALAPIA (IR) - {c.label}.docx"
+
+
+def test_render_all_sanitizes_forbidden_windows_characters_and_control_characters(tmp_path: Path) -> None:
+    """render_all() sanitizes control characters, colons, slashes, and Windows reserved chars without [Errno 22]."""
+    pkg = SubstationEquipmentPackage()
+    # Create parts with extreme, pathological part names
+    parts = (
+        PlanPartItem(
+            part_type=PlanPartType.SCAN_PAGE,
+            part_name="Panel 6 (33kV TRANSITION\n(BUS - SECTION)) - BREAKER",
+            is_sliced=False,
+        ),
+        PlanPartItem(
+            part_type=PlanPartType.SCAN_PAGE,
+            part_name="Ratio: 1:1 / SP: Secondary Compartment\r\nTime: 12:30",
+            is_sliced=False,
+        ),
+        PlanPartItem(
+            part_type=PlanPartType.SCAN_PAGE,
+            part_name="Control\x00\x08\x1b\x1fChars\twith<pipes>|and*stars?",
+            is_sliced=False,
+        ),
+        PlanPartItem(
+            part_type=PlanPartType.SCAN_PAGE,
+            part_name="Deep...Nested...Dots...and   Spaces   ",
+            is_sliced=False,
+        ),
+        PlanPartItem(
+            part_type=PlanPartType.SCAN_PAGE,
+            part_name="A" * 200,  # Extremely long part name
+            is_sliced=False,
+        ),
+    )
+
+    plan = FullReportStationPlan(
+        station="TEST STATION",
+        station_code="TST",
+        date_str="01-01-2026",
+        month_folder="01. JANUARY",
+        output_dir=tmp_path / "output",
+        output_filename="test_output.docx",
+        final_output_path=tmp_path / "output" / "test_output.docx",
+        package=pkg,
+        parts=parts,
+    )
+
+    rendered_dir = tmp_path / "rendered"
+    rendered_paths = plan.render_all(rendered_dir)
+    assert len(rendered_paths) == len(parts)
+
+    for p in rendered_paths:
+        # Every file must exist on disk and be accessible
+        assert p.is_file()
+        filename = p.name
+        # Must not contain any ASCII control characters
+        for ch in filename:
+            assert ord(ch) >= 32, f"Control character found in filename: {ascii(filename)}"
+        # Must not contain Windows reserved characters
+        for forbidden in '<>:"/\\|?*':
+            assert forbidden not in filename, f"Forbidden character {forbidden!r} in {filename}"
+        assert not filename.startswith("_")
+        assert not filename.endswith(". ")
+
+
+def test_plan_document_chunk_post_init_sanitizes_label_and_output_paths(tmp_path: Path) -> None:
+    """PlanDocumentChunk.__post_init__ strictly sanitizes label, output_filename, and destination_path."""
+    chunk = PlanDocumentChunk(
+        chunk_index=2,
+        label="Part 02 - Panel 1 (33kV TRANSITION\n(BUS - SECTION))",
+        output_filename="03. SSU LYNAS - Part 02 - Panel 1 (33kV TRANSITION\r\n(BUS - SECTION)):test.docx",
+        destination_path=tmp_path / "03. SSU LYNAS - Part 02 - Panel 1 (33kV TRANSITION\r\n(BUS - SECTION)):test.docx",
+    )
+
+    assert "\n" not in chunk.label
+    assert "\r" not in chunk.label
+    assert ":" not in chunk.label
+    assert "33kV TRANSITION (BUS - SECTION)" in chunk.label
+
+    assert "\n" not in chunk.output_filename
+    assert "\r" not in chunk.output_filename
+    assert ":" not in chunk.output_filename
+    assert chunk.output_filename.endswith(".docx")
+
+    assert chunk.destination_path.name == chunk.output_filename
+    assert chunk.destination_path.parent == tmp_path
+
+
+def test_multipart_partition_policy_sanitizes_multiline_and_control_characters(tmp_path: Path) -> None:
+    """MultiPartPartitionPolicy sanitizes panel names containing tabs, newlines, colons, and control characters."""
+    from src.full_report.composer import FullReportComposer
+    from src.quick_report.compiler import FakeDocumentCompiler
+
+    swg = SwitchgearSpec(
+        switchgear_type="VCB 33kV",
+        manufacturer="TAMCO",
+        model="VH3",
+        rating="33kV",
+        panels=(
+            SwitchgearPanelSpec(
+                panel_no=1,
+                name="33kV TRANSITION\n(BUS - SECTION)",
+                panel_type="VCB",
+            ),
+            SwitchgearPanelSpec(
+                panel_no=2,
+                name="FEEDER\t1:INCOMER\r\n(MAIN)",
+                panel_type="VCB",
+            ),
+            SwitchgearPanelSpec(
+                panel_no=3,
+                name="BUS*COUPLER?#<1>",
+                panel_type="VCB",
+            ),
+        ),
+    )
+    pkg = SubstationEquipmentPackage(switchgears=(swg,))
+    sliced = SlicedSections(
+        station="SSU TEST 33kV",
+        front_page=tmp_path / "front_page.docx",
+        condition_pages=tmp_path / "condition_pages.docx",
+        sticker_page=tmp_path / "sticker_page.docx",
+    )
+
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=pkg,
+        sliced_sections=sliced,
+        cbm_defects=[],
+        vi_defects=[],
+        station="SSU TEST 33kV",
+        output_dir=tmp_path / "out",
+        output_filename="01. SSU TEST 33kV.docx",
+    )
+
+    chunks = plan.chunks
+    assert len(chunks) == 5  # Part 01 Summary + 3 Panels + Part 05 TX and Condition
+
+    for c in chunks:
+        assert "\n" not in c.label
+        assert "\r" not in c.label
+        assert ":" not in c.output_filename
+        assert "*" not in c.output_filename
+        assert "?" not in c.output_filename
+        assert "<" not in c.output_filename
+        assert ">" not in c.output_filename
+
+    # Verify FakeDocumentCompiler compiles all chunks without [Errno 22]
+    composer = FullReportComposer(compiler=FakeDocumentCompiler())
+    res = composer.compose(plan, base_dir=tmp_path)
+    assert res.is_multipart is True
+    assert len(res.chunk_paths) == len(chunks)
+    for cp in res.chunk_paths:
+        assert cp.is_file()
+

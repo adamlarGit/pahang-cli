@@ -322,6 +322,21 @@ class PlanDocumentChunk:
     destination_path: Path
     parts: tuple[PlanPartItem, ...] = ()
 
+    def __post_init__(self) -> None:
+        clean_label = sanitize_filename(self.label).strip()
+        clean_out = sanitize_filename(self.output_filename).strip()
+        if not clean_out.lower().endswith(".docx"):
+            clean_out = f"{clean_out}.docx"
+        if clean_label != self.label:
+            object.__setattr__(self, "label", clean_label)
+        if clean_out != self.output_filename:
+            object.__setattr__(self, "output_filename", clean_out)
+        if self.destination_path is not None:
+            dest_p = Path(self.destination_path)
+            clean_dest = dest_p.parent / clean_out
+            if clean_dest != self.destination_path:
+                object.__setattr__(self, "destination_path", clean_dest)
+
 
 def sort_switchgears_by_voltage(swgs: Sequence[Any]) -> list[Any]:
     """Sort switchgears so 33kV/36kV lineups precede 11kV/22kV lineups."""
@@ -362,7 +377,7 @@ class MultiPartPartitionPolicy:
     ) -> tuple[PlanDocumentChunk, ...]:
         """Partition plan parts into document chunks."""
         archetype = MultiPartPartitionPolicy._resolve_archetype(plan)
-        stem = plan.output_filename.removesuffix(".docx")
+        stem = sanitize_filename(plan.output_filename.removesuffix(".docx").removesuffix(".DOCX")).strip()
         dest_dir = plan.output_dir
 
         if archetype in (
@@ -372,12 +387,16 @@ class MultiPartPartitionPolicy:
             return MultiPartPartitionPolicy._partition_multipart(plan, stem, dest_dir)
 
         # Single chunk for RMU and other archetypes
+        clean_label = sanitize_filename(stem).strip()
+        clean_output_filename = sanitize_filename(plan.output_filename).strip()
+        if not clean_output_filename.lower().endswith(".docx"):
+            clean_output_filename = f"{clean_output_filename}.docx"
         return (
             PlanDocumentChunk(
                 chunk_index=1,
-                label=stem,
-                output_filename=plan.output_filename,
-                destination_path=dest_dir / plan.output_filename,
+                label=clean_label,
+                output_filename=clean_output_filename,
+                destination_path=dest_dir / clean_output_filename,
                 parts=plan.parts,
             ),
         )
@@ -766,15 +785,21 @@ class FullReportStationPlan:
         cb = census_builder or ExecutiveSummaryCensusBuilder()
 
         for idx, item in enumerate(self.parts, 1):
-            clean_name = (
-                item.part_name.replace(" ", "_")
-                .replace("/", "_")
-                .replace("\\", "_")
-                .replace(".", "_")
-                .lower()
-            )
-            # Remove repeated docx in clean_name if present
-            clean_name = clean_name.removesuffix("_docx")
+            # Normalize whitespace sequences, newlines, carriage returns, and tabs to underscores
+            raw_name = re.sub(r"[\r\n\t\s]+", "_", item.part_name)
+            # Replace forbidden Windows characters, path separators, colons, and dots with underscores
+            raw_name = re.sub(r'[/\\:*?"<>|.]+', "_", raw_name)
+            # Strip remaining ASCII control characters (0x00-0x1F, 0x7F)
+            raw_name = re.sub(r"[\x00-\x1f\x7f]", "", raw_name)
+            # Lowercase and remove any repeated _docx suffix
+            clean_name = raw_name.lower().removesuffix("_docx")
+            # Collapse multiple consecutive underscores and strip trailing/leading underscores
+            clean_name = re.sub(r"_+", "_", clean_name).strip("_")
+            if not clean_name:
+                clean_name = f"part_{idx}"
+            # Protect against Windows MAX_PATH by bounding clean_name length
+            clean_name = clean_name[:120].rstrip("_")
+
             out_file = out_dir / f"{idx:03d}_{item.part_type.value.lower()}_{clean_name}.docx"
             rendered_path = item.render(out_file, renderer=r, census_builder=cb)
             paths.append(rendered_path)
@@ -1026,11 +1051,16 @@ class FullReportPlanBuilder:
                 except (ValueError, TypeError):
                     sub_num = 0
 
+            clean_st_name = sanitize_filename(st_name).strip()
             if sub_num:
                 prefix = f"{sub_num:02d}." if is_33kv else f"{sub_num:03d}."
-                output_filename = f"{prefix} {st_name}{suffix_str}.docx"
+                output_filename = f"{prefix} {clean_st_name}{suffix_str}.docx"
             else:
-                output_filename = f"{st_name}{suffix_str}.docx"
+                output_filename = f"{clean_st_name}{suffix_str}.docx"
+
+        output_filename = sanitize_filename(output_filename).strip()
+        if not output_filename.lower().endswith(".docx"):
+            output_filename = f"{output_filename}.docx"
 
         final_path = out_d / output_filename
 

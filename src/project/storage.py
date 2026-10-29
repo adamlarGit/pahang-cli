@@ -73,8 +73,16 @@ def parse_substation_stem(name: str) -> SubstationStemInfo:
 
 
 def sanitize_filename(name: str) -> str:
-    """Remove invalid characters from Windows filename."""
-    return re.sub(r'[<>:"/\\|?*]', '', name)
+    """Remove invalid Windows characters and ASCII control characters from filename."""
+    if not name:
+        return ""
+    # Normalize multiline newlines, carriage returns, and tabs to single spaces
+    s = re.sub(r"[\r\n\t]+", " ", str(name))
+    # Remove Windows-reserved characters and ASCII control characters (0x00-0x1F, 0x7F)
+    s = re.sub(r'[\x00-\x1f\x7f<>:"/\\|?*]', "", s)
+    # Collapse multiple consecutive spaces and strip surrounding whitespace and trailing dots
+    s = re.sub(r" +", " ", s).strip()
+    return s.rstrip(". ")
 
 
 def get_next_file_number(directory: str | Path, pattern: str = r'^(\d+)\.') -> int:

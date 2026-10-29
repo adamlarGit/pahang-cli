@@ -1068,3 +1068,99 @@ class TestDualVoltageLineupIsolationAndWrappedContainers:
         assert cable_item.context["panel"]["tev"]["reading"] == "25"
         assert cable_item.context["panel"]["tev"]["ppc"] == "20"
 
+
+def test_full_report_ssu_lynas_compiles_intermediate_parts_and_chunks(tmp_path: Path) -> None:
+    """Regression test (Ticket #138): SSU LYNAS 33kV intermediate parts and chunks compile without [Errno 22]."""
+    from src.testsheet.parsers.ppu import PpuTestsheetParser
+    from src.testsheet.extractor import TestsheetData
+    from src.testsheet.models import (
+        SubstationEquipmentPackage,
+        SwitchgearSpec,
+        SwitchgearPanelSpec,
+    )
+
+    ts_path = Path(
+        r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\GEBENG\01. OCTOBER\07-10-2026\03. SSU LYNAS 33kV (VI).xlsx"
+    )
+
+    if ts_path.is_file():
+        parser = PpuTestsheetParser()
+        data = parser.extract_testsheet_data(ts_path)
+    else:
+        # Synthetic fallback with identical switchgear and panel topology
+        panels = (
+            SwitchgearPanelSpec(panel_no=1, name="SPARE", panel_feeder_no="5S5"),
+            SwitchgearPanelSpec(panel_no=2, name="PMU GBNG (1L5)", panel_feeder_no="3S5"),
+            SwitchgearPanelSpec(panel_no=3, name="CONSUMER 1", panel_feeder_no="1S5"),
+            SwitchgearPanelSpec(panel_no=4, name="BUS - COUPLER", panel_feeder_no="1W0"),
+            SwitchgearPanelSpec(panel_no=5, name="BUS - SECTION", panel_feeder_no="1S0"),
+            SwitchgearPanelSpec(panel_no=6, name="33kV TRANSITION\n(BUS - SECTION)", panel_feeder_no="1S0"),
+            SwitchgearPanelSpec(panel_no=7, name="CONSUMER 2", panel_feeder_no="2S5"),
+            SwitchgearPanelSpec(panel_no=8, name="PMU GBID (2L5)", panel_feeder_no="4S5"),
+            SwitchgearPanelSpec(panel_no=9, name="SPARE", panel_feeder_no="6S5"),
+        )
+        swg = SwitchgearSpec(
+            switchgear_type="GIS",
+            manufacturer="EPE",
+            rating="36kV",
+            panels=panels,
+        )
+        data = TestsheetData(
+            substation_number=3,
+            substation_name_erms="SSU LYNAS 33kV",
+            station_name="SSU LYNAS 33kV",
+            equipment=SubstationEquipmentPackage(switchgears=(swg,)),
+        )
+
+    out_dir = tmp_path / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    builder = FullReportPlanBuilder()
+    plan = builder.build(
+        package=data,
+        station=data.station_name,
+        output_dir=out_dir,
+    )
+
+    assert plan.is_33kv is True
+    assert plan.is_multipart is True
+    assert len(plan.chunks) == 10
+
+    # Verify chunk labels and filenames have no control characters, colons, or un-sanitized newlines
+    for c in plan.chunks:
+        assert "\n" not in c.label
+        assert "\r" not in c.label
+        assert "\t" not in c.label
+        assert ":" not in c.label
+        assert ":" not in c.output_filename
+        assert "\n" not in c.output_filename
+        assert "\r" not in c.output_filename
+        assert "\t" not in c.output_filename
+        assert c.destination_path.name == c.output_filename
+
+    # Chunk 7 (Panel 6) must cleanly sanitize the transition bus section
+    chunk6 = plan.chunks[6]  # Index 6 is Part 07 - Panel 6
+    assert "33kV TRANSITION (BUS - SECTION)" in chunk6.label
+    assert "33kV TRANSITION (BUS - SECTION)" in chunk6.output_filename
+
+    # Render intermediate scan parts: must execute without OSError: [Errno 22] Invalid argument
+    rendered_dir = tmp_path / "rendered"
+    rendered_paths = plan.render_all(rendered_dir)
+    assert len(rendered_paths) > 0
+    for p in rendered_paths:
+        assert p.is_file()
+        for forbidden in '<>:"/\\|?*':
+            assert forbidden not in p.name
+        for ch in p.name:
+            assert ord(ch) >= 32
+
+    # Compile chunks using headless FakeDocumentCompiler: all 10 chunks compile successfully to disk
+    composer = FullReportComposer(compiler=FakeDocumentCompiler())
+    res = composer.compose(plan, temp_dir=rendered_dir, base_dir=tmp_path)
+    assert res.is_multipart is True
+    assert len(res.chunk_paths) == 10
+    for cp in res.chunk_paths:
+        assert cp.is_file()
+        assert cp.stat().st_size > 0
+
+

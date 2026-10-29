@@ -170,4 +170,31 @@ def test_repair_openpyxl_zip(tmp_path: Path) -> None:
         assert 'Target="../drawings/drawing1.xml"' in fixed_rels
 
 
+def test_sanitize_filename_strips_control_and_reserved_characters() -> None:
+    """Verify sanitize_filename strips ASCII control characters, newlines, and Windows reserved chars."""
+    from src.project.storage import sanitize_filename
+
+    # 1. ASCII control characters (\x00-\x1f, \x7f)
+    assert sanitize_filename("hello\x00world\x1f\x7ftest") == "helloworldtest"
+
+    # 2. Multiline whitespace (\r\n, \n, \r, \t) normalized to single spaces
+    assert sanitize_filename("33kV TRANSITION\n(BUS - SECTION)") == "33kV TRANSITION (BUS - SECTION)"
+    assert sanitize_filename("line1\r\nline2\tline3") == "line1 line2 line3"
+
+    # 3. Windows-reserved characters ([<>:"/\\|?*])
+    assert sanitize_filename('bad:file"with*special?chars<and>pipes|end') == "badfilewithspecialcharsandpipesend"
+    assert sanitize_filename("path/with\\slashes:and:colons") == "pathwithslashesandcolons"
+
+    # 4. Trailing dots and spaces stripped
+    assert sanitize_filename("test_file. ") == "test_file"
+    assert sanitize_filename("another_file...") == "another_file"
+    assert sanitize_filename("valid_report.docx") == "valid_report.docx"
+
+    # 5. Empty and edge cases
+    assert sanitize_filename("") == ""
+    assert sanitize_filename("   ") == ""
+    assert sanitize_filename(None) == ""
+
+
+
 
