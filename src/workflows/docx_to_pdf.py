@@ -13,6 +13,7 @@ except ImportError:
     win32com = None  # type: ignore[assignment]
 
 from src.postprocessing.converters import (
+    BatchComSession,
     ComDocumentConverter,
     DocumentConverter,
     configure_uniform_printer,
@@ -32,6 +33,7 @@ def convert_docx_folder_to_pdf(
     *,
     converter: DocumentConverter | None = None,
     progress_sink: ProgressSink | None = print,
+    session: BatchComSession | None = None,
 ) -> DocxToPdfSummary:
     """Convert every DOCX file in a directory to PDF using DocumentConverter seam."""
     input_dir = Path(input_directory).expanduser().resolve()
@@ -56,33 +58,67 @@ def convert_docx_folder_to_pdf(
     is_com = isinstance(converter, ComDocumentConverter)
     word_app = None
     co_initialized = False
+    owns_word = False
 
     try:
-        if is_com and pythoncom and win32com and getattr(win32com, "client", None):
+        if session is not None and getattr(session, "word_app", None) is not None:
+            word_app = session.word_app
+            owns_word = False
+        elif is_com and pythoncom and win32com and getattr(win32com, "client", None):
             pythoncom.CoInitialize()
             co_initialized = True
             word_app = win32com.client.DispatchEx("Word.Application")
             word_app.Visible = False
             word_app.DisplayAlerts = 0
             configure_uniform_printer(word_app)
+            owns_word = True
 
         for idx, docx_path in enumerate(docx_files, start=1):
             output_path = docx_path.with_suffix(".pdf")
             tracker.emit(idx, f"Converting: {docx_path.name} -> {output_path.name}")
             if word_app is not None:
-                converter.convert_docx_to_pdf(docx_path, output_path, word_app=word_app)
+                converter.convert_docx_to_pdf(docx_path, output_path, word_app=word_app, session=session)
             else:
-                converter.convert_docx_to_pdf(docx_path, output_path)
+                converter.convert_docx_to_pdf(docx_path, output_path, session=session)
             converted += 1
     finally:
-        if word_app is not None:
+        if owns_word and word_app is not None:
+            word_to_quit = word_app
+            word_app = None
+            try:
+                import faulthandler
+                was_enabled = faulthandler.is_enabled()
+                if was_enabled:
+                    faulthandler.disable()
+            except Exception:
+                was_enabled = False
+            try:
+                try:
+                    word_to_quit.Quit()
+                except Exception:
+                    pass
+                del word_to_quit
+                import gc
+                gc.collect()
+            finally:
+                if was_enabled:
+                    try:
+                        faulthandler.enable()
+                    except Exception:
+                        pass
+        elif word_app is not None and session is None and not is_com:
             try:
                 word_app.Quit()
             except Exception:
                 pass
             word_app = None
+
         if co_initialized:
             try:
+                import gc
+                gc.collect()
+                import time
+                time.sleep(0.2)
                 pythoncom.CoUninitialize()
             except Exception:
                 pass

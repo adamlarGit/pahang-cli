@@ -86,7 +86,7 @@ graph TD
     T137["#137: Normalize multiline whitespace and control characters in testsheet cell parsers - Closed"]
     T138["#138: Harden filesystem path sanitization in Full Report intermediate parts and multi-part chunks - Closed"]
     T140["#140: feat(converters): dual-mode Word COM converter with silent Adobe PDF print and native fallback - Closed"]
-    T141["#141: feat(postprocessing): integrate dual-mode high-fidelity PDF converter across Full Report and Utility batch workflows"]
+    T141["#141: feat(postprocessing): integrate dual-mode high-fidelity PDF converter across Full Report and Utility batch workflows - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -443,15 +443,15 @@ graph TD
 - [x] Unit tests in tests/test_postprocessing_cli_adapter.py / tests/test_converters.py verify both the Adobe PDF branch and fallback branch.
 
 ### #141: feat(postprocessing): integrate dual-mode high-fidelity PDF converter across Full Report and Utility batch workflows
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#141](https://github.com/adamlarGit/pahang-cli/issues/141)
 - **Blocked by**: #140
 - **Ticket File**: [tickets/141-integrate-dual-mode-pdf-converter.md](./tickets/141-integrate-dual-mode-pdf-converter.md)
 - **Delivers**: Integration and end-to-end verification of dual-mode high-fidelity Word converter across Full Report postprocessing, batch docx_to_pdf, and full substation pipeline.
-- [ ] src/workflows/full_report_postprocessing.py utilizes dual-mode converter with testsheet appending and ultrasound embedding.
-- [ ] src/workflows/docx_to_pdf.py utilizes dual-mode high-fidelity conversion.
-- [ ] src/workflows/postprocessing_pipeline.py integrates dual-mode high-fidelity conversion.
-- [ ] Unit and workflow test suite passes with zero regressions.
+- [x] src/workflows/full_report_postprocessing.py utilizes dual-mode converter with testsheet appending and ultrasound embedding.
+- [x] src/workflows/docx_to_pdf.py utilizes dual-mode high-fidelity conversion.
+- [x] src/workflows/postprocessing_pipeline.py integrates dual-mode high-fidelity conversion.
+- [x] Unit and workflow test suite passes with zero regressions.
 
 ---
 

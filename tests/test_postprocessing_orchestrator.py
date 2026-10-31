@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 import openpyxl
 import pytest
 
-from src.postprocessing.converters import FakeDocumentConverter
+from src.postprocessing.converters import (
+    BatchComSession,
+    ComDocumentConverter,
+    FakeDocumentConverter,
+)
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
@@ -401,3 +405,83 @@ def test_workflow_service_integration(mock_env: ProjectEnvironment) -> None:
         assert isinstance(summary, PostProcessingSummary)
         assert summary.is_successful is True
         assert len(summary.processed_packages) == 1
+
+
+def test_postprocessing_pipeline_with_com_converter_dual_mode(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+    """Verify PostProcessingPipelineWorkflow integrates ComDocumentConverter in dual-mode (Adobe PDF virtual printer)."""
+    date_str = "07-05-2026"
+    qr_files, ts_files, _ = _setup_substation_files(mock_env, date_str, count=1)
+    qr_docx = qr_files[0]
+
+    mock_word = MagicMock()
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+
+    mock_excel = MagicMock()
+    mock_wb = MagicMock()
+    mock_excel.Workbooks.Open.return_value = mock_wb
+    mock_ws = MagicMock()
+    mock_ws.Name = "PCE Testsheet"
+    mock_wb.Worksheets = [mock_ws]
+
+    session = BatchComSession(word_app=mock_word, excel_app=mock_excel)
+    converter = ComDocumentConverter(try_adobe_printer=True)
+
+    request = PostProcessingRequest(
+        mode=PostProcessingMode.BY_DATE,
+        target_dates=(date_str,),
+        apply_signatures=False,
+        converter=converter,
+    )
+
+    workflow = PostProcessingPipelineWorkflow(converter=converter)
+
+    def _simulate_word_wait(target_pdf: Path, **kwargs: object) -> bool:
+        from PyPDF2 import PdfWriter
+        target_pdf.parent.mkdir(parents=True, exist_ok=True)
+        w = PdfWriter()
+        w.add_blank_page(width=612, height=792)
+        with open(target_pdf, "wb") as f:
+            w.write(f)
+        return True
+
+    def _simulate_excel_export(fmt: int, filename: str, *args: object, **kwargs: object) -> None:
+        from PyPDF2 import PdfWriter
+        p = Path(filename)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        w = PdfWriter()
+        w.add_blank_page(width=792, height=612)
+        with open(p, "wb") as f:
+            w.write(f)
+
+    mock_ws.ExportAsFixedFormat.side_effect = _simulate_excel_export
+
+    with patch("src.workflows.postprocessing_pipeline.validate_postprocessing_preflight") as mock_preflight, \
+         patch("src.workflows.postprocessing_pipeline.rename_files_match") as mock_rename, \
+         patch("src.workflows.postprocessing_pipeline.batch_com_session", return_value=session), \
+         patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Documents"), \
+         patch.object(converter, "_is_distiller_available", return_value=True), \
+         patch.object(converter, "_detect_distiller_joboptions_preset", return_value="High Quality Print(1)"), \
+         patch.object(converter, "_set_transient_distiller_joboptions", return_value={"DC": "Standard"}), \
+         patch.object(converter, "_register_printer_job_control", return_value=["WINWORD.EXE"]), \
+         patch.object(converter, "_cleanup_printer_job_control") as mock_cleanup, \
+         patch.object(converter, "_restore_distiller_joboptions") as mock_restore, \
+         patch.object(converter, "_wait_for_pdf", side_effect=_simulate_word_wait):
+
+        mock_preflight.return_value = MagicMock(is_valid=True)
+        mock_rename.return_value = MagicMock(renamed=())
+
+        summary = workflow.execute(mock_env, request)
+
+    assert summary.is_successful is True
+    assert len(summary.processed_packages) == 1
+    assert len(summary.final_deliverables) == 1
+    deliverable = summary.final_deliverables[0]
+    assert deliverable == qr_docx.with_suffix(".pdf")
+    assert deliverable.exists()
+
+    # Verify Word document printed via silent Adobe virtual printer
+    mock_doc.PrintOut.assert_called_once()
+    mock_cleanup.assert_called_once()
+    mock_restore.assert_called_once()
+    mock_doc.Close.assert_called_once()

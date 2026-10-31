@@ -941,7 +941,20 @@ class ComDocumentConverter(DocumentConverter):
                         converted = False
 
             if not converted:
-                self._export_fixed_format(doc, pdf_path)
+                try:
+                    self._export_fixed_format(doc, pdf_path)
+                except Exception as export_exc:
+                    logging.debug(
+                        "Initial ExportAsFixedFormat failed (%s); retrying with fresh document handle",
+                        export_exc,
+                    )
+                    try:
+                        doc.Close(SaveChanges=False)
+                    except Exception:
+                        pass
+                    doc = None
+                    doc = word_app.Documents.Open(str(docx_path.resolve()))
+                    self._export_fixed_format(doc, pdf_path)
         finally:
             if doc is not None:
                 try:

@@ -228,11 +228,21 @@ class PostProcessingPipelineWorkflow:
                     testsheet_pdf_dir = processed_xlsx_dir / "pdf"
                     testsheet_pdf_dir.mkdir(parents=True, exist_ok=True)
                     testsheet_pdf = testsheet_pdf_dir / f"{pkg.testsheet_xlsx.stem}.pdf"
-                    converter.convert_testsheet_to_pdf(processed_xlsx, testsheet_pdf, session=session)
+                    converter.convert_testsheet_to_pdf(
+                        processed_xlsx,
+                        testsheet_pdf,
+                        excel_app=getattr(session, "excel_app", None),
+                        session=session,
+                    )
 
                     # 5. Quick Report DOCX to PDF
                     quick_report_pdf = pkg.quick_report_docx.with_suffix(".pdf")
-                    converter.convert_docx_to_pdf(pkg.quick_report_docx, quick_report_pdf, session=session)
+                    converter.convert_docx_to_pdf(
+                        pkg.quick_report_docx,
+                        quick_report_pdf,
+                        word_app=getattr(session, "word_app", None),
+                        session=session,
+                    )
 
                     # 6. PDF Merge: combine in-place into quick_report_pdf
                     converter.merge_pdfs(quick_report_pdf, testsheet_pdf, quick_report_pdf)

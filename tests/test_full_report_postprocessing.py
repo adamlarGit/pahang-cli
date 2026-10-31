@@ -19,7 +19,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PyPDF2 import PdfReader, PdfWriter
 
-from src.postprocessing.converters import ComDocumentConverter, FakeDocumentConverter
+from src.postprocessing.converters import (
+    BatchComSession,
+    ComDocumentConverter,
+    FakeDocumentConverter,
+)
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
@@ -783,4 +787,134 @@ class TestMultipartPostProcessingExecution:
         assert len(fake_converter.merge_pdfs_calls) == 1
 
 
+# ==============================================================================
+# 8. Dual-Mode ComDocumentConverter Full Report Integration Tests (Ticket #141)
+# ==============================================================================
+
+class TestComDocumentConverterFullReportIntegration:
+    """End-to-end integration tests for FullReportPostProcessingWorkflow using ComDocumentConverter."""
+
+    def test_process_multipart_with_com_converter_dual_mode_adobe(self, tmp_path: Path) -> None:
+        """Verify Full Report post-processing executes multi-part documents through ComDocumentConverter dual-mode."""
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        stem = "005. TALAPIA (IR+VI)"
+
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+        p1 = _create_mock_docx(fr_dir / f"{stem} - Part 01 - Summary.docx")
+        p2 = _create_mock_docx(fr_dir / f"{stem} - Part 02 - Details.docx")
+
+        ts_pdf = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem}.pdf"
+        _create_mock_pdf(ts_pdf, page_count=2)
+
+        # Raw data directory for ultrasound audio embedding
+        raw_sub_dir = env.storage.get_raw_material_dir() / station / month / date_str / "005. TALAPIA" / "RAW DATA" / "US+TEV"
+        raw_sub_dir.mkdir(parents=True, exist_ok=True)
+        (raw_sub_dir / "survey_summary.js").write_text("// test", encoding="utf-8")
+        (raw_sub_dir / "test.wav").write_bytes(b"RIFFmockwavdata")
+
+        mock_word = MagicMock()
+        mock_doc = MagicMock()
+        mock_word.Documents.Open.return_value = mock_doc
+
+        converter = ComDocumentConverter(try_adobe_printer=True)
+        session = BatchComSession(word_app=mock_word, excel_app=MagicMock())
+        workflow = FullReportPostProcessingWorkflow(converter=converter)
+
+        def _simulate_wait(target_pdf: Path, **kwargs: object) -> bool:
+            _create_mock_pdf(target_pdf, page_count=1)
+            return True
+
+        with patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Documents"), \
+             patch.object(converter, "_is_distiller_available", return_value=True), \
+             patch.object(converter, "_detect_distiller_joboptions_preset", return_value="High Quality Print(1)"), \
+             patch.object(converter, "_set_transient_distiller_joboptions", return_value={"DC": "Standard"}), \
+             patch.object(converter, "_register_printer_job_control", return_value=["WINWORD.EXE"]), \
+             patch.object(converter, "_cleanup_printer_job_control") as mock_cleanup, \
+             patch.object(converter, "_restore_distiller_joboptions") as mock_restore, \
+             patch.object(converter, "_wait_for_pdf", side_effect=_simulate_wait), \
+             patch("src.workflows.full_report_postprocessing.embed_survey_ultrasound_into_pdf", return_value=1) as mock_embed:
+
+            result = workflow.process(date_str, env, com_session=session)
+
+        assert result.is_success
+        assert result.succeeded_count == 1
+        assert len(result.deliverables) == 1
+
+        deliverable = result.deliverables[0]
+        assert deliverable == fr_dir / f"{stem}.pdf"
+        assert deliverable.exists()
+
+        # Both parts printed via Adobe PDF printer
+        assert mock_doc.PrintOut.call_count == 2
+        assert mock_cleanup.call_count == 2
+        assert mock_restore.call_count == 2
+
+        # Final deliverable: 2 parts (1 page each) + 2 testsheet pages = 4 pages
+        reader = PdfReader(str(deliverable))
+        assert len(reader.pages) == 4
+
+        # Sound embedder was called with output PDF and survey root
+        mock_embed.assert_called_once()
+        assert mock_embed.call_args.args[0] == deliverable
+
+        # Intermediate files cleaned up
+        assert not (fr_dir / f".tmp_conv_{stem}_part_01.pdf").exists()
+        assert not (fr_dir / f".tmp_conv_{stem}_part_02.pdf").exists()
+        assert not (fr_dir / f".tmp_conv_{stem}_master.pdf").exists()
+
+    def test_process_single_part_with_com_converter_fallback(self, tmp_path: Path) -> None:
+        """Verify Full Report post-processing seamlessly falls back to ExportAsFixedFormat when Adobe PDF printing fails."""
+        env = _make_mock_env(tmp_path)
+        station = "RAUB"
+        month = "08. AUGUST"
+        date_str = "04-08-2026"
+        stem = "006. CHEROH (IR)"
+
+        fr_dir = env.get_full_report_dir() / station / month / date_str
+        docx_file = _create_mock_docx(fr_dir / f"{stem}.docx")
+
+        ts_pdf = env.get_testsheet_dir() / station / month / date_str / "processed_testsheet" / "pdf" / f"{stem}.pdf"
+        _create_mock_pdf(ts_pdf, page_count=3)
+
+        mock_word = MagicMock()
+        mock_doc = MagicMock()
+        mock_word.Documents.Open.return_value = mock_doc
+
+        def _simulate_export(*args: object, **kwargs: object) -> None:
+            out_fn = kwargs.get("OutputFileName")
+            if out_fn:
+                _create_mock_pdf(Path(out_fn), page_count=2)
+
+        mock_doc.ExportAsFixedFormat.side_effect = _simulate_export
+
+        converter = ComDocumentConverter(try_adobe_printer=True)
+        session = BatchComSession(word_app=mock_word, excel_app=MagicMock())
+        workflow = FullReportPostProcessingWorkflow(converter=converter)
+
+        with patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Documents"), \
+             patch.object(converter, "_is_distiller_available", return_value=True), \
+             patch.object(converter, "_convert_docx_via_adobe_pdf", side_effect=RuntimeError("Printer spooler error")), \
+             patch.object(converter, "_export_fixed_format", wraps=converter._export_fixed_format) as spy_export:
+
+            result = workflow.process(date_str, env, com_session=session)
+
+        assert result.is_success
+        assert result.succeeded_count == 1
+        deliverable = result.deliverables[0]
+        assert deliverable == fr_dir / f"{stem}.pdf"
+        assert deliverable.exists()
+
+        spy_export.assert_called_once()
+        mock_doc.ExportAsFixedFormat.assert_called_once()
+        assert mock_doc.ExportAsFixedFormat.call_args.kwargs.get("OptimizeFor") == 0  # wdExportOptimizeForPrint
+
+        # Final deliverable: 2 docx pages + 3 testsheet pages = 5 pages
+        reader = PdfReader(str(deliverable))
+        assert len(reader.pages) == 5
+
+        # Intermediate file cleaned up
+        assert not (fr_dir / f".tmp_conv_{stem}.pdf").exists()
 
