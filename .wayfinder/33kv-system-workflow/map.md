@@ -87,6 +87,7 @@ graph TD
     T138["#138: Harden filesystem path sanitization in Full Report intermediate parts and multi-part chunks - Closed"]
     T140["#140: feat(converters): dual-mode Word COM converter with silent Adobe PDF print and native fallback - Closed"]
     T141["#141: feat(postprocessing): integrate dual-mode high-fidelity PDF converter across Full Report and Utility batch workflows - Closed"]
+    T142["#142: fix(converters): suppress Acrobat viewer auto-launch, scale large-document timeout, and isolate fallback paths"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -130,7 +131,8 @@ graph TD
     T137 --> T138
     T138 --> T140
     T140 --> T141
-    T141 --> T103
+    T141 --> T142
+    T142 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -452,6 +454,19 @@ graph TD
 - [x] src/workflows/docx_to_pdf.py utilizes dual-mode high-fidelity conversion.
 - [x] src/workflows/postprocessing_pipeline.py integrates dual-mode high-fidelity conversion.
 - [x] Unit and workflow test suite passes with zero regressions.
+
+### #142: fix(converters): suppress Acrobat viewer auto-launch, scale large-document timeout, and isolate fallback paths
+- **Status**: Open
+- **GitHub Issue**: [#142](https://github.com/adamlarGit/pahang-cli/issues/142)
+- **Blocked by**: None
+- **Ticket File**: [tickets/142-suppress-acrobat-viewer-auto-launch-and-scale-timeout.md](./tickets/142-suppress-acrobat-viewer-auto-launch-and-scale-timeout.md)
+- **Delivers**: Hardening of dual-mode converter against background Acrobat viewer file locking and timeout collisions on large Word documents (20MB-35MB+), eliminating orphaned `.tmp_conv_*.pdf` files and "Word cannot save this document" errors.
+- [ ] ComDocumentConverter suppresses ViewPrintOutput and cleans up any stray background Acrobat.exe viewer handles targeting temporary PDF paths.
+- [ ] adobe_timeout in ComDocumentConverter is scaled (default >= 90s or dynamic) to accommodate 30MB+ Word documents with dozens of thermograms.
+- [ ] Native ExportAsFixedFormat fallback writes to an isolated path when Distiller print encounters a timeout or exception, eliminating file sharing collisions.
+- [ ] Intermediate .tmp_conv_* PDFs are unlinked reliably with retry/backoff so no temporary files linger in deliverable folders.
+- [ ] Unit tests in tests/test_converters.py and tests/test_full_report_postprocessing.py pass.
+- [ ] Verification against 17-08-2026 Cameron Highland dataset passes with 10/10 deliverables generated and zero .tmp files remaining.
 
 ---
 
