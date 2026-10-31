@@ -67,7 +67,7 @@ def test_fake_document_converter(tmp_path) -> None:
 
 def test_convert_docx_to_pdf_with_provided_word_app(tmp_path) -> None:
     """Test that ComDocumentConverter reuses provided word_app without quitting it and exports high fidelity PDF."""
-    converter = ComDocumentConverter()
+    converter = ComDocumentConverter(try_adobe_printer=False)
     docx_path = tmp_path / "sample.docx"
     pdf_path = tmp_path / "sample.pdf"
     docx_path.write_bytes(b"docx_content")
@@ -115,7 +115,7 @@ def test_convert_docx_to_pdf_standalone_lifecycle(
     tmp_path: Path,
 ) -> None:
     """Test that ComDocumentConverter initializes and quits Word when word_app is None."""
-    converter = ComDocumentConverter()
+    converter = ComDocumentConverter(try_adobe_printer=False)
     docx_path = tmp_path / "standalone.docx"
     pdf_path = tmp_path / "standalone.pdf"
     docx_path.write_bytes(b"content")
@@ -394,6 +394,371 @@ def test_com_document_converter_xobject_collision_regression(tmp_path: Path) -> 
     warnings = fitz.TOOLS.mupdf_warnings()
     assert "cannot find XObject resource" not in warnings
     assert "syntax error" not in warnings
+
+
+def test_convert_docx_to_pdf_adobe_pdf_branch_success(tmp_path: Path) -> None:
+    """Test successful conversion via Adobe PDF virtual printer with silent PrinterJobControl automation."""
+    converter = ComDocumentConverter()
+    docx_path = tmp_path / "report.docx"
+    pdf_path = tmp_path / "report.pdf"
+    docx_path.write_bytes(b"sample_report")
+
+    mock_word = MagicMock()
+    mock_word.Path = r"C:\Program Files\Microsoft Office\root\Office16"
+    mock_word.ActivePrinter = "Default Printer"
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+
+    def fake_printout(Background=False):
+        pdf_path.write_bytes(b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n")
+
+    mock_doc.PrintOut.side_effect = fake_printout
+
+    with (
+        patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Ne07:"),
+        patch.object(converter, "_is_distiller_available", return_value=True),
+        patch.object(converter, "_detect_distiller_joboptions_preset", return_value="High Quality Print(1)"),
+        patch.object(converter, "_set_transient_distiller_joboptions", return_value={"DC": "Standard"}) as mock_set_opt,
+        patch.object(converter, "_restore_distiller_joboptions") as mock_restore_opt,
+        patch.object(converter, "_register_printer_job_control", return_value=["WINWORD.EXE", "splwow64.exe"]) as mock_reg_pjc,
+        patch.object(converter, "_cleanup_printer_job_control") as mock_clean_pjc,
+    ):
+        result = converter.convert_docx_to_pdf(docx_path, pdf_path, word_app=mock_word)
+
+        assert result == pdf_path
+        assert pdf_path.exists()
+
+        mock_set_opt.assert_called_once_with("High Quality Print(1)")
+        mock_reg_pjc.assert_called_once_with(mock_word, pdf_path)
+        mock_doc.PrintOut.assert_called_once_with(Background=False)
+        mock_clean_pjc.assert_called_once_with(["WINWORD.EXE", "splwow64.exe"])
+        mock_restore_opt.assert_called_once_with({"DC": "Standard"})
+        mock_doc.ExportAsFixedFormat.assert_not_called()
+        mock_doc.Close.assert_called_once_with(SaveChanges=False)
+
+
+def test_convert_docx_to_pdf_adobe_pdf_cleanup_on_printout_error(tmp_path: Path) -> None:
+    """Test that PrinterJobControl and JobOptions are cleaned up deterministically in finally when PrintOut raises, and falls back to ExportAsFixedFormat."""
+    converter = ComDocumentConverter()
+    docx_path = tmp_path / "broken_print.docx"
+    pdf_path = tmp_path / "broken_print.pdf"
+    docx_path.write_bytes(b"content")
+
+    mock_word = MagicMock()
+    mock_word.Path = r"C:\Program Files\Microsoft Office\root\Office16"
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+
+    mock_doc.PrintOut.side_effect = RuntimeError("Spooler RPC connection failed")
+
+    def fake_export(OutputFileName, **kwargs):
+        Path(OutputFileName).write_bytes(b"%PDF-fallback\n%%EOF\n")
+
+    mock_doc.ExportAsFixedFormat.side_effect = fake_export
+
+    with (
+        patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Ne07:"),
+        patch.object(converter, "_is_distiller_available", return_value=True),
+        patch.object(converter, "_set_transient_distiller_joboptions", return_value={"DC": "Standard"}) as mock_set_opt,
+        patch.object(converter, "_restore_distiller_joboptions") as mock_restore_opt,
+        patch.object(converter, "_register_printer_job_control", return_value=["WINWORD.EXE", "splwow64.exe"]) as mock_reg_pjc,
+        patch.object(converter, "_cleanup_printer_job_control") as mock_clean_pjc,
+    ):
+        result = converter.convert_docx_to_pdf(docx_path, pdf_path, word_app=mock_word)
+
+        assert result == pdf_path
+        assert pdf_path.exists()
+        # Ensure cleanup happened in finally despite PrintOut exception
+        mock_clean_pjc.assert_called_once_with(["WINWORD.EXE", "splwow64.exe"])
+        mock_restore_opt.assert_called_once_with({"DC": "Standard"})
+        # Graceful fallback to ExportAsFixedFormat
+        mock_doc.ExportAsFixedFormat.assert_called_once()
+        mock_doc.Close.assert_called_once_with(SaveChanges=False)
+
+
+def test_convert_docx_to_pdf_fallback_when_adobe_printer_missing(tmp_path: Path) -> None:
+    """Test fallback to ExportAsFixedFormat(OptimizeFor=0) when Adobe PDF printer is not available on host."""
+    converter = ComDocumentConverter(try_adobe_printer=True)
+    docx_path = tmp_path / "no_adobe.docx"
+    pdf_path = tmp_path / "no_adobe.pdf"
+    docx_path.write_bytes(b"content")
+
+    mock_word = MagicMock()
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+
+    def fake_export(OutputFileName, **kwargs):
+        Path(OutputFileName).write_bytes(b"%PDF-native")
+
+    mock_doc.ExportAsFixedFormat.side_effect = fake_export
+
+    with patch.object(converter, "_find_adobe_pdf_printer", return_value=None):
+        result = converter.convert_docx_to_pdf(docx_path, pdf_path, word_app=mock_word)
+
+        assert result == pdf_path
+        assert pdf_path.exists()
+        mock_doc.PrintOut.assert_not_called()
+        mock_doc.ExportAsFixedFormat.assert_called_once_with(
+            OutputFileName=str(pdf_path.resolve()),
+            ExportFormat=17,
+            OpenAfterExport=False,
+            OptimizeFor=0,
+            Range=0,
+            Item=0,
+            IncludeDocProps=True,
+            KeepIRM=True,
+            CreateBookmarks=0,
+            DocStructureTags=True,
+            BitmapMissingFonts=True,
+            UseISO19005_1=False,
+        )
+
+
+def test_convert_docx_to_pdf_fallback_when_distiller_missing(tmp_path: Path) -> None:
+    """Test fallback to ExportAsFixedFormat when Adobe PDF printer exists but Acrobat Distiller registry keys are missing."""
+    converter = ComDocumentConverter(try_adobe_printer=True)
+    docx_path = tmp_path / "no_distiller.docx"
+    pdf_path = tmp_path / "no_distiller.pdf"
+    docx_path.write_bytes(b"content")
+
+    mock_word = MagicMock()
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+
+    def fake_export(OutputFileName, **kwargs):
+        Path(OutputFileName).write_bytes(b"%PDF-native")
+
+    mock_doc.ExportAsFixedFormat.side_effect = fake_export
+
+    with (
+        patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Ne07:"),
+        patch.object(converter, "_is_distiller_available", return_value=False),
+    ):
+        result = converter.convert_docx_to_pdf(docx_path, pdf_path, word_app=mock_word)
+
+        assert result == pdf_path
+        mock_doc.PrintOut.assert_not_called()
+        mock_doc.ExportAsFixedFormat.assert_called_once()
+
+
+def test_convert_docx_to_pdf_fallback_when_try_adobe_printer_false(tmp_path: Path) -> None:
+    """Test that try_adobe_printer=False directly routes to native ExportAsFixedFormat without printer checks."""
+    converter = ComDocumentConverter(try_adobe_printer=False)
+    docx_path = tmp_path / "disabled_adobe.docx"
+    pdf_path = tmp_path / "disabled_adobe.pdf"
+    docx_path.write_bytes(b"content")
+
+    mock_word = MagicMock()
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+
+    def fake_export(OutputFileName, **kwargs):
+        Path(OutputFileName).write_bytes(b"%PDF-native")
+
+    mock_doc.ExportAsFixedFormat.side_effect = fake_export
+
+    with patch.object(converter, "_find_adobe_pdf_printer") as mock_find:
+        result = converter.convert_docx_to_pdf(docx_path, pdf_path, word_app=mock_word)
+
+        assert result == pdf_path
+        mock_find.assert_not_called()
+        mock_doc.PrintOut.assert_not_called()
+        mock_doc.ExportAsFixedFormat.assert_called_once()
+
+
+def test_convert_docx_to_pdf_adobe_pdf_timeout_fallback(tmp_path: Path) -> None:
+    """Test that when Adobe PDF printout does not produce a PDF within timeout, it falls back to ExportAsFixedFormat."""
+    converter = ComDocumentConverter(adobe_timeout=0.01)
+    docx_path = tmp_path / "timeout.docx"
+    pdf_path = tmp_path / "timeout.pdf"
+    docx_path.write_bytes(b"content")
+
+    mock_word = MagicMock()
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+    # PrintOut does nothing (no file created)
+    mock_doc.PrintOut.return_value = None
+
+    def fake_export(OutputFileName, **kwargs):
+        Path(OutputFileName).write_bytes(b"%PDF-fallback")
+
+    mock_doc.ExportAsFixedFormat.side_effect = fake_export
+
+    with (
+        patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Ne07:"),
+        patch.object(converter, "_is_distiller_available", return_value=True),
+        patch.object(converter, "_cleanup_printer_job_control") as mock_clean,
+    ):
+        result = converter.convert_docx_to_pdf(docx_path, pdf_path, word_app=mock_word)
+
+        assert result == pdf_path
+        assert pdf_path.exists()
+        mock_doc.PrintOut.assert_called_once()
+        mock_doc.ExportAsFixedFormat.assert_called_once()
+        mock_clean.assert_called_once()
+
+
+def test_printer_job_control_registration_and_cleanup_deterministic(tmp_path: Path) -> None:
+    """Verify registry automation for PrinterJobControl registers entries for WINWORD.EXE and splwow64.exe and deletes them."""
+    import winreg
+
+    converter = ComDocumentConverter()
+    pdf_path = tmp_path / "sample_out.pdf"
+
+    mock_word = MagicMock()
+    mock_word.Path = r"C:\Office"
+
+    set_calls = []
+    delete_calls = []
+
+    mock_key = MagicMock()
+
+    def fake_set_value(key, name, reserved, type_, val):
+        set_calls.append((name, val))
+
+    def fake_delete_value(key, name):
+        delete_calls.append(name)
+
+    with (
+        patch("winreg.CreateKey", return_value=mock_key),
+        patch("winreg.OpenKey", return_value=mock_key),
+        patch("winreg.SetValueEx", side_effect=fake_set_value),
+        patch("winreg.DeleteValue", side_effect=fake_delete_value),
+    ):
+        entries = converter._register_printer_job_control(mock_word, pdf_path)
+
+        assert "WINWORD.EXE" in entries
+        assert "splwow64.exe" in entries
+        assert any("splwow64.exe" in e and "\\" in e for e in entries)
+        assert any(r"C:\Office\WINWORD.EXE" in e for e in entries)
+
+        # Check all registered names received the absolute PDF path
+        target_str = str(pdf_path.resolve())
+        for name, val in set_calls:
+            assert val == target_str
+
+        # Now clean up
+        converter._cleanup_printer_job_control(entries)
+        for e in entries:
+            assert e in delete_calls
+
+
+def test_detect_distiller_joboptions_preset_registry_selection() -> None:
+    """Test joboptions preset detection prioritizes High Quality Print(1), then High Quality Print."""
+    converter = ComDocumentConverter()
+
+    # Case 1: High Quality Print(1) is available
+    with (
+        patch("winreg.OpenKey"),
+        patch(
+            "winreg.EnumValue",
+            side_effect=[
+                ("Standard", "desc", None),
+                ("High Quality Print(1)", "desc", None),
+                ("High Quality Print", "desc", None),
+                OSError("No more data"),
+            ],
+        ),
+    ):
+        assert converter._detect_distiller_joboptions_preset() == "High Quality Print(1)"
+
+    # Case 2: Only High Quality Print is available
+    with (
+        patch("winreg.OpenKey"),
+        patch(
+            "winreg.EnumValue",
+            side_effect=[
+                ("Standard", "desc", None),
+                ("High Quality Print", "desc", None),
+                OSError("No more data"),
+            ],
+        ),
+    ):
+        assert converter._detect_distiller_joboptions_preset() == "High Quality Print"
+
+    # Case 3: Neither found in registry -> default to High Quality Print(1)
+    with (
+        patch("winreg.OpenKey", side_effect=OSError("Key not found")),
+        patch("pathlib.Path.exists", return_value=False),
+    ):
+        assert converter._detect_distiller_joboptions_preset() == "High Quality Print(1)"
+
+
+def test_transient_distiller_joboptions_set_and_restore() -> None:
+    """Test that _set_transient_distiller_joboptions captures original JobOptions and restores them faithfully."""
+    import winreg
+
+    converter = ComDocumentConverter()
+    mock_root = MagicMock()
+    mock_root.__enter__.return_value = mock_root
+    mock_sub = MagicMock()
+    mock_sub.__enter__.return_value = mock_sub
+
+    with (
+        patch("winreg.OpenKey", side_effect=[mock_root, mock_sub, mock_sub]),
+        patch("winreg.EnumKey", side_effect=["DC", OSError("No more keys")]),
+        patch("winreg.QueryValueEx", return_value=("Standard", winreg.REG_SZ)),
+        patch("winreg.SetValueEx") as mock_set,
+    ):
+        backup = converter._set_transient_distiller_joboptions("High Quality Print(1)")
+        assert backup == {"": "Standard", "DC": "Standard"}
+        mock_set.assert_called_with(mock_sub, "JobOptions", 0, winreg.REG_SZ, "High Quality Print(1)")
+
+    # Test restoration
+    with (
+        patch("winreg.OpenKey", return_value=mock_sub),
+        patch("winreg.SetValueEx") as mock_restore_set,
+    ):
+        converter._restore_distiller_joboptions(backup)
+        assert mock_restore_set.call_count == 2
+        mock_restore_set.assert_called_with(mock_sub, "JobOptions", 0, winreg.REG_SZ, "Standard")
+
+
+def test_get_installed_printers_enumeration() -> None:
+    """Test get_installed_printers enumerates Devices and maps lowercase printer names to full specs."""
+    from src.postprocessing.converters import get_installed_printers
+
+    with (
+        patch("winreg.OpenKey"),
+        patch(
+            "winreg.EnumValue",
+            side_effect=[
+                ("Adobe PDF", "winspool,Ne07:", None),
+                ("Microsoft Print to PDF", "winspool,Ne02:", None),
+                ("DirectPrinter", "winspool", None),
+                OSError("No more items"),
+            ],
+        ),
+    ):
+        printers = get_installed_printers()
+        assert printers["adobe pdf"] == "Adobe PDF on Ne07:"
+        assert printers["microsoft print to pdf"] == "Microsoft Print to PDF on Ne02:"
+        assert printers["directprinter"] == "DirectPrinter"
+
+
+def test_wait_for_pdf_success_with_eof(tmp_path: Path) -> None:
+    """Test _wait_for_pdf returns True immediately when file exists, is unlocked, and contains %%EOF."""
+    converter = ComDocumentConverter()
+    pdf_path = tmp_path / "valid.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n")
+
+    assert converter._wait_for_pdf(pdf_path, timeout=1.0) is True
+
+
+def test_wait_for_pdf_failure_on_incomplete_file_or_timeout(tmp_path: Path) -> None:
+    """Test _wait_for_pdf returns False when file is incomplete/missing %%EOF or never appears."""
+    converter = ComDocumentConverter()
+    pdf_path = tmp_path / "corrupted.pdf"
+    pdf_path.write_bytes(b"%PDF-incomplete-without-eof")
+
+    # When file lacks %%EOF and size doesn't stabilize twice before timeout
+    assert converter._wait_for_pdf(pdf_path, timeout=0.05, poll_interval=0.01) is False
+
+    # When file does not exist at all
+    missing_path = tmp_path / "does_not_exist.pdf"
+    assert converter._wait_for_pdf(missing_path, timeout=0.05, poll_interval=0.01) is False
+
+
 
 
 

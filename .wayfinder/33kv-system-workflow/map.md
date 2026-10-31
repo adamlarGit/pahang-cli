@@ -85,6 +85,8 @@ graph TD
     T134["#134: Record LinkBoxSanitizationPolicy and TransformerDesignationPolicy in CONTEXT.md - Closed"]
     T137["#137: Normalize multiline whitespace and control characters in testsheet cell parsers - Closed"]
     T138["#138: Harden filesystem path sanitization in Full Report intermediate parts and multi-part chunks - Closed"]
+    T140["#140: feat(converters): dual-mode Word COM converter with silent Adobe PDF print and native fallback - Closed"]
+    T141["#141: feat(postprocessing): integrate dual-mode high-fidelity PDF converter across Full Report and Utility batch workflows"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -126,7 +128,9 @@ graph TD
     T133 --> T134
     T134 --> T137
     T137 --> T138
-    T138 --> T103
+    T138 --> T140
+    T140 --> T141
+    T141 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -425,6 +429,29 @@ graph TD
 - [x] Shared sanitize_filename utility strips/replaces ASCII control characters ([\x00-\x1f\r\n\t]) in addition to existing reserved characters ([<>:"/\\|?*]).
 - [x] Multi-part partition chunk labels and output filenames are sanitized against control characters and invalid filename characters.
 - [x] Regression test verifies that Full Report generation compiles all intermediate parts and multi-part chunk deliverables for SSU LYNAS 33kV without [Errno 22] Invalid argument or COM compilation failures.
+
+### #140: feat(converters): dual-mode Word COM converter with silent Adobe PDF print and native fallback
+- **Status**: Closed
+- **GitHub Issue**: [#140](https://github.com/adamlarGit/pahang-cli/issues/140)
+- **Blocked by**: None
+- **Ticket File**: [tickets/140-dual-mode-word-com-converter.md](./tickets/140-dual-mode-word-com-converter.md)
+- **Delivers**: Silent high-fidelity Word-to-PDF conversion via Adobe PDF printer with transient PrinterJobControl registry automation and fallback to ExportAsFixedFormat.
+- [x] ComDocumentConverter.convert_docx_to_pdf checks for Adobe PDF printer and runs silent print with transient PrinterJobControl registry automation for both WINWORD.EXE and splwow64.exe.
+- [x] Active Acrobat Distiller joboptions preset High Quality Print(1) or equivalent non-downsampling profile is utilized.
+- [x] Registry entries in HKCU\Software\Adobe\Acrobat Distiller\PrinterJobControl are cleaned up deterministically in a finally block even if errors occur.
+- [x] Graceful fallback to doc.ExportAsFixedFormat occurs if Adobe PDF is missing or on error.
+- [x] Unit tests in tests/test_postprocessing_cli_adapter.py / tests/test_converters.py verify both the Adobe PDF branch and fallback branch.
+
+### #141: feat(postprocessing): integrate dual-mode high-fidelity PDF converter across Full Report and Utility batch workflows
+- **Status**: Open
+- **GitHub Issue**: [#141](https://github.com/adamlarGit/pahang-cli/issues/141)
+- **Blocked by**: #140
+- **Ticket File**: [tickets/141-integrate-dual-mode-pdf-converter.md](./tickets/141-integrate-dual-mode-pdf-converter.md)
+- **Delivers**: Integration and end-to-end verification of dual-mode high-fidelity Word converter across Full Report postprocessing, batch docx_to_pdf, and full substation pipeline.
+- [ ] src/workflows/full_report_postprocessing.py utilizes dual-mode converter with testsheet appending and ultrasound embedding.
+- [ ] src/workflows/docx_to_pdf.py utilizes dual-mode high-fidelity conversion.
+- [ ] src/workflows/postprocessing_pipeline.py integrates dual-mode high-fidelity conversion.
+- [ ] Unit and workflow test suite passes with zero regressions.
 
 ---
 

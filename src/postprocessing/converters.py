@@ -204,6 +204,36 @@ def select_and_sort_sheets(
     return testsheet_names + vi_names
 
 
+def get_installed_printers() -> dict[str, str]:
+    """Enumerate installed printers from Windows registry Devices list.
+
+    Returns:
+        dict[str, str]: Mapping of lowercase printer name to full printer spec (e.g. 'adobe pdf': 'Adobe PDF on Ne07:').
+    """
+    devices: dict[str, str] = {}
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows NT\CurrentVersion\Devices",
+        ) as key:
+            i = 0
+            while True:
+                try:
+                    name, val, _ = winreg.EnumValue(key, i)
+                    parts = str(val).split(",")
+                    port = parts[1].strip() if len(parts) >= 2 else ""
+                    spec = f"{name} on {port}" if port else str(name)
+                    devices[str(name).lower()] = spec
+                    i += 1
+                except OSError:
+                    break
+    except Exception as exc:
+        logging.debug("Could not query Devices registry for installed printers: %s", exc)
+    return devices
+
+
 def configure_uniform_printer(app: object) -> None:
     """Configure ActivePrinter to a standardized virtual PDF printer (Adobe PDF or Microsoft Print to PDF) to ensure uniform scaling."""
     try:
@@ -212,29 +242,12 @@ def configure_uniform_printer(app: object) -> None:
         if any(p in current_printer.lower() for p in preferred_printers):
             return
 
-        import winreg
-
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows NT\CurrentVersion\Devices",
-        ) as key:
-            devices = {}
-            i = 0
-            while True:
-                try:
-                    name, val, _ = winreg.EnumValue(key, i)
-                    parts = str(val).split(",")
-                    port = parts[1].strip() if len(parts) >= 2 else ""
-                    devices[name.lower()] = f"{name} on {port}"
-                    i += 1
-                except OSError:
-                    break
-
-            for pref in preferred_printers:
-                for dev_name, full_spec in devices.items():
-                    if pref in dev_name:
-                        app.ActivePrinter = full_spec
-                        return
+        devices = get_installed_printers()
+        for pref in preferred_printers:
+            for dev_name, full_spec in devices.items():
+                if pref in dev_name:
+                    app.ActivePrinter = full_spec
+                    return
     except Exception as exc:
         logging.debug("Could not configure uniform printer: %s", exc)
 
@@ -428,10 +441,286 @@ class DocumentConverter(ABC):
 class ComDocumentConverter(DocumentConverter):
     """Document converter utilizing Windows COM automation (`win32com.client`)."""
 
-    def __init__(self, optimize_page_setup: bool = True, try_adobe_printer: bool = True) -> None:
+    def __init__(
+        self,
+        optimize_page_setup: bool = True,
+        try_adobe_printer: bool = True,
+        adobe_timeout: float = 30.0,
+    ) -> None:
         """Initialize the COM converter with optional PageSetup optimization and Adobe PDF virtual printer selection."""
         self.optimize_page_setup = optimize_page_setup
         self.try_adobe_printer = try_adobe_printer
+        self.adobe_timeout = adobe_timeout
+
+    def _find_adobe_pdf_printer(self) -> str | None:
+        """Detect whether 'Adobe PDF' printer is available in the Windows registry Devices list."""
+        devices = get_installed_printers()
+        for dev_name, full_spec in devices.items():
+            if "adobe pdf" in dev_name:
+                return full_spec
+        return None
+
+    def _is_distiller_available(self) -> bool:
+        """Detect whether Acrobat Distiller registry configuration is present on host."""
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Adobe\Acrobat Distiller",
+            ):
+                return True
+        except Exception:
+            return False
+
+    def _detect_distiller_joboptions_preset(self) -> str:
+        """Detect the optimal Acrobat Distiller joboptions preset name.
+
+        Prioritizes 'High Quality Print(1)', followed by 'High Quality Print' and 'Press Quality'.
+        """
+        candidates = ["High Quality Print(1)", "High Quality Print", "Press Quality"]
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Adobe\Acrobat Distiller\AdobePDFSettings",
+            ) as key:
+                available_settings = set()
+                i = 0
+                while True:
+                    try:
+                        name, _, _ = winreg.EnumValue(key, i)
+                        if name:
+                            available_settings.add(str(name).strip())
+                        i += 1
+                    except OSError:
+                        break
+                for candidate in candidates:
+                    if candidate in available_settings:
+                        return candidate
+        except Exception as exc:
+            logging.debug("Could not query AdobePDFSettings in registry: %s", exc)
+
+        fs_dirs = [
+            Path(os.environ.get("APPDATA", "")) / "Adobe" / "Adobe PDF" / "Settings",
+            Path(os.environ.get("ProgramData", "")) / "Adobe" / "Adobe PDF" / "Settings",
+        ]
+        for candidate in candidates:
+            for d in fs_dirs:
+                if (d / f"{candidate}.joboptions").exists():
+                    return candidate
+
+        return "High Quality Print(1)"
+
+    def _set_transient_distiller_joboptions(self, preset: str) -> dict[str, str | None]:
+        """Configure transient Distiller JobOptions preset across Distiller version keys, preserving original values."""
+        import winreg
+
+        backup: dict[str, str | None] = {}
+        distiller_path = r"Software\Adobe\Acrobat Distiller"
+
+        subkeys_to_check = [""]
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                distiller_path,
+                0,
+                winreg.KEY_READ,
+            ) as root_key:
+                i = 0
+                while True:
+                    try:
+                        sub = winreg.EnumKey(root_key, i)
+                        if sub.lower() not in ("printerjobcontrol", "adobepdfsettings"):
+                            subkeys_to_check.append(sub)
+                        i += 1
+                    except OSError:
+                        break
+        except OSError:
+            return backup
+
+        for sub in subkeys_to_check:
+            full_sub_path = f"{distiller_path}\\{sub}" if sub else distiller_path
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    full_sub_path,
+                    0,
+                    winreg.KEY_READ | winreg.KEY_SET_VALUE,
+                ) as key:
+                    try:
+                        orig_val, _ = winreg.QueryValueEx(key, "JobOptions")
+                        backup[sub] = orig_val
+                    except OSError:
+                        if sub and (sub == "DC" or re.match(r"^\d+\.\d+$", sub)):
+                            backup[sub] = None
+                        else:
+                            continue
+
+                    winreg.SetValueEx(key, "JobOptions", 0, winreg.REG_SZ, preset)
+            except OSError:
+                pass
+
+        return backup
+
+    def _restore_distiller_joboptions(self, backup: dict[str, str | None]) -> None:
+        """Restore Acrobat Distiller JobOptions settings to their previous values."""
+        import winreg
+
+        distiller_path = r"Software\Adobe\Acrobat Distiller"
+        for sub, orig_val in backup.items():
+            full_sub_path = f"{distiller_path}\\{sub}" if sub else distiller_path
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_CURRENT_USER,
+                    full_sub_path,
+                    0,
+                    winreg.KEY_SET_VALUE,
+                ) as key:
+                    if orig_val is not None:
+                        winreg.SetValueEx(key, "JobOptions", 0, winreg.REG_SZ, orig_val)
+                    else:
+                        try:
+                            winreg.DeleteValue(key, "JobOptions")
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+
+    def _register_printer_job_control(self, word_app: object, pdf_path: Path) -> list[str]:
+        """Register output PDF path entries in HKCU\\Software\\Adobe\\Acrobat Distiller\\PrinterJobControl."""
+        import winreg
+
+        target_str = str(pdf_path.resolve())
+        entries: list[str] = [
+            "WINWORD.EXE",
+            "splwow64.exe",
+            str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "splwow64.exe"),
+        ]
+        word_path = getattr(word_app, "Path", None)
+        if word_path:
+            full_word_exe = str(Path(word_path) / "WINWORD.EXE")
+            if full_word_exe not in entries:
+                entries.append(full_word_exe)
+
+        with winreg.CreateKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Adobe\Acrobat Distiller\PrinterJobControl",
+        ) as pjc_key:
+            for entry in entries:
+                winreg.SetValueEx(pjc_key, entry, 0, winreg.REG_SZ, target_str)
+
+        return entries
+
+    def _cleanup_printer_job_control(self, entry_names: list[str]) -> None:
+        """Deterministically remove registered entries from PrinterJobControl in registry."""
+        import winreg
+
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Adobe\Acrobat Distiller\PrinterJobControl",
+                0,
+                winreg.KEY_SET_VALUE,
+            ) as pjc_key:
+                for entry in entry_names:
+                    try:
+                        winreg.DeleteValue(pjc_key, entry)
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+    def _wait_for_pdf(self, pdf_path: Path, timeout: float = 30.0, poll_interval: float = 0.25) -> bool:
+        """Wait for PDF to be fully created, unlocked, and contain the valid EOF token."""
+        import time
+
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            if pdf_path.exists():
+                try:
+                    size = pdf_path.stat().st_size
+                    if size > 0:
+                        with open(pdf_path, "rb+") as f:
+                            f.seek(max(0, size - 1024))
+                            tail = f.read()
+                            if b"%%EOF" in tail:
+                                return True
+                except (OSError, PermissionError):
+                    pass
+            time.sleep(poll_interval)
+
+        return False
+
+    def _export_fixed_format(self, doc: object, pdf_path: Path) -> None:
+        """Export Word document using native ExportAsFixedFormat engine (wdExportOptimizeForPrint)."""
+        doc.ExportAsFixedFormat(
+            OutputFileName=str(pdf_path.resolve()),
+            ExportFormat=17,  # wdExportFormatPDF
+            OpenAfterExport=False,
+            OptimizeFor=0,  # wdExportOptimizeForPrint (High Quality)
+            Range=0,  # wdExportAllDocument
+            Item=0,  # wdExportDocumentContent
+            IncludeDocProps=True,
+            KeepIRM=True,
+            CreateBookmarks=0,  # wdExportCreateNoBookmarks
+            DocStructureTags=True,
+            BitmapMissingFonts=True,
+            UseISO19005_1=False,
+        )
+
+    def _convert_docx_via_adobe_pdf(
+        self,
+        word_app: object,
+        doc: object,
+        pdf_path: Path,
+        printer_spec: str,
+    ) -> bool:
+        """Route Word document conversion through Adobe PDF virtual printer with silent PrinterJobControl automation."""
+        preset = self._detect_distiller_joboptions_preset()
+        joboptions_backup: dict[str, str | None] = {}
+        registered_entries: list[str] = []
+        orig_printer = None
+
+        try:
+            joboptions_backup = self._set_transient_distiller_joboptions(preset)
+            registered_entries = self._register_printer_job_control(word_app, pdf_path)
+
+            try:
+                orig_printer = getattr(word_app, "ActivePrinter", None)
+            except Exception:
+                orig_printer = None
+
+            try:
+                word_app.ActivePrinter = printer_spec
+            except Exception:
+                word_app.ActivePrinter = "Adobe PDF"
+
+            if pdf_path.exists():
+                try:
+                    pdf_path.unlink()
+                except OSError:
+                    pass
+
+            doc.PrintOut(Background=False)
+
+            success = self._wait_for_pdf(pdf_path, timeout=self.adobe_timeout)
+            if not success or not pdf_path.exists() or pdf_path.stat().st_size == 0:
+                raise RuntimeError(f"Adobe PDF printer failed to produce output at {pdf_path}")
+            return True
+
+        finally:
+            if registered_entries:
+                self._cleanup_printer_job_control(registered_entries)
+            if joboptions_backup:
+                self._restore_distiller_joboptions(joboptions_backup)
+            if orig_printer is not None:
+                try:
+                    word_app.ActivePrinter = orig_printer
+                except Exception:
+                    pass
 
     def _configure_adobe_printer(self, excel_app: object) -> None:
         """Configure printer for Excel COM automation."""
@@ -612,7 +901,7 @@ class ComDocumentConverter(DocumentConverter):
         word_app: object | None = None,
         session: BatchComSession | None = None,
     ) -> Path:
-        """Convert Word document to PDF using high-fidelity COM ExportAsFixedFormat."""
+        """Convert Word document to PDF using dual-mode silent Adobe PDF printing with native ExportAsFixedFormat fallback."""
         if session is not None and word_app is None:
             word_app = session.word_app
 
@@ -634,20 +923,25 @@ class ComDocumentConverter(DocumentConverter):
         doc = None
         try:
             doc = word_app.Documents.Open(str(docx_path.resolve()))
-            doc.ExportAsFixedFormat(
-                OutputFileName=str(pdf_path.resolve()),
-                ExportFormat=17,  # wdExportFormatPDF
-                OpenAfterExport=False,
-                OptimizeFor=0,  # wdExportOptimizeForPrint (High Quality)
-                Range=0,  # wdExportAllDocument
-                Item=0,  # wdExportDocumentContent
-                IncludeDocProps=True,
-                KeepIRM=True,
-                CreateBookmarks=0,  # wdExportCreateNoBookmarks
-                DocStructureTags=True,
-                BitmapMissingFonts=True,
-                UseISO19005_1=False,
-            )
+            converted = False
+
+            if self.try_adobe_printer:
+                printer_spec = self._find_adobe_pdf_printer()
+                if printer_spec and self._is_distiller_available():
+                    try:
+                        converted = self._convert_docx_via_adobe_pdf(
+                            word_app, doc, pdf_path, printer_spec
+                        )
+                    except Exception as exc:
+                        logging.warning(
+                            "Silent Adobe PDF print failed for %s (%s); falling back to native ExportAsFixedFormat",
+                            docx_path.name,
+                            exc,
+                        )
+                        converted = False
+
+            if not converted:
+                self._export_fixed_format(doc, pdf_path)
         finally:
             if doc is not None:
                 try:
@@ -744,10 +1038,16 @@ class ComDocumentConverter(DocumentConverter):
 class FakeDocumentConverter(DocumentConverter):
     """Fake document converter implementation for testing without COM execution."""
 
-    def __init__(self, optimize_page_setup: bool = True, try_adobe_printer: bool = True) -> None:
+    def __init__(
+        self,
+        optimize_page_setup: bool = True,
+        try_adobe_printer: bool = True,
+        adobe_timeout: float = 30.0,
+    ) -> None:
         """Initialize the fake converter and tracking lists for method invocations."""
         self.optimize_page_setup = optimize_page_setup
         self.try_adobe_printer = try_adobe_printer
+        self.adobe_timeout = adobe_timeout
         self.convert_testsheet_calls: list[tuple[Path, Path, Sequence[str] | None]] = []
         self.convert_docx_calls: list[tuple[Path, Path]] = []
         self.merge_pdfs_calls: list[tuple[Path, Path, Path]] = []
