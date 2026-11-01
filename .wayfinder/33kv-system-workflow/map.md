@@ -92,7 +92,7 @@ graph TD
     T144["#144: fix(converters): remove premature stagnation timeout to allow large PostScript spool completion - Closed"]
     T145["#145: fix(converters): pre-warm Session 1 Distiller instance to prevent Session 0 port monitor fallback - Closed"]
     T146["#146: feat(postprocessing): Source Image Restoration module - Closed"]
-    T147["#147: feat(converters): native export with Source Image Restoration as the Full Report conversion path"]
+    T147["#147: feat(converters): native export with Source Image Restoration as the Full Report conversion path - Closed"]
     T149["#149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)"]
     T148["#148: refactor(converters): retire the Adobe PDF virtual-printer path"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
@@ -538,18 +538,18 @@ graph TD
 - [x] All tests pass with zero regressions.
 
 ### #147: feat(converters): native export with Source Image Restoration as the Full Report conversion path
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#147](https://github.com/adamlarGit/pahang-cli/issues/147) (sub-issue of #145; parents #140–#145)
 - **Blocked by**: #146
 - **Ticket File**: [tickets/147-native-export-with-restoration-in-converter.md](./tickets/147-native-export-with-restoration-in-converter.md)
 - **Delivers**: Full Report conversion of native export, then restoration, per part. It adds a DOCX snapshot and hash consistency check, unique temp names, a per-part fallback to native with an operator warning, a per-date-folder run lock with a stale temp sweep, and restoration counts in the batch summary.
-- [ ] No `PrintOut` or Distiller is called for Full Report parts.
-- [ ] The snapshot consistency check is in place, with one redo and a warning.
-- [ ] Unique temp names, cleaned up on every path.
-- [ ] A restoration failure in one part does not fail the multi-part deliverable.
-- [ ] The run lock prevents concurrent post-processing of the same folder, and stale temps are swept.
-- [ ] Restoration counts appear in the batch summary.
-- [ ] All tests pass with zero regressions.
+- [x] No `PrintOut` or Distiller is called for Full Report parts.
+- [x] The snapshot consistency check is in place, with one redo and a warning.
+- [x] Unique temp names, cleaned up on every path.
+- [x] A restoration failure in one part does not fail the multi-part deliverable.
+- [x] The run lock prevents concurrent post-processing of the same folder, and stale temps are swept.
+- [x] Restoration counts appear in the batch summary.
+- [x] All tests pass with zero regressions.
 
 ### #149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)
 - **Status**: Open

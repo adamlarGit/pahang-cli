@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #147: feat(converters): native export with Source Image Restoration as the Full Report conversion path
 
 ## Parent
@@ -57,15 +57,15 @@ In one long-lived 32-bit Word session, the 41 MB "TX and Condition" part of PPU 
 - Excel testsheet conversion is unchanged.
 
 ## Acceptance criteria
-- [ ] `convert_docx_to_pdf` never calls `PrintOut` or Distiller for Full Report parts.
-- [ ] Snapshot and hash consistency check is in place, with the single redo and the warning on a second change.
-- [ ] Unique per-conversion temp names, all removed on success, on failure, and on a `KeyboardInterrupt` between steps.
-- [ ] Restoration failure in one part of a multi-part group yields a completed deliverable with that part native, plus a warning.
-- [ ] The run lock prevents concurrent post-processing of the same date folder. A dead-PID lock is taken over, and stale temps are swept.
-- [ ] An export that returns without writing a file triggers one retry in a fresh Word instance. Word is recycled at each substation boundary.
-- [ ] Restoration counts appear in the batch summary.
-- [ ] Unit and workflow tests use `FakeDocumentConverter` and the restoration module with a stub where needed. 33kV multi-part workflow tests (`tests/test_full_report_postprocessing_33kv.py`) are updated.
-- [ ] All tests pass with zero regressions.
+- [x] `convert_docx_to_pdf` never calls `PrintOut` or Distiller for Full Report parts.
+- [x] Snapshot and hash consistency check is in place, with the single redo and the warning on a second change.
+- [x] Unique per-conversion temp names, all removed on success, on failure, and on a `KeyboardInterrupt` between steps.
+- [x] Restoration failure in one part of a multi-part group yields a completed deliverable with that part native, plus a warning.
+- [x] The run lock prevents concurrent post-processing of the same date folder. A dead-PID lock is taken over, and stale temps are swept.
+- [x] An export that returns without writing a file triggers one retry in a fresh Word instance. Word is recycled at each substation boundary.
+- [x] Restoration counts appear in the batch summary.
+- [x] Unit and workflow tests use `FakeDocumentConverter` and the restoration module with a stub where needed. 33kV multi-part workflow tests (`tests/test_full_report_postprocessing_33kv.py`) are updated.
+- [x] All tests pass with zero regressions.
 
 ## Blocked by
 #146
