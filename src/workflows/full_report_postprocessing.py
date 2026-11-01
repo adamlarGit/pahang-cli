@@ -32,6 +32,7 @@ from src.postprocessing.converters import (
     FakeDocumentConverter,
     batch_com_session,
     configure_uniform_printer,
+    safe_unlink_with_retry,
 )
 from src.project.storage import extract_numerical_prefix, extract_prefix_safe
 from src.quick_report.extractor import DAILY_DATE_FOLDER_PATTERN
@@ -722,16 +723,8 @@ class FullReportPostProcessingWorkflow:
             finally:
                 # 4. Clean up all temporary part PDFs and intermediate master PDF
                 for temp_p in temp_part_pdfs:
-                    if temp_p.exists():
-                        try:
-                            temp_p.unlink()
-                        except Exception:
-                            pass
-                if temp_master_pdf.exists():
-                    try:
-                        temp_master_pdf.unlink()
-                    except Exception:
-                        pass
+                    safe_unlink_with_retry(temp_p)
+                safe_unlink_with_retry(temp_master_pdf)
         else:
             # Single-file target
             docx_path = group.primary_docx_path
@@ -742,11 +735,7 @@ class FullReportPostProcessingWorkflow:
                 )
                 self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
             finally:
-                if temp_conv_pdf.exists():
-                    try:
-                        temp_conv_pdf.unlink()
-                    except Exception:
-                        pass
+                safe_unlink_with_retry(temp_conv_pdf)
 
         # Unified Exit Point: Sound embedding hook (IdempotentSoundEmbeddingPolicy & UsTevAudioResiliencePolicy)
         if environment is not None and out_pdf.exists():

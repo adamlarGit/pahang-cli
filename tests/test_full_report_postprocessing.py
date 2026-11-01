@@ -23,6 +23,7 @@ from src.postprocessing.converters import (
     BatchComSession,
     ComDocumentConverter,
     FakeDocumentConverter,
+    safe_unlink_with_retry,
 )
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
@@ -917,4 +918,91 @@ class TestComDocumentConverterFullReportIntegration:
 
         # Intermediate file cleaned up
         assert not (fr_dir / f".tmp_conv_{stem}.pdf").exists()
+
+
+def test_compile_deliverable_cleans_up_tmp_conv_with_safe_unlink(tmp_path: Path) -> None:
+    """Test that _compile_deliverable uses safe_unlink_with_retry on intermediate .tmp_conv_* files."""
+    from src.workflows.full_report_postprocessing import (
+        FullReportPostProcessingWorkflow,
+        PostProcessingTargetGroup,
+    )
+
+    out_dir = tmp_path / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_pdf = out_dir / "deliverable.pdf"
+    ts_pdf = out_dir / "testsheet.pdf"
+    docx_file = out_dir / "report.docx"
+
+    docx_file.write_bytes(b"mock docx")
+    _create_mock_pdf(ts_pdf, page_count=1)
+
+    converter = FakeDocumentConverter()
+    workflow = FullReportPostProcessingWorkflow(converter=converter)
+
+    group = PostProcessingTargetGroup(
+        stem="deliverable",
+        docx_paths=(docx_file,),
+        is_multipart=False,
+    )
+
+    with patch("src.workflows.full_report_postprocessing.safe_unlink_with_retry", wraps=safe_unlink_with_retry) as spy_unlink:
+        workflow._compile_deliverable(
+            group=group,
+            testsheet_pdf_path=ts_pdf,
+            output_pdf_path=out_pdf,
+        )
+
+        assert out_pdf.exists()
+        # Verify safe_unlink_with_retry was called on intermediate .tmp_conv_deliverable.pdf
+        temp_conv_pdf = out_dir / f".tmp_conv_{out_pdf.name}"
+        spy_unlink.assert_called_with(temp_conv_pdf)
+        assert not temp_conv_pdf.exists()
+
+
+def test_compile_deliverable_passes_batch_com_session_to_converter(tmp_path: Path) -> None:
+    """Verify that _compile_deliverable passes the active BatchComSession through to convert_docx_to_pdf."""
+    from src.postprocessing.converters import BatchComSession
+    from src.workflows.full_report_postprocessing import (
+        FullReportPostProcessingWorkflow,
+        PostProcessingTargetGroup,
+    )
+
+    out_dir = tmp_path / "output"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_pdf = out_dir / "deliverable.pdf"
+    ts_pdf = out_dir / "testsheet.pdf"
+    docx_file = out_dir / "report.docx"
+
+    docx_file.write_bytes(b"mock docx")
+    _create_mock_pdf(ts_pdf, page_count=1)
+
+    mock_converter = MagicMock()
+    # Mock convert_docx_to_pdf to write valid PDF bytes so merge succeeds
+    def fake_convert(docx_p, pdf_p, word_app=None, session=None):
+        _create_mock_pdf(pdf_p, page_count=1)
+        return pdf_p
+
+    mock_converter.convert_docx_to_pdf.side_effect = fake_convert
+    mock_converter.merge_pdfs.side_effect = lambda a, b, out: _create_mock_pdf(out, page_count=2)
+
+    workflow = FullReportPostProcessingWorkflow(converter=mock_converter)
+    mock_session = MagicMock(spec=BatchComSession)
+
+    group = PostProcessingTargetGroup(
+        stem="deliverable",
+        docx_paths=(docx_file,),
+        is_multipart=False,
+    )
+
+    workflow._compile_deliverable(
+        group=group,
+        testsheet_pdf_path=ts_pdf,
+        output_pdf_path=out_pdf,
+        session=mock_session,
+    )
+
+    # Verify session was forwarded to converter
+    mock_converter.convert_docx_to_pdf.assert_called_once()
+    _, kwargs = mock_converter.convert_docx_to_pdf.call_args
+    assert kwargs.get("session") == mock_session
 
