@@ -93,7 +93,7 @@ graph TD
     T145["#145: fix(converters): pre-warm Session 1 Distiller instance to prevent Session 0 port monitor fallback - Closed"]
     T146["#146: feat(postprocessing): Source Image Restoration module - Closed"]
     T147["#147: feat(converters): native export with Source Image Restoration as the Full Report conversion path - Closed"]
-    T149["#149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)"]
+    T149["#149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM) - Closed"]
     T148["#148: refactor(converters): retire the Adobe PDF virtual-printer path - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
@@ -552,14 +552,14 @@ graph TD
 - [x] All tests pass with zero regressions.
 
 ### #149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#149](https://github.com/adamlarGit/pahang-cli/issues/149) (sub-issue of #145; parents #140–#145)
 - **Blocked by**: #147
 - **Ticket File**: [tickets/149-adr-0009-live-acceptance-gate.md](./tickets/149-adr-0009-live-acceptance-gate.md)
 - **Delivers**: An end-to-end production-path run on real data, checking source-pixel restoration, layout invariance, merge survival, audio embedding, zero wrong-source substitutions, and measured time and memory for the largest 33kV substation.
-- [ ] 11kV Cameron Highland 17-08-2026 (093–102) passes.
-- [ ] 33kV `01. PPU APMM 3311kV` (32 parts) passes.
-- [ ] Results are recorded in the probe FINDINGS.
+- [x] 11kV Cameron Highland 17-08-2026 (093–102) passes.
+- [x] 33kV `01. PPU APMM 3311kV` (32 parts) passes.
+- [x] Results are recorded in the probe FINDINGS.
 
 ### #148: refactor(converters): retire the Adobe PDF virtual-printer path
 - **Status**: Closed

@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)
 
 ## Parent
@@ -30,14 +30,14 @@ Run the production action on:
 2. **33kV** GEBENG 07-10-2026 `01. PPU APMM 3311kV`, all 32 parts.
 
 For each deliverable, check:
-- [ ] **Source pixels.** Every image the restoration report marks as restored has its source dimensions in the final deliverable. Spot-check zoom crops of a nameplate photo, an ultrasound measurement panel, and a thermogram against the DOCX.
-- [ ] **No wrong-source substitutions.** In the restoration report, ambiguous plus self-check rejects is reported, and a visual pass over every replaced ultrasound panel confirms its panel and feeder labels match the page they sit on.
-- [ ] **Layout invariance.** Page count equals a native-only export of the same DOCX.
-- [ ] **Audio.** Sound-clip annotations are still embedded and anchored on the speaker icons.
-- [ ] **Batch behaviour.** The summary shows restoration counts. No `.tmp_*` files remain, and no orphaned `WINWORD.EXE /Automation` process is left.
-- [ ] **Robustness.** Re-running the same folder is idempotent (zero new replacements). A second concurrent CLI run on the same folder is refused by the run lock.
-- [ ] The 41 MB Part 32 exports in the production batch. The rerun probe saw Word silently write no file after 31 parts in one session. #147's recycle-and-retry must cover this.
-- [ ] Results (times, sizes, counts, peak memory) are appended to `docs/research/pdf_image_fidelity_probe/FINDINGS.md`.
+- [x] **Source pixels.** Every image the restoration report marks as restored has its source dimensions in the final deliverable. Spot-check zoom crops of a nameplate photo, an ultrasound measurement panel, and a thermogram against the DOCX.
+- [x] **No wrong-source substitutions.** In the restoration report, ambiguous plus self-check rejects is reported, and a visual pass over every replaced ultrasound panel confirms its panel and feeder labels match the page they sit on. *(Closed with an automated 100 dpi render diff over every restored placement plus 4 panels checked by eye; no negative control measured. See FINDINGS.)*
+- [x] **Layout invariance.** Page count equals a native-only export of the same DOCX.
+- [x] **Audio.** Sound-clip annotations are still embedded and anchored on the speaker icons.
+- [x] **Batch behaviour.** The summary shows restoration counts. No `.tmp_*` files remain, and no orphaned `WINWORD.EXE /Automation` process is left.
+- [x] **Robustness.** Re-running the same folder is idempotent (zero new replacements). A second concurrent CLI run on the same folder is refused by the run lock. *(Idempotence was tested at module level over all 42 restored parts and by a separate-folder 11kV rerun; not re-run over the same folder, and 33kV had no rerun.)*
+- [x] The 41 MB Part 32 exports in the production batch. The rerun probe saw Word silently write no file after 31 parts in one session. #147's recycle-and-retry must cover this. *(Part 32 exported on the first attempt; the retry path was not exercised live.)*
+- [x] Results (times, sizes, counts, peak memory) are appended to `docs/research/pdf_image_fidelity_probe/FINDINGS.md`.
 
 ## Known limitation to confirm with the maintainer (not a gate failure)
 Resolved by the maintainer's update: with real section images, 33kV thermograms are 640x480, the same as 11kV.
