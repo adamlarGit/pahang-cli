@@ -36,7 +36,11 @@ from src.postprocessing.converters import (
     configure_uniform_printer,
     safe_unlink_with_retry,
 )
-from src.project.storage import extract_numerical_prefix, extract_prefix_safe
+from src.project.storage import (
+    extract_numerical_prefix,
+    extract_prefix_safe,
+    resolve_full_report_dir,
+)
 from src.quick_report.extractor import DAILY_DATE_FOLDER_PATTERN
 from src.quick_report.prpd import discover_ultratev_survey_dir
 from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
@@ -63,13 +67,6 @@ MULTIPART_DOCX_PATTERN = re.compile(
 SUPERSEDED_DIR_NAME = "_superseded"
 WARN_ICON = "\u26a0\ufe0f "
 EMPTY_DATE_HINT = "no Full Report documents — run Generate Full Reports first"
-
-
-def resolve_full_report_dir(environment: ProjectEnvironment) -> Path:
-    """The project's FULL REPORT root, tolerating environments without get_full_report_dir()."""
-    if hasattr(environment, "get_full_report_dir"):
-        return environment.get_full_report_dir()
-    return environment.base_path / "FULL REPORT"
 
 
 def _stem_name_part(stem: str) -> str:

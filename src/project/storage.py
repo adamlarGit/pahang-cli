@@ -178,6 +178,13 @@ def is_canonical_msms_csv_name(filename: str) -> bool:
     return bool(re.match(r"^(\d{2}-\d{2}-\d{4})(_\d{3})?\.csv$", filename, re.IGNORECASE))
 
 
+def resolve_full_report_dir(environment: object) -> Path:
+    """The project's FULL REPORT root, tolerating environments without get_full_report_dir()."""
+    if hasattr(environment, "get_full_report_dir"):
+        return environment.get_full_report_dir()
+    return environment.base_path / "FULL REPORT"
+
+
 
 class WorkspaceStorage(ABC):
     """Abstract base class for project folder and file resolution."""

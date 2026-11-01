@@ -43,7 +43,7 @@ from src.postprocessing.sound_embedder import (
     resolve_measurement_audio_for_page,
     validate_and_return_8k_wav,
 )
-from src.project.storage import extract_numerical_prefix
+from src.project.storage import extract_numerical_prefix, resolve_full_report_dir
 from src.quick_report.extractor import QuickReportExtractor
 from src.quick_report.prpd import (
     DiscoveredMeasurement,
@@ -545,11 +545,7 @@ def discover_us_audio_candidate_substations(
     folder_dates = [d.name if isinstance(d, Path) else str(d) for d in target_dates]
     packages = extractor.extract(environment, folders=folder_dates)
 
-    full_report_dir = (
-        environment.get_full_report_dir()
-        if hasattr(environment, "get_full_report_dir")
-        else getattr(environment, "base_path", Path(".")) / "FULL REPORT"
-    )
+    full_report_dir = resolve_full_report_dir(environment)
     quick_report_dir = (
         environment.get_quick_report_dir()
         if hasattr(environment, "get_quick_report_dir")

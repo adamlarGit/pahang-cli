@@ -30,8 +30,8 @@ from src.workflows.full_report_postprocessing import (
     FullReportPostProcessingInspection,
     FullReportPostProcessingResult,
     FullReportPostProcessingWorkflow,
-    resolve_full_report_dir,
 )
+from src.project.storage import resolve_full_report_dir
 from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.service import WorkflowService
 

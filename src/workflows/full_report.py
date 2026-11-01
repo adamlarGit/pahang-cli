@@ -44,6 +44,7 @@ from src.full_report.slicer import (
     WordComDocumentSlicer,
 )
 from src.postprocessing.converters import BatchComSession
+from src.project.storage import resolve_full_report_dir
 from src.quick_report.compiler import (
     DocumentCompiler,
     FakeDocumentCompiler,
@@ -988,10 +989,7 @@ class FullReportWorkflow:
                 return base_out / filename
             return base_out / station / month / date_str / filename
 
-        if hasattr(environment, "get_full_report_dir"):
-            base_full = environment.get_full_report_dir()
-        else:
-            base_full = environment.base_path / "FULL REPORT"
+        base_full = resolve_full_report_dir(environment)
 
         return base_full / station / month / date_str / filename
 
