@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 import logging
 import os
 from pathlib import Path
+import shutil
 import time
 from typing import Any, Callable, Literal, Sequence
 
@@ -28,6 +29,10 @@ from src.cli_selectors import (
     select_pahang_inspection_dates_interactive,
 )
 from src.core.normalizers import format_month_folder
+from src.postprocessing.converters import (
+    calculate_exponential_delays,
+    safe_unlink_with_retry,
+)
 from src.postprocessing.sound_embedder import (
     TRANSFORMER_HV_SIDE_KEYWORDS,
     convert_24bit_wav_to_16bit_pcm,
@@ -212,6 +217,31 @@ def _auto_discover_testsheet_data(pdf_path: Path) -> Any | None:
     return None
 
 
+def _replace_with_retry(
+    src: Path,
+    dst: Path,
+    max_attempts: int = 5,
+    total_wait: float = 2.5,
+) -> None:
+    """Wrap os.replace in an exponential backoff retry loop (max_attempts over total_wait seconds)
+    to overcome transient Windows filesystem locks.
+    """
+    delays = calculate_exponential_delays(max_attempts, total_wait)
+
+    last_err: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except (OSError, PermissionError) as exc:
+            last_err = exc
+            if attempt < max_attempts - 1:
+                delay = delays[attempt]
+                time.sleep(delay)
+    if last_err is not None:
+        raise last_err
+
+
 def embed_survey_ultrasound_into_pdf(
     pdf_path: Path | str,
     survey_root: Path | str | None,
@@ -220,7 +250,9 @@ def embed_survey_ultrasound_into_pdf(
     """Retroactively embed ultrasound sound annotations into an existing deliverable PDF.
 
     Validates pdf_path.is_file(). If survey root is missing, logs INFO and returns 0 (UsTevAudioResiliencePolicy).
-    Pre-flight unlinks any stale .tmp_sound_{pdf.name} in pdf_path.parent.
+    Pre-flight unlinks any stale .tmp_sound_{pdf.name} and .tmp_pre_sound_{pdf.name} in pdf_path.parent.
+    Maintains a temporary pre-embedding snapshot (.tmp_pre_sound_{target_pdf.name}) during audio injection
+    for fail-safe rollback, guaranteed to be unlinked in all paths in a try...finally block.
     Uses context-managed PyMuPDF session (with fitz.open(pdf_path) as doc:) to guarantee handle closure:
       - Caches discovered US measurements for survey_root.
       - Auto-discovers testsheet data if package is None.
@@ -232,8 +264,8 @@ def embed_survey_ultrasound_into_pdf(
         - Injects sound annotation idempotently via embed_sound_annotation().
       - Writes modified PDF bytes to .tmp_sound_{pdf.name} in the same directory.
     Enforces AtomicPdfSavePolicy: outside document context (handles closed), replaces pdf_path
-    atomically via os.replace(tmp_path, pdf_path), guarded with try...finally to ensure
-    temp file cleanup on error.
+    atomically via _replace_with_retry(tmp_path, target_pdf), guarded with try...finally to ensure
+    temp file cleanup on error and zero snapshot files lingering.
 
     Args:
         pdf_path: Path to the deliverable PDF file.
@@ -249,6 +281,13 @@ def embed_survey_ultrasound_into_pdf(
     target_pdf = Path(pdf_path).resolve()
     if not target_pdf.is_file():
         raise FileNotFoundError(f"Deliverable PDF file not found: {target_pdf}")
+
+    tmp_path = target_pdf.parent / f".tmp_sound_{target_pdf.name}"
+    snapshot_path = target_pdf.parent / f".tmp_pre_sound_{target_pdf.name}"
+
+    # Pre-flight: unlink any stale temp or snapshot files
+    safe_unlink_with_retry(tmp_path)
+    safe_unlink_with_retry(snapshot_path)
 
     if survey_root is None:
         logger.info(
@@ -280,18 +319,14 @@ def embed_survey_ultrasound_into_pdf(
     if package is None:
         package = _auto_discover_testsheet_data(target_pdf)
 
-    tmp_path = target_pdf.parent / f".tmp_sound_{target_pdf.name}"
-
-    # Pre-flight: unlink any stale temp file
-    if tmp_path.exists():
-        try:
-            tmp_path.unlink()
-        except OSError as exc:
-            logger.warning("Failed pre-flight unlink of stale temp file %s: %s", tmp_path, exc)
-
     annot_count = 0
     state: dict[str, Any] = {}
+    snapshot_created = False
     try:
+        # Pre-embedding snapshot for fail-safe rollback
+        shutil.copy2(target_pdf, snapshot_path)
+        snapshot_created = True
+
         with fitz.open(target_pdf) as doc:
             for page in doc:
                 page_ctx = extract_page_equipment_context(
@@ -323,15 +358,26 @@ def embed_survey_ultrasound_into_pdf(
                 doc.save(str(tmp_path), garbage=3, deflate=True)
 
         if annot_count > 0 and tmp_path.exists():
-            os.replace(tmp_path, target_pdf)
+            try:
+                _replace_with_retry(tmp_path, target_pdf, max_attempts=5, total_wait=2.5)
+            except Exception as replace_err:
+                logger.error(
+                    "os.replace failed after retries for %s: %s; rolling back from pre-embedding snapshot",
+                    target_pdf,
+                    replace_err,
+                )
+                if snapshot_path.exists():
+                    try:
+                        shutil.copy2(snapshot_path, target_pdf)
+                    except Exception as rollback_err:
+                        logger.error("Rollback failed for %s: %s", target_pdf, rollback_err)
+                raise replace_err
 
         return annot_count
     finally:
-        if tmp_path.exists():
-            try:
-                tmp_path.unlink()
-            except OSError:
-                pass
+        safe_unlink_with_retry(tmp_path)
+        if snapshot_created or snapshot_path.exists():
+            safe_unlink_with_retry(snapshot_path)
 
 
 class UsAudioWorkflow:
