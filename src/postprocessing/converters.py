@@ -950,7 +950,8 @@ class ComDocumentConverter(DocumentConverter):
             word = state["word"]
             doc = None
             try:
-                doc = word.Documents.Open(str(docx.resolve()))
+                # FileName, ConfirmConversions, ReadOnly, AddToRecentFiles: read-only so Word never writes or deletes ~$ files
+                doc = word.Documents.Open(str(docx.resolve()), False, True, False)
                 self._export_fixed_format(doc, out_pdf)
             finally:
                 if doc is not None:

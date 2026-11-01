@@ -86,6 +86,23 @@ def test_fake_document_converter(tmp_path) -> None:
     assert len(converter.convert_docx_calls) == 1
 
 
+def test_convert_docx_to_pdf_opens_source_docx_read_only(tmp_path) -> None:
+    """Word must open the operator's DOCX ReadOnly and out of Recent Files, so it never creates ~$ files there."""
+    docx_path = tmp_path / "sample.docx"
+    docx_path.write_bytes(b"docx_content")
+    mock_word = MagicMock()
+    mock_doc = MagicMock()
+    mock_word.Documents.Open.return_value = mock_doc
+    mock_doc.ExportAsFixedFormat.side_effect = lambda OutputFileName, **kw: _write_real_pdf(OutputFileName)
+
+    ComDocumentConverter().convert_docx_to_pdf(docx_path, tmp_path / "out.pdf", word_app=mock_word, restore_images=False)
+
+    args, kwargs = mock_word.Documents.Open.call_args
+    named = dict(zip(("FileName", "ConfirmConversions", "ReadOnly", "AddToRecentFiles"), args)) | kwargs
+    assert named["ReadOnly"] is True
+    assert named["AddToRecentFiles"] is False
+
+
 def test_convert_docx_to_pdf_with_provided_word_app(tmp_path) -> None:
     """Test that ComDocumentConverter reuses provided word_app without quitting it and exports high fidelity PDF."""
     converter = ComDocumentConverter()
@@ -106,7 +123,8 @@ def test_convert_docx_to_pdf_with_provided_word_app(tmp_path) -> None:
 
     assert result == pdf_path
     assert pdf_path.exists()
-    mock_word.Documents.Open.assert_called_once_with(str(docx_path.resolve()))
+    # ReadOnly=True (3rd arg) keeps Word from creating or deleting ~$ owner files in operator folders
+    mock_word.Documents.Open.assert_called_once_with(str(docx_path.resolve()), False, True, False)
     mock_doc.ExportAsFixedFormat.assert_called_once_with(
         OutputFileName=_NativeTmpPath(),
         ExportFormat=17,

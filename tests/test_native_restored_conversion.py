@@ -236,7 +236,7 @@ class _FakeWord:
         word = self
         word.Documents = type("D", (), {})()
 
-        def open_doc(path):
+        def open_doc(path, *args):
             word.opened.append(path)
             return _FakeDoc(word)
 
@@ -298,7 +298,7 @@ class _ScriptedWord:
         word = self
 
         class _Docs:
-            def Open(self, path):
+            def Open(self, path, *args):
                 word.opened.append(Path(path).name)
                 if word.fail_opens > 0:
                     word.fail_opens -= 1
