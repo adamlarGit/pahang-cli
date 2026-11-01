@@ -4,8 +4,10 @@
 
 .DESCRIPTION
     WHY THIS EXISTS
-    The full-report postprocessing step can print Word documents through the
-    "Adobe PDF" virtual printer (Acrobat 11). When it does, the Print Spooler
+    Manual cleanup for jobs left behind by the retired Adobe PDF print path.
+    Full Report conversion no longer prints (native export, ADR 0009), but
+    earlier versions printed Word documents through the "Adobe PDF" virtual
+    printer (Acrobat 11). When they did, the Print Spooler
     starts its own copy of acrodist.exe and acrotray.exe in Session 0 (the
     background service session, not your desktop). That Distiller can deadlock,
     leaving jobs stuck at "Deleting, Printing, Retained" or "Deleting, Spooling".
@@ -17,7 +19,8 @@
 
     If jobs come back after a cleanup, check the submitted time
     (Get-PrintJob -PrinterName 'Adobe PDF'). New jobs mean something is still
-    printing, usually an open pahang-cli run. Close it before purging again.
+    printing, usually an old pahang-cli run or another program. Close it
+    before purging again.
 
     WHAT IT DOES
       1. Re-launches itself as Administrator if needed (UAC prompt).

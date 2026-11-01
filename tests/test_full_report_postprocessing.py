@@ -820,7 +820,7 @@ class TestComDocumentConverterFullReportIntegration:
         mock_doc = MagicMock()
         mock_word.Documents.Open.return_value = mock_doc
 
-        converter = ComDocumentConverter(try_adobe_printer=True)
+        converter = ComDocumentConverter()
         session = BatchComSession(word_app=mock_word, excel_app=MagicMock())
         workflow = FullReportPostProcessingWorkflow(converter=converter)
 
@@ -828,8 +828,7 @@ class TestComDocumentConverterFullReportIntegration:
             Path(k["OutputFileName"]), page_count=1
         )
 
-        with patch.object(converter, "_find_adobe_pdf_printer") as mock_find_adobe, \
-             patch("src.workflows.full_report_postprocessing.embed_survey_ultrasound_into_pdf", return_value=1) as mock_embed:
+        with patch("src.workflows.full_report_postprocessing.embed_survey_ultrasound_into_pdf", return_value=1) as mock_embed:
 
             result = workflow.process(date_str, env, com_session=session)
 
@@ -843,7 +842,6 @@ class TestComDocumentConverterFullReportIntegration:
 
         # Both parts exported natively; nothing is printed (ADR 0009)
         assert mock_doc.PrintOut.call_count == 0
-        mock_find_adobe.assert_not_called()
         assert mock_doc.ExportAsFixedFormat.call_count == 2
 
         # Final deliverable: 2 parts (1 page each) + 2 testsheet pages = 4 pages
@@ -859,8 +857,8 @@ class TestComDocumentConverterFullReportIntegration:
         assert not (fr_dir / f".tmp_conv_{stem}_part_02.pdf").exists()
         assert not (fr_dir / f".tmp_conv_{stem}_master.pdf").exists()
 
-    def test_process_single_part_with_com_converter_fallback(self, tmp_path: Path) -> None:
-        """Verify Full Report post-processing seamlessly falls back to ExportAsFixedFormat when Adobe PDF printing fails."""
+    def test_process_single_part_with_com_converter_native_export(self, tmp_path: Path) -> None:
+        """Verify Full Report post-processing exports natively via ExportAsFixedFormat."""
         env = _make_mock_env(tmp_path)
         station = "RAUB"
         month = "08. AUGUST"
@@ -884,14 +882,11 @@ class TestComDocumentConverterFullReportIntegration:
 
         mock_doc.ExportAsFixedFormat.side_effect = _simulate_export
 
-        converter = ComDocumentConverter(try_adobe_printer=True)
+        converter = ComDocumentConverter()
         session = BatchComSession(word_app=mock_word, excel_app=MagicMock())
         workflow = FullReportPostProcessingWorkflow(converter=converter)
 
-        with patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Documents"), \
-             patch.object(converter, "_is_distiller_available", return_value=True), \
-             patch.object(converter, "_convert_docx_via_adobe_pdf", side_effect=RuntimeError("Printer spooler error")), \
-             patch.object(converter, "_export_fixed_format", wraps=converter._export_fixed_format) as spy_export:
+        with patch.object(converter, "_export_fixed_format", wraps=converter._export_fixed_format) as spy_export:
 
             result = workflow.process(date_str, env, com_session=session)
 

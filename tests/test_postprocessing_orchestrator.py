@@ -408,7 +408,7 @@ def test_workflow_service_integration(mock_env: ProjectEnvironment) -> None:
 
 
 def test_postprocessing_pipeline_with_com_converter_native_export(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
-    """Verify PostProcessingPipelineWorkflow integrates ComDocumentConverter in dual-mode (Adobe PDF virtual printer)."""
+    """Verify PostProcessingPipelineWorkflow integrates ComDocumentConverter with native export."""
     date_str = "07-05-2026"
     qr_files, ts_files, _ = _setup_substation_files(mock_env, date_str, count=1)
     qr_docx = qr_files[0]
@@ -425,7 +425,7 @@ def test_postprocessing_pipeline_with_com_converter_native_export(mock_env: Proj
     mock_wb.Worksheets = [mock_ws]
 
     session = BatchComSession(word_app=mock_word, excel_app=mock_excel)
-    converter = ComDocumentConverter(try_adobe_printer=True)
+    converter = ComDocumentConverter()
 
     request = PostProcessingRequest(
         mode=PostProcessingMode.BY_DATE,
@@ -459,8 +459,7 @@ def test_postprocessing_pipeline_with_com_converter_native_export(mock_env: Proj
 
     with patch("src.workflows.postprocessing_pipeline.validate_postprocessing_preflight") as mock_preflight, \
          patch("src.workflows.postprocessing_pipeline.rename_files_match") as mock_rename, \
-         patch("src.workflows.postprocessing_pipeline.batch_com_session", return_value=session), \
-         patch.object(converter, "_find_adobe_pdf_printer") as mock_find_adobe:
+         patch("src.workflows.postprocessing_pipeline.batch_com_session", return_value=session):
 
         mock_preflight.return_value = MagicMock(is_valid=True)
         mock_rename.return_value = MagicMock(renamed=())
@@ -474,8 +473,7 @@ def test_postprocessing_pipeline_with_com_converter_native_export(mock_env: Proj
     assert deliverable == qr_docx.with_suffix(".pdf")
     assert deliverable.exists()
 
-    # Native export only: the Adobe virtual printer is never reached (ADR 0009)
+    # Native export only: nothing is printed (ADR 0009)
     mock_doc.PrintOut.assert_not_called()
-    mock_find_adobe.assert_not_called()
     mock_doc.ExportAsFixedFormat.assert_called_once()
     mock_doc.Close.assert_called_once()

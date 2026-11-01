@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 import hashlib
 import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 import re
-import shutil
 import time
 from types import TracebackType
 from typing import TYPE_CHECKING, Callable, Sequence
@@ -25,115 +23,6 @@ from PyPDF2 import PdfWriter
 
 if TYPE_CHECKING:
     from .image_restoration import RestorationReport
-
-
-class ConversionFeedbackState(str, Enum):
-    """Phased conversion feedback states for document conversion monitoring."""
-
-    QUEUED = "QUEUED"
-    SPOOLING = "SPOOLING"
-    DISTILLING = "DISTILLING"
-    LOCK_RELEASE = "LOCK_RELEASE"
-    VERIFIED = "VERIFIED"
-    FAILED = "FAILED"
-
-
-def compute_dynamic_conversion_timeout(docx_path: Path | str) -> float:
-    """Scale conversion timeout dynamically based on .docx file size.
-
-    Accommodates heavy Word documents (20MB-35MB+ with 30-50 thermograms):
-    timeout = min(180.0, max(90.0, 60.0 + file_size_mb * 2.0))
-    """
-    try:
-        p = Path(docx_path)
-        size_bytes = p.stat().st_size if p.exists() else 0
-        file_size_mb = size_bytes / (1024.0 * 1024.0)
-    except OSError:
-        file_size_mb = 0.0
-    return min(180.0, max(90.0, 60.0 + file_size_mb * 2.0))
-
-
-def _terminate_processes_by_filter(
-    process_name: str,
-    filter_fn: Callable[[object], bool],
-    log_label: str = "process",
-) -> int:
-    """Query and terminate processes matching process_name and filter_fn via Windows WMI."""
-    killed = 0
-    try:
-        import win32com.client as win32
-
-        wmi = win32.GetObject("winmgmts:")
-        query = f"SELECT ProcessId, Name, CommandLine FROM Win32_Process WHERE Name = '{process_name}'"
-        processes = wmi.ExecQuery(query)
-        for proc in processes:
-            if filter_fn(proc):
-                try:
-                    proc.Terminate()
-                    killed += 1
-                    logging.info(
-                        "Terminated %s: PID %s",
-                        log_label,
-                        getattr(proc, "ProcessId", "?"),
-                    )
-                except Exception as exc:
-                    logging.debug(
-                        "Failed to terminate %s PID %s: %s",
-                        log_label,
-                        getattr(proc, "ProcessId", "?"),
-                        exc,
-                    )
-    except Exception as exc:
-        logging.debug("WMI query failed for %s sentinel: %s", process_name, exc)
-    return killed
-
-
-def terminate_stray_acrobat_processes() -> int:
-    """Surgically terminate only Acrobat.exe processes whose command line references '.tmp_conv_'."""
-    return _terminate_processes_by_filter(
-        process_name="Acrobat.exe",
-        filter_fn=lambda proc: ".tmp_conv_" in (getattr(proc, "CommandLine", "") or ""),
-        log_label="stray Acrobat viewer locking temp file",
-    )
-
-
-def terminate_hung_distiller_processes() -> int:
-    """Terminate hung acrodist.exe -Embedding processes holding printer port on timeout."""
-    def _is_hung_distiller(proc: object) -> bool:
-        cmd = getattr(proc, "CommandLine", "") or ""
-        return "-embedding" in cmd.lower() or not cmd
-
-    return _terminate_processes_by_filter(
-        process_name="acrodist.exe",
-        filter_fn=_is_hung_distiller,
-        log_label="hung Distiller process",
-    )
-
-
-def ensure_session_distiller_warmed() -> object | None:
-    """Pre-warm Acrobat Distiller COM server in the interactive user session (Session 1).
-
-    Ensures acrodist.exe is running under the interactive user account and ready to accept
-    print jobs, preventing AdobePdf.dll in Session 0 from falling back to CreateProcessW.
-    Returns the Distiller COM object if successfully dispatched, or None if unavailable/fails.
-    """
-    try:
-        try:
-            import pythoncom
-
-            pythoncom.CoInitialize()
-        except Exception:
-            pass
-        import win32com.client as win32
-
-        distiller = win32.Dispatch("PdfDistiller.PdfDistiller")
-        return distiller
-    except Exception as exc:
-        logging.debug("Could not pre-warm Acrobat Distiller COM server: %s", exc)
-        return None
-
-
-_ensure_session_distiller_warmed = ensure_session_distiller_warmed
 
 
 def calculate_exponential_delays(max_attempts: int, total_wait: float) -> list[float]:
@@ -152,7 +41,6 @@ def safe_unlink_with_retry(
 ) -> bool:
     """Safely unlink a file with exponential backoff retry to overcome transient Windows locks.
 
-    Invokes terminate_stray_acrobat_processes() before attempting unlinks and on retry.
     Attempts unlinking up to max_attempts times scaled across total_wait seconds.
     Returns True if file was successfully removed or did not exist, False otherwise.
     """
@@ -160,7 +48,6 @@ def safe_unlink_with_retry(
     if not p.exists():
         return True
 
-    terminate_stray_acrobat_processes()
     delays = calculate_exponential_delays(max_attempts, total_wait)
 
     for attempt in range(max_attempts):
@@ -171,7 +58,6 @@ def safe_unlink_with_retry(
             return True
         except (OSError, PermissionError) as exc:
             if attempt < max_attempts - 1:
-                terminate_stray_acrobat_processes()
                 delay = delays[attempt]
                 time.sleep(delay)
             else:
@@ -189,7 +75,6 @@ def safe_replace_with_retry(
 ) -> bool:
     """Safely replace dst with src using exponential backoff retry to overcome transient Windows locks.
 
-    Invokes terminate_stray_acrobat_processes() before attempting replacement and on retry.
     Attempts replacement up to max_attempts times scaled across total_wait seconds.
     Returns True if file was successfully replaced, False otherwise.
     """
@@ -198,7 +83,6 @@ def safe_replace_with_retry(
     if not src_p.exists():
         return False
 
-    terminate_stray_acrobat_processes()
     delays = calculate_exponential_delays(max_attempts, total_wait)
 
     for attempt in range(max_attempts):
@@ -207,7 +91,6 @@ def safe_replace_with_retry(
             return True
         except (OSError, PermissionError) as exc:
             if attempt < max_attempts - 1:
-                terminate_stray_acrobat_processes()
                 delay = delays[attempt]
                 time.sleep(delay)
             else:
@@ -215,261 +98,6 @@ def safe_replace_with_retry(
                 logging.debug(msg)
                 return False
     return False
-
-
-def probe_two_tier_pdf_completion(pdf_path: Path | str) -> tuple[bool, bool]:
-    """Two-tier completion probe for PDF generation.
-
-    Tier 1 (Structural): Validates %PDF- header and %%EOF trailer within the last 1024 bytes.
-    Tier 2 (Exclusive Lock): Probes for exclusive write access open(..., "r+b") confirming Distiller
-    and background spooler processes have released all open file handles.
-
-    Returns:
-        tuple[bool, bool]: (structural_valid, exclusive_access_acquired)
-    """
-    p = Path(pdf_path)
-    if not p.exists():
-        return False, False
-
-    try:
-        size = p.stat().st_size
-        if size < 10:
-            return False, False
-        with open(p, "rb") as f:
-            header = f.read(10)
-            if not header.startswith(b"%PDF-"):
-                return False, False
-            f.seek(max(0, size - 1024))
-            tail = f.read()
-            if b"%%EOF" not in tail:
-                return False, False
-    except (OSError, PermissionError):
-        return False, False
-
-    try:
-        with open(p, "r+b"):
-            pass
-        return True, True
-    except (OSError, PermissionError):
-        return True, False
-
-
-def drain_word_spooler(
-    word_app: object | None,
-    max_wait: float = 30.0,
-    poll_interval: float = 0.2,
-) -> None:
-    """Pre-closure spooler drain guard preventing premature document closure.
-
-    Never teardown or close Word documents while word_app.BackgroundPrintingStatus > 0.
-    """
-    if word_app is None:
-        return
-    start = time.time()
-    while time.time() - start < max_wait:
-        try:
-            status = getattr(word_app, "BackgroundPrintingStatus", 0)
-            if isinstance(status, (int, float)):
-                if status <= 0:
-                    break
-            else:
-                break
-        except Exception:
-            break
-        time.sleep(poll_interval)
-
-
-def get_printer_jobs_info(printer_name: str) -> list[dict]:
-    """Enumerate active jobs with their JobId and Status on the printer queue via win32print."""
-    try:
-        import win32print
-
-        clean_name = printer_name.split(" on ")[0].strip()
-        handle = win32print.OpenPrinter(clean_name)
-        try:
-            jobs = win32print.EnumJobs(handle, 0, -1, 1)
-            return list(jobs)
-        finally:
-            win32print.ClosePrinter(handle)
-    except Exception as exc:
-        logging.debug("Could not query spooler jobs info on %s: %s", printer_name, exc)
-        return []
-
-
-def get_active_printer_job_ids(printer_name: str) -> set[int]:
-    """Enumerate active JobIds on the given printer queue via win32print."""
-    return {j["JobId"] for j in get_printer_jobs_info(printer_name) if "JobId" in j}
-
-
-def wait_for_printer_job_drain(
-    printer_name: str,
-    job_ids: set[int],
-    max_wait: float = 15.0,
-    poll_interval: float = 0.25,
-) -> bool:
-    """Wait for tracked print jobs to leave JOB_STATUS_PRINTING or retire from the spooler queue.
-
-    Guarantees the serial port monitor is completely idle before the next document prints.
-    Returns True if jobs drained/retired, False if timeout occurred.
-    """
-    if not job_ids:
-        return True
-
-    try:
-        import win32print
-
-        job_status_printing = getattr(win32print, "JOB_STATUS_PRINTING", 0x10)
-    except Exception:
-        job_status_printing = 0x10
-
-    start = time.time()
-    while time.time() - start < max_wait:
-        jobs = get_printer_jobs_info(printer_name)
-        active_tracked_printing = False
-        for job in jobs:
-            jid = job.get("JobId")
-            if jid in job_ids:
-                status = job.get("Status", 0)
-                if status & job_status_printing:
-                    active_tracked_printing = True
-                    break
-
-        if not active_tracked_printing:
-            return True
-
-        time.sleep(poll_interval)
-
-    logging.debug(
-        "Spooler job drain timed out after %.1fs for jobs %s on %s",
-        max_wait,
-        job_ids,
-        printer_name,
-    )
-    return False
-
-
-def purge_printer_jobs(printer_name: str, job_ids: set[int] | None = None) -> int:
-    """Actively cancel and purge stalled jobs from the printer queue via win32print (JOB_CONTROL_DELETE)."""
-    purged = 0
-    try:
-        import win32print
-
-        clean_name = printer_name.split(" on ")[0].strip()
-        handle = win32print.OpenPrinter(clean_name)
-        try:
-            job_control_delete = getattr(win32print, "JOB_CONTROL_DELETE", 5)
-            jobs = win32print.EnumJobs(handle, 0, -1, 1)
-            for job in jobs:
-                jid = job.get("JobId")
-                if jid is not None and (job_ids is None or jid in job_ids):
-                    try:
-                        win32print.SetJob(handle, jid, 0, None, job_control_delete)
-                        purged += 1
-                        logging.info("Purged print job %s on %s", jid, clean_name)
-                    except Exception as exc:
-                        logging.debug("Failed to purge print job %s on %s: %s", jid, clean_name, exc)
-        finally:
-            win32print.ClosePrinter(handle)
-    except Exception as exc:
-        logging.debug("Could not open printer %s for purging: %s", printer_name, exc)
-    return purged
-
-
-class ConversionFeedbackMonitor:
-    """STA-safe state machine monitoring PDF conversion progress through Distiller.
-
-    Phases:
-      QUEUED -> SPOOLING -> DISTILLING -> LOCK_RELEASE -> VERIFIED
-    """
-
-    def __init__(
-        self,
-        target_pdf: Path | str,
-        timeout: float = 90.0,
-        poll_interval: float = 0.25,
-        word_app: object | None = None,
-        job_ids: set[int] | None = None,
-        printer_name: str = "Adobe PDF",
-    ) -> None:
-        self.target_pdf = Path(target_pdf)
-        self.timeout = timeout
-        self.poll_interval = poll_interval
-        self.word_app = word_app
-        self.job_ids = set(job_ids) if job_ids else set()
-        self.printer_name = printer_name
-        self.state: ConversionFeedbackState = ConversionFeedbackState.QUEUED
-        self.history: list[ConversionFeedbackState] = [ConversionFeedbackState.QUEUED]
-        self.start_time: float = 0.0
-
-    def transition_to(self, new_state: ConversionFeedbackState) -> None:
-        """Record and log state machine transitions."""
-        if self.state != new_state:
-            logging.debug(
-                "ConversionFeedbackMonitor [%s]: %s -> %s",
-                self.target_pdf.name,
-                self.state.value,
-                new_state.value,
-            )
-            self.state = new_state
-            self.history.append(new_state)
-
-    def wait_for_completion(self) -> bool:
-        """Poll conversion progress through the phase transitions until VERIFIED or timeout."""
-        self.start_time = time.time()
-        saw_spooling = False
-
-        while time.time() - self.start_time < self.timeout:
-            # 1. Spooler detection
-            spooling = False
-            if self.word_app is not None:
-                try:
-                    bg = getattr(self.word_app, "BackgroundPrintingStatus", 0)
-                    if isinstance(bg, (int, float)) and bg > 0:
-                        spooling = True
-                except Exception:
-                    pass
-
-            if not spooling and self.job_ids:
-                active = get_active_printer_job_ids(self.printer_name)
-                if any(jid in active for jid in self.job_ids):
-                    spooling = True
-
-            if spooling:
-                saw_spooling = True
-                self.transition_to(ConversionFeedbackState.SPOOLING)
-            else:
-                if saw_spooling or self.target_pdf.exists():
-                    if self.state in (ConversionFeedbackState.QUEUED, ConversionFeedbackState.SPOOLING):
-                        self.transition_to(ConversionFeedbackState.DISTILLING)
-
-            # 2. Two-tier probe
-            structural, exclusive = probe_two_tier_pdf_completion(self.target_pdf)
-            if structural and not exclusive:
-                self.transition_to(ConversionFeedbackState.LOCK_RELEASE)
-                # Terminate any stray Acrobat viewer holding lock on .tmp_conv_
-                terminate_stray_acrobat_processes()
-            elif structural and exclusive:
-                if self.state in (ConversionFeedbackState.QUEUED, ConversionFeedbackState.SPOOLING):
-                    self.transition_to(ConversionFeedbackState.DISTILLING)
-                if self.state != ConversionFeedbackState.LOCK_RELEASE:
-                    self.transition_to(ConversionFeedbackState.LOCK_RELEASE)
-                self.transition_to(ConversionFeedbackState.VERIFIED)
-
-                # Post-print spooler port drain guard: wait for tracked JobId to leave JOB_STATUS_PRINTING / retire
-                if self.job_ids:
-                    wait_for_printer_job_drain(
-                        self.printer_name,
-                        self.job_ids,
-                        max_wait=15.0,
-                        poll_interval=self.poll_interval,
-                    )
-                return True
-
-            time.sleep(self.poll_interval)
-
-        self.transition_to(ConversionFeedbackState.FAILED)
-        return False
-
 
 
 def _is_pce_testsheet_sheet(ws_name: str) -> bool:
@@ -756,13 +384,11 @@ class BatchComSession:
         self.excel_app = excel_app
         self.configure_printer = configure_printer
         self.suppress_errors = suppress_errors
-        self.distiller_app: object | None = None
         self._co_initialized: bool = False
         self._closed: bool = False
         self._word_started_here: bool = False
 
     def __enter__(self) -> BatchComSession:
-        self.distiller_app = ensure_session_distiller_warmed()
         self.open()
         return self
 
@@ -772,12 +398,6 @@ class BatchComSession:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        if self.distiller_app is not None:
-            try:
-                del self.distiller_app
-            except Exception:
-                pass
-            self.distiller_app = None
         self.close()
 
     def open(self) -> BatchComSession:
@@ -835,15 +455,6 @@ class BatchComSession:
         if self._closed:
             return
         self._closed = True
-
-        # Cleanup Distiller
-        if self.distiller_app is not None:
-            distiller = self.distiller_app
-            self.distiller_app = None
-            try:
-                del distiller
-            except Exception:
-                pass
 
         # Cleanup Excel
         if self.excel_app is not None:
@@ -1114,258 +725,10 @@ class ComDocumentConverter(DocumentConverter):
     def __init__(
         self,
         optimize_page_setup: bool = True,
-        try_adobe_printer: bool = True,
-        adobe_timeout: float | None = None,
     ) -> None:
-        """Initialize the COM converter with optional PageSetup optimization and Adobe PDF virtual printer selection."""
+        """Initialize the COM converter with optional PageSetup optimization."""
         self.optimize_page_setup = optimize_page_setup
-        self.try_adobe_printer = try_adobe_printer
-        self.adobe_timeout = adobe_timeout
         self.last_conversion: PartConversionOutcome | None = None
-
-    def get_conversion_timeout(self, docx_path: Path | str | None = None) -> float:
-        """Determine effective timeout: explicit self.adobe_timeout if specified, else dynamic."""
-        if self.adobe_timeout is not None:
-            return float(self.adobe_timeout)
-        if docx_path is not None:
-            return compute_dynamic_conversion_timeout(docx_path)
-        return 90.0
-
-    def _find_adobe_pdf_printer(self) -> str | None:
-        """Detect whether 'Adobe PDF' printer is available in the Windows registry Devices list."""
-        devices = get_installed_printers()
-        for dev_name, full_spec in devices.items():
-            if "adobe pdf" in dev_name:
-                return full_spec
-        return None
-
-    def _is_distiller_available(self) -> bool:
-        """Detect whether Acrobat Distiller registry configuration is present on host."""
-        try:
-            import winreg
-
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Adobe\Acrobat Distiller",
-            ):
-                return True
-        except Exception:
-            return False
-
-    def _detect_distiller_joboptions_preset(self) -> str:
-        """Detect the optimal Acrobat Distiller joboptions preset name.
-
-        Prioritizes 'High Quality Print(1)', followed by 'High Quality Print' and 'Press Quality'.
-        """
-        candidates = ["High Quality Print(1)", "High Quality Print", "Press Quality"]
-        try:
-            import winreg
-
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Adobe\Acrobat Distiller\AdobePDFSettings",
-            ) as key:
-                available_settings = set()
-                i = 0
-                while True:
-                    try:
-                        name, _, _ = winreg.EnumValue(key, i)
-                        if name:
-                            available_settings.add(str(name).strip())
-                        i += 1
-                    except OSError:
-                        break
-                for candidate in candidates:
-                    if candidate in available_settings:
-                        return candidate
-        except Exception as exc:
-            logging.debug("Could not query AdobePDFSettings in registry: %s", exc)
-
-        fs_dirs = [
-            Path(os.environ.get("APPDATA", "")) / "Adobe" / "Adobe PDF" / "Settings",
-            Path(os.environ.get("ProgramData", "")) / "Adobe" / "Adobe PDF" / "Settings",
-        ]
-        for candidate in candidates:
-            for d in fs_dirs:
-                if (d / f"{candidate}.joboptions").exists():
-                    return candidate
-
-        return "High Quality Print(1)"
-
-    def _set_transient_distiller_joboptions(self, preset: str) -> dict[str, str | None]:
-        """Configure transient Distiller JobOptions preset across Distiller version keys, preserving original values."""
-        import winreg
-
-        backup: dict[str, str | None] = {}
-        distiller_path = r"Software\Adobe\Acrobat Distiller"
-
-        subkeys_to_check = [""]
-        try:
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                distiller_path,
-                0,
-                winreg.KEY_READ,
-            ) as root_key:
-                i = 0
-                while True:
-                    try:
-                        sub = winreg.EnumKey(root_key, i)
-                        if sub.lower() not in ("printerjobcontrol", "adobepdfsettings"):
-                            subkeys_to_check.append(sub)
-                        i += 1
-                    except OSError:
-                        break
-        except OSError:
-            return backup
-
-        for sub in subkeys_to_check:
-            full_sub_path = f"{distiller_path}\\{sub}" if sub else distiller_path
-            try:
-                with winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    full_sub_path,
-                    0,
-                    winreg.KEY_READ | winreg.KEY_SET_VALUE,
-                ) as key:
-                    try:
-                        orig_val, _ = winreg.QueryValueEx(key, "JobOptions")
-                        backup[sub] = orig_val
-                    except OSError:
-                        if sub and (sub == "DC" or re.match(r"^\d+\.\d+$", sub)):
-                            backup[sub] = None
-                        else:
-                            continue
-
-                    winreg.SetValueEx(key, "JobOptions", 0, winreg.REG_SZ, preset)
-            except OSError:
-                pass
-
-        return backup
-
-    def _restore_distiller_joboptions(self, backup: dict[str, str | None]) -> None:
-        """Restore Acrobat Distiller JobOptions settings to their previous values."""
-        import winreg
-
-        distiller_path = r"Software\Adobe\Acrobat Distiller"
-        for sub, orig_val in backup.items():
-            full_sub_path = f"{distiller_path}\\{sub}" if sub else distiller_path
-            try:
-                with winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    full_sub_path,
-                    0,
-                    winreg.KEY_SET_VALUE,
-                ) as key:
-                    if orig_val is not None:
-                        winreg.SetValueEx(key, "JobOptions", 0, winreg.REG_SZ, orig_val)
-                    else:
-                        try:
-                            winreg.DeleteValue(key, "JobOptions")
-                        except OSError:
-                            pass
-            except OSError:
-                pass
-
-    def _register_printer_job_control(self, word_app: object, pdf_path: Path) -> list[str]:
-        """Register output PDF path entries in HKCU\\Software\\Adobe\\Acrobat Distiller\\PrinterJobControl."""
-        import winreg
-
-        target_str = str(pdf_path.resolve())
-        entries: list[str] = [
-            "WINWORD.EXE",
-            "splwow64.exe",
-            str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "splwow64.exe"),
-        ]
-        word_path = getattr(word_app, "Path", None)
-        if word_path:
-            full_word_exe = str(Path(word_path) / "WINWORD.EXE")
-            if full_word_exe not in entries:
-                entries.append(full_word_exe)
-
-        with winreg.CreateKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Adobe\Acrobat Distiller\PrinterJobControl",
-        ) as pjc_key:
-            for entry in entries:
-                winreg.SetValueEx(pjc_key, entry, 0, winreg.REG_SZ, target_str)
-
-        return entries
-
-    def _suppress_view_print_output(self, word_app: object | None = None) -> None:
-        """Write ViewPrintOutput = 0 (DWORD) under HKCU\\Software\\Adobe\\Acrobat Distiller\\PrinterJobControl
-        across root, WINWORD.EXE, splwow64.exe, and <EXE>:<USER> subkeys before printing.
-        """
-        import winreg
-
-        username = os.environ.get("USERNAME", "")
-        subkeys = ["WINWORD.EXE", "splwow64.exe"]
-        if username:
-            subkeys.extend([f"WINWORD.EXE:{username}", f"splwow64.exe:{username}"])
-        if word_app is not None:
-            wpath = getattr(word_app, "Path", None)
-            if wpath:
-                wexe = str(Path(wpath) / "WINWORD.EXE")
-                if wexe not in subkeys:
-                    subkeys.append(wexe)
-                if username:
-                    wexe_user = f"{wexe}:{username}"
-                    if wexe_user not in subkeys:
-                        subkeys.append(wexe_user)
-
-        base_path = r"Software\Adobe\Acrobat Distiller\PrinterJobControl"
-        try:
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, base_path) as root_key:
-                winreg.SetValueEx(root_key, "ViewPrintOutput", 0, winreg.REG_DWORD, 0)
-        except Exception as exc:
-            logging.debug("Could not set ViewPrintOutput on root PrinterJobControl: %s", exc)
-
-        for sub in subkeys:
-            full_path = f"{base_path}\\{sub}"
-            try:
-                with winreg.CreateKey(winreg.HKEY_CURRENT_USER, full_path) as key:
-                    winreg.SetValueEx(key, "ViewPrintOutput", 0, winreg.REG_DWORD, 0)
-            except Exception as exc:
-                logging.debug("Could not set ViewPrintOutput for subkey %s: %s", sub, exc)
-
-    def _cleanup_printer_job_control(self, entry_names: list[str]) -> None:
-        """Deterministically remove registered entries from PrinterJobControl in registry,
-        leaving ViewPrintOutput = 0 persistent across batch runs.
-        """
-        import winreg
-
-        try:
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Adobe\Acrobat Distiller\PrinterJobControl",
-                0,
-                winreg.KEY_SET_VALUE,
-            ) as pjc_key:
-                for entry in entry_names:
-                    try:
-                        winreg.DeleteValue(pjc_key, entry)
-                    except OSError:
-                        pass
-        except OSError:
-            pass
-
-    def _wait_for_pdf(
-        self,
-        pdf_path: Path,
-        timeout: float = 30.0,
-        poll_interval: float = 0.25,
-        monitor: ConversionFeedbackMonitor | None = None,
-    ) -> bool:
-        """Wait for PDF to be fully created, unlocked, and verified via two-tier completion probe."""
-        if monitor is not None:
-            return monitor.wait_for_completion()
-
-        mon = ConversionFeedbackMonitor(
-            target_pdf=pdf_path,
-            timeout=timeout,
-            poll_interval=poll_interval,
-        )
-        return mon.wait_for_completion()
 
     def _export_fixed_format(self, doc: object, pdf_path: Path) -> None:
         """Export Word document using native ExportAsFixedFormat engine (wdExportOptimizeForPrint)."""
@@ -1383,153 +746,6 @@ class ComDocumentConverter(DocumentConverter):
             BitmapMissingFonts=True,
             UseISO19005_1=False,
         )
-
-    def _export_fixed_format_isolated(
-        self,
-        word_app: object,
-        doc: object,
-        pdf_path: Path,
-        docx_path: Path,
-    ) -> None:
-        """Route Word's native ExportAsFixedFormat to an isolated fallback path (.tmp_native_{pdf.name}),
-        completely eliminating file sharing collisions with Distiller, and atomically replace target.
-        """
-        native_tmp_pdf = pdf_path.parent / f".tmp_native_{pdf_path.name}"
-        try:
-            try:
-                self._export_fixed_format(doc, native_tmp_pdf)
-            except Exception as export_exc:
-                logging.debug(
-                    "Initial ExportAsFixedFormat isolated failed (%s); retrying with fresh document handle",
-                    export_exc,
-                )
-                if doc is not None:
-                    drain_word_spooler(word_app)
-                    try:
-                        doc.Close(SaveChanges=False)
-                    except Exception:
-                        pass
-                fresh_doc = word_app.Documents.Open(str(docx_path.resolve()))
-                try:
-                    self._export_fixed_format(fresh_doc, native_tmp_pdf)
-                finally:
-                    drain_word_spooler(word_app)
-                    try:
-                        fresh_doc.Close(SaveChanges=False)
-                    except Exception:
-                        pass
-
-            if pdf_path.exists():
-                safe_unlink_with_retry(pdf_path)
-
-            safe_replace_with_retry(native_tmp_pdf, pdf_path)
-        finally:
-            if native_tmp_pdf.exists():
-                safe_unlink_with_retry(native_tmp_pdf)
-
-    def _convert_docx_via_adobe_pdf(
-        self,
-        word_app: object,
-        doc: object,
-        pdf_path: Path,
-        printer_spec: str,
-        docx_path: Path | None = None,
-        session: BatchComSession | None = None,
-    ) -> bool:
-        """Route Word document conversion through Adobe PDF virtual printer with silent PrinterJobControl automation."""
-        preset = self._detect_distiller_joboptions_preset()
-        joboptions_backup: dict[str, str | None] = {}
-        registered_entries: list[str] = []
-        orig_printer = None
-        printer_changed = False
-        tracked_jobs: set[int] = set()
-        standalone_distiller: object | None = None
-
-        try:
-            initial_jobs = get_active_printer_job_ids("Adobe PDF")
-            joboptions_backup = self._set_transient_distiller_joboptions(preset)
-            registered_entries = self._register_printer_job_control(word_app, pdf_path)
-            self._suppress_view_print_output(word_app)
-
-            current_printer = ""
-            try:
-                current_printer = getattr(word_app, "ActivePrinter", "") or ""
-            except Exception:
-                current_printer = ""
-
-            if not current_printer.strip().lower().startswith("adobe pdf"):
-                orig_printer = current_printer
-                try:
-                    word_app.ActivePrinter = printer_spec
-                    printer_changed = True
-                except Exception:
-                    try:
-                        word_app.ActivePrinter = "Adobe PDF"
-                        printer_changed = True
-                    except Exception:
-                        pass
-            else:
-                orig_printer = None
-
-            if pdf_path.exists():
-                safe_unlink_with_retry(pdf_path)
-
-            if session is not None and getattr(session, "distiller_app", None) is not None:
-                pass
-            elif session is not None:
-                session.distiller_app = ensure_session_distiller_warmed()
-            else:
-                standalone_distiller = ensure_session_distiller_warmed()
-
-            doc.PrintOut(Background=False)
-
-            current_jobs = get_active_printer_job_ids("Adobe PDF")
-            new_jobs = current_jobs - initial_jobs
-            tracked_jobs = new_jobs if new_jobs else current_jobs
-
-            timeout = self.get_conversion_timeout(docx_path or pdf_path)
-            monitor = ConversionFeedbackMonitor(
-                target_pdf=pdf_path,
-                timeout=timeout,
-                poll_interval=0.25,
-                word_app=word_app,
-                job_ids=tracked_jobs,
-                printer_name="Adobe PDF",
-            )
-            success = self._wait_for_pdf(pdf_path, timeout=timeout, monitor=monitor)
-            if not success or not pdf_path.exists() or pdf_path.stat().st_size == 0:
-                raise RuntimeError(f"Adobe PDF printer failed to produce output at {pdf_path}")
-
-            return True
-
-        except Exception:
-            # Purge stalled spooler job so queue never clogs
-            purge_printer_jobs("Adobe PDF", tracked_jobs)
-            # Surgical sentinels
-            terminate_stray_acrobat_processes()
-            terminate_hung_distiller_processes()
-            raise
-
-        finally:
-            if standalone_distiller is not None:
-                try:
-                    del standalone_distiller
-                except Exception:
-                    pass
-                standalone_distiller = None
-            if registered_entries:
-                self._cleanup_printer_job_control(registered_entries)
-            if joboptions_backup:
-                self._restore_distiller_joboptions(joboptions_backup)
-            if printer_changed and orig_printer and session is None:
-                try:
-                    word_app.ActivePrinter = orig_printer
-                except Exception:
-                    pass
-
-    def _configure_adobe_printer(self, excel_app: object) -> None:
-        """Configure printer for Excel COM automation."""
-        self._configure_uniform_printer(excel_app)
 
     def _configure_uniform_printer(self, excel_app: object) -> None:
         """Configure ActivePrinter to a standardized virtual PDF printer (e.g. Microsoft Print to PDF) to ensure uniform sheet scaling."""
@@ -1709,7 +925,7 @@ class ComDocumentConverter(DocumentConverter):
     ) -> Path:
         """Convert a Full Report DOCX to PDF: native ExportAsFixedFormat, then Source Image Restoration (ADR 0009).
 
-        Never prints (no PrintOut, no Distiller). The outcome is left in `last_conversion`.
+        Never prints. The outcome is left in `last_conversion`.
         """
         self.last_conversion = None
         if session is not None and session.word_app is not None:
@@ -1738,7 +954,6 @@ class ComDocumentConverter(DocumentConverter):
                 self._export_fixed_format(doc, out_pdf)
             finally:
                 if doc is not None:
-                    drain_word_spooler(word)
                     try:
                         doc.Close(SaveChanges=False)
                     except Exception:
@@ -1833,13 +1048,9 @@ class FakeDocumentConverter(DocumentConverter):
     def __init__(
         self,
         optimize_page_setup: bool = True,
-        try_adobe_printer: bool = True,
-        adobe_timeout: float | None = None,
     ) -> None:
         """Initialize the fake converter and tracking lists for method invocations."""
         self.optimize_page_setup = optimize_page_setup
-        self.try_adobe_printer = try_adobe_printer
-        self.adobe_timeout = adobe_timeout
         self.convert_testsheet_calls: list[tuple[Path, Path, Sequence[str] | None]] = []
         self.conversion_outcomes: dict[str, PartConversionOutcome] = {}
         self.last_conversion: PartConversionOutcome | None = None

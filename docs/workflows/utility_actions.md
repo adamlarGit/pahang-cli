@@ -12,22 +12,21 @@ This document details the standalone batch processing tools available under the 
   - All non-target sheets (instructions, scratch calculations) are ignored during export.
 - **Custom Sorting (`_get_sheet_sort_key`):**
   - All `PCE Testsheet` tabs (and their `(2)` copies) are sorted numerically first (`priority = 0`), followed by `PCE VI` (`priority = 1`).
-- **COM PageSetup & Adobe PDF Printer Discovery (`[TRIAL/EXPERIMENTAL FEATURE]`):**
-  - Enabled when `USE_ADOBE_PDF_TRIAL = True`.
-  - **Printer Discovery:** Uses Python `winreg` (`HKEY_CURRENT_USER\Software\Microsoft\Windows NT\CurrentVersion\Devices`) to dynamically locate the exact system port assigned to the `Adobe PDF` virtual printer (e.g., `Adobe PDF on Ne07:`).
+- **COM PageSetup & Uniform Printer Metrics:**
+  - **Printer setup:** `configure_uniform_printer()` runs once per COM session so Excel lays pages out with stable A4 metrics. It only sets `ActivePrinter` for layout; nothing is printed.
   - **COM PageSetup Enforcement:** Iterates through every target sheet and applies:
     - `PaperSize = 9` (A4 format)
     - `Zoom = False`
     - `FitToPagesWide = 1`
     - `FitToPagesTall = False`
-  - **Export Fallback:** Attempts `ws.ExportAsFixedFormat(0, str(pdf_path))` (`xlTypePDF`). If COM printer redirection fails or `Adobe PDF` is not installed on the colleague's machine, it falls back seamlessly to Excel's native high-quality PDF engine.
+  - **Export:** `ws.ExportAsFixedFormat(0, str(pdf_path))` (`xlTypePDF`) through Excel's native PDF engine.
 
 ---
 
 ## 2. Convert DOCX to PDF (`src/workflows/docx_to_pdf.py`)
 - **Purpose:** Batch converts `.docx` Word documents into `.pdf` using `Word.Application` COM automation while preserving maximum image resolution (High Fidelity), table borders, and font rendering exactness.
 - **High-Fidelity Mechanics:**
-  - Standardizes `ActivePrinter` to `Adobe PDF` (or `Microsoft Print to PDF` fallback).
+  - Exports natively and never prints through a virtual printer (ADR 0009).
   - Enforces `word_app.Options.DoNotCompressImages = True` and `doc.DoNotCompressImages = True` at runtime.
   - Exports via `doc.ExportAsFixedFormat(..., OptimizeFor=0, BitmapMissingFonts=True, DocStructureTags=True)` (`wdExportOptimizeForPrint`).
 - **Execution Safeguards:** Runs with `word_app.Visible = False` and `word_app.DisplayAlerts = 0` inside a `try...finally` block, ensuring `word_app.Quit()` is invoked even if Word encounters a corrupted document.

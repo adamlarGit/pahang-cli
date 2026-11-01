@@ -262,7 +262,6 @@ def test_com_converter_never_prints_and_records_outcome(tmp_path: Path, docx: Pa
     import src.postprocessing.image_restoration as ir
 
     monkeypatch.setattr(ir, "restore_source_images", lambda b, n, o: (make_pdf(o, 2), report(4))[1])
-    monkeypatch.setattr("src.postprocessing.converters.drain_word_spooler", lambda *a, **k: None)
     word = _FakeWord().make()
     converter = ComDocumentConverter()
     out = tmp_path / "out.pdf"
@@ -324,12 +323,7 @@ class _FakeSession:
         return True
 
 
-def _no_spooler(monkeypatch) -> None:
-    monkeypatch.setattr("src.postprocessing.converters.drain_word_spooler", lambda *a, **k: None)
-
-
 def test_session_recycle_swaps_word_and_next_part_uses_the_new_app(tmp_path: Path, monkeypatch) -> None:
-    _no_spooler(monkeypatch)
     dead, fresh = _ScriptedWord("A", fail_opens=1), _ScriptedWord("B")
     session = _FakeSession(dead, fresh)
     converter = ComDocumentConverter()
@@ -347,7 +341,6 @@ def test_session_recycle_swaps_word_and_next_part_uses_the_new_app(tmp_path: Pat
 
 
 def test_owns_word_recycle_quits_the_dead_instance_and_starts_a_new_one(tmp_path: Path, monkeypatch) -> None:
-    _no_spooler(monkeypatch)
     first, second = _ScriptedWord("A", fail_opens=1), _ScriptedWord("B")
     instances = iter([first, second])
     monkeypatch.setattr("win32com.client.DispatchEx", lambda prog_id: next(instances))
@@ -364,7 +357,6 @@ def test_owns_word_recycle_quits_the_dead_instance_and_starts_a_new_one(tmp_path
 
 
 def test_injected_word_without_session_is_not_recycled(tmp_path: Path, monkeypatch) -> None:
-    _no_spooler(monkeypatch)
     word = _ScriptedWord("A", fail_opens=1)
     docx = tmp_path / "x.docx"
     docx.write_bytes(b"x")
@@ -373,7 +365,6 @@ def test_injected_word_without_session_is_not_recycled(tmp_path: Path, monkeypat
 
 
 def test_last_conversion_is_reset_before_each_conversion(tmp_path: Path, monkeypatch) -> None:
-    _no_spooler(monkeypatch)
     converter = ComDocumentConverter()
     converter.last_conversion = PartConversionOutcome(tmp_path / "old.docx", report(9))
     docx = tmp_path / "x.docx"

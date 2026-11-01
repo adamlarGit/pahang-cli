@@ -5,8 +5,8 @@ Decisions and Architectural Policies Enforced:
   converts .docx to .pdf and merges testsheet PDF into the final client deliverable.
 - D43: Testsheet PDF reuse & strict fail-fast: directly reuses pre-existing testsheet PDF
   from processed_testsheet/pdf/<stem>.pdf. Fails fast with clear diagnostic if missing.
-- D45: Uniform virtual printer conversion: configured with configure_uniform_printer()
-  (Adobe PDF / Microsoft Print to PDF) and Word COM ExportAsFixedFormat to preserve exact A4 metrics.
+- D45: Uniform A4 layout metrics: configure_uniform_printer() runs once per session, then Word COM
+  ExportAsFixedFormat plus Source Image Restoration (ADR 0009).
 - SubstationIsolatedBatchResiliencePolicy: isolates individual substation failures during batch execution
   without aborting the remaining batch run.
 - Seam: Swappable DocumentConverter (ComDocumentConverter vs FakeDocumentConverter).
@@ -471,7 +471,7 @@ class FullReportPostProcessingWorkflow:
     Enforces:
     - D42: Decoupled two-stage execution (post-processing runs after docx finalization).
     - D43: Fail-fast pre-flight validation on testsheet PDF in processed_testsheet/pdf/.
-    - D45: Uniform A4 virtual printer configuration via configure_uniform_printer().
+    - D45: Uniform A4 layout metrics via configure_uniform_printer().
     - SubstationIsolatedBatchResiliencePolicy: isolated failures during batch runs.
     """
 

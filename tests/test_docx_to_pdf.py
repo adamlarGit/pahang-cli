@@ -185,8 +185,8 @@ def test_convert_docx_folder_to_pdf_delegates_to_com_converter_native_export(tmp
     assert mock_doc.Close.call_count == 2
 
 
-def test_convert_docx_folder_to_pdf_uses_native_export_when_adobe_flag_set(tmp_path: Path) -> None:
-    """Verify batch docx_to_pdf delegates properly to ComDocumentConverter falling back to ExportAsFixedFormat when Adobe printer fails."""
+def test_convert_docx_folder_to_pdf_uses_native_export(tmp_path: Path) -> None:
+    """Verify batch docx_to_pdf delegates to ComDocumentConverter's native ExportAsFixedFormat."""
     f1 = tmp_path / "001. Doc A.docx"
     f1.write_bytes(b"content1")
 
@@ -206,16 +206,15 @@ def test_convert_docx_folder_to_pdf_uses_native_export_when_adobe_flag_set(tmp_p
     mock_doc.ExportAsFixedFormat.side_effect = _simulate_export
 
     session = BatchComSession(word_app=mock_word, excel_app=MagicMock())
-    converter = ComDocumentConverter(try_adobe_printer=True)
+    converter = ComDocumentConverter()
 
-    with patch.object(converter, "_convert_docx_via_adobe_pdf") as adobe, \
-         patch.object(converter, "_export_fixed_format", wraps=converter._export_fixed_format) as spy_export:
+    with patch.object(converter, "_export_fixed_format", wraps=converter._export_fixed_format) as spy_export:
 
         summary = convert_docx_folder_to_pdf(tmp_path, converter=converter, session=session, progress_sink=None)
 
     assert summary.converted_count == 1
     assert (tmp_path / "001. Doc A.pdf").exists()
-    adobe.assert_not_called()
+    mock_doc.PrintOut.assert_not_called()
     spy_export.assert_called_once()
     mock_doc.ExportAsFixedFormat.assert_called_once()
     assert mock_doc.ExportAsFixedFormat.call_args.kwargs.get("OptimizeFor") == 0  # wdExportOptimizeForPrint

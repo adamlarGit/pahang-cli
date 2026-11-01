@@ -126,7 +126,7 @@ def test_batch_com_session_non_windows_mock_fallback() -> None:
 
 def test_com_document_converter_reuses_session_apps(tmp_path: Path) -> None:
     """Test that ComDocumentConverter accepts session/apps and does not quit them across multiple conversions."""
-    converter = ComDocumentConverter(try_adobe_printer=False)
+    converter = ComDocumentConverter()
 
     mock_word = MagicMock()
     mock_doc1 = MagicMock()

@@ -272,7 +272,7 @@ The clean placeholder sanitization policy implemented in `src/workflows/replace_
 
 ### HighFidelityDocumentExportPolicy
 The cross-platform document rendering and PDF export fidelity policy governing Quick Report `.docx` and Testsheet `.xlsx` conversions in `src/postprocessing/converters.py`. Enforces:
-1. **Dynamic Virtual Printer Discovery**: Standardizes `ActivePrinter` on both `Word.Application` and `Excel.Application` by discovering `Adobe PDF` (preferred driver metrics) or falling back to universal `Microsoft Print to PDF`.
+1. **Uniform Printer Metrics**: Standardizes `ActivePrinter` on both `Word.Application` and `Excel.Application` once per COM session by selecting an installed `Adobe PDF` (preferred driver metrics) or `Microsoft Print to PDF` printer, purely so page layout metrics stay stable. Nothing is ever printed through it; conversion is native export (ADR 0009).
 2. **Template OpenXML High Fidelity**: Injects `<w:doNotCompressImages/>` and `<w:defaultImageDpi w:val="0"/>` (High Fidelity) into all `.docx` templates to lock image resolutions against host Word profile downsampling. *Caveat (2026-11-01 probe, ADR 0009): these settings protect images stored in the DOCX, but they do not stop `ExportAsFixedFormat` from resampling pictures above about 200 PPI in the exported PDF.*
 3. **Runtime COM Image Compression Suppression**: Requires runtime image-compression suppression across batch runs; this is a delivery requirement, not established merely by `ExportAsFixedFormat` print optimization.
 4. **Native COM Fixed Format Export**: Uses `doc.ExportAsFixedFormat` (`OptimizeFor=0` / `wdExportOptimizeForPrint`, `BitmapMissingFonts=True`, `DocStructureTags=True`) for Word, and `ws.ExportAsFixedFormat` (`Quality=0` / `xlQualityStandard`, `PaperSize=9` A4, `Orientation=2` Landscape) for Excel.
@@ -290,15 +290,6 @@ The per-part account of Source Image Restoration: images restored, images left u
 
 ### ThermogramSourcePreservationPolicy
 The Full Report thermogram-fidelity requirement. PDF conversion must retain the source pixel dimensions of every sampled thermogram without downsampling; lossless PDF stream encoding is permitted because it does not discard image information. A target output resolution such as `300 DPI` is an implementation setting, not evidence that this policy is met.
-
-### WordExportConfigurationIsolationPolicy
-**Retired by ADR 0009**: Full Report conversion no longer changes any Word or Office setting. The ownership boundary for Word image-quality configuration during batch conversion. The converter applies the configuration needed to satisfy `ThermogramSourcePreservationPolicy` for its own run and restores the operator's previous Word and Office settings afterwards. Batch correctness must not depend on a workstation's pre-existing personal Word configuration.
-
-### InterimPdfFallbackPolicy
-**Replaced by ADR 0009**: native export is now the primary path, and the operator notice covers parts where Source Image Restoration failed. The temporary delivery policy while no spooler-independent conversion backend has proven `PdfConversionDeliveryContract`. The existing native `ExportAsFixedFormat` fallback remains enabled so post-processing produces a usable PDF when Adobe PDF printing fails. This fallback is an operational continuity measure, not evidence of thermogram source preservation, and will be removed only after a compliant high-fidelity backend is validated. The CLI notifies the operator when fallback is selected; no persistent deliverable classification is required.
-
-### PdfConversionInvestigationSequence
-**Concluded 2026-11-01 (ADR 0009)**: step one disproved native-export configuration, and step two was not needed. The ordered validation path for replacing the interim fallback. First, run a one-off, read-only native Word export fidelity probe for the three acceptance reports, writing only to a temporary output directory and restoring converter-owned no-downsampling configuration afterwards. Verify `ThermogramSourcePreservationPolicy` before any production-converter change. Only if native export cannot satisfy that test, prototype direct Session 1 Acrobat Distiller conversion using a PostScript file (`PrintToFile → FileToPDF`) without the Adobe PDF virtual-printer port monitor.
 
 ### FlirActiveXIsolationPolicy
 The architectural rule governing Quick Report compilation in `src/quick_report/composer.py`. Mandates that multi-part documents containing FLIR Tools+ ActiveX controls (`CIRViewer`) merge through Microsoft Word COM Automation (`Documents.Add()`, read-only part opening, clipboard copy, page break, and paste). Prohibits pure Python OpenXML concatenation (`docxcompose`, `python-docx`) to prevent control identifier collisions and binary compound file corruption.
