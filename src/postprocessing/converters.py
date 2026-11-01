@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
+import hashlib
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -11,7 +13,8 @@ import re
 import shutil
 import time
 from types import TracebackType
-from typing import Callable, Sequence
+from typing import TYPE_CHECKING, Callable, Sequence
+import uuid
 
 try:
     import pymupdf as fitz
@@ -19,6 +22,9 @@ except ImportError:
     import fitz
 
 from PyPDF2 import PdfWriter
+
+if TYPE_CHECKING:
+    from .image_restoration import RestorationReport
 
 
 class ConversionFeedbackState(str, Enum):
@@ -700,6 +706,42 @@ def configure_uniform_printer(app: object) -> None:
         logging.debug("Could not configure uniform printer: %s", exc)
 
 
+def _start_word(configure_printer: bool = True) -> object:
+    """Start a new, hidden Word instance owned by the caller."""
+    import win32com.client as win32
+
+    word = win32.DispatchEx("Word.Application")
+    word.Visible = False
+    word.DisplayAlerts = 0
+    word.ScreenUpdating = False
+    if configure_printer:
+        configure_uniform_printer(word)
+    return word
+
+
+def _quit_word(word: object) -> None:
+    """Quit a Word instance, tolerating a dead COM server (faulthandler is paused around the call)."""
+    try:
+        import faulthandler
+
+        was_enabled = faulthandler.is_enabled()
+        if was_enabled:
+            faulthandler.disable()
+    except Exception:
+        was_enabled = False
+    try:
+        try:
+            word.Quit()
+        except Exception as exc:
+            logging.debug("Error quitting Word COM: %s", exc)
+    finally:
+        if was_enabled:
+            try:
+                faulthandler.enable()
+            except Exception:
+                pass
+
+
 class BatchComSession:
     """Context manager managing the shared lifecycle of Word and Excel COM applications."""
 
@@ -717,6 +759,7 @@ class BatchComSession:
         self.distiller_app: object | None = None
         self._co_initialized: bool = False
         self._closed: bool = False
+        self._word_started_here: bool = False
 
     def __enter__(self) -> BatchComSession:
         self.distiller_app = ensure_session_distiller_warmed()
@@ -750,13 +793,8 @@ class BatchComSession:
             self._co_initialized = True
 
             if self.word_app is None:
-                word = win32.DispatchEx("Word.Application")
-                word.Visible = False
-                word.DisplayAlerts = 0
-                word.ScreenUpdating = False
-                if self.configure_printer:
-                    configure_uniform_printer(word)
-                self.word_app = word
+                self.word_app = _start_word(self.configure_printer)
+                self._word_started_here = True
 
             if self.excel_app is None:
                 excel = win32.DispatchEx("Excel.Application")
@@ -772,6 +810,25 @@ class BatchComSession:
             if not self.suppress_errors:
                 raise
         return self
+
+    def restart_word(self) -> bool:
+        """Quit this session's own Word instance and start a fresh one (ticket #147 Word session health).
+
+        Only an instance this session started itself is ever quit; an injected `word_app` is left alone and
+        False is returned so the caller keeps using it.
+        """
+        if not self._word_started_here or self.word_app is None or self._closed:
+            return False
+        old = self.word_app
+        self.word_app = None
+        _quit_word(old)
+        del old
+        import gc
+
+        gc.collect()
+        time.sleep(0.2)
+        self.word_app = _start_word(self.configure_printer)
+        return True
 
     def close(self) -> None:
         """Gracefully quit COM applications, release references, and uninitialize COM."""
@@ -799,32 +856,16 @@ class BatchComSession:
             finally:
                 del excel
 
-        # Cleanup Word
+        # Cleanup Word: only an instance this session started; an injected one belongs to its caller
         if self.word_app is not None:
             word = self.word_app
             self.word_app = None
-            try:
-                import faulthandler
-                was_enabled = faulthandler.is_enabled()
-                if was_enabled:
-                    faulthandler.disable()
-            except Exception:
-                was_enabled = False
-            try:
-                try:
-                    word.Quit()
-                except Exception as exc:
-                    logging.debug("Error quitting Word COM: %s", exc)
-                finally:
-                    del word
-                import gc
-                gc.collect()
-            finally:
-                if was_enabled:
-                    try:
-                        faulthandler.enable()
-                    except Exception:
-                        pass
+            if self._word_started_here:
+                _quit_word(word)
+            del word
+            import gc
+
+            gc.collect()
 
         # Cleanup COM runtime
         if self._co_initialized:
@@ -856,6 +897,169 @@ def batch_com_session(
     )
 
 
+# --------------------------------------------------------------------------- native export + restoration (ADR 0009)
+
+
+@dataclass(frozen=True)
+class PartConversionOutcome:
+    """How one DOCX became its PDF: the Restoration Report (None when restoration did not run) and fallback state."""
+
+    docx_path: Path
+    report: RestorationReport | None = None
+    fell_back: bool = False
+    warning: str | None = None
+
+
+_OPEN_RETRY_DELAYS: tuple[float, ...] = (0.2, 0.5, 1.0)
+
+
+def _sha256_of_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _unlink_quiet(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as exc:
+        logging.debug("Could not remove temp file %s: %s", path, exc)
+
+
+def _pdf_export_problem(pdf_path: Path, retry_delays: Sequence[float]) -> str | None:
+    """Return None when `pdf_path` exists, opens and has pages; otherwise a description of the problem."""
+    problem = "export produced no file"
+    for delay in (0.0, *retry_delays):
+        if delay:
+            time.sleep(delay)
+        if not pdf_path.exists():
+            problem = "export produced no file"
+            continue
+        if pdf_path.stat().st_size == 0:
+            problem = "export produced an empty file"
+            continue
+        try:
+            doc = fitz.open(str(pdf_path))
+            try:
+                pages = doc.page_count
+            finally:
+                doc.close()
+        except Exception as exc:
+            problem = f"export does not open ({exc})"
+            continue
+        if pages <= 0:
+            return "export has no pages"
+        return None
+    return problem
+
+
+def _export_validated(
+    export: Callable[[Path, Path], None],
+    docx_path: Path,
+    native_tmp: Path,
+    recycle: Callable[[], None] | None,
+    retry_delays: Sequence[float],
+) -> None:
+    """Export, validate, and on failure recycle Word and retry once (Word session health)."""
+    problem = ""
+    for attempt in range(2):
+        _unlink_quiet(native_tmp)
+        try:
+            export(docx_path, native_tmp)
+            found = _pdf_export_problem(native_tmp, retry_delays)
+        except Exception as exc:
+            found = f"export raised {type(exc).__name__}: {exc}"
+        if found is None:
+            return
+        problem = found
+        if attempt == 0:
+            logging.warning(
+                "Word export failed for %s (%s); recycling Word and retrying once", docx_path.name, problem
+            )
+            if recycle is not None:
+                try:
+                    recycle()
+                except Exception as exc:
+                    logging.warning("Could not recycle Word: %s", exc)
+    raise RuntimeError(f"Word export failed for {docx_path.name}: {problem}")
+
+
+def _publish(src: Path, dst: Path) -> None:
+    if not safe_replace_with_retry(src, dst):
+        raise RuntimeError(f"Could not publish {src.name} to {dst}")
+
+
+def convert_docx_native_restored(
+    docx_path: Path,
+    pdf_path: Path,
+    export: Callable[[Path, Path], None],
+    *,
+    restore: Callable[[bytes, Path, Path], RestorationReport] | None = None,
+    recycle: Callable[[], None] | None = None,
+    retry_delays: Sequence[float] | None = None,
+    restore_images: bool = True,
+) -> PartConversionOutcome:
+    """Native export of one DOCX followed by Source Image Restoration (ADR 0009 Decision section 2-4).
+
+    `export(docx, out_pdf)` performs Word's ExportAsFixedFormat. The DOCX is snapshotted and hashed before export
+    and re-hashed after; a change triggers one redo, a second change keeps the native PDF. A restoration failure
+    publishes the native PDF instead. All temp files are removed on every path. With `restore_images=False`
+    (Quick Report, out of ADR 0009 scope) the validated native PDF is published as is.
+    """
+    if restore is None and restore_images:
+        from .image_restoration import restore_source_images as restore  # lazy: it imports this module
+    delays = _OPEN_RETRY_DELAYS if retry_delays is None else retry_delays
+    token = uuid.uuid4().hex[:8]
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    native_tmp = pdf_path.parent / f".tmp_native_{token}.pdf"  # short: 33kV stems already near MAX_PATH
+    restore_tmp = pdf_path.parent / f".tmp_restore_{token}.pdf"
+    try:
+        if not restore_images:  # no snapshot or hash: nothing will consume them
+            _export_validated(export, docx_path, native_tmp, recycle, delays)
+            _publish(native_tmp, pdf_path)
+            return PartConversionOutcome(docx_path)
+
+        snapshot = b""
+        stable = False
+        for attempt in range(2):
+            snapshot = docx_path.read_bytes()
+            digest = hashlib.sha256(snapshot).hexdigest()
+            _export_validated(export, docx_path, native_tmp, recycle, delays)
+            if _sha256_of_file(docx_path) == digest:
+                stable = True
+                break
+            if attempt == 0:
+                logging.info("%s changed during conversion; redoing once", docx_path.name)
+
+        if not stable:
+            warning = f"source changed during conversion: {docx_path.name}; kept native PDF"
+            logging.warning(warning)
+            _publish(native_tmp, pdf_path)
+            return PartConversionOutcome(docx_path, None, True, warning)
+
+        try:
+            report = restore(snapshot, native_tmp, restore_tmp)
+        except Exception as exc:
+            warning = f"image restoration failed for {docx_path.name} ({exc}); kept native PDF"
+            logging.warning(warning)
+            _publish(native_tmp, pdf_path)
+            return PartConversionOutcome(docx_path, None, True, warning)
+        snapshot = b""
+        try:
+            _publish(restore_tmp, pdf_path)
+        except Exception as exc:
+            warning = f"could not publish restored PDF for {docx_path.name} ({exc}); kept native PDF"
+            logging.warning(warning)
+            _publish(native_tmp, pdf_path)
+            return PartConversionOutcome(docx_path, None, True, warning)
+        return PartConversionOutcome(docx_path, report, False, None)
+    finally:
+        _unlink_quiet(native_tmp)
+        _unlink_quiet(restore_tmp)
+
+
 class DocumentConverter(ABC):
     """Abstract base class defining the document converter contract."""
 
@@ -878,6 +1082,7 @@ class DocumentConverter(ABC):
         pdf_path: Path,
         word_app: object | None = None,
         session: BatchComSession | None = None,
+        restore_images: bool = True,
     ) -> Path:
         """Convert a Word document (`.docx`) to a PDF file."""
         ...
@@ -916,6 +1121,7 @@ class ComDocumentConverter(DocumentConverter):
         self.optimize_page_setup = optimize_page_setup
         self.try_adobe_printer = try_adobe_printer
         self.adobe_timeout = adobe_timeout
+        self.last_conversion: PartConversionOutcome | None = None
 
     def get_conversion_timeout(self, docx_path: Path | str | None = None) -> float:
         """Determine effective timeout: explicit self.adobe_timeout if specified, else dynamic."""
@@ -1499,13 +1705,17 @@ class ComDocumentConverter(DocumentConverter):
         pdf_path: Path,
         word_app: object | None = None,
         session: BatchComSession | None = None,
+        restore_images: bool = True,
     ) -> Path:
-        """Convert Word document to PDF using dual-mode silent Adobe PDF printing with native ExportAsFixedFormat fallback."""
-        if session is not None and word_app is None:
-            word_app = session.word_app
+        """Convert a Full Report DOCX to PDF: native ExportAsFixedFormat, then Source Image Restoration (ADR 0009).
+
+        Never prints (no PrintOut, no Distiller). The outcome is left in `last_conversion`.
+        """
+        self.last_conversion = None
+        if session is not None and session.word_app is not None:
+            word_app = session.word_app  # the session's current Word wins over a handle captured before a recycle
 
         import pythoncom
-        import win32com.client as win32
 
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
         owns_word = word_app is None
@@ -1514,97 +1724,53 @@ class ComDocumentConverter(DocumentConverter):
         if owns_word:
             pythoncom.CoInitialize()
             co_initialized = True
-            word_app = win32.DispatchEx("Word.Application")
-            word_app.Visible = False
-            word_app.DisplayAlerts = 0
-            self._configure_uniform_printer(word_app)
+            word_app = _start_word()
 
-        doc = None
-        try:
-            doc = word_app.Documents.Open(str(docx_path.resolve()))
-            converted = False
-            distiller_attempted = False
+        state: dict[str, object] = {"word": word_app}
 
-            if self.try_adobe_printer:
-                printer_spec = self._find_adobe_pdf_printer()
-                if printer_spec and self._is_distiller_available():
-                    distiller_attempted = True
+        def export(docx: Path, out_pdf: Path) -> None:
+            if session is not None and session.word_app is not None:
+                state["word"] = session.word_app
+            word = state["word"]
+            doc = None
+            try:
+                doc = word.Documents.Open(str(docx.resolve()))
+                self._export_fixed_format(doc, out_pdf)
+            finally:
+                if doc is not None:
+                    drain_word_spooler(word)
                     try:
-                        converted = self._convert_docx_via_adobe_pdf(
-                            word_app,
-                            doc,
-                            pdf_path,
-                            printer_spec,
-                            docx_path=docx_path,
-                            session=session,
-                        )
-                    except Exception as exc:
-                        logging.warning(
-                            "Silent Adobe PDF print failed for %s (%s); falling back to native ExportAsFixedFormat",
-                            docx_path.name,
-                            exc,
-                        )
-                        converted = False
-
-            if not converted:
-                if distiller_attempted:
-                    self._export_fixed_format_isolated(word_app, doc, pdf_path, docx_path)
-                else:
-                    try:
-                        self._export_fixed_format(doc, pdf_path)
-                    except Exception as export_exc:
-                        logging.debug(
-                            "Initial ExportAsFixedFormat failed (%s); retrying with fresh document handle",
-                            export_exc,
-                        )
-                        if doc is not None:
-                            drain_word_spooler(word_app)
-                            try:
-                                doc.Close(SaveChanges=False)
-                            except Exception:
-                                pass
-                            doc = None
-                        doc = word_app.Documents.Open(str(docx_path.resolve()))
-                        self._export_fixed_format(doc, pdf_path)
-        finally:
-            if doc is not None:
-                if word_app is not None:
-                    drain_word_spooler(word_app)
-                try:
-                    doc.Close(SaveChanges=False)
-                except Exception:
-                    pass
-                del doc
-                doc = None
-            if owns_word and word_app is not None:
-                word_to_quit = word_app
-                word_app = None
-                try:
-                    import faulthandler
-                    was_enabled = faulthandler.is_enabled()
-                    if was_enabled:
-                        faulthandler.disable()
-                except Exception:
-                    was_enabled = False
-                try:
-                    try:
-                        word_to_quit.Quit()
+                        doc.Close(SaveChanges=False)
                     except Exception:
                         pass
-                    del word_to_quit
-                    import gc
-                    gc.collect()
-                finally:
-                    if was_enabled:
-                        try:
-                            faulthandler.enable()
-                        except Exception:
-                            pass
+
+        def recycle() -> None:
+            if session is not None:
+                if session.restart_word():
+                    state["word"] = session.word_app
+                return
+            if owns_word:
+                _quit_word(state["word"])
+                state["word"] = _start_word()
+
+        try:
+            self.last_conversion = convert_docx_native_restored(
+                docx_path, pdf_path, export, recycle=recycle, restore_images=restore_images
+            )
+        finally:
+            if owns_word and state["word"] is not None:
+                word_to_quit = state["word"]
+                state["word"] = None
+                _quit_word(word_to_quit)
+                del word_to_quit
+                import gc
+
+                gc.collect()
             if co_initialized:
                 try:
                     import gc
+
                     gc.collect()
-                    import time
                     time.sleep(0.2)
                     pythoncom.CoUninitialize()
                 except Exception:
@@ -1675,6 +1841,8 @@ class FakeDocumentConverter(DocumentConverter):
         self.try_adobe_printer = try_adobe_printer
         self.adobe_timeout = adobe_timeout
         self.convert_testsheet_calls: list[tuple[Path, Path, Sequence[str] | None]] = []
+        self.conversion_outcomes: dict[str, PartConversionOutcome] = {}
+        self.last_conversion: PartConversionOutcome | None = None
         self.convert_docx_calls: list[tuple[Path, Path]] = []
         self.merge_pdfs_calls: list[tuple[Path, Path, Path]] = []
         self.merge_pdfs_batch_calls: list[tuple[Sequence[Path], Path]] = []
@@ -1739,9 +1907,11 @@ class FakeDocumentConverter(DocumentConverter):
         pdf_path: Path,
         word_app: object | None = None,
         session: BatchComSession | None = None,
+        restore_images: bool = True,
     ) -> Path:
         """Record the call and write valid mock PDF content to `pdf_path`."""
         self.convert_docx_calls.append((docx_path, pdf_path))
+        self.last_conversion = self.conversion_outcomes.get(docx_path.name, PartConversionOutcome(docx_path))
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
 
         writer = PdfWriter()

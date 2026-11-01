@@ -795,7 +795,7 @@ class TestMultipartPostProcessingExecution:
 class TestComDocumentConverterFullReportIntegration:
     """End-to-end integration tests for FullReportPostProcessingWorkflow using ComDocumentConverter."""
 
-    def test_process_multipart_with_com_converter_dual_mode_adobe(self, tmp_path: Path) -> None:
+    def test_process_multipart_with_com_converter_native_export(self, tmp_path: Path) -> None:
         """Verify Full Report post-processing executes multi-part documents through ComDocumentConverter dual-mode."""
         env = _make_mock_env(tmp_path)
         station = "RAUB"
@@ -824,18 +824,11 @@ class TestComDocumentConverterFullReportIntegration:
         session = BatchComSession(word_app=mock_word, excel_app=MagicMock())
         workflow = FullReportPostProcessingWorkflow(converter=converter)
 
-        def _simulate_wait(target_pdf: Path, **kwargs: object) -> bool:
-            _create_mock_pdf(target_pdf, page_count=1)
-            return True
+        mock_doc.ExportAsFixedFormat.side_effect = lambda *a, **k: _create_mock_pdf(
+            Path(k["OutputFileName"]), page_count=1
+        )
 
-        with patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Documents"), \
-             patch.object(converter, "_is_distiller_available", return_value=True), \
-             patch.object(converter, "_detect_distiller_joboptions_preset", return_value="High Quality Print(1)"), \
-             patch.object(converter, "_set_transient_distiller_joboptions", return_value={"DC": "Standard"}), \
-             patch.object(converter, "_register_printer_job_control", return_value=["WINWORD.EXE"]), \
-             patch.object(converter, "_cleanup_printer_job_control") as mock_cleanup, \
-             patch.object(converter, "_restore_distiller_joboptions") as mock_restore, \
-             patch.object(converter, "_wait_for_pdf", side_effect=_simulate_wait), \
+        with patch.object(converter, "_find_adobe_pdf_printer") as mock_find_adobe, \
              patch("src.workflows.full_report_postprocessing.embed_survey_ultrasound_into_pdf", return_value=1) as mock_embed:
 
             result = workflow.process(date_str, env, com_session=session)
@@ -848,10 +841,10 @@ class TestComDocumentConverterFullReportIntegration:
         assert deliverable == fr_dir / f"{stem}.pdf"
         assert deliverable.exists()
 
-        # Both parts printed via Adobe PDF printer
-        assert mock_doc.PrintOut.call_count == 2
-        assert mock_cleanup.call_count == 2
-        assert mock_restore.call_count == 2
+        # Both parts exported natively; nothing is printed (ADR 0009)
+        assert mock_doc.PrintOut.call_count == 0
+        mock_find_adobe.assert_not_called()
+        assert mock_doc.ExportAsFixedFormat.call_count == 2
 
         # Final deliverable: 2 parts (1 page each) + 2 testsheet pages = 4 pages
         reader = PdfReader(str(deliverable))

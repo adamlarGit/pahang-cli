@@ -15,7 +15,7 @@ Decisions and Architectural Policies Enforced:
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 import io
 import logging
@@ -25,11 +25,13 @@ import time
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Sequence
 
 from src.core.normalizers import format_month_folder
+from src.postprocessing.batch_guard import FolderLock, keep_awake, sweep_stale_temps
 from src.postprocessing.converters import (
     BatchComSession,
     ComDocumentConverter,
     DocumentConverter,
     FakeDocumentConverter,
+    PartConversionOutcome,
     batch_com_session,
     configure_uniform_printer,
     safe_unlink_with_retry,
@@ -347,6 +349,34 @@ class FullReportPostProcessingTelemetry:
     errors: tuple[str, ...] = ()
     is_multipart: bool = False
     part_docx_paths: tuple[Path, ...] = ()
+    part_outcomes: tuple[PartConversionOutcome, ...] = ()
+
+    @property
+    def images_restored(self) -> int:
+        return sum(o.report.restored for o in self.part_outcomes if o.report is not None)
+
+    @property
+    def images_unmatched(self) -> int:
+        return sum(o.report.unmatched for o in self.part_outcomes if o.report is not None)
+
+    @property
+    def images_ambiguous(self) -> int:
+        return sum(o.report.ambiguous for o in self.part_outcomes if o.report is not None)
+
+    @property
+    def fallback_count(self) -> int:
+        return sum(1 for o in self.part_outcomes if o.fell_back)
+
+    @property
+    def restoration_banner(self) -> str | None:
+        """Operator summary line for this report, or None when no part was converted."""
+        if not self.part_outcomes:
+            return None
+        return (
+            f"[IMG] {self.stem}: restored {self.images_restored} images across {len(self.part_outcomes)} parts, "
+            f"{self.images_unmatched} unmatched, {self.images_ambiguous} ambiguous, "
+            f"{self.fallback_count} fallbacks"
+        )
 
     @property
     def pe_number(self) -> int | None:
@@ -556,59 +586,98 @@ class FullReportPostProcessingWorkflow:
             assert telem.testsheet_pdf_path is not None
             valid_targets.append(telem)
 
-        # Step 2: Establish shared BatchComSession if ComDocumentConverter is used
+        # Step 2: Run lock + stale temp sweep per output folder, then a shared BatchComSession
         deliverables: list[Path] = []
-        session_cm = self._establish_batch_session(com_session)
-
-        with session_cm as session:
-            word_app = getattr(session, "word_app", None)
-            try:
-                if word_app is not None:
-                    configure_uniform_printer(word_app)
-
-                for idx, telem in enumerate(valid_targets, start=1):
-                    stem = telem.stem
-                    out_pdf = telem.target_pdf_path
-                    ts_pdf = telem.testsheet_pdf_path
-                    assert ts_pdf is not None
-
-                    if progress_sink:
-                        progress_sink(
-                            f"[{idx}/{len(valid_targets)}] Converting and merging Full Report for {stem}..."
+        final_telemetries: dict[Path, FullReportPostProcessingTelemetry] = {}
+        held_locks: dict[Path, FolderLock] = {}
+        try:
+            runnable: list[FullReportPostProcessingTelemetry] = []
+            for telem in valid_targets:
+                folder = telem.target_pdf_path.parent
+                if folder not in held_locks:
+                    folder.mkdir(parents=True, exist_ok=True)
+                    lock = FolderLock.acquire(folder)
+                    if lock is None:
+                        errors.append(
+                            f"Skipped {folder}: another post-processing run holds {folder / '.postprocess.lock'}"
                         )
-                    try:
-                        target_group = PostProcessingTargetGroup(
-                            stem=telem.stem,
-                            docx_paths=telem.part_docx_paths if telem.is_multipart else (telem.docx_path,),
-                            is_multipart=telem.is_multipart,
-                        )
-                        self._compile_deliverable(
-                            group=target_group,
-                            testsheet_pdf_path=ts_pdf,
-                            output_pdf_path=out_pdf,
-                            environment=environment,
-                            word_app=word_app,
-                            session=session,
-                        )
+                        continue
+                    held_locks[folder] = lock
+                    swept = sweep_stale_temps(folder)
+                    if swept:
+                        logger.info("Swept %d stale temp file(s) in %s", len(swept), folder)
+                if folder in held_locks:
+                    runnable.append(telem)
+            valid_targets = runnable
 
-                        if out_pdf.exists() and out_pdf.stat().st_size > 0:
-                            deliverables.append(out_pdf)
-                            if progress_sink:
-                                progress_sink(f"Deliverable generated -> {out_pdf.name}")
-                        else:
-                            err_msg = f"Merged deliverable for {stem} is missing or 0 bytes."
+            session_cm = self._establish_batch_session(com_session)
+
+            with keep_awake(), session_cm as session:
+                word_app = getattr(session, "word_app", None)
+                try:
+                    if word_app is not None:
+                        configure_uniform_printer(word_app)
+
+                    for idx, telem in enumerate(valid_targets, start=1):
+                        if idx > 1 and session is not None and hasattr(session, "restart_word"):
+                            # Recycle Word at every substation boundary (Q112 amends Q84).
+                            try:
+                                if session.restart_word():
+                                    word_app = getattr(session, "word_app", None)
+                            except Exception as exc:
+                                warnings.append(f"Could not recycle Word before {telem.stem}: {exc}")
+                                word_app = getattr(session, "word_app", None)
+                        stem = telem.stem
+                        out_pdf = telem.target_pdf_path
+                        ts_pdf = telem.testsheet_pdf_path
+                        assert ts_pdf is not None
+
+                        if progress_sink:
+                            progress_sink(
+                                f"[{idx}/{len(valid_targets)}] Converting and merging Full Report for {stem}..."
+                            )
+                        try:
+                            target_group = PostProcessingTargetGroup(
+                                stem=telem.stem,
+                                docx_paths=telem.part_docx_paths if telem.is_multipart else (telem.docx_path,),
+                                is_multipart=telem.is_multipart,
+                            )
+                            outcomes = self._compile_deliverable(
+                                group=target_group,
+                                testsheet_pdf_path=ts_pdf,
+                                output_pdf_path=out_pdf,
+                                environment=environment,
+                                word_app=word_app,
+                                session=session,
+                            )
+                            final_telemetries[telem.docx_path] = replace(telem, part_outcomes=outcomes)
+                            for outcome in outcomes:
+                                if outcome.warning:
+                                    warnings.append(outcome.warning)
+
+                            if out_pdf.exists() and out_pdf.stat().st_size > 0:
+                                deliverables.append(out_pdf)
+                                if progress_sink:
+                                    progress_sink(f"Deliverable generated -> {out_pdf.name}")
+                            else:
+                                err_msg = f"Merged deliverable for {stem} is missing or 0 bytes."
+                                errors.append(err_msg)
+                        except Exception as exc:
+                            err_msg = f"Failed to post-process {stem}: {exc}"
                             errors.append(err_msg)
-                    except Exception as exc:
-                        err_msg = f"Failed to post-process {stem}: {exc}"
-                        errors.append(err_msg)
-                        logger.exception(err_msg)
-                        if fail_fast:
-                            raise
-            finally:
-                word_app = None
-                import gc
-                gc.collect()
+                            logger.exception(err_msg)
+                            if fail_fast:
+                                raise
+                finally:
+                    word_app = None
+                    import gc
+                    gc.collect()
 
+        finally:
+            for lock in held_locks.values():
+                lock.release()
+
+        telemetries = [final_telemetries.get(t.docx_path, t) for t in telemetries]
         duration = time.time() - start_time
 
         if progress_sink:
@@ -667,19 +736,27 @@ class FullReportPostProcessingWorkflow:
         assert ts_pdf is not None
 
         out_p = Path(output_path).resolve() if output_path else doc_p.parent / f"{stem}.pdf"
-        session_cm = self._establish_batch_session(session)
-        with session_cm as active_session:
-            word_app = getattr(active_session, "word_app", None)
-            if word_app is not None:
-                configure_uniform_printer(word_app)
-            self._compile_deliverable(
-                group=group,
-                testsheet_pdf_path=ts_pdf,
-                output_pdf_path=out_p,
-                environment=environment,
-                word_app=word_app,
-                session=active_session,
-            )
+        out_p.parent.mkdir(parents=True, exist_ok=True)
+        lock = FolderLock.acquire(out_p.parent)
+        if lock is None:
+            raise RuntimeError(f"Another post-processing run holds the lock for {out_p.parent}")
+        try:
+            sweep_stale_temps(out_p.parent)
+            session_cm = self._establish_batch_session(session)
+            with keep_awake(), session_cm as active_session:
+                word_app = getattr(active_session, "word_app", None)
+                if word_app is not None:
+                    configure_uniform_printer(word_app)
+                self._compile_deliverable(
+                    group=group,
+                    testsheet_pdf_path=ts_pdf,
+                    output_pdf_path=out_p,
+                    environment=environment,
+                    word_app=word_app,
+                    session=active_session,
+                )
+        finally:
+            lock.release()
 
         return out_p
 
@@ -696,12 +773,21 @@ class FullReportPostProcessingWorkflow:
         environment: ProjectEnvironment | None = None,
         word_app: Any = None,
         session: Any = None,
-    ) -> None:
-        """Convert docx to temporary PDF(s) and merge with testsheet PDF into deliverable."""
+    ) -> tuple[PartConversionOutcome, ...]:
+        """Convert docx to temporary PDF(s) and merge with testsheet PDF into deliverable.
+
+        Returns the per-part conversion outcomes (Restoration Reports) for the batch summary.
+        """
         stem = group.stem
         out_pdf = output_pdf_path
         ts_pdf = testsheet_pdf_path
         out_pdf.parent.mkdir(parents=True, exist_ok=True)
+        outcomes: list[PartConversionOutcome] = []
+
+        def _record_outcome() -> None:
+            outcome = getattr(self._converter, "last_conversion", None)
+            if isinstance(outcome, PartConversionOutcome):
+                outcomes.append(outcome)
 
         if group.is_multipart:
             temp_part_pdfs: list[Path] = []
@@ -714,6 +800,7 @@ class FullReportPostProcessingWorkflow:
                     self._converter.convert_docx_to_pdf(
                         part_docx, temp_part_pdf, word_app=word_app, session=session
                     )
+                    _record_outcome()
 
                 # 2. Sequential batch PDF merge into consolidated full report PDF
                 self._converter.merge_pdfs_batch(temp_part_pdfs, temp_master_pdf)
@@ -733,6 +820,7 @@ class FullReportPostProcessingWorkflow:
                 self._converter.convert_docx_to_pdf(
                     docx_path, temp_conv_pdf, word_app=word_app, session=session
                 )
+                _record_outcome()
                 self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
             finally:
                 safe_unlink_with_retry(temp_conv_pdf)
@@ -766,6 +854,8 @@ class FullReportPostProcessingWorkflow:
                     logger.info("[FULL REPORT] No US+TEV raw data found for %s; skipping sound embedding", stem)
             except Exception as exc:
                 logger.warning("[WARN] Sound embedding failed for %s: %s; keeping original PDF", out_pdf.name, exc)
+
+        return tuple(outcomes)
 
     def _resolve_testsheet_data_for_group(
         self,
@@ -995,6 +1085,9 @@ class FullReportPostProcessingWorkflow:
 
             # Direct .docx path
             if p_tgt.suffix.lower() == ".docx":
+                if p_tgt.name.startswith("~$"):
+                    errors.append(f"Ignoring Word owner file (document is open): {p_tgt.name}")
+                    return [], warnings, errors
                 if not p_tgt.exists() or not p_tgt.is_file():
                     errors.append(f"Target file does not exist: {target}")
                     return [], warnings, errors
@@ -1026,6 +1119,9 @@ class FullReportPostProcessingWorkflow:
             for item in target:
                 p = Path(item)
                 if p.suffix.lower() == ".docx":
+                    if p.name.startswith("~$"):
+                        errors.append(f"Ignoring Word owner file (document is open): {p.name}")
+                        continue
                     if not p.exists() or not p.is_file():
                         errors.append(f"Target file does not exist: {item}")
                         continue

@@ -151,8 +151,8 @@ def test_convert_docx_folder_to_pdf_with_existing_com_session(tmp_path: Path) ->
     mock_word.Quit.assert_not_called()
 
 
-def test_convert_docx_folder_to_pdf_delegates_to_com_converter_dual_mode_adobe(tmp_path: Path) -> None:
-    """Verify batch docx_to_pdf delegates properly to ComDocumentConverter using dual-mode silent Adobe virtual printer."""
+def test_convert_docx_folder_to_pdf_delegates_to_com_converter_native_export(tmp_path: Path) -> None:
+    """Verify batch docx_to_pdf delegates to ComDocumentConverter's native export and never prints (ADR 0009)."""
     f1 = tmp_path / "001. Doc A.docx"
     f2 = tmp_path / "002. Doc B.docx"
     f1.write_bytes(b"content1")
@@ -162,34 +162,30 @@ def test_convert_docx_folder_to_pdf_delegates_to_com_converter_dual_mode_adobe(t
     mock_doc = MagicMock()
     mock_word.Documents.Open.return_value = mock_doc
 
+    def _simulate_export(*args: object, **kwargs: object) -> None:
+        import pymupdf
+
+        pdf = pymupdf.open()
+        pdf.new_page()
+        pdf.save(str(kwargs["OutputFileName"]))
+        pdf.close()
+
+    mock_doc.ExportAsFixedFormat.side_effect = _simulate_export
+
     session = BatchComSession(word_app=mock_word, excel_app=MagicMock())
-    converter = ComDocumentConverter(try_adobe_printer=True)
+    converter = ComDocumentConverter()
 
-    with patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Documents"), \
-         patch.object(converter, "_is_distiller_available", return_value=True), \
-         patch.object(converter, "_detect_distiller_joboptions_preset", return_value="High Quality Print(1)"), \
-         patch.object(converter, "_set_transient_distiller_joboptions", return_value={"DC": "Standard"}), \
-         patch.object(converter, "_register_printer_job_control", return_value=["WINWORD.EXE"]), \
-         patch.object(converter, "_cleanup_printer_job_control") as mock_cleanup, \
-         patch.object(converter, "_restore_distiller_joboptions") as mock_restore:
-
-        def _simulate_wait(target_pdf: Path, **kwargs: object) -> bool:
-            target_pdf.write_bytes(b"%PDF-1.4 mock\n%%EOF")
-            return True
-
-        with patch.object(converter, "_wait_for_pdf", side_effect=_simulate_wait):
-            summary = convert_docx_folder_to_pdf(tmp_path, converter=converter, session=session, progress_sink=None)
+    summary = convert_docx_folder_to_pdf(tmp_path, converter=converter, session=session, progress_sink=None)
 
     assert summary.converted_count == 2
     assert (tmp_path / "001. Doc A.pdf").exists()
     assert (tmp_path / "002. Doc B.pdf").exists()
-    assert mock_doc.PrintOut.call_count == 2
-    assert mock_cleanup.call_count == 2
-    assert mock_restore.call_count == 2
+    mock_doc.PrintOut.assert_not_called()
+    assert mock_doc.ExportAsFixedFormat.call_count == 2
     assert mock_doc.Close.call_count == 2
 
 
-def test_convert_docx_folder_to_pdf_delegates_to_com_converter_fallback(tmp_path: Path) -> None:
+def test_convert_docx_folder_to_pdf_uses_native_export_when_adobe_flag_set(tmp_path: Path) -> None:
     """Verify batch docx_to_pdf delegates properly to ComDocumentConverter falling back to ExportAsFixedFormat when Adobe printer fails."""
     f1 = tmp_path / "001. Doc A.docx"
     f1.write_bytes(b"content1")
@@ -201,22 +197,25 @@ def test_convert_docx_folder_to_pdf_delegates_to_com_converter_fallback(tmp_path
     def _simulate_export(*args: object, **kwargs: object) -> None:
         out_fn = kwargs.get("OutputFileName")
         if out_fn:
-            Path(out_fn).write_bytes(b"%PDF-1.4 fixed format\n%%EOF")
+            import pymupdf
+            pdf = pymupdf.open()
+            pdf.new_page()
+            pdf.save(str(out_fn))
+            pdf.close()
 
     mock_doc.ExportAsFixedFormat.side_effect = _simulate_export
 
     session = BatchComSession(word_app=mock_word, excel_app=MagicMock())
     converter = ComDocumentConverter(try_adobe_printer=True)
 
-    with patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Documents"), \
-         patch.object(converter, "_is_distiller_available", return_value=True), \
-         patch.object(converter, "_convert_docx_via_adobe_pdf", side_effect=RuntimeError("Printer spooler error")), \
+    with patch.object(converter, "_convert_docx_via_adobe_pdf") as adobe, \
          patch.object(converter, "_export_fixed_format", wraps=converter._export_fixed_format) as spy_export:
 
         summary = convert_docx_folder_to_pdf(tmp_path, converter=converter, session=session, progress_sink=None)
 
     assert summary.converted_count == 1
     assert (tmp_path / "001. Doc A.pdf").exists()
+    adobe.assert_not_called()
     spy_export.assert_called_once()
     mock_doc.ExportAsFixedFormat.assert_called_once()
     assert mock_doc.ExportAsFixedFormat.call_args.kwargs.get("OptimizeFor") == 0  # wdExportOptimizeForPrint

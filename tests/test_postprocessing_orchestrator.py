@@ -407,7 +407,7 @@ def test_workflow_service_integration(mock_env: ProjectEnvironment) -> None:
         assert len(summary.processed_packages) == 1
 
 
-def test_postprocessing_pipeline_with_com_converter_dual_mode(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
+def test_postprocessing_pipeline_with_com_converter_native_export(mock_env: ProjectEnvironment, tmp_path: Path) -> None:
     """Verify PostProcessingPipelineWorkflow integrates ComDocumentConverter in dual-mode (Adobe PDF virtual printer)."""
     date_str = "07-05-2026"
     qr_files, ts_files, _ = _setup_substation_files(mock_env, date_str, count=1)
@@ -455,18 +455,12 @@ def test_postprocessing_pipeline_with_com_converter_dual_mode(mock_env: ProjectE
             w.write(f)
 
     mock_ws.ExportAsFixedFormat.side_effect = _simulate_excel_export
+    mock_doc.ExportAsFixedFormat.side_effect = lambda *a, **k: _simulate_word_wait(Path(k["OutputFileName"]))
 
     with patch("src.workflows.postprocessing_pipeline.validate_postprocessing_preflight") as mock_preflight, \
          patch("src.workflows.postprocessing_pipeline.rename_files_match") as mock_rename, \
          patch("src.workflows.postprocessing_pipeline.batch_com_session", return_value=session), \
-         patch.object(converter, "_find_adobe_pdf_printer", return_value="Adobe PDF on Documents"), \
-         patch.object(converter, "_is_distiller_available", return_value=True), \
-         patch.object(converter, "_detect_distiller_joboptions_preset", return_value="High Quality Print(1)"), \
-         patch.object(converter, "_set_transient_distiller_joboptions", return_value={"DC": "Standard"}), \
-         patch.object(converter, "_register_printer_job_control", return_value=["WINWORD.EXE"]), \
-         patch.object(converter, "_cleanup_printer_job_control") as mock_cleanup, \
-         patch.object(converter, "_restore_distiller_joboptions") as mock_restore, \
-         patch.object(converter, "_wait_for_pdf", side_effect=_simulate_word_wait):
+         patch.object(converter, "_find_adobe_pdf_printer") as mock_find_adobe:
 
         mock_preflight.return_value = MagicMock(is_valid=True)
         mock_rename.return_value = MagicMock(renamed=())
@@ -480,8 +474,8 @@ def test_postprocessing_pipeline_with_com_converter_dual_mode(mock_env: ProjectE
     assert deliverable == qr_docx.with_suffix(".pdf")
     assert deliverable.exists()
 
-    # Verify Word document printed via silent Adobe virtual printer
-    mock_doc.PrintOut.assert_called_once()
-    mock_cleanup.assert_called_once()
-    mock_restore.assert_called_once()
+    # Native export only: the Adobe virtual printer is never reached (ADR 0009)
+    mock_doc.PrintOut.assert_not_called()
+    mock_find_adobe.assert_not_called()
+    mock_doc.ExportAsFixedFormat.assert_called_once()
     mock_doc.Close.assert_called_once()

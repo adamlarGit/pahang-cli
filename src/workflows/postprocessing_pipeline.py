@@ -242,6 +242,7 @@ class PostProcessingPipelineWorkflow:
                         quick_report_pdf,
                         word_app=getattr(session, "word_app", None),
                         session=session,
+                        restore_images=False,  # Quick Report is out of ADR 0009 scope
                     )
 
                     # 6. PDF Merge: combine in-place into quick_report_pdf

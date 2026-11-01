@@ -1010,3 +1010,104 @@ class TestTestsheetDataResolutionAndAudioHook33kV:
             result = workflow._resolve_testsheet_data_for_group(group, env, testsheet_pdf_path=fake_pdf)
             assert result is None
 
+
+
+# ==============================================================================
+# 9. Source Image Restoration, run lock and Word recycling for multi-part 33kV (Ticket #147)
+# ==============================================================================
+
+class TestRestorationAndBatchSafety33kV:
+    """33kV substations are always multi-part: restoration is per part, isolated, and summarised per report."""
+
+    STATION = "GEBENG"
+    MONTH = "10. OCTOBER"
+    DATE = "07-10-2026"
+    STEMS = ("01. PPU APMM 3311kV", "06. SSU FLEXSYS CHEMICAL 33kV (VI)")
+
+    def _build(self, tmp_path: Path):
+        env = _make_mock_33kv_env(tmp_path)
+        folder = env.get_full_report_dir() / self.STATION / self.MONTH / self.DATE
+        parts: dict[str, list[Path]] = {}
+        for stem, count in zip(self.STEMS, (4, 2)):
+            parts[stem] = [
+                _create_mock_docx(folder / f"{stem} - Part {i:02d} - X.docx") for i in range(1, count + 1)
+            ]
+            ts_dir = env.get_testsheet_dir() / self.STATION / self.MONTH / self.DATE / "processed_testsheet" / "pdf"
+            _create_mock_pdf(ts_dir / f"{stem}.pdf", page_count=2)
+        return env, folder, parts
+
+    @staticmethod
+    def _report(restored: int, unmatched: int = 0):
+        from src.postprocessing.image_restoration import RestorationReport
+
+        return RestorationReport(restored + unmatched, restored, unmatched, 0, 0, 0.0)
+
+    def test_per_report_restoration_counts_and_one_part_falling_back(self, tmp_path: Path) -> None:
+        from src.postprocessing.converters import PartConversionOutcome
+
+        env, folder, parts = self._build(tmp_path)
+        converter = FakeDocumentConverter()
+        big = parts[self.STEMS[0]]
+        for doc, restored in zip(big[:3], (100, 150, 162)):
+            converter.conversion_outcomes[doc.name] = PartConversionOutcome(doc, self._report(restored, 12))
+        converter.conversion_outcomes[big[3].name] = PartConversionOutcome(
+            big[3], None, True, f"image restoration failed for {big[3].name} (no match); kept native PDF"
+        )
+        small = parts[self.STEMS[1]]
+        for doc in small:
+            converter.conversion_outcomes[doc.name] = PartConversionOutcome(doc, self._report(4))
+
+        result = FullReportPostProcessingWorkflow(converter=converter).process(self.DATE, env)
+
+        assert result.succeeded_count == 2 and not result.errors
+        by_stem = {t.stem: t for t in result.telemetries}
+        apmm = by_stem[self.STEMS[0]]
+        assert (apmm.images_restored, apmm.images_unmatched, apmm.fallback_count) == (412, 36, 1)
+        assert apmm.restoration_banner.startswith(
+            "[IMG] 01. PPU APMM 3311kV: restored 412 images across 4 parts, 36 unmatched"
+        )
+        assert apmm.restoration_banner.endswith("1 fallbacks")
+        assert by_stem[self.STEMS[1]].fallback_count == 0
+        # the failing part did not stop the substation: it still produced its deliverable (4 parts + 2 testsheet pages)
+        assert len(PdfReader(str(folder / f"{self.STEMS[0]}.pdf")).pages) == 6
+        assert sum("kept native PDF" in w for w in result.warnings) == 1
+
+    def test_live_lock_skips_the_folder_and_fails_loudly(self, tmp_path: Path) -> None:
+        from src.postprocessing.batch_guard import FolderLock
+
+        env, folder, _parts = self._build(tmp_path)
+        held = FolderLock.acquire(folder)
+        converter = FakeDocumentConverter()
+        try:
+            result = FullReportPostProcessingWorkflow(converter=converter).process(self.DATE, env)
+        finally:
+            held.release()
+        assert converter.convert_docx_calls == []
+        assert result.succeeded_count == 0 and not result.is_success
+        assert any("another post-processing run" in e for e in result.errors)
+
+    def test_word_recycled_between_substations_and_stale_temps_swept(self, tmp_path: Path) -> None:
+        env, folder, _parts = self._build(tmp_path)
+        (folder / f".tmp_conv_{self.STEMS[0]}_part_02.pdf").write_bytes(b"dead run")
+        (folder / ".tmp_native_deadbeef.pdf").write_bytes(b"dead run")
+
+        class Session:
+            word_app = object()
+            restarts = 0
+
+            def restart_word(self):
+                type(self).restarts += 1
+                return True
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return None
+
+        result = FullReportPostProcessingWorkflow(converter=FakeDocumentConverter()).process(
+            self.DATE, env, com_session=Session()
+        )
+        assert result.succeeded_count == 2
+        assert Session.restarts == 1
+        assert not [p for p in folder.iterdir() if p.name.startswith(".tmp_") or p.name == ".postprocess.lock"]

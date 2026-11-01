@@ -992,6 +992,14 @@ def _print_full_report_postprocessing_summary(
         for w in result.warnings:
             print(f"      - {w}")
 
+    banners = [t for t in result.telemetries if t.restoration_banner]
+    if banners:
+        print("\n    SOURCE IMAGE RESTORATION:")
+        for t in banners:
+            print(f"      {t.restoration_banner}")
+            if t.fallback_count:
+                print(f"      [WARN] {t.stem}: {t.fallback_count} part(s) kept their native (unrestored) PDF")
+
     if result.errors:
         print("\n    ❌ FAILED REPORTS:")
         for e in result.errors:

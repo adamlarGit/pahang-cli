@@ -48,6 +48,7 @@ class ReportWithSoundDocConverter(FakeDocumentConverter):
         pdf_path: Path,
         word_app: object | None = None,
         session: object | None = None,
+        restore_images: bool = True,
     ) -> Path:
         self.convert_docx_calls.append((docx_path, pdf_path))
         return _create_synthetic_report_pdf(pdf_path)

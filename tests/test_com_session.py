@@ -145,7 +145,12 @@ def test_com_document_converter_reuses_session_apps(tmp_path: Path) -> None:
     mock_excel.Workbooks.Open.side_effect = [mock_wb1, mock_wb2]
 
     def fake_word_export(OutputFileName: str, **kwargs) -> None:
-        Path(OutputFileName).write_bytes(b"%PDF-word")
+        import pymupdf
+
+        pdf = pymupdf.open()
+        pdf.new_page()
+        pdf.save(OutputFileName)
+        pdf.close()
 
     mock_doc1.ExportAsFixedFormat.side_effect = fake_word_export
     mock_doc2.ExportAsFixedFormat.side_effect = fake_word_export
@@ -197,7 +202,7 @@ def test_com_document_converter_reuses_session_apps(tmp_path: Path) -> None:
 
     # Now close session
     session.close()
-    mock_word.Quit.assert_called_once()
+    mock_word.Quit.assert_not_called()  # injected Word was not started by the session (#147)
     mock_excel.Quit.assert_called_once()
 
 
@@ -221,3 +226,58 @@ def test_fake_document_converter_with_session(tmp_path: Path) -> None:
     assert result_xlsx.exists()
     assert len(fake_converter.convert_docx_calls) == 1
     assert len(fake_converter.convert_testsheet_calls) == 1
+
+
+def _dispatching(*words):
+    queue = list(words)
+
+    def dispatch(prog_id: str):
+        return queue.pop(0) if prog_id == "Word.Application" else MagicMock()
+
+    return dispatch
+
+
+def test_restart_word_replaces_the_session_started_instance() -> None:
+    old, new = MagicMock(), MagicMock()
+    with patch("pythoncom.CoInitialize"), patch("pythoncom.CoUninitialize"), patch(
+        "win32com.client.DispatchEx", side_effect=_dispatching(old, new)
+    ):
+        with batch_com_session() as session:
+            assert session.restart_word() is True
+            assert session.word_app is new
+            old.Quit.assert_called_once()
+            new.Quit.assert_not_called()
+            assert new.Visible is False and new.DisplayAlerts == 0
+        new.Quit.assert_called_once()  # close() quits the replacement, too
+
+
+def test_restart_word_never_touches_an_injected_instance() -> None:
+    injected = MagicMock()
+    session = BatchComSession(word_app=injected, excel_app=MagicMock())
+    assert session.restart_word() is False
+    assert session.word_app is injected
+    injected.Quit.assert_not_called()
+
+
+def test_restart_word_after_close_is_a_no_op() -> None:
+    session = BatchComSession(word_app=MagicMock(), excel_app=MagicMock())
+    session.close()
+    assert session.restart_word() is False
+
+
+def test_restart_word_survives_a_dead_old_instance() -> None:
+    old, new = MagicMock(), MagicMock()
+    old.Quit.side_effect = RuntimeError("RPC server unavailable")
+    with patch("pythoncom.CoInitialize"), patch("pythoncom.CoUninitialize"), patch(
+        "win32com.client.DispatchEx", side_effect=_dispatching(old, new)
+    ):
+        with batch_com_session() as session:
+            assert session.restart_word() is True
+            assert session.word_app is new
+
+
+def test_close_never_quits_a_word_it_did_not_start() -> None:
+    injected, excel = MagicMock(), MagicMock()
+    BatchComSession(word_app=injected, excel_app=excel).close()
+    injected.Quit.assert_not_called()
+    excel.Quit.assert_called_once()
