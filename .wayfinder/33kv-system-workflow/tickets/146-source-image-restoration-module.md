@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #146: feat(postprocessing): Source Image Restoration module
 
 ## Parent
@@ -74,23 +74,23 @@ Any difference raises `RestorationError`. The placement check protects the sound
 Restoring an already restored PDF must make zero replacements.
 
 ## Acceptance criteria
-- [ ] `restore_source_images` exists with the interface above and has no COM or Word imports.
-- [ ] Unit tests (TDD, synthetic fixtures built with python-docx and PyMuPDF, no client data) cover:
-  - [ ] a downsampled PNG is restored to its source pixels
-  - [ ] JPEG re-encoding of a lossless source is restored losslessly
-  - [ ] a cropped source (DrawingML and VML) is restored to its cropped region
-  - [ ] a DIB inside a WMF is restored
-  - [ ] **look-alike graphs with different values each map to their own source (wrong-source substitution impossible)**
-  - [ ] an ambiguous match is skipped
-  - [ ] a smaller source never replaces a larger PDF image
-  - [ ] alpha is preserved
-  - [ ] the self-check rejects a payload that does not match
-  - [ ] the invariance gate raises on a tampered output
-  - [ ] idempotence
-  - [ ] a corrupt DOCX snapshot raises `RestorationError`
-  - [ ] no temp file is left after success or failure
-- [ ] Peak memory is bounded per part (lazy decode). The 33kV probe (#149) records the measured peak.
-- [ ] All tests pass with zero regressions.
+- [x] `restore_source_images` exists with the interface above and has no COM or Word imports.
+- [x] Unit tests (TDD, synthetic fixtures built with python-docx and PyMuPDF, no client data) cover:
+  - [x] a downsampled PNG is restored to its source pixels
+  - [x] JPEG re-encoding of a lossless source is restored losslessly
+  - [x] a cropped source (DrawingML and VML) is restored to its cropped region
+  - [x] a DIB inside a WMF is restored
+  - [x] **look-alike graphs with different values each map to their own source (wrong-source substitution impossible)**
+  - [x] an ambiguous match is skipped
+  - [x] a smaller source never replaces a larger PDF image
+  - [x] alpha is preserved
+  - [x] the self-check rejects a payload that does not match
+  - [x] the invariance gate raises on a tampered output
+  - [x] idempotence
+  - [x] a corrupt DOCX snapshot raises `RestorationError`
+  - [x] no temp file is left after success or failure
+- [x] Peak memory is bounded per part (lazy decode). The 33kV probe (#149) records the measured peak.
+- [x] All tests pass with zero regressions.
 
 ## Blocked by
 None. Can start immediately.

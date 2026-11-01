@@ -91,7 +91,7 @@ graph TD
     T143["#143: fix(converters): eliminate ActivePrinter thrashing, persist ViewPrintOutput suppression, and guard port monitor drain - Closed"]
     T144["#144: fix(converters): remove premature stagnation timeout to allow large PostScript spool completion - Closed"]
     T145["#145: fix(converters): pre-warm Session 1 Distiller instance to prevent Session 0 port monitor fallback - Closed"]
-    T146["#146: feat(postprocessing): Source Image Restoration module"]
+    T146["#146: feat(postprocessing): Source Image Restoration module - Closed"]
     T147["#147: feat(converters): native export with Source Image Restoration as the Full Report conversion path"]
     T149["#149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)"]
     T148["#148: refactor(converters): retire the Adobe PDF virtual-printer path"]
@@ -527,15 +527,15 @@ graph TD
 > **Superseded direction (2026-11-01):** [ADR 0009](../../docs/adr/0009-native-export-with-source-image-restoration.md) supersedes ADR 0008. Tickets #140–#145 hardened an Adobe virtual-printer path that is now being retired. #146–#149 replace it with native export plus Source Image Restoration.
 
 ### #146: feat(postprocessing): Source Image Restoration module
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#146](https://github.com/adamlarGit/pahang-cli/issues/146) (sub-issue of #145; parents #140–#145)
 - **Blocked by**: none
 - **Ticket File**: [tickets/146-source-image-restoration-module.md](./tickets/146-source-image-restoration-module.md)
 - **Delivers**: A COM-free deep module that restores the original DOCX pixels into a Word-exported PDF by replacing image streams only. It uses two-stage matching with measured thresholds, an ambiguity guard, a pre-write self-check, an invariance gate, atomic temp-file publishing, and lazy decoding to bound memory.
-- [ ] `restore_source_images` exists with the specified interface and has no COM or Word imports.
-- [ ] Synthetic-fixture unit tests cover restoration, crops, WMF DIBs, look-alike discrimination, ambiguity skip, the no-downgrade rule, alpha, the self-check, the invariance gate, idempotence, corrupt input, and temp cleanup.
-- [ ] Peak memory is bounded per part.
-- [ ] All tests pass with zero regressions.
+- [x] `restore_source_images` exists with the specified interface and has no COM or Word imports.
+- [x] Synthetic-fixture unit tests cover restoration, crops, WMF DIBs, look-alike discrimination, ambiguity skip, the no-downgrade rule, alpha, the self-check, the invariance gate, idempotence, corrupt input, and temp cleanup.
+- [x] Peak memory is bounded per part.
+- [x] All tests pass with zero regressions.
 
 ### #147: feat(converters): native export with Source Image Restoration as the Full Report conversion path
 - **Status**: Open
