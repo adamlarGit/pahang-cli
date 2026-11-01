@@ -1,4 +1,4 @@
-<!-- status: open -->
+<!-- status: closed -->
 # Ticket #148: refactor(converters): retire the Adobe PDF virtual-printer path
 
 ## Parent
@@ -31,10 +31,10 @@ After #147, Full Report conversion no longer reaches the Adobe path. ADR 0009 re
 - `docs/workflows/utility_actions.md` and `docs/full_report_domain_analysis.md`: remove Adobe-printer statements.
 
 ## Acceptance criteria
-- [ ] `grep -rE "Distiller|PrinterJobControl|ConversionFeedbackMonitor|try_adobe_printer|purge_printer_jobs|ViewPrintOutput" src tests` returns nothing.
-- [ ] `configure_uniform_printer` still runs once per batch session, verified by an existing or new test.
-- [ ] Pagination of the #149 acceptance reports is unchanged before and after this ticket (page counts equal).
-- [ ] All tests pass with zero regressions.
+- [x] `grep -rE "Distiller|PrinterJobControl|ConversionFeedbackMonitor|try_adobe_printer|purge_printer_jobs|ViewPrintOutput" src tests` returns nothing.
+- [x] `configure_uniform_printer` still runs once per batch session, verified by an existing or new test.
+- [x] Pagination of the #149 acceptance reports is unchanged before and after this ticket (page counts equal).
+- [x] All tests pass with zero regressions.
 
 ## Blocked by
 #149 (the acceptance gate must pass on the new path before the old one is deleted).

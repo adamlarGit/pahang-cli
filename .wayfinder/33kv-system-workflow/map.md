@@ -94,7 +94,7 @@ graph TD
     T146["#146: feat(postprocessing): Source Image Restoration module - Closed"]
     T147["#147: feat(converters): native export with Source Image Restoration as the Full Report conversion path - Closed"]
     T149["#149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)"]
-    T148["#148: refactor(converters): retire the Adobe PDF virtual-printer path"]
+    T148["#148: refactor(converters): retire the Adobe PDF virtual-printer path - Closed"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -562,15 +562,15 @@ graph TD
 - [ ] Results are recorded in the probe FINDINGS.
 
 ### #148: refactor(converters): retire the Adobe PDF virtual-printer path
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#148](https://github.com/adamlarGit/pahang-cli/issues/148) (sub-issue of #145; parents #140–#145)
 - **Blocked by**: #149
 - **Ticket File**: [tickets/148-retire-adobe-virtual-printer-path.md](./tickets/148-retire-adobe-virtual-printer-path.md)
 - **Delivers**: Deletion of the Adobe printer, Distiller, spooler and registry machinery from #140–#145, with their tests and docs. Session-level printer selection is kept for layout parity.
-- [ ] No Adobe or Distiller symbols remain in `src` or `tests`.
-- [ ] `configure_uniform_printer` still runs once per session.
-- [ ] Acceptance-report pagination is unchanged.
-- [ ] All tests pass with zero regressions.
+- [x] No Adobe or Distiller symbols remain in `src` or `tests`.
+- [x] `configure_uniform_printer` still runs once per session.
+- [x] Acceptance-report pagination is unchanged.
+- [x] All tests pass with zero regressions.
 
 ---
 
