@@ -87,3 +87,40 @@ The FLIR CIRViewer preview bitmaps inside 33kV parts (PPU APMM) are **207x159**,
 - Cropped JPEG sources are re-encoded (q95, 4:4:4) at full source resolution. Uncropped sources are inserted byte-for-byte.
 - Word's rasterisation of a whole metafile (bitmap plus vector overlay, e.g. 603x460) is left untouched because no single source bitmap represents it.
 - Matching uses heuristics (aspect within 4%, mean abs grey diff ≤ 10 at 64 px). Rotated or recoloured pictures would fail to match and stay as Word rendered them, which is safe.
+
+## Live acceptance gate: ADR 0009 production path (ticket #149, 01-11-2026)
+
+The real `Post-Process Full Reports` action (`postprocess_full_reports_action`: production converter, shared Word session, run lock, keep-awake) was run with `scripts/adr0009_acceptance_gate.py`, which answers the interactive selectors, redirects deliverables to a scratch folder (operator-owned PDFs are never written, ADR 0010), and keeps each part's native export next to its restored PDF.
+
+Two runs, labelled throughout:
+
+- **BEFORE** = a clean detached checkout of the committed #147 code, `d5660a9`. This is the gate proper. Run times, export/restore times and the Part 32 timings come from BEFORE.
+- **AFTER** = the main tree with #148's uncommitted Adobe-path removal applied (later committed as `9580b50`). Peak memory comes from AFTER, because the BEFORE 11kV Python peak was recorded as 0 by a ctypes bug in the first harness (the BEFORE 33kV peak, 463 MB, was recorded correctly and matches AFTER).
+- The first BEFORE 11kV run was aborted (a harness bug: it used the default converter, so no restoration was wrapped) and restarted from scratch; its Word process was killed by hand.
+
+Inputs: 11kV Cameron Highland 17-08-2026 reports 093-102, and 33kV GEBENG 07-10-2026 `01. PPU APMM 3311kV` (32 parts, real section images).
+
+| Dataset | Parts | Deliverable pages | Images | Restored | Unmatched | Ambiguous | Self-check rejects | Fallbacks | Run time (BEFORE) | Export + restore (BEFORE) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 11kV 093-102 (10 reports) | 10 | 198 + 20 testsheet = 218 | 569 | 241 | 37 | 5 (safe skip) | 0 | 0 | 421 s | 61.8 s + 54.3 s |
+| 33kV PPU APMM | 32 | 206 + 8 testsheet = 214 | 645 | 328 | 32 | 1 (safe skip) | 0 | 0 | 511 s | 86.6 s + 65.6 s |
+
+Peak memory over the whole action, from AFTER: Python 505 MB (11kV) and 465 MB (33kV) peak working set. Word 531 MB (11kV) and 1.26 GB (33kV) are `tasklist` samples every 3 s, so they undercount short peaks, and the Word PID counts have the same limit; the sampled PID set is not a recycle count. Part 32 (41 MB DOCX, 34 pages, 123 images), BEFORE: 9.7 s to export and 9.6 s to restore. It exported on the first attempt in the same Word session that had exported 31 parts, so the recycle-and-retry path was not triggered and was not exercised.
+
+Checks, measured on the production output (BEFORE and AFTER gave identical results):
+
+- **Layout invariance.** All 42 parts: page count, per-page text, links and image placements are identical between the native export and the restored PDF. Deliverable pages equal native part pages plus testsheet pages.
+- **Operator deliverables.** The 10 gate deliverables have the same page counts and the same number of Sound annotations as the operator's existing PDFs in the folder (read-only comparison, recorded in `operator_pdf_comparison.json` in the scratch evidence). This is a count comparison, not a content comparison.
+- **Source pixels.** 0 dimension mismatches over 569 restored images (241 in 11kV, 328 in 33kV): each restored placement has one of its source's dimensions. Ultrasound panels went from 629x199 or 666x211 to 1200x380 (94 placements in 11kV), nameplate photos from 597x448 to 2048x1536, and thermograms stay 640x480 and are lossless. Zoom crops were inspected by eye for one nameplate, one thermogram and one panel (report 098).
+- **No wrong-source substitution.** 0 self-check rejects. The per-panel visual pass was replaced by an automated render comparison that does not use the module's matcher: each restored placement was rendered at 100 dpi in the native and the restored PDF and compared pixelwise. Worst case: 0.78% of pixels differing by 48 or more grey levels in 11kV (sharper graph text) and 0.0% in 33kV. I did not measure a negative control in this gate. The probe measured wrong look-alike panels at 2.2% or more with a similar metric (see "Matching safety" above), which is the only basis for treating 0.78% as "same image"; that is a threshold argument, not a proof for every panel. Four panels of report 098 were also compared side by side by eye.
+- **Merge.** No restored image size is missing from any final deliverable.
+- **Audio.** Sound annotation counts: 8, 10, 2, 2, 6, 2, 6, 10, 6, 8 in the 11kV reports (equal to the operator's PDFs) and 114 in the 33kV report. Every annotation lies over an image placement (the speaker icon).
+- **Batch behaviour.** The summary prints the restoration banner per report. No `.tmp_*` file remained in the output folders. No Word process started by the run remained (up to 3.6 s of shutdown lag on the 1.2 GB 33kV session). Word is recycled at each substation boundary by design (Q112); the BEFORE 11kV run saw 11 Word PIDs for 10 reports, but that figure is sampled.
+- **Idempotence, as tested.** (a) Module level: restoration was run again over all 42 restored parts against their DOCX files, giving 0 new replacements. (b) One full 11kV rerun into a separate output folder reproduced identical page and restored counts. Neither was a re-run over the same output folder, and 33kV had no full rerun.
+- **Run lock.** A second CLI run aimed at the BEFORE 11kV output folder while the first was running was refused on all 10 reports ("another post-processing run holds ...\.postprocess.lock") and started no Word.
+- **Deliverable sizes.** 7.6 to 10.9 MB for 11kV reports; 52.5 MB for the 33kV report (the testsheet pages and 114 embedded sounds on top of the 36.4 MB probe merge).
+- **After #148.** The same run from the main tree with the Adobe path removed produced identical page counts per part and per report, and identical restoration counts.
+
+Source files: the converter opened the operator's DOCX with `Documents.Open` without `ReadOnly`, so Word wrote owner files (`~$`) beside them. The DOCX size and mtime were unchanged by the runs. The folder held two stale owner files before the gate (`~$1. TANG SENG (VI).docx`, `~$3. CHAN KAM HONG (IR+VI).docx`); they are still there, unchanged. The aborted first BEFORE run, whose Word I killed, left one more (`~$4. CHAN YIM SOM (IR+VI).docx`, created 18:28), which I removed. The follow-up fix opens the DOCX read-only; a single-report live check (093, 25 pages, 23 images restored) showed no new `~$` file during the run.
+
+Tests: the suite ran under the system Python, because the project `.venv` has no pytest. 7 failures matched the known pre-existing set (`test_33kv_bugfixes_verification`, `test_enrich_msms`, `test_msms_33kv_e2e` x2, `test_propagate_wo`, `test_quick_report_components`, `test_sound_matching`).
