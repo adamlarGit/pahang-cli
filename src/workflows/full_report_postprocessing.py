@@ -60,6 +60,48 @@ MULTIPART_DOCX_PATTERN = re.compile(
 )
 
 
+SUPERSEDED_DIR_NAME = "_superseded"
+EMPTY_DATE_HINT = "no Full Report documents — run Generate Full Reports first"
+
+
+def _date_tag(date_str: str) -> str:
+    """Return '[DD-MM-YYYY] ' for a date folder name, or '' when it is not a date."""
+    return f"[{date_str}] " if DAILY_DATE_FOLDER_PATTERN.match(date_str or "") else ""
+
+
+def _is_docx_candidate(p: Path) -> bool:
+    return not p.name.startswith("~$") and not p.name.startswith(".")
+
+
+def _top_level_docx(folder: Path) -> list[Path]:
+    """Top-level .docx files of a date folder; never descends into _superseded/."""
+    if not folder.is_dir():
+        return []
+    return sorted(
+        (p.resolve() for p in folder.glob("*.docx") if _is_docx_candidate(p)),
+        key=lambda p: p.name,
+    )
+
+
+def _rglob_docx_excluding_superseded(folder: Path) -> list[Path]:
+    return [
+        p.resolve()
+        for p in folder.rglob("*.docx")
+        if _is_docx_candidate(p) and SUPERSEDED_DIR_NAME not in p.relative_to(folder).parts
+    ]
+
+
+def _is_date_folder_path(p: Path) -> bool:
+    """True for a path ending in a DD-MM-YYYY folder name that has a parent (not a bare date string)."""
+    return bool(DAILY_DATE_FOLDER_PATTERN.match(p.name)) and len(p.parts) > 1
+
+
+def _empty_date_warning(date_folder: Path) -> str:
+    station = date_folder.parent.parent.name if len(date_folder.parts) >= 3 else ""
+    where = f" ({station})" if station else ""
+    return f"{date_folder.name}{where}: {EMPTY_DATE_HINT}"
+
+
 @dataclass(frozen=True)
 class PostProcessingTargetGroup:
     """Group of docx files representing a single substation Full Report deliverable."""
@@ -511,7 +553,8 @@ class FullReportPostProcessingWorkflow:
         for idx, group in enumerate(target_groups, start=1):
             if progress_sink:
                 progress_sink(
-                    f"[{idx}/{len(target_groups)}] Inspecting testsheet PDF for {group.stem}..."
+                    f"[{idx}/{len(target_groups)}] {_date_tag(group.primary_docx_path.parent.name)}"
+                    f"Inspecting testsheet PDF for {group.stem}..."
                 )
             telem = self._inspect_single_report(group, environment)
             telemetries.append(telem)
@@ -634,7 +677,8 @@ class FullReportPostProcessingWorkflow:
 
                         if progress_sink:
                             progress_sink(
-                                f"[{idx}/{len(valid_targets)}] Converting and merging Full Report for {stem}..."
+                                f"[{idx}/{len(valid_targets)}] {_date_tag(telem.docx_path.parent.name)}"
+                                f"Converting and merging Full Report for {stem}..."
                             )
                         try:
                             target_group = PostProcessingTargetGroup(
@@ -1095,11 +1139,12 @@ class FullReportPostProcessingWorkflow:
 
             # Direct path to directory
             if p_tgt.is_dir():
-                files = [
-                    p.resolve()
-                    for p in p_tgt.rglob("*.docx")
-                    if not p.name.startswith("~$") and not p.name.startswith(".")
-                ]
+                if _is_date_folder_path(p_tgt):
+                    files = _top_level_docx(p_tgt)
+                    if not files:
+                        warnings.append(_empty_date_warning(p_tgt))
+                else:
+                    files = _rglob_docx_excluding_superseded(p_tgt)
                 if station:
                     files = [p for p in files if self._matches_station(p, station)]
                 files.sort(key=lambda p: p.name)
@@ -1139,13 +1184,20 @@ class FullReportPostProcessingWorkflow:
                         continue
                     if p_res not in collected:
                         collected.append(p_res)
-                elif p.is_dir():
-                    for f in sorted(p.rglob("*.docx")):
-                        if not f.name.startswith("~$") and not f.name.startswith("."):
-                            if f.resolve() not in collected:
-                                collected.append(f.resolve())
+                elif p.is_dir() or _is_date_folder_path(p):
+                    if _is_date_folder_path(p):
+                        found = _top_level_docx(p)
+                        if not found:
+                            warnings.append(_empty_date_warning(p))
+                    else:
+                        found = sorted(_rglob_docx_excluding_superseded(p))
+                    for f in found:
+                        if f not in collected:
+                            collected.append(f)
                 elif isinstance(item, (str, Path)) and DAILY_DATE_FOLDER_PATTERN.match(str(item).strip()):
                     date_files = self._find_docx_by_date(full_report_dir, str(item).strip())
+                    if not date_files:
+                        warnings.append(f"{str(item).strip()}: {EMPTY_DATE_HINT}")
                     for df in date_files:
                         if df not in collected:
                             collected.append(df)
@@ -1159,17 +1211,58 @@ class FullReportPostProcessingWorkflow:
                 warnings.append(f"Full Report directory does not exist: {full_report_dir}")
                 return [], warnings, errors
 
-            files = [
-                p.resolve()
-                for p in full_report_dir.rglob("*.docx")
-                if not p.name.startswith("~$") and not p.name.startswith(".")
-            ]
+            files = _rglob_docx_excluding_superseded(full_report_dir)
             if station:
                 files = [p for p in files if self._matches_station(p, station)]
             files.sort(key=lambda p: p.name)
             return files, warnings, errors
 
         return [], warnings, errors
+
+    def locate_full_reports_for_fls(
+        self,
+        fls: Sequence[str],
+        environment: ProjectEnvironment,
+    ) -> tuple[list[Path], list[str]]:
+        """Resolve Functional Locations to Full Report Parts, the way Generate Full Reports does.
+
+        FLs are looked up in the testsheets; each matching package (one per date the FL
+        appears on) maps to the top level of its FULL REPORT/<STATION>/<MONTH>/<DATE>/
+        folder, where every Part sharing the package's substation number is returned.
+        Returns (docx paths, warning lines).
+        """
+        from src.workflows.full_report import FullReportWorkflow
+
+        packages, warnings, errors = FullReportWorkflow().discover_packages(list(fls), environment)
+        warnings = [*warnings, *errors]
+        full_report_dir = (
+            environment.get_full_report_dir()
+            if hasattr(environment, "get_full_report_dir")
+            else environment.base_path / "FULL REPORT"
+        )
+
+        found: list[Path] = []
+        for pkg in packages:
+            folder = full_report_dir / pkg.station / format_month_folder(pkg.month) / pkg.date_str
+            matched: list[Path] = []
+            for docx in _top_level_docx(folder):
+                m = MULTIPART_DOCX_PATTERN.match(docx.stem)
+                stem = m.group("stem").strip() if m else docx.stem
+                try:
+                    number = extract_numerical_prefix(stem)
+                except ValueError:
+                    continue
+                if number == pkg.substation_number:
+                    matched.append(docx)
+            if not matched:
+                warnings.append(
+                    f"{pkg.date_str} ({pkg.station}): {EMPTY_DATE_HINT} "
+                    f"(PE {pkg.substation_number})"
+                )
+            for docx in matched:
+                if docx not in found:
+                    found.append(docx)
+        return found, warnings
 
     def _find_docx_by_date(self, full_report_dir: Path, date_str: str) -> list[Path]:
         """Find all .docx files inside date subdirectories matching date_str."""

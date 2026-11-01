@@ -290,7 +290,7 @@ def test_full_report_action_multi_station_selection_and_summary(
 
 def test_full_report_postprocessing_action_cancel_date_selection(mock_env: MagicMock) -> None:
     action = FullReportPostProcessingAction()
-    with patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=None):
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="__cancel__"):
         result = action.execute(mock_env)
         assert result is None
 
@@ -321,7 +321,7 @@ def test_full_report_postprocessing_action_dry_run_telemetry_and_cancel_confirma
     action = FullReportPostProcessingAction(workflow=mock_workflow)
     date_dir = Path("C:/fake/project/FULL REPORT/RAUB/08. AUGUST/04-08-2026")
 
-    with patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="browse_dates"),          patch("src.project_workflow_actions.cli_selectors.select_pahang_inspection_dates_interactive", return_value=(date_dir,)), \
          patch("src.project_workflow_actions.cli_selectors.select_substations_interactive", return_value=[telem]), \
          patch("src.project_workflow_actions.cli_selectors.confirm", return_value=False) as mock_confirm:
 
@@ -392,7 +392,7 @@ def test_full_report_postprocessing_action_multi_document_and_summary(
     action = FullReportPostProcessingAction(workflow=mock_workflow)
     date_dir = Path("C:/fake/project/FULL REPORT/RAUB/08. AUGUST/04-08-2026")
 
-    with patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="browse_dates"),          patch("src.project_workflow_actions.cli_selectors.select_pahang_inspection_dates_interactive", return_value=(date_dir,)), \
          patch("src.project_workflow_actions.cli_selectors.select_substations_interactive") as mock_interactive, \
          patch("src.project_workflow_actions.cli_selectors.confirm", return_value=True):
 
@@ -454,7 +454,7 @@ def test_full_report_postprocessing_action_multipart_substation_forwards_all_par
     action = FullReportPostProcessingAction(workflow=mock_workflow)
     date_dir = Path("C:/fake/project/FULL REPORT/KUANTAN/01. AUGUST/25-08-2026")
 
-    with patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=date_dir), \
+    with patch("src.project_workflow_actions.cli_selectors.select_one", return_value="browse_dates"),          patch("src.project_workflow_actions.cli_selectors.select_pahang_inspection_dates_interactive", return_value=(date_dir,)), \
          patch("src.project_workflow_actions.cli_selectors.select_substations_interactive") as mock_interactive, \
          patch("src.project_workflow_actions.cli_selectors.confirm", return_value=True):
 

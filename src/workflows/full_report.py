@@ -1214,6 +1214,15 @@ class FullReportWorkflow:
             return path.exists() or (environment.get_testsheet_dir() / path).exists()
         return path.exists()
 
+    def discover_packages(
+        self,
+        target: ReportTarget,
+        environment: ProjectEnvironment,
+        station: str | Sequence[str] | None = None,
+    ) -> tuple[list[SubstationTestsheetPackage], list[str], list[str]]:
+        """Public package lookup (testsheet extraction) shared with Full Report post-processing."""
+        return self._discover_packages(target, environment, station=station)
+
     def _discover_packages(
         self,
         target: ReportTarget,
@@ -1257,10 +1266,33 @@ class FullReportWorkflow:
             errors.append(f"Package discovery failed: {exc}")
             return [], warnings, errors
 
-        if not packages:
+        date_warnings = self._empty_date_warnings(folders, packages) if folders and not fls else []
+        warnings.extend(date_warnings)
+        if not packages and not date_warnings:
             warnings.append(f"No testsheet packages found for target: {target}")
 
         return packages, warnings, errors
+
+    @staticmethod
+    def _empty_date_warnings(
+        folders: Sequence[str],
+        packages: Sequence[SubstationTestsheetPackage],
+    ) -> list[str]:
+        """One warning per selected date folder that yielded no testsheet packages."""
+        found_pairs = {(pkg.station, pkg.date_str) for pkg in packages}
+        found_dates = {pkg.date_str for pkg in packages}
+        lines: list[str] = []
+        for raw in folders:
+            p = Path(str(raw))
+            if not DAILY_DATE_FOLDER_PATTERN.match(p.name):
+                continue
+            if len(p.parts) >= 4:
+                station_name = p.parent.parent.name
+                if (station_name, p.name) not in found_pairs:
+                    lines.append(f"{p.name} ({station_name}): no testsheet packages found")
+            elif p.name not in found_dates:
+                lines.append(f"{p.name}: no testsheet packages found")
+        return lines
 
     def _resolve_target(
         self,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence
 
@@ -785,6 +786,45 @@ def _print_full_report_batch_summary(result: FullReportBatchResult | None) -> No
     print("  =======================================================\n")
 
 
+def _prompt_full_report_selection(
+    environment: ProjectEnvironment,
+    title: str,
+) -> list[str] | tuple[Path, ...] | None:
+    """Shared MultiDateSelectionPolicy prompt used by Full Report generation and post-processing.
+
+    Returns a list of Functional Locations (Manual FL) or a tuple of TESTSHEET date
+    folders (Browse / typed dates); None when the operator cancels.
+    """
+    options = [
+        cli_selectors.SelectOption("Manual FL Input", "manual"),
+        cli_selectors.SelectOption("Browse Date Folders (Interactive Checklist)", "browse_dates"),
+        cli_selectors.SelectOption("Enter Target Date(s) (Text Input / Range)", "enter_dates"),
+        cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"),
+    ]
+    mode_str = cli_selectors.select_one(title, options)
+    if mode_str in ("__cancel__", None):
+        print("Processing cancelled.")
+        return None
+
+    if mode_str == "manual":
+        print("Enter comma-separated Functional Locations.")
+        input_locs = input("Functional Locations: ").strip()
+        fl_numbers = [loc.strip() for loc in input_locs.split(",") if loc.strip()]
+        if not fl_numbers:
+            print("No functional locations provided.")
+            return None
+        return fl_numbers
+
+    if mode_str == "browse_dates":
+        selected_paths = cli_selectors.select_pahang_inspection_dates_interactive(environment)
+    else:
+        selected_paths = cli_selectors.prompt_target_inspection_dates_with_ranges(environment)
+    if not selected_paths:
+        print("Processing cancelled.")
+        return None
+    return selected_paths
+
+
 def generate_full_reports_action(
     environment: ProjectEnvironment,
     *,
@@ -794,37 +834,10 @@ def generate_full_reports_action(
     """Action handler for Stage 1 Full Report Word document generation."""
     selected_target: Path | str | Sequence[str]
     if target is None:
-        options = [
-            cli_selectors.SelectOption("Manual FL Input", "manual"),
-            cli_selectors.SelectOption("Browse Date Folders (Interactive Checklist)", "browse_dates"),
-            cli_selectors.SelectOption("Enter Target Date(s) (Text Input / Range)", "enter_dates"),
-            cli_selectors.SelectOption("Cancel", "__cancel__", shortcut_key="c"),
-        ]
-        mode_str = cli_selectors.select_one("Full Report - Selection Mode", options)
-        if mode_str in ("__cancel__", None):
-            print("Processing cancelled.")
+        prompted = _prompt_full_report_selection(environment, "Full Report - Selection Mode")
+        if prompted is None:
             return None
-
-        if mode_str == "manual":
-            print("Enter comma-separated Functional Locations.")
-            input_locs = input("Functional Locations: ").strip()
-            fl_numbers = [loc.strip() for loc in input_locs.split(",") if loc.strip()]
-            if not fl_numbers:
-                print("No functional locations provided.")
-                return None
-            selected_target = fl_numbers
-        elif mode_str == "browse_dates":
-            selected_paths = cli_selectors.select_pahang_inspection_dates_interactive(environment)
-            if not selected_paths:
-                print("Processing cancelled.")
-                return None
-            selected_target = selected_paths
-        else:
-            selected_paths = cli_selectors.prompt_target_inspection_dates_with_ranges(environment)
-            if not selected_paths:
-                print("Processing cancelled.")
-                return None
-            selected_target = selected_paths
+        selected_target = prompted
     else:
         if isinstance(target, (list, tuple)):
             selected_target = target
@@ -1008,6 +1021,25 @@ def _print_full_report_postprocessing_summary(
     print("  =======================================================\n")
 
 
+def _map_testsheet_dates_to_full_report_dirs(
+    environment: ProjectEnvironment,
+    date_folders: Sequence[Path],
+) -> list[Path]:
+    """Map TESTSHEET/<STATION>/<MONTH>/<DATE>/ folders onto the same station's FULL REPORT date folders."""
+    full_report_dir = (
+        environment.get_full_report_dir()
+        if hasattr(environment, "get_full_report_dir")
+        else environment.base_path / "FULL REPORT"
+    )
+    mapped: list[Path] = []
+    for folder in date_folders:
+        station, month, date_str = folder.parent.parent.name, folder.parent.name, folder.name
+        candidate = full_report_dir / station / month / date_str
+        if candidate not in mapped:
+            mapped.append(candidate)
+    return mapped
+
+
 def postprocess_full_reports_action(
     environment: ProjectEnvironment,
     *,
@@ -1015,11 +1047,20 @@ def postprocess_full_reports_action(
     target: Path | str | None = None,
 ) -> FullReportPostProcessingResult | None:
     """Action handler for Stage 2 Full Report PDF conversion and testsheet merge."""
+    active_workflow = workflow or FullReportPostProcessingWorkflow()
+    extra_warnings: list[str] = []
+    inspect_target: Path | str | Sequence[Path | str]
     if target is None:
-        selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
-        if selected_path is None:
-            print("Processing cancelled.")
+        selection = _prompt_full_report_selection(
+            environment, "Full Report Post-Processing - Selection Mode"
+        )
+        if selection is None:
             return None
+        if isinstance(selection, list):
+            docx_paths, extra_warnings = active_workflow.locate_full_reports_for_fls(selection, environment)
+            inspect_target = docx_paths
+        else:
+            inspect_target = _map_testsheet_dates_to_full_report_dirs(environment, selection)
     else:
         target_path = Path(target)
         if not target_path.is_absolute():
@@ -1033,17 +1074,18 @@ def postprocess_full_reports_action(
         else:
             selected_path = target_path
 
-    if selected_path.is_dir() and any(selected_path.glob("*.docx")):
-        inspect_target: Path | str = selected_path
-    else:
-        inspect_target = selected_path.name
+        if selected_path.is_dir() and any(selected_path.glob("*.docx")):
+            inspect_target = selected_path
+        else:
+            inspect_target = selected_path.name
 
-    active_workflow = workflow or FullReportPostProcessingWorkflow()
     inspection = active_workflow.inspect(
         inspect_target,
         environment,
         progress_sink=_cli_progress_sink,
     )
+    if extra_warnings:
+        inspection = replace(inspection, warnings=(*extra_warnings, *inspection.warnings))
 
     _print_full_report_postprocessing_dry_run_telemetry(inspection)
 
@@ -1054,12 +1096,14 @@ def postprocess_full_reports_action(
     def _format_postprocessing_target_title(item: FullReportPostProcessingTelemetry | Any) -> str:
         """Format display title for substation selection checklist, highlighting multi-part parts."""
         ready_str = "READY" if getattr(item, "is_ready", True) else "NOT READY"
+        date_tag = getattr(item, "date_str", "")
+        date_prefix = f"[{date_tag}] " if date_tag else ""
         if getattr(item, "is_multipart", False):
             parts = getattr(item, "part_docx_paths", ())
             stem = getattr(item, "stem", str(item))
-            return f"{stem} [{len(parts)} docx parts -> 1 pdf deliverable] [{ready_str}]"
+            return f"{date_prefix}{stem} [{len(parts)} docx parts -> 1 pdf deliverable] [{ready_str}]"
         doc_name = getattr(getattr(item, "docx_path", None), "name", str(item))
-        return f"{doc_name} [{ready_str}]"
+        return f"{date_prefix}{doc_name} [{ready_str}]"
 
     chosen_targets = cli_selectors.select_substations_interactive(
         inspection.targets,
