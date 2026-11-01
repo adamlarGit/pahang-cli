@@ -5,11 +5,12 @@ This file serves as the ubiquitous language and domain model reference for the P
 ## Concepts
 
 ### MultiDateSelectionPolicy
-The ubiquitous policy governing multi-date target selection across all report generation workflows (Quick Report, Full Report, etc.). 
+The ubiquitous policy governing multi-date target selection across all report generation workflows (Quick Report, Full Report, etc.) and Full Report post-processing. Both Full Report stages offer the same selection modes over the same `TESTSHEET/` date tree, so an operator selects a batch the same way for generation and post-processing. 
 - **Dual-Mode Entry**: Operators can use interactive tree checkboxes ("Browse Date Folders") or range-aware text input ("Enter Target Date(s)").
 - **Interactive Checklist**: Default checklist state is unchecked `[ ]`. Keyboard shortcut `'a'` toggles all. If zero items are selected or the prompt is cancelled, the workflow guarantees loop-back resilience (returning to month/station selection instead of aborting).
 - **Range Syntax Grammar**: Supports comma separation and sequential range expansion (`DD-MM-YYYY..DD-MM-YYYY` or `to` / `-`). Implements tolerant validation with pre-flight folder existence checks, displaying broken-down confirmation prompts when some dates are missing.
-- **Date-Prefixed Checklist**: Full Report generation displays interactive substation checklists prefixed with their corresponding date tags (e.g., `[01-05-2026] 001. PMU BENTONG [READY]`).
+- **Date-Prefixed Checklist**: Full Report generation and post-processing display interactive substation checklists prefixed with their corresponding date tags (e.g., `[01-05-2026] 001. PMU BENTONG [READY]`).
+- **Empty-Date Warning**: Pre-flight telemetry names every selected date that yields nothing to process (no testsheet packages for generation; no Full Report documents for post-processing), so a selected date never drops out of the batch silently.
 - **Date-Aware Progress Telemetry**: Batch execution log sinks embed the inspection date tag inside progress messages (e.g., `[1/5] [01-05-2026] Generating...`).
 
 ### ProjectMetadata
@@ -138,6 +139,22 @@ An immutable dataclass (`src/workflows/us_tev_graphs.py`) representing an eligib
 The ubiquitous file naming schema for generated US+TEV survey graphs:
 `{ASSET}_{SUBASSET}_{COMPONENT}_{TECH}.png`
 Normalizes uppercase tokens, strips leading `$`, preserves physical compartment labels (`CIRCUIT_BREAKER`, `CABLE_BOX`, `UPPER_BUSBARS`, `LOWER_BUSBARS`, `CT_CHAMBER`) across multi-point switchgear (such as `VCB_CUBICLE`), omits the component token when none is specified (`{ASSET}_{SUBASSET}_{TECH}.png`), and appends an incrementing numeric suffix (`_2`, `_3`) in the rare event of identical components.
+
+### Survey Sub-Asset
+One measured item inside an UltraTEV survey, as named by the technician on the instrument keypad in the field. It may be a switchgear panel, a transformer, or another asset, and its name may contain field-entry typos.
+_Avoid_: bay, survey panel, survey folder
+
+### Testsheet Asset
+One inspected item recorded on the testsheet (a switchgear panel, transformer, feeder pillar, etc.). The testsheet is the source of truth for its name; survey data never corrects it.
+_Avoid_: bay, canonical panel
+
+### Survey Alignment
+The confirmed pairing between each Testsheet Asset and the Survey Sub-Asset that holds its measurements. Typos in a Survey Sub-Asset name never change which Testsheet Asset it belongs to once aligned.
+_Avoid_: survey matching, reconciliation (when meaning the pairing itself)
+
+### Transformer Survey Naming (PTX vs TX)
+On 33kV projects, power transformers are `PTX1`..`PTX4` and station service transformers are `LTX`. Field technicians enter these as `TX<n>` (e.g. `TX3`, `TX4`) on the instrument throughout the project; the missing `P` is a field-entry error, not a separate asset. `TX1`..`TX4` is reserved for distribution transformers on 11kV projects.
+_Avoid_: `TX<n>` for 33kV power transformers
 
 ### BrowserPrerequisitePolicy
 The pre-flight environment prerequisite check enforced in Option C rendering mode. Verifies that Google Chrome or Microsoft Edge is installed and accessible on the host system prior to initiating batch substation graph generation, failing fast with an actionable `BrowserPrerequisiteError` rather than failing mid-batch during headless rendering.
@@ -490,3 +507,11 @@ The naming hierarchy and propagation policy governing transformer asset identifi
   - **Visual Inspection Verbatim Preservation**: Visual inspection defect descriptions from testsheets (e.g. `SILICA GEL IN POOR CONDITION – PTX1 - MAIN TANK`) are preserved 100% verbatim without regex inference, normalization rewriting, or token substitution.
 
 
+
+### OperatorArchive
+The operator's own retained copy of the original editable `.docx` Quick Reports and Full Reports, held in two flat folders, `QUICK REPORT WORD/` and `FULL REPORT WORD/`, with no station/month/date nesting. Files are **moved** here (not copied) once their PDFs are final, so after archiving, the `.docx` no longer sits in `QUICK REPORT/` or `FULL REPORT/`. Never sent to the client.
+_Avoid_: backup, word copy
+
+### SubmissionPackage
+The PDF-only deliverable handed to the client on a pendrive. Mirrors the client-mandated `QUICK REPORT/` and `FULL REPORT/` `<STATION>/<MONTH>/<DATE>/` layout, holding only `.pdf` files, with raw material also presented inside the `FULL REPORT/` structure. Its exact final layout is not yet confirmed from a completed project.
+_Avoid_: pendrive folder, client folder
