@@ -61,7 +61,25 @@ MULTIPART_DOCX_PATTERN = re.compile(
 
 
 SUPERSEDED_DIR_NAME = "_superseded"
+WARN_ICON = "\u26a0\ufe0f "
 EMPTY_DATE_HINT = "no Full Report documents — run Generate Full Reports first"
+
+
+def resolve_full_report_dir(environment: ProjectEnvironment) -> Path:
+    """The project's FULL REPORT root, tolerating environments without get_full_report_dir()."""
+    if hasattr(environment, "get_full_report_dir"):
+        return environment.get_full_report_dir()
+    return environment.base_path / "FULL REPORT"
+
+
+def _stem_name_part(stem: str) -> str:
+    """Substation name inside a Full Report stem: drops the 'NNN.' prefix and a trailing '(...)' suffix."""
+    name = re.sub(r"^\d+\.\s*", "", stem)
+    return re.sub(r"\s*\([^()]*\)$", "", name).strip()
+
+
+def _comparable_name(name: object) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(name or "").lower())
 
 
 def _date_tag(date_str: str) -> str:
@@ -99,7 +117,7 @@ def _is_date_folder_path(p: Path) -> bool:
 def _empty_date_warning(date_folder: Path) -> str:
     station = date_folder.parent.parent.name if len(date_folder.parts) >= 3 else ""
     where = f" ({station})" if station else ""
-    return f"{date_folder.name}{where}: {EMPTY_DATE_HINT}"
+    return f"{WARN_ICON}{date_folder.name}{where}: {EMPTY_DATE_HINT}"
 
 
 @dataclass(frozen=True)
@@ -1105,7 +1123,7 @@ class FullReportPostProcessingWorkflow:
         warnings: list[str] = []
         errors: list[str] = []
 
-        full_report_dir = environment.get_full_report_dir() if hasattr(environment, "get_full_report_dir") else environment.base_path / "FULL REPORT"
+        full_report_dir = resolve_full_report_dir(environment)
 
         def _expand_multipart_siblings(p: Path) -> list[Path]:
             """Expand a multi-part .docx path to all its ordered siblings sharing the same stem."""
@@ -1197,7 +1215,7 @@ class FullReportPostProcessingWorkflow:
                 elif isinstance(item, (str, Path)) and DAILY_DATE_FOLDER_PATTERN.match(str(item).strip()):
                     date_files = self._find_docx_by_date(full_report_dir, str(item).strip())
                     if not date_files:
-                        warnings.append(f"{str(item).strip()}: {EMPTY_DATE_HINT}")
+                        warnings.append(f"{WARN_ICON}{str(item).strip()}: {EMPTY_DATE_HINT}")
                     for df in date_files:
                         if df not in collected:
                             collected.append(df)
@@ -1235,16 +1253,12 @@ class FullReportPostProcessingWorkflow:
 
         packages, warnings, errors = FullReportWorkflow().discover_packages(list(fls), environment)
         warnings = [*warnings, *errors]
-        full_report_dir = (
-            environment.get_full_report_dir()
-            if hasattr(environment, "get_full_report_dir")
-            else environment.base_path / "FULL REPORT"
-        )
+        full_report_dir = resolve_full_report_dir(environment)
 
         found: list[Path] = []
         for pkg in packages:
             folder = full_report_dir / pkg.station / format_month_folder(pkg.month) / pkg.date_str
-            matched: list[Path] = []
+            candidates: list[tuple[Path, str]] = []
             for docx in _top_level_docx(folder):
                 m = MULTIPART_DOCX_PATTERN.match(docx.stem)
                 stem = m.group("stem").strip() if m else docx.stem
@@ -1253,10 +1267,26 @@ class FullReportPostProcessingWorkflow:
                 except ValueError:
                     continue
                 if number == pkg.substation_number:
-                    matched.append(docx)
+                    candidates.append((docx, stem))
+
+            # Refine by substation name when the testsheet exposes one; fall back to PE number alone.
+            pkg_name = _comparable_name(
+                getattr(pkg.data, "substation_name_site", "") or getattr(pkg.data, "substation_name_erms", "")
+            )
+            if pkg_name:
+                named = [c for c in candidates if _comparable_name(_stem_name_part(c[1])) == pkg_name]
+                candidates = named or candidates
+            matched = [docx for docx, _ in candidates]
+
+            distinct_stems = {stem for _, stem in candidates}
+            if len(distinct_stems) > 1:
+                warnings.append(
+                    f"{WARN_ICON}{pkg.date_str} ({pkg.station}): PE {pkg.substation_number} matches "
+                    f"more than one Full Report ({', '.join(sorted(distinct_stems))}) - all will be listed"
+                )
             if not matched:
                 warnings.append(
-                    f"{pkg.date_str} ({pkg.station}): {EMPTY_DATE_HINT} "
+                    f"{WARN_ICON}{pkg.date_str} ({pkg.station}): {EMPTY_DATE_HINT} "
                     f"(PE {pkg.substation_number})"
                 )
             for docx in matched:

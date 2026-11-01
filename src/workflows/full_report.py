@@ -1266,7 +1266,11 @@ class FullReportWorkflow:
             errors.append(f"Package discovery failed: {exc}")
             return [], warnings, errors
 
-        date_warnings = self._empty_date_warnings(folders, packages) if folders and not fls else []
+        date_warnings = (
+            self._empty_date_warnings(folders, packages, self._testsheet_root(environment))
+            if folders and not fls
+            else []
+        )
         warnings.extend(date_warnings)
         if not packages and not date_warnings:
             warnings.append(f"No testsheet packages found for target: {target}")
@@ -1274,24 +1278,43 @@ class FullReportWorkflow:
         return packages, warnings, errors
 
     @staticmethod
+    def _testsheet_root(environment: ProjectEnvironment) -> Path | None:
+        getter = getattr(environment, "get_testsheet_dir", None)
+        root = getter() if callable(getter) else None
+        return root if isinstance(root, Path) else None
+
+    @staticmethod
     def _empty_date_warnings(
         folders: Sequence[str],
         packages: Sequence[SubstationTestsheetPackage],
+        testsheet_root: Path | None,
     ) -> list[str]:
-        """One warning per selected date folder that yielded no testsheet packages."""
+        """One warning per selected date folder that yielded no testsheet packages.
+
+        A folder at TESTSHEET/<STATION>/<MONTH>/<DATE> is matched per station; any other
+        date folder or bare date string is matched by date alone.
+        """
         found_pairs = {(pkg.station, pkg.date_str) for pkg in packages}
         found_dates = {pkg.date_str for pkg in packages}
+        icon = "\u26a0\ufe0f "
         lines: list[str] = []
         for raw in folders:
             p = Path(str(raw))
             if not DAILY_DATE_FOLDER_PATTERN.match(p.name):
                 continue
-            if len(p.parts) >= 4:
-                station_name = p.parent.parent.name
+            station_name = ""
+            if testsheet_root is not None:
+                try:
+                    rel_parts = p.relative_to(testsheet_root).parts
+                except ValueError:
+                    rel_parts = ()
+                if len(rel_parts) == 3:
+                    station_name = rel_parts[0]
+            if station_name:
                 if (station_name, p.name) not in found_pairs:
-                    lines.append(f"{p.name} ({station_name}): no testsheet packages found")
+                    lines.append(f"{icon}{p.name} ({station_name}): no testsheet packages found")
             elif p.name not in found_dates:
-                lines.append(f"{p.name}: no testsheet packages found")
+                lines.append(f"{icon}{p.name}: no testsheet packages found")
         return lines
 
     def _resolve_target(

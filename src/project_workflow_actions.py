@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence
 
 from src import cli_selectors
+from src.core.normalizers import format_month_folder
 from src.workflows.models import (
     GenerateTestsheetFolderRequest,
     PopulateDataMsmsRequest,
@@ -29,6 +30,7 @@ from src.workflows.full_report_postprocessing import (
     FullReportPostProcessingInspection,
     FullReportPostProcessingResult,
     FullReportPostProcessingWorkflow,
+    resolve_full_report_dir,
 )
 from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.service import WorkflowService
@@ -1026,14 +1028,11 @@ def _map_testsheet_dates_to_full_report_dirs(
     date_folders: Sequence[Path],
 ) -> list[Path]:
     """Map TESTSHEET/<STATION>/<MONTH>/<DATE>/ folders onto the same station's FULL REPORT date folders."""
-    full_report_dir = (
-        environment.get_full_report_dir()
-        if hasattr(environment, "get_full_report_dir")
-        else environment.base_path / "FULL REPORT"
-    )
+    full_report_dir = resolve_full_report_dir(environment)
     mapped: list[Path] = []
     for folder in date_folders:
-        station, month, date_str = folder.parent.parent.name, folder.parent.name, folder.name
+        station, date_str = folder.parent.parent.name, folder.name
+        month = format_month_folder(folder.parent.name) or folder.parent.name
         candidate = full_report_dir / station / month / date_str
         if candidate not in mapped:
             mapped.append(candidate)
@@ -1064,11 +1063,7 @@ def postprocess_full_reports_action(
     else:
         target_path = Path(target)
         if not target_path.is_absolute():
-            full_report_dir = (
-                environment.get_full_report_dir()
-                if hasattr(environment, "get_full_report_dir")
-                else environment.base_path / "FULL REPORT"
-            )
+            full_report_dir = resolve_full_report_dir(environment)
             candidate = full_report_dir / target_path
             selected_path = candidate if candidate.exists() else (environment.base_path / target_path)
         else:

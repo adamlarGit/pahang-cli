@@ -239,8 +239,8 @@ def test_14_empty_date_warns_and_run_continues(env: MagicMock) -> None:
 
     assert files == [ok.resolve()]
     assert warnings == [
-        "03-05-2026 (BENTONG): no Full Report documents — run Generate Full Reports first",
-        "04-05-2026 (BENTONG): no Full Report documents — run Generate Full Reports first",
+        "⚠️ 03-05-2026 (BENTONG): no Full Report documents — run Generate Full Reports first",
+        "⚠️ 04-05-2026 (BENTONG): no Full Report documents — run Generate Full Reports first",
     ]
 
 
@@ -272,7 +272,7 @@ def test_13_empty_date_gets_its_own_warning(env: MagicMock) -> None:
     pkgs, warnings, errors = wf._discover_packages((has, none), env)
 
     assert len(pkgs) == 1
-    assert warnings == ["03-05-2026 (BENTONG): no testsheet packages found"]
+    assert warnings == ["⚠️ 03-05-2026 (BENTONG): no testsheet packages found"]
 
 
 def test_13_all_dates_empty_keeps_nothing_discovered_message(env: MagicMock, capsys) -> None:
@@ -286,3 +286,76 @@ def test_13_all_dates_empty_keeps_nothing_discovered_message(env: MagicMock, cap
     out = capsys.readouterr().out
     assert "03-05-2026 (BENTONG): no testsheet packages found" in out
     assert "No substations discovered to process." in out
+
+
+# --- Review fixes -------------------------------------------------------------
+
+def test_14_browse_maps_noncanonical_testsheet_month_to_canonical_full_report_month(env: MagicMock) -> None:
+    _fr_docx(env, "BENTONG", "01-05-2026", "001. ALPHA.docx")  # FULL REPORT/BENTONG/05. MAY/...
+    ts = env.get_testsheet_dir() / "BENTONG" / "5. MAY" / "01-05-2026"
+    ts.mkdir(parents=True)
+    empty_ts = env.get_testsheet_dir() / "BENTONG" / "MAY" / "03-05-2026"
+    empty_ts.mkdir(parents=True)
+
+    shown = _run_14(
+        env, "browse_dates",
+        ("src.project_workflow_actions.cli_selectors.select_pahang_inspection_dates_interactive", (ts, empty_ts)),
+        workflow=FullReportPostProcessingWorkflow(converter=MagicMock()),
+    )
+    assert [t.stem for t in shown["targets"]] == ["001. ALPHA"]
+
+
+def test_14_manual_fl_matches_substation_name_not_just_pe_number(env: MagicMock) -> None:
+    mine = _fr_docx(env, "BENTONG", "01-05-2026", "157. PERPUSTAKAAN AWAM.docx")
+    _fr_docx(env, "BENTONG", "01-05-2026", "157. SOMEWHERE ELSE.docx")
+    pkg = _pkg("BENTONG", "01-05-2026", 157)
+    pkg = SubstationTestsheetPackage(
+        testsheet_path=pkg.testsheet_path, unsorted_raw_data_dir=pkg.unsorted_raw_data_dir,
+        station=pkg.station, month=pkg.month, date_str=pkg.date_str, substation_number=157,
+        data=SimpleNamespace(substation_name_site="PERPUSTAKAAN AWAM", substation_name_erms="",
+                             station_name="BENTONG"),
+    )
+    with patch.object(FullReportWorkflow, "_discover_packages", return_value=([pkg], [], [])):
+        files, warnings = FullReportPostProcessingWorkflow(converter=MagicMock()).locate_full_reports_for_fls(
+            ["FL-157"], env
+        )
+    assert files == [mine.resolve()]
+
+
+def test_14_manual_fl_warns_when_matches_span_distinct_stems(env: MagicMock) -> None:
+    _fr_docx(env, "BENTONG", "01-05-2026", "157. PERPUSTAKAAN AWAM.docx")
+    _fr_docx(env, "BENTONG", "01-05-2026", "157. SOMEWHERE ELSE.docx")
+    with patch.object(FullReportWorkflow, "_discover_packages",
+                      return_value=([_pkg("BENTONG", "01-05-2026", 157)], [], [])):
+        files, warnings = FullReportPostProcessingWorkflow(converter=MagicMock()).locate_full_reports_for_fls(
+            ["FL-157"], env
+        )
+    assert len(files) == 2
+    assert any("01-05-2026 (BENTONG)" in w and "more than one" in w for w in warnings)
+
+
+def test_empty_date_warnings_carry_warning_icon(env: MagicMock) -> None:
+    empty = env.get_full_report_dir() / "BENTONG" / MONTH / "03-05-2026"
+    _, warnings, _ = FullReportPostProcessingWorkflow(converter=MagicMock())._discover_docx_files([empty], env)
+    assert warnings[0].startswith("⚠️ 03-05-2026 (BENTONG): no Full Report documents")
+
+    none = _ts_folder(env, "BENTONG", "03-05-2026")
+    extractor = MagicMock()
+    extractor.extract.return_value = []
+    _, w13, _ = FullReportWorkflow(compiler=MagicMock(), extractor=extractor)._discover_packages((none,), env)
+    assert w13 == ["⚠️ 03-05-2026 (BENTONG): no testsheet packages found"]
+
+
+def test_13_empty_date_station_is_read_from_testsheet_layout_not_path_depth(env: MagicMock) -> None:
+    """A date folder outside the TESTSHEET/<ST>/<MONTH>/<DATE> layout gets no station guess."""
+    odd = env.base_path / "elsewhere" / "03-05-2026"
+    odd.mkdir(parents=True)
+    extractor = MagicMock()
+    extractor.extract.return_value = [
+        SubstationTestsheetPackage(
+            testsheet_path=Path("x.xlsx"), unsorted_raw_data_dir=Path("raw"),
+            station="BENTONG", month=MONTH, date_str="01-05-2026", substation_number=1, data=MagicMock(),
+        )
+    ]
+    _, warnings, _ = FullReportWorkflow(compiler=MagicMock(), extractor=extractor)._discover_packages((odd,), env)
+    assert warnings == ["⚠️ 03-05-2026: no testsheet packages found"]
