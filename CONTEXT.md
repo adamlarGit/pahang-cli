@@ -273,10 +273,32 @@ The clean placeholder sanitization policy implemented in `src/workflows/replace_
 ### HighFidelityDocumentExportPolicy
 The cross-platform document rendering and PDF export fidelity policy governing Quick Report `.docx` and Testsheet `.xlsx` conversions in `src/postprocessing/converters.py`. Enforces:
 1. **Dynamic Virtual Printer Discovery**: Standardizes `ActivePrinter` on both `Word.Application` and `Excel.Application` by discovering `Adobe PDF` (preferred driver metrics) or falling back to universal `Microsoft Print to PDF`.
-2. **Template OpenXML High Fidelity**: Injects `<w:doNotCompressImages/>` and `<w:defaultImageDpi w:val="0"/>` (High Fidelity) into all `.docx` templates to lock image resolutions against host Word profile downsampling.
-3. **Runtime COM Image Compression Suppression**: Enforces `word_app.Options.DoNotCompressImages = True` and `doc.DoNotCompressImages = True` across batch runs.
+2. **Template OpenXML High Fidelity**: Injects `<w:doNotCompressImages/>` and `<w:defaultImageDpi w:val="0"/>` (High Fidelity) into all `.docx` templates to lock image resolutions against host Word profile downsampling. *Caveat (2026-11-01 probe, ADR 0009): these settings protect images stored in the DOCX, but they do not stop `ExportAsFixedFormat` from resampling pictures above about 200 PPI in the exported PDF.*
+3. **Runtime COM Image Compression Suppression**: Requires runtime image-compression suppression across batch runs; this is a delivery requirement, not established merely by `ExportAsFixedFormat` print optimization.
 4. **Native COM Fixed Format Export**: Uses `doc.ExportAsFixedFormat` (`OptimizeFor=0` / `wdExportOptimizeForPrint`, `BitmapMissingFonts=True`, `DocStructureTags=True`) for Word, and `ws.ExportAsFixedFormat` (`Quality=0` / `xlQualityStandard`, `PaperSize=9` A4, `Orientation=2` Landscape) for Excel.
 5. **Orientation Partitioning**: Strictly maintains Portrait orientation for Quick Report Word document pages and Landscape orientation for Excel testsheet pages during final client deliverable PDF merging.
+
+### PdfConversionDeliveryContract
+The target delivery contract for Full Report PDF conversion. Every client deliverable must complete without relying on a Windows print-spooler path, and its thermogram fidelity must satisfy an explicit, measured acceptance threshold using representative production documents. The gate is source-pixel preservation for every thermogram in the two known failing reports (`101`, `102`) and one normal report. The prior user-interactive Adobe PDF print is a visual reference, not an eligible batch-conversion backend. A conversion backend is eligible for production use only when it demonstrates both conditions in an end-to-end batch test; unit tests that mock Word, the printer driver, or the spooler do not establish this contract. Met by native export plus **Source Image Restoration** (ADR 0009).
+
+### Source Image Restoration
+Replacing images in a Word-exported PDF with the original pixels held in the source document, without changing page layout, text, or links. Applies to one Full Report Part at a time, before merging. An image is replaced only when the source is strictly better than Word's copy. If no confident match exists, Word's rendering is kept.
+_Avoid_: image swap, image patching, re-embedding
+
+### Restoration Report
+The per-part account of Source Image Restoration: images restored, images left unmatched, and whether the part fell back to its unrestored native PDF. Shown to the operator in the batch summary and never persisted.
+
+### ThermogramSourcePreservationPolicy
+The Full Report thermogram-fidelity requirement. PDF conversion must retain the source pixel dimensions of every sampled thermogram without downsampling; lossless PDF stream encoding is permitted because it does not discard image information. A target output resolution such as `300 DPI` is an implementation setting, not evidence that this policy is met.
+
+### WordExportConfigurationIsolationPolicy
+**Retired by ADR 0009**: Full Report conversion no longer changes any Word or Office setting. The ownership boundary for Word image-quality configuration during batch conversion. The converter applies the configuration needed to satisfy `ThermogramSourcePreservationPolicy` for its own run and restores the operator's previous Word and Office settings afterwards. Batch correctness must not depend on a workstation's pre-existing personal Word configuration.
+
+### InterimPdfFallbackPolicy
+**Replaced by ADR 0009**: native export is now the primary path, and the operator notice covers parts where Source Image Restoration failed. The temporary delivery policy while no spooler-independent conversion backend has proven `PdfConversionDeliveryContract`. The existing native `ExportAsFixedFormat` fallback remains enabled so post-processing produces a usable PDF when Adobe PDF printing fails. This fallback is an operational continuity measure, not evidence of thermogram source preservation, and will be removed only after a compliant high-fidelity backend is validated. The CLI notifies the operator when fallback is selected; no persistent deliverable classification is required.
+
+### PdfConversionInvestigationSequence
+**Concluded 2026-11-01 (ADR 0009)**: step one disproved native-export configuration, and step two was not needed. The ordered validation path for replacing the interim fallback. First, run a one-off, read-only native Word export fidelity probe for the three acceptance reports, writing only to a temporary output directory and restoring converter-owned no-downsampling configuration afterwards. Verify `ThermogramSourcePreservationPolicy` before any production-converter change. Only if native export cannot satisfy that test, prototype direct Session 1 Acrobat Distiller conversion using a PostScript file (`PrintToFile → FileToPDF`) without the Adobe PDF virtual-printer port monitor.
 
 ### FlirActiveXIsolationPolicy
 The architectural rule governing Quick Report compilation in `src/quick_report/composer.py`. Mandates that multi-part documents containing FLIR Tools+ ActiveX controls (`CIRViewer`) merge through Microsoft Word COM Automation (`Documents.Add()`, read-only part opening, clipboard copy, page break, and paste). Prohibits pure Python OpenXML concatenation (`docxcompose`, `python-docx`) to prevent control identifier collisions and binary compound file corruption.
@@ -349,6 +371,24 @@ The two-phase resolution engine (`src/core/topology.py`) providing pure, COM-fre
 
 ### StrictZeroFallbackPolicy
 The data integrity and evidence preservation invariant governing Full Report photo pairing. Enforces strict 1-to-1 matching between thermal/visual inspection photos and scanning page placeholders. Prohibits artificial duplication or placeholder cloning across compartments when empirical evidence was not captured on-site, ensuring zero photo duplication across report deliverables.
+
+### Full Report Part
+One output Word file of a multi-part Full Report, named `<STEM> - Part {XX} - {label}.docx` (e.g. `Part 01 - Summary`, `Part 03 - Panel 2 (...)`). This is what operators and reviewers open; the post-processing pipeline stitches all Full Report Parts of a substation into one PDF. Modelled in code as `PlanDocumentChunk`.
+_Avoid_: chunk (in user-facing text), file
+
+### Section
+One rendered page group (a template slice or scan page) that is assembled, in order, into a Full Report Part. A Full Report Part contains one or more Sections. Modelled in code as `PlanPartItem`.
+_Avoid_: part (reserved for Full Report Part)
+
+### Resume (Full Report)
+Generating only the Full Report Parts of a substation that do not yet exist. An existing Full Report Part is treated as complete and owned by the operator (who edits it for thermogram analysis after generation); Resume never opens, compares, or replaces it.
+
+### Rebuild (Full Report)
+Regenerating every Full Report Part of a substation from scratch. Existing Parts are moved aside as Superseded Parts, never deleted. Requires explicit operator confirmation.
+
+### Superseded Part
+A Full Report Part moved out of the date folder into `_superseded/<timestamp>/`, either by Rebuild or because the current plan no longer produces it (e.g. a renamed panel). Kept so operator edits are recoverable; excluded from post-processing.
+_Avoid_: deleted part, old part
 
 ### PlanDocumentChunk
 The immutable planned document fragment model (`src/full_report/plan_builder.py`) representing an individual Word output deliverable in a multi-part Full Report compilation plan. Encapsulates `chunk_index` (1-based sequence), `label` (human-readable chunk description such as `Part 01 - Summary`, `Part 02 - Panel 1 (INCOMING 1)`, `Part 07 - TX and Condition`), `output_filename` (zero-padded filename `<STEM> - Part {XX} - {label}.docx`), `destination_path` (resolved absolute output path in the date folder), and `parts: tuple[PlanPartItem, ...]` (ordered sequence of template slices and rendered pages belonging to this chunk).

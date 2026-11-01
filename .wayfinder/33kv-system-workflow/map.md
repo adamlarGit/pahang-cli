@@ -87,7 +87,14 @@ graph TD
     T138["#138: Harden filesystem path sanitization in Full Report intermediate parts and multi-part chunks - Closed"]
     T140["#140: feat(converters): dual-mode Word COM converter with silent Adobe PDF print and native fallback - Closed"]
     T141["#141: feat(postprocessing): integrate dual-mode high-fidelity PDF converter across Full Report and Utility batch workflows - Closed"]
-    T142["#142: fix(converters): suppress Acrobat viewer auto-launch, scale large-document timeout, and isolate fallback paths"]
+    T142["#142: fix(converters): suppress Acrobat viewer auto-launch, scale large-document timeout, and isolate fallback paths - Closed"]
+    T143["#143: fix(converters): eliminate ActivePrinter thrashing, persist ViewPrintOutput suppression, and guard port monitor drain - Closed"]
+    T144["#144: fix(converters): remove premature stagnation timeout to allow large PostScript spool completion - Closed"]
+    T145["#145: fix(converters): pre-warm Session 1 Distiller instance to prevent Session 0 port monitor fallback - Closed"]
+    T146["#146: feat(postprocessing): Source Image Restoration module"]
+    T147["#147: feat(converters): native export with Source Image Restoration as the Full Report conversion path"]
+    T149["#149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)"]
+    T148["#148: refactor(converters): retire the Adobe PDF virtual-printer path"]
     T103["#103: ADR 0007, CONTEXT.md, and full regression verification"]
 
     T91 --> T92
@@ -132,7 +139,15 @@ graph TD
     T138 --> T140
     T140 --> T141
     T141 --> T142
-    T142 --> T103
+    T142 --> T143
+    T143 --> T144
+    T144 --> T145
+    T145 --> T103
+    T145 --> T146
+    T146 --> T147
+    T147 --> T149
+    T149 --> T148
+    T148 --> T103
     T101 --> T125
     T125 --> T103
     T97 --> T103
@@ -456,17 +471,106 @@ graph TD
 - [x] Unit and workflow test suite passes with zero regressions.
 
 ### #142: fix(converters): suppress Acrobat viewer auto-launch, scale large-document timeout, and isolate fallback paths
-- **Status**: Open
+- **Status**: Closed
 - **GitHub Issue**: [#142](https://github.com/adamlarGit/pahang-cli/issues/142)
 - **Blocked by**: None
 - **Ticket File**: [tickets/142-suppress-acrobat-viewer-auto-launch-and-scale-timeout.md](./tickets/142-suppress-acrobat-viewer-auto-launch-and-scale-timeout.md)
 - **Delivers**: Hardening of dual-mode converter against background Acrobat viewer file locking and timeout collisions on large Word documents (20MB-35MB+), eliminating orphaned `.tmp_conv_*.pdf` files and "Word cannot save this document" errors.
-- [ ] ComDocumentConverter suppresses ViewPrintOutput and cleans up any stray background Acrobat.exe viewer handles targeting temporary PDF paths.
-- [ ] adobe_timeout in ComDocumentConverter is scaled (default >= 90s or dynamic) to accommodate 30MB+ Word documents with dozens of thermograms.
-- [ ] Native ExportAsFixedFormat fallback writes to an isolated path when Distiller print encounters a timeout or exception, eliminating file sharing collisions.
-- [ ] Intermediate .tmp_conv_* PDFs are unlinked reliably with retry/backoff so no temporary files linger in deliverable folders.
-- [ ] Unit tests in tests/test_converters.py and tests/test_full_report_postprocessing.py pass.
-- [ ] Verification against 17-08-2026 Cameron Highland dataset passes with 10/10 deliverables generated and zero .tmp files remaining.
+- [x] ComDocumentConverter implements ConversionFeedbackMonitor with pre-closure spooler drain guard (word_app.BackgroundPrintingStatus == 0).
+- [x] Two-tier completion probe verifies valid %PDF- header, %%EOF trailer, and exclusive handle release.
+- [x] Dynamic timeout scaling scales timeout with a 90s minimum, +2s/MB, and 180s cap.
+- [x] Spooler JobId is tracked via win32print and stalled jobs are purged on timeout/failure.
+- [x] Registry suppresses ViewPrintOutput = 0 and WMI process sentinel terminates stray .tmp_conv_* Acrobat.exe and hung acrodist.exe -Embedding.
+- [x] Native ExportAsFixedFormat fallback writes to isolated .tmp_native_{pdf.name} path and replaces target atomically.
+- [x] safe_unlink_with_retry() unlinks intermediate .tmp_conv_* PDFs with backoff.
+- [x] embed_survey_ultrasound_into_pdf protects os.replace with backoff retry and manages .tmp_pre_sound_* snapshot.
+- [x] Unit tests in tests/test_converters.py, tests/test_full_report_postprocessing.py, and tests/test_us_audio.py pass.
+- [x] Live verification logic accommodates multi-part large report datasets with audio embedded and zero leftover .tmp files.
+
+### #143: fix(converters): eliminate ActivePrinter thrashing, persist ViewPrintOutput suppression, and guard port monitor drain
+- **Status**: Closed
+- **GitHub Issue**: [#143](https://github.com/adamlarGit/pahang-cli/issues/143)
+- **Blocked by**: #142
+- **Ticket File**: [tickets/143-eliminate-activeprinter-thrashing-and-guard-port-drain.md](./tickets/143-eliminate-activeprinter-thrashing-and-guard-port-drain.md)
+- **Delivers**: Hardening of dual-mode converter against Session 0 spooler isolation, port monitor teardown latency, and ActivePrinter device-change broadcast storms during sequential batch post-processing.
+- [x] ComDocumentConverter leaves ViewPrintOutput = 0 persistent in registry across batch runs.
+- [x] safe_unlink_with_retry() calls terminate_stray_acrobat_processes() and operates with a 5.0s retry budget.
+- [x] _convert_docx_via_adobe_pdf() skips ActivePrinter assignment and restoration when already configured for Adobe PDF.
+- [x] _convert_docx_via_adobe_pdf() waits for the print job to be retired from the spooler queue before completing.
+- [x] ConversionFeedbackMonitor fails fast into isolated fallback if 0 bytes written after 35 seconds of printing.
+- [x] Unit tests pass with zero regressions.
+- [x] Live dataset verification accommodates multi-document batches without Session 0 deadlock or orphaned temporary files.
+
+### #144: fix(converters): remove premature stagnation timeout to allow large PostScript spool completion
+- **Status**: Closed
+- **GitHub Issue**: [#144](https://github.com/adamlarGit/pahang-cli/issues/144)
+- **Blocked by**: #143
+- **Ticket File**: [tickets/144-remove-stagnation-timeout-for-large-spool.md](./tickets/144-remove-stagnation-timeout-for-large-spool.md)
+- **Delivers**: Removal of premature 35s stagnation timeout, allowing large Word documents (50MB-88MB+ PostScript spool data) to complete naturally under dynamic timeout scaling without 0-byte aborts.
+- [x] ConversionFeedbackMonitor removes the 35-second stagnation abort, allowing large PostScript streams to spool completely.
+- [x] Large documents (20MB–35MB+ .docx) operate under dynamic timeout scaling (90s–180s) without premature 0-byte aborts.
+- [x] Unit tests pass with zero regressions.
+- [x] Live dataset verification accommodates large PostScript spool transfers with zero premature 0-byte aborts.
+
+### #145: fix(converters): pre-warm Session 1 Distiller instance to prevent Session 0 port monitor fallback
+- **Status**: Closed
+- **GitHub Issue**: [#145](https://github.com/adamlarGit/pahang-cli/issues/145)
+- **Blocked by**: #144
+- **Ticket File**: [tickets/145-pre-warm-session1-distiller.md](./tickets/145-pre-warm-session1-distiller.md)
+- **Delivers**: Active Session 1 Distiller pre-warming and COM session retention in BatchComSession and ComDocumentConverter, eliminating the Windows spooler port monitor (AdobePdf.dll) fallback into deadlocked Session 0 CreateProcessW during Word PostScript printing.
+- [x] _ensure_session_distiller_warmed() dispatches PdfDistiller.PdfDistiller via COM in the interactive user session.
+- [x] BatchComSession pre-warms and holds the Distiller COM reference across batch document conversions, releasing it cleanly on exit.
+- [x] ComDocumentConverter._convert_docx_via_adobe_pdf verifies a warm Session 1 Distiller instance prior to issuing doc.PrintOut(Background=False).
+- [x] Unit tests in tests/test_converters.py cover pre-warm dispatch, COM session retention, and error degradation.
+- [x] All unit tests pass with zero regressions.
+
+> **Superseded direction (2026-11-01):** [ADR 0009](../../docs/adr/0009-native-export-with-source-image-restoration.md) supersedes ADR 0008. Tickets #140–#145 hardened an Adobe virtual-printer path that is now being retired. #146–#149 replace it with native export plus Source Image Restoration.
+
+### #146: feat(postprocessing): Source Image Restoration module
+- **Status**: Open
+- **GitHub Issue**: [#146](https://github.com/adamlarGit/pahang-cli/issues/146) (sub-issue of #145; parents #140–#145)
+- **Blocked by**: none
+- **Ticket File**: [tickets/146-source-image-restoration-module.md](./tickets/146-source-image-restoration-module.md)
+- **Delivers**: A COM-free deep module that restores the original DOCX pixels into a Word-exported PDF by replacing image streams only. It uses two-stage matching with measured thresholds, an ambiguity guard, a pre-write self-check, an invariance gate, atomic temp-file publishing, and lazy decoding to bound memory.
+- [ ] `restore_source_images` exists with the specified interface and has no COM or Word imports.
+- [ ] Synthetic-fixture unit tests cover restoration, crops, WMF DIBs, look-alike discrimination, ambiguity skip, the no-downgrade rule, alpha, the self-check, the invariance gate, idempotence, corrupt input, and temp cleanup.
+- [ ] Peak memory is bounded per part.
+- [ ] All tests pass with zero regressions.
+
+### #147: feat(converters): native export with Source Image Restoration as the Full Report conversion path
+- **Status**: Open
+- **GitHub Issue**: [#147](https://github.com/adamlarGit/pahang-cli/issues/147) (sub-issue of #145; parents #140–#145)
+- **Blocked by**: #146
+- **Ticket File**: [tickets/147-native-export-with-restoration-in-converter.md](./tickets/147-native-export-with-restoration-in-converter.md)
+- **Delivers**: Full Report conversion of native export, then restoration, per part. It adds a DOCX snapshot and hash consistency check, unique temp names, a per-part fallback to native with an operator warning, a per-date-folder run lock with a stale temp sweep, and restoration counts in the batch summary.
+- [ ] No `PrintOut` or Distiller is called for Full Report parts.
+- [ ] The snapshot consistency check is in place, with one redo and a warning.
+- [ ] Unique temp names, cleaned up on every path.
+- [ ] A restoration failure in one part does not fail the multi-part deliverable.
+- [ ] The run lock prevents concurrent post-processing of the same folder, and stale temps are swept.
+- [ ] Restoration counts appear in the batch summary.
+- [ ] All tests pass with zero regressions.
+
+### #149: test(acceptance): ADR 0009 live acceptance gate (11kV Cameron Highland + 33kV PPU APMM)
+- **Status**: Open
+- **GitHub Issue**: [#149](https://github.com/adamlarGit/pahang-cli/issues/149) (sub-issue of #145; parents #140–#145)
+- **Blocked by**: #147
+- **Ticket File**: [tickets/149-adr-0009-live-acceptance-gate.md](./tickets/149-adr-0009-live-acceptance-gate.md)
+- **Delivers**: An end-to-end production-path run on real data, checking source-pixel restoration, layout invariance, merge survival, audio embedding, zero wrong-source substitutions, and measured time and memory for the largest 33kV substation.
+- [ ] 11kV Cameron Highland 17-08-2026 (093–102) passes.
+- [ ] 33kV `01. PPU APMM 3311kV` (32 parts) passes.
+- [ ] Results are recorded in the probe FINDINGS.
+
+### #148: refactor(converters): retire the Adobe PDF virtual-printer path
+- **Status**: Open
+- **GitHub Issue**: [#148](https://github.com/adamlarGit/pahang-cli/issues/148) (sub-issue of #145; parents #140–#145)
+- **Blocked by**: #149
+- **Ticket File**: [tickets/148-retire-adobe-virtual-printer-path.md](./tickets/148-retire-adobe-virtual-printer-path.md)
+- **Delivers**: Deletion of the Adobe printer, Distiller, spooler and registry machinery from #140–#145, with their tests and docs. Session-level printer selection is kept for layout parity.
+- [ ] No Adobe or Distiller symbols remain in `src` or `tests`.
+- [ ] `configure_uniform_printer` still runs once per session.
+- [ ] Acceptance-report pagination is unchanged.
+- [ ] All tests pass with zero regressions.
 
 ---
 
@@ -552,7 +656,7 @@ graph TD
 - **Q81**: 33kV Full Report post-processing strictly enforces the D43 fail-fast requirement, raising `TestsheetPdfNotFoundError` in single runs or flagging the target as unready in batch inspection if the signed testsheet PDF is missing in `processed_testsheet/pdf/`. Handled in #102.
 - **Q82**: Temporary `.tmp_conv_*` PDF files created during multi-part conversion are automatically unlinked in a `finally` block, while all intermediate Word chunks (`.docx`) are strictly preserved permanently in the substation date directory per ADR 0005. Handled in #102.
 - **Q83**: Merged Full Report deliverable PDF is saved directly to `FULL REPORT/<STATION>/<MONTH>/<DATE>/<STEM>.pdf` (e.g. `06. SSU FLEXSYS CHEMICAL 33kV (VI).pdf`), maintaining 100% path and naming parity with 11kV deliverables. Handled in #102.
-- **Q84**: 33kV Full Report post-processing follows 100% parity with the existing 11kV post-processing workflow: utilizing a single shared `BatchComSession` across all chunks and substations in the batch without per-substation recycling. Handled in #102.
+- **Q84**: 33kV Full Report post-processing follows 100% parity with the existing 11kV post-processing workflow: utilizing a single shared `BatchComSession` across all chunks and substations in the batch without per-substation recycling. Handled in #102. *(Amended by Q112: Word is now recycled at every substation boundary.)*
 - **Q85**: `_group_multipart_targets()` transparently retains single-file fallback for non-multipart or standalone `.docx` reports, converting and merging them directly with the testsheet PDF. Handled in #102.
 - **Q86**: ADR 0007 is recorded in `docs/adr/0007-voltage-polymorphic-workflows-for-33kv.md` capturing the unified 14-action workflow architecture with polymorphic strategy dispatch based on `ProjectEnvironment.voltage_type` (`TestsheetParserStrategy`, `ReadingMapperStrategy`, statewide contract 750-39 storage resolution, multi-voltage Quick Reports & Full Reports, `MultiPartPartitionPolicy`), detailing context, design decisions, consequences, and trade-offs. Handled in #103.
 - **Q87**: `CONTEXT.md` is updated under `## Concepts` to formalize ubiquitous language for 33kV: `TestsheetParserStrategy`, `PpuTestsheetParser`, `PceTestsheetParser`, `PowerTransformerSpec` ($\ge 5$ MVA threshold), `SecondaryCompartmentRemarksPolicy` (Col Q `SP:`), `Qr02Cba33kVTransaction`, `PpuSubstationConditionPairBuilderPolicy`, `HighFidelityDocumentExportPolicy`, `T1SUB33` MSMS Online Condition Assessment, and `MultiPartPartitionPolicy` dual-voltage chunking. Handled in #103.
@@ -571,6 +675,16 @@ graph TD
 - **Q100**: Link Box sanitization policy formalizes field overrides: Equipment = `LINK BOX`, Manufacturer/Model/Area/Serial No/Heater/CB Position/Busbar Position/Cable Type = `-`, Rating = system operating voltage (`33kV` / `11kV`), preserving parent panel feeder, name, load, and thermals, with US/TEV blanking. Handled in #131 and recorded in #134.
 - **Q101**: Transformer designation policy formalizes transformer naming hierarchy across PMU/PPU and standard distribution substations (`PTX{n}` for power transformers $\ge 5$ MVA from Slots 1–4, `LTX` for local station service transformers from Slot 5 / `LOCAL` with `LTX{n}` for multi-unit configurations, and `TX{n}` for standard distribution units), testsheet coordinate origins (Sheet `TX`, row 6 headers, column W for LTX model, shorthand expansion `H/S` and `C/T`), and propagation across `Tx No.` cell, scan item titles, CBM defect pages, while preserving Table 26 placards and verbatim visual inspection descriptions. Handled in #132, #133, and recorded in #134.
 - **Q102**: Full report intermediate scan part filenames (`render_all()`), output chunk documents, and shared `sanitize_filename` strictly sanitize against Windows forbidden characters `[<>:"/\\|?*]` and ASCII control characters `[\x00-\x1f\r\n\t]`, eliminating `OSError: [Errno 22] Invalid argument` when compiling substations with complex or multiline panel names (such as SSU LYNAS 33kV). Handled in #138.
+- **Q103**: Full Report PDF fidelity is achieved by native Word export followed by Source Image Restoration. ADR 0009 supersedes ADR 0008. Word export cannot be configured to stop resampling above about 200 PPI (probe, 01-11-2026). Handled in #146–#149.
+- **Q104**: Restoration runs per Full Report Part inside `convert_docx_to_pdf`, before merge, while each PDF maps one-to-one to its DOCX. Testsheet PDFs are never touched. Handled in #147.
+- **Q105**: The Adobe virtual-printer path is deleted, with no feature flag, once the acceptance gate passes. The session-level `configure_uniform_printer` is kept for pagination parity. Handled in #148 after #149.
+- **Q106**: A restoration failure keeps that part's native PDF and warns the operator. The batch summary shows restored and unmatched counts per report, and unmatched images never fail the batch. Handled in #147.
+- **Q107**: Larger deliverables are accepted, roughly at the size of Adobe outputs. Scope is Full Report only (11kV and 33kV). Handled in #147.
+- **Q108**: Matching safety. Matches are verified at full resolution (accept ≤ 0.5% strongly differing pixels; look-alikes measured ≥ 2.2%), with an ambiguity guard, the best-scoring source always used (never a "larger equivalent" file), and a pre-write self-check. The safe failure mode is keeping Word's rendering. Handled in #146.
+- **Q109**: Race safety. DOCX byte snapshot plus hash check across export, unique per-conversion temp names, atomic publish, a per-date-folder run lock with stale temp sweep, and per-part failure isolation for large 33kV multi-part groups (up to 47 parts). Handled in #146 and #147.
+- **Q110**: The acceptance gate adds a 33kV multi-part substation (`01. PPU APMM 3311kV`, 32 parts) to the 11kV Cameron Highland reports. Handled in #149.
+- **Q111**: Approved by the maintainer. When Word reports export success but no PDF appears, the converter restarts Word and retries that part once (seen on the 41 MB APMM Part 32 after 31 parts in one session). Handled in #147.
+- **Q112**: Approved by the maintainer. Full Report post-processing restarts its Word instance at every substation boundary. This amends Q84, which used a single shared `BatchComSession` with no recycling. The maintainer has tested it and it removes the silent export-failure edge case. Handled in #147.
 
 ---
 
