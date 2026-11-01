@@ -43,6 +43,7 @@ graph TD
     T67 --> T69
     T68 --> T70
     T69 --> T70
+    T171["#171: feat(full-report): multi-date selection for post-processing matching Generate Full Reports - Closed"]
 ```
 
 ---
@@ -77,6 +78,21 @@ graph TD
 - **Ticket File**: [.wayfinder/multi-date-report-generation/tickets/070-e2e-verification-and-domain-documentation.md](file:///C:/Users/ADAM/Desktop/pahang-cli/.wayfinder/multi-date-report-generation/tickets/070-e2e-verification-and-domain-documentation.md)
 - **Delivers**: Canonical `MultiDateSelectionPolicy` concept in `CONTEXT.md`, and 100% green automated test suite across unit, adapter, workflow, and regression tests.
 
+### #171: feat(full-report): multi-date selection for post-processing matching Generate Full Reports
+- **Status**: Closed
+- **GitHub Issue**: [#171](https://github.com/adamlarGit/pahang-cli/issues/171)
+- **Blocked by**: None (extends the selection built in #67 and #69 to Stage 2)
+- **Ticket File**: [.wayfinder/multi-date-report-generation/tickets/171-full-report-postprocessing-multi-date-selection.md](./tickets/171-full-report-postprocessing-multi-date-selection.md)
+- **Delivers**: A shared selection prompt for workflows 13 and 14, per-station Browse mapping, typed dates across stations, Manual FL lookup including multi-part reports, exclusion of `_superseded/` Parts, date-tagged checklist and progress lines in 14, and one empty-date warning per selected date in both preflights.
+- [x] 13 and 14 show the same selection-mode menu, built from one shared prompt, and 13's existing tests still pass.
+- [x] In 14, ticking several dates under one station in Browse processes only that station's Full Reports for those dates.
+- [x] In 14, typed dates match Full Reports across all stations for those dates.
+- [x] In 14, Manual FL finds the matching Full Report Parts, including multi-part reports, for every date the FL matches.
+- [x] A `.docx` under a date folder's `_superseded/` subfolder is never discovered (regression test).
+- [x] 14's checklist entries and progress messages carry the `[DD-MM-YYYY]` date tag.
+- [x] 13's and 14's preflights print one warning line for each selected date that yields nothing, and the run continues with the remaining dates.
+- [x] Tests are written first (red to green) for each behaviour above.
+
 ---
 
 ## Decisions so far
@@ -88,4 +104,4 @@ graph TD
 - **D66.5**: Full Report presents an interactive checklist of discovered substations prefixed by date (`[DD-MM-YYYY] <STEM> [READY]`).
 - **D66.6**: Batch progress sinks format progress with the date tag: `[1/N] [DD-MM-YYYY] Generating ...`.
 - **D66.7**: Generated reports are placed into their respective daily folders (`QUICK REPORT/<STATION>/<MONTH>/<DATE>/` and `FULL REPORT/<STATION>/<MONTH>/<DATE>/`).
-- **D66.8**: Scope is strictly focused on Stage 1 report generation; Stage 2 post-processing pipelines remain untouched in this update.
+- **D66.8**: Scope is strictly focused on Stage 1 report generation; Stage 2 post-processing pipelines remain untouched in this update. *(Superseded for Full Report post-processing by #171, which gives Stage 2 the same selection modes.)*
