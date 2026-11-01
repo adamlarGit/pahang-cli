@@ -22,3 +22,6 @@ scratch/
 ~$*
 test_palette_output/
 
+
+# Local Claude Code skill junctions (mirror .agents/skills)
+.claude/skills/
