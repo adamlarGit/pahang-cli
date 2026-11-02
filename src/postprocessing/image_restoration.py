@@ -420,12 +420,35 @@ def _replace_xobject(doc, xref: int, payload: bytes) -> None:
 
 
 def _pdf_image(doc, xref: int) -> Image.Image:
+    """Word's copy of the picture on white, the same way sources are flattened (see ``_flat``)."""
     pix = fitz.Pixmap(doc, xref)
     if pix.alpha:
         pix = fitz.Pixmap(pix, 0)
     if pix.colorspace is None or pix.colorspace.n != 3:
         pix = fitz.Pixmap(fitz.csRGB, pix)
-    return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    rgb = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    smask = _smask_xref(doc, xref)
+    if smask:
+        mask_pix = fitz.Pixmap(doc, smask)
+        if mask_pix.colorspace is None or mask_pix.colorspace.n != 1:
+            mask_pix = fitz.Pixmap(fitz.csGRAY, mask_pix)
+        mask = Image.frombytes("L", (mask_pix.width, mask_pix.height), mask_pix.samples)
+        if mask.size != rgb.size:
+            mask = mask.resize(rgb.size, Image.BILINEAR)
+        white = Image.new("RGB", rgb.size, (255, 255, 255))
+        white.paste(rgb, mask=mask)
+        return white
+    return rgb
+
+
+def _smask_xref(doc, xref: int) -> int:
+    kind, value = doc.xref_get_key(xref, "SMask")
+    if kind != "xref":
+        return 0
+    try:
+        return int(value.split()[0])
+    except (ValueError, IndexError):
+        return 0
 
 
 def _restore_into(doc, sources: list[_Source]) -> list[RestorationEntry]:

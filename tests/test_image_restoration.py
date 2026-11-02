@@ -308,6 +308,37 @@ def test_alpha_is_preserved(paths):
         assert mask.samples[0] == 0 and mask.samples[mask.width * 200 + 300] == 255
 
 
+def logo(seed: int, size=(600, 400)) -> Image.Image:
+    """Logo-like RGBA picture: mostly transparent background, a few opaque coloured blocks."""
+    rnd = random.Random(seed)
+    im = Image.new("RGBA", size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for _ in range(5):
+        x, y = rnd.randint(0, size[0] // 2), rnd.randint(0, size[1] // 2)
+        w, h = rnd.randint(size[0] // 5, size[0] // 2), rnd.randint(size[1] // 5, size[1] // 2)
+        d.rectangle([x, y, x + w, y + h], fill=(rnd.randint(0, 200), rnd.randint(0, 200), rnd.randint(0, 200), 255))
+    return im
+
+
+def test_transparent_background_logo_is_restored_and_keeps_transparency(paths):
+    native, out = paths
+    src = logo(61)
+    native_pdf(native, [png_bytes(src.resize((300, 200), Image.LANCZOS))])
+    report = restore_source_images(docx_with_pictures([png_bytes(src)]), native, out)
+    assert report.restored == 1 and report.unmatched == 0
+    with fitz.open(out) as doc:
+        im = doc[0].get_images(full=True)[0]
+        assert im[1] != 0  # SMask kept
+        assert (im[2], im[3]) == (600, 400)
+
+
+def test_different_transparent_logo_of_same_size_is_unmatched(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(logo(62).resize((300, 200), Image.LANCZOS))])
+    report = restore_source_images(docx_with_pictures([png_bytes(logo(63))]), native, out)
+    assert report.unmatched == 1 and report.restored == 0
+
+
 def test_self_check_rejects_payload_that_does_not_match(paths, monkeypatch):
     native, out = paths
     src = graph(61)
