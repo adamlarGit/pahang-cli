@@ -68,31 +68,51 @@ class UsTevWorkflowSummary:
 
     total_substations: int = 0
     total_graphs: int = 0
+    total_skipped_no_data: int = 0
     errors: list[str] = field(default_factory=list)
     elapsed_time: float = 0.0
+
+
+@dataclass
+class SubstationGraphResult:
+    """Outcome of graph generation for one substation survey."""
+
+    generated: list[Path] = field(default_factory=list)
+    skipped_no_data: list[str] = field(default_factory=list)
 
 
 def generate_substation_graphs(
     survey_root: Path | str,
     output_dir: Path | str,
     mode: PrpdMode = "option_c",
-) -> list[Path]:
+) -> SubstationGraphResult:
     """Generate US and TEV PRPD graphs for all discovered measurements in a survey directory.
 
     Idempotently writes or overwrites image files at `<output_dir>/<label>.png`.
-    Returns list of generated image file paths.
+    Placeholder measurements (no recorded data file) are skipped and listed in
+    `skipped_no_data` instead of being rendered.
     """
     survey_root_path = Path(survey_root).resolve()
     out_dir = Path(output_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    result = SubstationGraphResult()
+
     measurements = discover_survey_measurements(survey_root_path)
     if not measurements:
         logger.warning("[WARN] No valid US/TEV measurements found in survey %s", survey_root_path)
-        return []
+        return result
+
+    recorded: list[DiscoveredMeasurement] = []
+    for meas in measurements:
+        if meas.has_recorded_data:
+            recorded.append(meas)
+        else:
+            logger.warning("%s: no %s data recorded (skipped)", meas.label, meas.tech)
+            result.skipped_no_data.append(meas.label)
+    measurements = recorded
 
     norm_mode = mode.lower()
-    generated_paths: list[Path] = []
 
     if norm_mode == "option_c":
         with SurveyHttpServer(survey_root_path, temp_dir=out_dir) as port:
@@ -110,42 +130,26 @@ def generate_substation_graphs(
                     http_port=port,
                 )
                 if res and res.is_file():
-                    generated_paths.append(res)
+                    result.generated.append(res)
     else:
         # Default / Option B (Matplotlib native decoding)
         for meas in measurements:
             target_png = out_dir / f"{meas.label}.png"
-            events: list[dict[str, Any]] = []
-
-            if meas.tech == "TEV":
-                data_file = meas.meas_dir / "eventData.js"
-                if not data_file.is_file():
-                    logger.warning("TEV event data file missing for %s: %s", meas.label, data_file)
-                    continue
-                try:
-                    events = decode_tev_event_data(data_file)
-                except Exception as exc:
-                    logger.warning("Failed decoding TEV event data for %s: %s", meas.label, exc)
-                    continue
-            else:
-                data_file = meas.meas_dir / "ultrasonic_phase_plot.js"
-                if not data_file.is_file():
-                    logger.warning("US phase plot file missing for %s: %s", meas.label, data_file)
-                    continue
-                try:
-                    events = decode_ultrasonic_phase_plot(data_file)
-                except Exception as exc:
-                    logger.warning("Failed decoding US phase plot for %s: %s", meas.label, exc)
-                    continue
+            decode = decode_tev_event_data if meas.tech == "TEV" else decode_ultrasonic_phase_plot
+            try:
+                events: list[dict[str, Any]] = decode(meas.data_file)
+            except Exception as exc:
+                logger.warning("Failed decoding %s data for %s: %s", meas.tech, meas.label, exc)
+                continue
 
             try:
                 res = generate_prpd_figure(events, meas.tech, target_png)
                 if res and res.is_file():
-                    generated_paths.append(res)
+                    result.generated.append(res)
             except Exception as exc:
                 logger.warning("Failed generating PRPD figure for %s: %s", meas.label, exc)
 
-    return generated_paths
+    return result
 
 
 def resolve_us_tev_graphs_output_dir(survey_dir: Path | str) -> Path:
@@ -178,7 +182,7 @@ class UsTevGraphWorkflow:
                 raise BrowserPrerequisiteError() from exc
         return ""
 
-    def run_substation(self, survey_root: Path | str, output_dir: Path | str | None = None) -> list[Path]:
+    def run_substation(self, survey_root: Path | str, output_dir: Path | str | None = None) -> SubstationGraphResult:
         """Generate graphs for a single substation survey root."""
         s_root = Path(survey_root).resolve()
         resolved_root = discover_ultratev_survey_dir(s_root) or s_root
@@ -193,7 +197,7 @@ class UsTevGraphWorkflow:
     def run_batch(
         self,
         substations: Sequence[tuple[Any, ...]],
-        on_progress: Callable[[int, int, str, int, Path], None] | None = None,
+        on_progress: Callable[[int, int, str, int, int, Path], None] | None = None,
     ) -> UsTevWorkflowSummary:
         """Execute batch graph generation adhering to SubstationIsolatedBatchResiliencePolicy."""
         start_time = time.time()
@@ -223,11 +227,13 @@ class UsTevGraphWorkflow:
                 else:
                     output_dir = resolve_us_tev_graphs_output_dir(survey_root)
 
-                paths = self.run_substation(survey_root, output_dir)
-                count = len(paths)
+                result = self.run_substation(survey_root, output_dir)
+                count = len(result.generated)
+                skipped = len(result.skipped_no_data)
                 summary.total_graphs += count
+                summary.total_skipped_no_data += skipped
                 if on_progress:
-                    on_progress(idx, total, item_label, count, output_dir)
+                    on_progress(idx, total, item_label, count, skipped, output_dir)
             except Exception as exc:
                 err_msg = f"Failed generating graphs for {item_label}: {exc}"
                 logger.error(err_msg, exc_info=True)
@@ -362,8 +368,9 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
         for cand in selected_candidates
     ]
 
-    def _on_progress(idx: int, total: int, pe_name: str, count: int, out_dir: Path) -> None:
-        print(f"[{idx}/{total}] {pe_name}: Generated {count} graphs -> {out_dir}")
+    def _on_progress(idx: int, total: int, pe_name: str, count: int, skipped: int, out_dir: Path) -> None:
+        skipped_note = f", skipped {skipped} (no data)" if skipped else ""
+        print(f"[{idx}/{total}] {pe_name}: Generated {count} graphs{skipped_note} -> {out_dir}")
 
     summary = workflow.run_batch(batch, on_progress=_on_progress)
 
@@ -372,6 +379,7 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
     print("=" * 80)
     print(f"Total Substations Processed: {summary.total_substations}")
     print(f"Total Graphs Generated:     {summary.total_graphs}")
+    print(f"Skipped (no data recorded): {summary.total_skipped_no_data}")
     print(f"Elapsed Time:               {summary.elapsed_time:.2f} seconds")
     if summary.errors:
         print(f"\nErrors ({len(summary.errors)}):")

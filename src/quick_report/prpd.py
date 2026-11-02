@@ -59,6 +59,17 @@ class DiscoveredMeasurement:
     data_rel_path: str
     meas_dir: Path
 
+    @property
+    def data_file(self) -> Path:
+        """Recorded event data file: eventData.js (TEV) or ultrasonic_phase_plot.js (US)."""
+        name = "eventData.js" if self.tech == "TEV" else "ultrasonic_phase_plot.js"
+        return self.meas_dir / name
+
+    @property
+    def has_recorded_data(self) -> bool:
+        """False for placeholder measurements the surveyor created without taking a reading."""
+        return self.data_file.is_file()
+
 
 def _clean_survey_token(val: str | None) -> str:
     """Sanitize survey metadata tokens into uppercase filesystem-safe identifiers."""

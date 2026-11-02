@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **US+TEV Survey Graphs Skip Placeholder Measurements (`fix(us-tev-graphs)`, `src/workflows/us_tev_graphs.py`, `src/quick_report/prpd.py`, `tests/test_us_tev_graph_workflow.py`)**:
+  - Measurements created without a reading (no `ultrasonic_phase_plot.js` / `eventData.js`) are now skipped before rendering, so Option C no longer launches headless Chrome three times per placeholder and logs a misleading "render exhausted retries" warning; each skip logs `<label>: no <TECH> data recorded (skipped)`.
+  - Added `DiscoveredMeasurement.data_file` / `has_recorded_data`; `generate_substation_graphs()` and `run_substation()` return `SubstationGraphResult(generated, skipped_no_data)`, and the `on_progress` callback gains a skipped count.
+  - Progress line and summary report `Skipped (no data recorded)` separately from generated graphs, so a partial run no longer reads as complete.
+  - Fixes #173.
 - **33kV GIS Switchgear Survey PRPD Discovery (`fix(survey)`, `src/quick_report/prpd.py`, `tests/test_full_report_scan_adapters.py`)**:
   - Added `"GIS"` to switchgear prefix scanner tuple `("SWG", "VCB", "RMU", "GIS")` in `_discover_substation_assets()` and `find_swg_feeder_survey_dir()`.
   - Extended survey root discovery in `_is_survey_dir()`, `discover_ultratev_survey_dir()`, and `discover_survey_measurements()` to recognize GIS equipment directories.

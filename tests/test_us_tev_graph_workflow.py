@@ -86,6 +86,117 @@ def _setup_synthetic_survey(survey_root: Path) -> None:
     (survey_root / "survey_summary.js").write_text(f"var survey_summary = {json.dumps(summary)};\n", encoding="utf-8")
 
 
+_PLACEHOLDER_METADATA = (
+    'var measurement_metadata = {"Trend":[],"measurement_fields":[{"fields":['
+    '{"data":"VCB","fieldname":"$ASSET_NAME"},{"data":"PANEL 1","fieldname":"$SUB_ASSET_NAME"},'
+    '{"data":"$VT_CHAMBER","fieldname":"$COMPONENT"},{"data":"$NONE","fieldname":"$SUB_LOC"},'
+    '{"data":"X","fieldname":"$COMMENTS"}],"group":"$GROUP_METADATA"}]};\n'
+)
+
+
+def _add_placeholder_us_measurement(survey_root: Path) -> None:
+    """Add a US measurement the surveyor created but never recorded (HTML + metadata, no data file)."""
+    rel = "VCB/PANEL_1/20260917T100200_Ultrasonic"
+    meas_dir = survey_root / rel
+    meas_dir.mkdir(parents=True, exist_ok=True)
+    (meas_dir / "Ultrasonic.html").write_text("<html><body>US</body></html>", encoding="utf-8")
+    (meas_dir / "measurement_metadata.js").write_text(_PLACEHOLDER_METADATA, encoding="utf-8")
+
+    summary_file = survey_root / "survey_summary.js"
+    text = summary_file.read_text(encoding="utf-8")
+    summary = json.loads(text[text.index("{") : text.rindex("}") + 1])
+    summary["assets"][0]["$SUB_ASSETS"][0]["$MEASURES"].append(
+        {"$COMPONENT": "$VT_CHAMBER", "$MEASURE_TYPE": "$ULTRA", "$SUB_LOC": "$NONE", "Data": rel}
+    )
+    summary_file.write_text(f"var survey_summary = {json.dumps(summary)};\n", encoding="utf-8")
+
+
+def _fake_option_c_render(html_file, output_png, survey_root, http_port, **kwargs):
+    p = Path(output_png)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"\x89PNG\r\n\x1a\nfake_image_content")
+    return p
+
+
+def test_option_c_skips_measurement_with_no_recorded_data(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    """A placeholder measurement never reaches the headless renderer and is reported as skipped (#173)."""
+    survey_root = tmp_path / "RAW DATA" / "US+TEV"
+    _setup_synthetic_survey(survey_root)
+    _add_placeholder_us_measurement(survey_root)
+    output_dir = survey_root / "graphs"
+
+    with patch("src.workflows.us_tev_graphs.render_prpd_option_c_image", side_effect=_fake_option_c_render) as render:
+        result = generate_substation_graphs(survey_root, output_dir, mode="option_c")
+
+    rendered_html = [Path(c.kwargs["html_file"]).parent.name for c in render.call_args_list]
+    assert "20260917T100200_Ultrasonic" not in rendered_html
+    assert len(result.generated) == 2
+    assert result.skipped_no_data == ["VCB_PANEL_1_VT_CHAMBER_US"]
+    assert not (output_dir / "VCB_PANEL_1_VT_CHAMBER_US.png").exists()
+    assert any(
+        "VCB_PANEL_1_VT_CHAMBER_US" in r.message and "no US data recorded" in r.message for r in caplog.records
+    )
+
+
+def test_option_b_skips_measurement_with_no_recorded_data(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    """Option B reports placeholder measurements the same way as Option C (#173)."""
+    survey_root = tmp_path / "RAW DATA" / "US+TEV"
+    _setup_synthetic_survey(survey_root)
+    _add_placeholder_us_measurement(survey_root)
+    output_dir = survey_root / "graphs"
+
+    result = generate_substation_graphs(survey_root, output_dir, mode="option_b")
+
+    assert len(result.generated) == 2
+    assert result.skipped_no_data == ["VCB_PANEL_1_VT_CHAMBER_US"]
+    assert any(
+        "VCB_PANEL_1_VT_CHAMBER_US" in r.message and "no US data recorded" in r.message for r in caplog.records
+    )
+
+
+def test_option_c_render_failure_with_recorded_data_still_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    """A measurement with data whose capture comes out blank keeps the render warning and is not a skip (#173).
+
+    Chrome is never launched: subprocess.run is stubbed, so no screenshot is written and every attempt is blank.
+    """
+    survey_root = tmp_path / "RAW DATA" / "US+TEV"
+    _setup_synthetic_survey(survey_root)
+    output_dir = survey_root / "graphs"
+
+    with patch("src.quick_report.prpd.find_chrome_executable", return_value="chrome.exe"), \
+         patch("src.quick_report.prpd.subprocess.run") as chrome_run:
+        result = generate_substation_graphs(survey_root, output_dir, mode="option_c")
+
+    assert chrome_run.call_count == 6  # 2 measurements x 3 attempts
+    assert result.generated == []
+    assert result.skipped_no_data == []
+    exhausted = [r.message for r in caplog.records if "exhausted retries" in r.message]
+    assert len(exhausted) == 2
+    assert any("20260917T100100_US" in m for m in exhausted)
+
+
+def test_run_batch_reports_skipped_no_data_separately(tmp_path: Path):
+    """Batch summary and progress callback count no-data skips apart from generated graphs (#173)."""
+    survey1 = tmp_path / "SUB1" / "RAW DATA" / "US+TEV"
+    _setup_synthetic_survey(survey1)
+    _add_placeholder_us_measurement(survey1)
+    survey2 = tmp_path / "SUB2" / "RAW DATA" / "US+TEV"
+    _setup_synthetic_survey(survey2)
+
+    progress: list[tuple[str, int, int]] = []
+
+    def on_progress(idx, total, label, generated, skipped_no_data, out_dir):
+        progress.append((label, generated, skipped_no_data))
+
+    summary = UsTevGraphWorkflow(mode="option_b").run_batch(
+        [("Substation 1", survey1), ("Substation 2", survey2)], on_progress=on_progress
+    )
+
+    assert summary.total_graphs == 4
+    assert summary.total_skipped_no_data == 1
+    assert progress == [("Substation 1", 2, 1), ("Substation 2", 2, 0)]
+
+
 def test_browser_prerequisite_error_raised_when_chrome_missing():
     """Verify BrowserPrerequisiteError is raised in Option C mode if Chromium is absent."""
     workflow = UsTevGraphWorkflow(mode="option_c")
@@ -104,7 +215,7 @@ def test_option_b_generates_prpd_graphs(tmp_path: Path):
     _setup_synthetic_survey(survey_root)
     output_dir = survey_root / "graphs"
 
-    generated = generate_substation_graphs(survey_root, output_dir, mode="option_b")
+    generated = generate_substation_graphs(survey_root, output_dir, mode="option_b").generated
     assert len(generated) == 2
 
     tev_png = output_dir / "VCB_PANEL_1_CIRCUIT_BREAKER_TEV.png"
@@ -122,14 +233,8 @@ def test_option_c_headless_rendering_pipeline(tmp_path: Path):
     _setup_synthetic_survey(survey_root)
     output_dir = survey_root / "graphs"
 
-    def mock_render(html_file, output_png, survey_root, http_port, **kwargs):
-        p = Path(output_png)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(b"\x89PNG\r\n\x1a\nfake_image_content")
-        return p
-
-    with patch("src.workflows.us_tev_graphs.render_prpd_option_c_image", side_effect=mock_render):
-        generated = generate_substation_graphs(survey_root, output_dir, mode="option_c")
+    with patch("src.workflows.us_tev_graphs.render_prpd_option_c_image", side_effect=_fake_option_c_render):
+        generated = generate_substation_graphs(survey_root, output_dir, mode="option_c").generated
 
     assert len(generated) == 2
     assert (output_dir / "VCB_PANEL_1_CIRCUIT_BREAKER_TEV.png").exists()
@@ -153,8 +258,8 @@ def test_overwrite_idempotency(tmp_path: Path):
     assert target_png.read_bytes() != b"old content"
 
 
-def test_zero_measurement_survey_returns_empty_list(tmp_path: Path, caplog: pytest.LogCaptureFixture):
-    """Verify zero-measurement survey logs non-blocking warning and returns empty list."""
+def test_zero_measurement_survey_returns_empty_result(tmp_path: Path, caplog: pytest.LogCaptureFixture):
+    """Verify zero-measurement survey logs non-blocking warning and returns an empty result."""
     survey_root = tmp_path / "EMPTY_SURVEY"
     survey_root.mkdir(parents=True)
     (survey_root / "survey_summary.js").write_text("var survey_summary = {'assets': []};\n", encoding="utf-8")
@@ -162,7 +267,8 @@ def test_zero_measurement_survey_returns_empty_list(tmp_path: Path, caplog: pyte
     output_dir = survey_root / "graphs"
     res = generate_substation_graphs(survey_root, output_dir, mode="option_b")
 
-    assert res == []
+    assert res.generated == []
+    assert res.skipped_no_data == []
     assert any("[WARN] No valid US/TEV measurements found" in record.message for record in caplog.records)
 
 
@@ -216,7 +322,7 @@ def test_output_directory_resolution_for_nested_survey_archive(tmp_path: Path):
     workflow = UsTevGraphWorkflow(mode="option_b")
 
     # 1. run_substation with nested survey directory directly and output_dir=None
-    paths = workflow.run_substation(nested_zip_stem)
+    paths = workflow.run_substation(nested_zip_stem).generated
     assert len(paths) == 2
     canonical_graphs_dir = sub_raw_us_tev / "graphs"
     assert canonical_graphs_dir.exists()
@@ -225,7 +331,7 @@ def test_output_directory_resolution_for_nested_survey_archive(tmp_path: Path):
         assert p.exists()
 
     # 2. run_substation passing parent US+TEV directory and output_dir=None
-    paths_from_parent = workflow.run_substation(sub_raw_us_tev)
+    paths_from_parent = workflow.run_substation(sub_raw_us_tev).generated
     assert len(paths_from_parent) == 2
     for p in paths_from_parent:
         assert p.parent == canonical_graphs_dir
@@ -276,7 +382,7 @@ def test_run_substation_polymorphic_33kv_us(tmp_path: Path):
     _setup_synthetic_survey(sub_raw_us)
 
     workflow = UsTevGraphWorkflow(mode="option_b")
-    paths = workflow.run_substation(sub_raw_us)
+    paths = workflow.run_substation(sub_raw_us).generated
     assert len(paths) == 2
     canonical_graphs_dir = sub_raw_us / "graphs"
     assert canonical_graphs_dir.exists()
