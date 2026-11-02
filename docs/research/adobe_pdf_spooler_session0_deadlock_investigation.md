@@ -20,6 +20,63 @@
 
 ---
 
+## Correction (2026-11-02): verified root cause of the hang
+
+The Session 0 story in sections 2 and 3 is wrong about the mechanism. A Process Monitor trace of a single print on this host showed what actually happens. The findings below replace sections 2.2, 3.3, 3.4 and 3.5.
+
+### What the port monitor does
+
+`AdobePDF.dll` (Acrobat 11.0.0.305) runs inside `spoolsv.exe`. When a job reaches the `Documents\*.pdf` port, it does this:
+
+1. Reads `AskForPdfFileName`, `AskToReplacePdfFile` and `UsePortMonitor` from `HKLM\SOFTWARE\WOW6432Node\Adobe\Acrobat Distiller\11.0`. All three are absent, so defaults apply.
+2. Impersonates the job owner and looks up `HKCU\Software\Adobe\Acrobat Distiller\PrinterJobControl\AppName<jobId>`.
+3. If that value is missing, reads `HKCR\AcroDist\shell\open\command` and starts `acrodist.exe /N /P --UseSystemFonts /Q:300` itself. Because the spooler starts it, this Distiller runs as `NT AUTHORITY\SYSTEM` in Session 0.
+4. Reads the output path from `PrinterJobControl\<jobId>` (written by the driver in the printing app), then creates `\\.\pipe\PMtoDistiller` and feeds the job to that Distiller.
+
+So the Session 0 Distiller is the port monitor's normal route whenever `AppName<jobId>` is absent. It is not a fallback after a failed `FindWindow`. Nothing in the trace wrote `AppName<jobId>`.
+
+### Why the job hangs
+
+The printer's default preset is `PrinterDriverData\ConversionSettings = "High Quality Print(1)"`. That preset is a custom file that existed only in the operator's profile, at `%APPDATA%\Adobe\Adobe PDF\Settings\High Quality Print(1).joboptions`.
+
+The SYSTEM Distiller looked for it in three other places, and all three returned `NAME NOT FOUND`:
+
+- `C:\Program Files (x86)\Adobe\Acrobat 11.0\Acrobat\`
+- `C:\ProgramData\Adobe\Adobe PDF\Settings\` (the `JobOptionsFolder`)
+- `C:\Windows\SysWOW64\config\systemprofile\AppData\Roaming\Adobe\Adobe PDF\Settings\`
+
+After that it did nothing. Its CPU time stayed at 0.125 s and it never opened the job pipe. The job sat at `Printing, Retained` with 0 pages until the spooler was restarted. The most likely cause is a modal error dialog in Session 0, where nobody can see or dismiss it. The trace cannot show windows, so the dialog itself is inferred.
+
+### Evidence that the fix works
+
+The test print is one line of text sent with `Out-Printer -Name "Adobe PDF"`. The output path is preset with a `PrinterJobControl\<full exe path>` value, so no Save dialog appears. It goes red on this bug: the job sticks at `Printing, Retained` and no PDF is written.
+
+| Run | Starting state | Preset in `ProgramData\…\Settings` | Result |
+|---|---|---|---|
+| G | Leftover Session 0 Distiller | No | Stuck, no PDF |
+| H | Clean (spooler restarted, no Adobe processes) | No | Stuck, no PDF |
+| Fix | Clean | Yes, byte-identical copy | Job done in 2.5 s, valid PDF (`Acrobat Distiller 11.0`) |
+
+The fix was copying the preset into `C:\ProgramData\Adobe\Adobe PDF\Settings\`. Only SYSTEM can write to that folder (Administrators have read-only access), so the copy ran as a one-shot SYSTEM scheduled task. If the preset is edited, or a different custom preset becomes the printer default, it must be copied again.
+
+### Why it started on 2026-11-01
+
+The operator's Distiller log (`%APPDATA%\Adobe\Acrobat\Distiller 11\messages.log`) has 66 successful jobs from 2026-10-19 to 2026-11-01 03:38. Every one came through `PMtoDistiller_ID_<n>`, a Distiller running as the operator, which can read the per-user preset. No job has taken that route since.
+
+`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Print\Printers\Adobe PDF\PrinterDriverData` was last written at 2026-11-01 03:38:35. `HKCU\Printers\DevModePerUser` was written in the same second. That falls between report 100 (the last success) and report 101 (the first hang). The setting that changed the routing has not been identified. The fix does not depend on it, because it makes the SYSTEM route work.
+
+### Claims in this document that the trace contradicts
+
+- **`FindWindow` and UIPI as the cause:** wrong. The port monitor never needed to find the tray to choose Session 0. It starts the SYSTEM Distiller directly when `AppName<jobId>` is absent.
+- **Cancellation corrupting a port-monitor cache:** not needed to explain anything. The hang reproduces from a clean spooler after a reboot.
+- **"Distiller freezes because it cannot read `PrinterJobControl`":** wrong. The port monitor reads `PrinterJobControl` as the user and passes the output path over the pipe. The Distiller stalls on the missing preset.
+
+### Side finding: test-suite registry pollution
+
+On 2026-11-01 between 15:47 and 17:21 (after printing had already broken), the pre-#148 unit tests ran the real `winreg` registration code with `MagicMock` paths. They wrote 333 keys under `PrinterJobControl\MagicMock\mock.Path\…` in the operator's real hive. Removing those keys did not fix printing, so they were not the cause. The code that wrote them was deleted in #148. The only registry access left (`src/postprocessing/converters.py`, read-only printer lookup) is mocked in tests.
+
+---
+
 ## 1. Executive Summary
 
 During Full Report batch post-processing for Cameron Highland (17-08-2026), reports `093` through `100` (8 documents) successfully converted via the `Adobe PDF` virtual printer with intact high-resolution thermograms and embedded ultrasound audio. However, reports `101` and `102` consistently fail silent Adobe PDF printing, timing out after ~100–150 seconds and falling back to Word's native `ExportAsFixedFormat` engine.

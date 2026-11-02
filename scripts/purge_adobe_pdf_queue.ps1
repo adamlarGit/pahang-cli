@@ -4,23 +4,36 @@
 
 .DESCRIPTION
     WHY THIS EXISTS
-    Manual cleanup for jobs left behind by the retired Adobe PDF print path.
-    Full Report conversion no longer prints (native export, ADR 0009), but
-    earlier versions printed Word documents through the "Adobe PDF" virtual
-    printer (Acrobat 11). When they did, the Print Spooler
-    starts its own copy of acrodist.exe and acrotray.exe in Session 0 (the
-    background service session, not your desktop). That Distiller can deadlock,
-    leaving jobs stuck at "Deleting, Printing, Retained" or "Deleting, Spooling".
-    See docs/research/adobe_pdf_spooler_session0_deadlock_investigation.md.
+    Manual cleanup for jobs stuck on the "Adobe PDF" printer (Acrobat 11).
+    Full Report conversion no longer prints (native export, ADR 0009). This
+    script is for prints made by hand or by other programs.
 
-    Deleting files from spool\PRINTERS doesn't fix this. In the 2026-11-01
-    incident that folder was empty and the jobs were held in the spooler's
-    memory. The Session-0 acrodist has to be killed and the spooler restarted.
+    How a job gets stuck: when a job reaches the Adobe PDF port, the port
+    monitor inside the Print Spooler starts acrodist.exe as SYSTEM in
+    Session 0 (the background service session, not your desktop). That
+    Distiller loads the printer's default preset (ConversionSettings). If the
+    preset file exists only in your own profile
+    (%APPDATA%\Adobe\Adobe PDF\Settings), the SYSTEM Distiller cannot find it
+    and stalls before reading the job. The job then sits at
+    "Printing, Retained" with 0 pages and no PDF is written.
+    See the 2026-11-02 correction in
+    docs/research/adobe_pdf_spooler_session0_deadlock_investigation.md.
 
-    If jobs come back after a cleanup, check the submitted time
-    (Get-PrintJob -PrinterName 'Adobe PDF'). New jobs mean something is still
-    printing, usually an old pahang-cli run or another program. Close it
-    before purging again.
+    This script clears stuck jobs. It does not stop new ones. The fix is to
+    copy the preset into C:\ProgramData\Adobe\Adobe PDF\Settings\. Only SYSTEM
+    can write there, so the copy has to run as SYSTEM. Copy it again whenever
+    the preset is edited or the printer's default preset changes.
+
+    Deleting files from spool\PRINTERS doesn't fix a stuck job. In the
+    2026-11-01 incident that folder was empty and the jobs were held in the
+    spooler's memory. The Session-0 acrodist has to be killed and the spooler
+    restarted.
+
+    If jobs get stuck again after a cleanup, check that the preset in
+    ProgramData still exists and matches the printer's ConversionSettings.
+    Also check the submitted time (Get-PrintJob -PrinterName 'Adobe PDF').
+    New jobs mean something is still printing, so close that program before
+    purging again.
 
     WHAT IT DOES
       1. Re-launches itself as Administrator if needed (UAC prompt).
