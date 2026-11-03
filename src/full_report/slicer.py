@@ -452,6 +452,58 @@ def _slice_range_to_doc(
             pass
 
 
+def _vi_summary_table(source_doc: Any, p_visum: ParagraphBoundary, cond_start: int) -> Any | None:
+    """First table after the VISUAL DEFECT SUMMARY heading and before SUBSTATION CONDITION."""
+    try:
+        tables = source_doc.Range(p_visum.start, cond_start).Tables
+        if tables.Count >= 1:
+            return tables(1)
+    except Exception:
+        pass
+    return None
+
+
+def _count_vi_summary_source_rows(
+    source_doc: Any, p_visum: ParagraphBoundary, cond_start: int
+) -> int | None:
+    """Non-empty data rows (header excluded) in the Quick Report's own summary table; None if unreadable."""
+    tbl = _vi_summary_table(source_doc, p_visum, cond_start)
+    if tbl is None:
+        return None
+    try:
+        count = 0
+        for i in range(2, int(tbl.Rows.Count) + 1):
+            if str(tbl.Rows(i).Range.Text).replace("\r", "").replace("\x07", "").strip():
+                count += 1
+        return count
+    except Exception:
+        return None
+
+
+def _resolve_vi_summary_end(source_doc: Any, p_visum: ParagraphBoundary, cond_start: int) -> int:
+    """End of the VISUAL DEFECT SUMMARY slice: start of the page after the summary table's last row.
+
+    Ending at the heading's page drops rows that spill onto the next page; ending at
+    cond_start would pull in the CBM defect pages that follow the summary.
+    """
+    last_page = p_visum.page_number
+    tbl = _vi_summary_table(source_doc, p_visum, cond_start)
+    if tbl is not None:
+        try:
+            tbl_end = tbl.Range.End
+            last_row_end = source_doc.Range(tbl_end - 1, tbl_end - 1)
+            last_page = max(last_page, int(last_row_end.Information(WD_ACTIVE_END_PAGE_NUMBER)))
+        except Exception:
+            pass
+    try:
+        next_page = source_doc.GoTo(WD_GOTO_PAGE, WD_GOTO_ABSOLUTE, last_page + 1)
+        if next_page.Start > p_visum.start:
+            return min(next_page.Start, cond_start)
+    except Exception:
+        pass
+    return cond_start
+
+
 def _slice_section_with_retry(
     slice_func: Any,
     verify_func: Any,
@@ -811,6 +863,7 @@ class WordComDocumentSlicer:
             # 5. Visual defect summary boundary ("VISUAL DEFECT SUMMARY") per D16
             vi_summary_start: int | None = None
             vi_summary_end: int | None = None
+            vi_summary_source_rows: int | None = None
             if has_vi_summary and p2_start < cond_start:
                 p_visum = _find_paragraph(
                     source_doc,
@@ -820,14 +873,8 @@ class WordComDocumentSlicer:
                 )
                 if p_visum:
                     vi_summary_start = p_visum.start
-                    try:
-                        next_page = source_doc.GoTo(WD_GOTO_PAGE, WD_GOTO_ABSOLUTE, p_visum.page_number + 1)
-                        if next_page.Start > vi_summary_start:
-                            vi_summary_end = min(next_page.Start, cond_start)
-                        else:
-                            vi_summary_end = cond_start
-                    except Exception:
-                        vi_summary_end = cond_start
+                    vi_summary_end = _resolve_vi_summary_end(source_doc, p_visum, cond_start)
+                    vi_summary_source_rows = _count_vi_summary_source_rows(source_doc, p_visum, cond_start)
 
             # Slice Section 1: Front Page (Page 1) with D46 title replacement & attribution guard
             front_page_path = _slice_section_with_retry(
@@ -855,8 +902,14 @@ class WordComDocumentSlicer:
                         output_path=target_dir / "vi_summary.docx",
                     ),
                     verify_func=(
-                        (lambda p: verify_vi_summary_structure(p, expected_vi_defect_count))
-                        if expected_vi_defect_count > 0
+                        (
+                            lambda p: verify_vi_summary_structure(
+                                p,
+                                expected_vi_defect_count,
+                                source_row_count=vi_summary_source_rows,
+                            )
+                        )
+                        if expected_vi_defect_count > 0 or vi_summary_source_rows is not None
                         else (lambda p: (True, ""))
                     ),
                     section_name="vi_summary",

@@ -263,8 +263,15 @@ def verify_sticker_page_structure(path: Path | str) -> tuple[bool, str]:
 def verify_vi_summary_structure(
     path: Path | str,
     expected_count: int,
+    source_row_count: int | None = None,
 ) -> tuple[bool, str]:
-    """Assert Table 1 non-empty defect row count matches expected visual defect count."""
+    """Assert Table 1 non-empty defect row count matches the Quick Report and the master count.
+
+    expected_count comes from the master QR03 VI sheet. source_row_count, when given, is
+    the non-empty row count of the Quick Report's own summary table. Checking the slice
+    against it catches truncated slices that match the master count by coincidence.
+    With source_row_count given, expected_count <= 0 means no master count to check.
+    """
     p = Path(path).resolve()
     if not p.exists():
         return False, f"vi_summary file not found: {p}"
@@ -280,14 +287,31 @@ def verify_vi_summary_structure(
     t = doc.tables[0]
     data_rows = [r for r in t.rows[1:] if any(c.text.strip() for c in r.cells)]
 
-    # Table has non-empty data rows matching expected defect count
-    if len(data_rows) == expected_count:
+    sliced = len(data_rows)
+
+    if source_row_count is not None and sliced != source_row_count:
+        return (
+            False,
+            f"vi_summary slice is incomplete: Table 1 non-empty defect row count ({sliced} data rows) "
+            f"but the Quick Report summary table has {source_row_count}",
+        )
+
+    if source_row_count is not None and expected_count <= 0:
         return True, ""
 
+    if sliced == expected_count:
+        return True, ""
+
+    qr_note = (
+        f"; the Quick Report summary table has {source_row_count}, so the master QR03 VI sheet "
+        f"and the Quick Report disagree"
+        if source_row_count is not None
+        else ""
+    )
     return (
         False,
-        f"vi_summary Table 1 non-empty defect row count ({len(data_rows)} data rows) "
-        f"does not match expected defect count {expected_count}",
+        f"vi_summary Table 1 non-empty defect row count ({sliced} data rows) "
+        f"does not match expected defect count {expected_count}{qr_note}",
     )
 
 

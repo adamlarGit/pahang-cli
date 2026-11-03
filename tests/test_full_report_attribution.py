@@ -373,6 +373,47 @@ def test_verify_front_page_attribution_relaxed_dual_name(tmp_path: Path):
     assert "front page ERMS field: 'TELEKOM TANAH PUTIH'" in reason6
 
 
+def _vi_summary_doc(tmp_path: Path, data_rows: int) -> Path:
+    doc = docx.Document()
+    t = doc.add_table(rows=data_rows + 1, cols=2)
+    t.rows[0].cells[0].text = "NO."
+    for i in range(1, data_rows + 1):
+        t.rows[i].cells[0].text = str(i)
+    path = tmp_path / f"vi_summary_{data_rows}.docx"
+    doc.save(path)
+    return path
+
+
+def test_verify_vi_summary_structure_rejects_truncated_slice_that_matches_master(tmp_path: Path):
+    """J01647: slice kept 23 of 32 Quick Report rows; master also said 23, so the old guard passed."""
+    path = _vi_summary_doc(tmp_path, 23)
+    valid, reason = verify_vi_summary_structure(path, expected_count=23, source_row_count=32)
+    assert valid is False
+    assert "(23 data rows)" in reason
+    assert "Quick Report summary table has 32" in reason
+
+
+def test_verify_vi_summary_structure_reports_quick_report_count_on_master_mismatch(tmp_path: Path):
+    path = _vi_summary_doc(tmp_path, 32)
+    valid, reason = verify_vi_summary_structure(path, expected_count=23, source_row_count=32)
+    assert valid is False
+    assert "does not match expected defect count 23" in reason
+    assert "Quick Report summary table has 32" in reason
+
+
+def test_verify_vi_summary_structure_passes_when_all_three_counts_agree(tmp_path: Path):
+    path = _vi_summary_doc(tmp_path, 21)
+    assert verify_vi_summary_structure(path, expected_count=21, source_row_count=21) == (True, "")
+
+
+def test_verify_vi_summary_structure_checks_source_count_without_master_count(tmp_path: Path):
+    path = _vi_summary_doc(tmp_path, 19)
+    valid, reason = verify_vi_summary_structure(path, expected_count=0, source_row_count=21)
+    assert valid is False
+    assert "Quick Report summary table has 21" in reason
+    assert verify_vi_summary_structure(path, expected_count=0, source_row_count=19) == (True, "")
+
+
 def test_verify_vi_summary_structure_trailing_blank_rows(tmp_path: Path):
     """Regression test (Issue #46): VI summary table with trailing blank rows passes when non-empty rows match."""
     doc = docx.Document()
