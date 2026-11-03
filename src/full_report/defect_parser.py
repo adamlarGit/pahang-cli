@@ -166,6 +166,11 @@ class CbmDefectHeaderParser:
         grid = self._extract_grid(target)
         if not grid:
             raise ValueError("No table rows found to parse CBM defect header.")
+        if not self._has_cbm_defect_header(grid):
+            raise ValueError(
+                "Table has no CBM defect header (Substation, Equipment and Area label rows); "
+                "not a CBM defect detail page."
+            )
 
         fields = self._extract_key_values(grid)
 
@@ -312,6 +317,20 @@ class CbmDefectHeaderParser:
             return grid
 
         raise TypeError(f"Unsupported target type for table extraction: {type(target)}")
+
+    _REQUIRED_HEADER_LABELS = frozenset({"substation", "equipment", "area"})
+
+    def _has_cbm_defect_header(self, grid: list[list[str]]) -> bool:
+        """True when Substation, Equipment and Area each open a row, as on every CBM defect page template.
+
+        Summary tables (VI and CBM) open each row with the row number, so their overflow
+        pages are rejected even when a cell happens to read "SUBSTATION" or "EQUIPMENT".
+        """
+        row_labels = {
+            next((c for c in row if c), "").lower().strip().rstrip(":")
+            for row in grid
+        }
+        return self._REQUIRED_HEADER_LABELS <= row_labels
 
     def _table_to_grid(self, table: Any) -> list[list[str]]:
         """Convert a docx Table into a clean 2D string grid without consecutive duplicates."""

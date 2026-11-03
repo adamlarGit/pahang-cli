@@ -269,3 +269,52 @@ def test_parse_batch_increments_duplicate_indices():
 
 
 
+
+
+# --- #175: summary overflow pages must not parse as CBM defect detail pages ---
+
+
+@pytest.mark.parametrize(
+    "grid",
+    [
+        pytest.param(
+            [
+                ["20", "FP/LVDB", "NO LVDB GUARD", "LVDB2 TX1"],
+                ["21", "FP/LVDB", "NO FEEDER NO./FEEDER NAME", "LVDB2 TX1 - NOT FOLLOW NEW STANDARD"],
+            ],
+            id="rex-theatre-vi-summary-overflow",
+        ),
+        pytest.param(
+            [
+                ["NO.", "EQUIPMENT", "DEFECT DESCRIPTION", "ADDITIONAL REMARKS"],
+                ["1", "SUBSTATION", "CPR POSTER MISSING", "SWG ROOM"],
+                ["2", "SUBSTATION", "CEILING BROKEN", "TX1 ROOM"],
+            ],
+            id="vi-summary-with-substation-and-equipment-words",
+        ),
+        pytest.param(
+            [
+                ["NO.", "EQUIPMENT", "DEFECT AREA", "IR (Abs.T/∆T)", "U/S (dB)", "TEV (dB)", "SEVERITY"],
+                ["1.", "FEEDER PILLAR", "OUTGOING FUSE CONNECTION", "45.2/12.1", "-", "-", "MINOR"],
+            ],
+            id="cbm-summary-rows",
+        ),
+    ],
+)
+def test_parse_rejects_tables_without_cbm_defect_header(grid):
+    with pytest.raises(ValueError, match="CBM defect header"):
+        CbmDefectHeaderParser().parse(grid)
+
+
+def test_parse_accepts_header_with_leading_blank_cell():
+    """Quick Report header tables start with an empty merged cell before each label."""
+    grid = [
+        ["", "Substation", "REX THEATRE", "Date: 12/08/2026"],
+        ["", "Equipment", "LVDB2 TX1", "Manufacturer", "-", "Time: 12:31 PM"],
+        ["", "Model", "J-SLOTTED", "Rating", "-", "Humidity: 65%"],
+        ["", "Area", "OVERVIEW", "Feeder No.", "-"],
+        ["Feeder Name", "-"],
+    ]
+    meta = CbmDefectHeaderParser().parse(grid)
+    assert meta.substation == "REX THEATRE"
+    assert meta.defect_area == "OVERVIEW"

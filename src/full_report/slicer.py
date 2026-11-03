@@ -452,22 +452,43 @@ def _slice_range_to_doc(
             pass
 
 
-def _vi_summary_table(source_doc: Any, p_visum: ParagraphBoundary, cond_start: int) -> Any | None:
-    """First table after the VISUAL DEFECT SUMMARY heading and before SUBSTATION CONDITION."""
+def _summary_table(source_doc: Any, p_heading: ParagraphBoundary, end_pos: int) -> Any | None:
+    """First table after a summary heading (VI or CBM) and before end_pos, if it is a summary table.
+
+    Summary tables open with a "NO." header cell; CBM defect detail headers never do, so a
+    heading with no table of its own never claims the CBM defect page that follows it.
+    """
     try:
-        tables = source_doc.Range(p_visum.start, cond_start).Tables
+        tables = source_doc.Range(p_heading.start, end_pos).Tables
         if tables.Count >= 1:
-            return tables(1)
+            tbl = tables(1)
+            first_cell = str(tbl.Cell(1, 1).Range.Text).replace("\r", "").replace("\x07", "").strip()
+            if first_cell.upper().startswith("NO"):
+                return tbl
     except Exception:
         pass
     return None
+
+
+def _summary_table_last_page(source_doc: Any, p_heading: ParagraphBoundary, end_pos: int) -> int:
+    """Page holding the last row of the summary table under p_heading; the heading's page if none."""
+    last_page = p_heading.page_number
+    tbl = _summary_table(source_doc, p_heading, end_pos)
+    if tbl is not None:
+        try:
+            tbl_end = tbl.Range.End
+            last_row_end = source_doc.Range(tbl_end - 1, tbl_end - 1)
+            last_page = max(last_page, int(last_row_end.Information(WD_ACTIVE_END_PAGE_NUMBER)))
+        except Exception:
+            pass
+    return last_page
 
 
 def _count_vi_summary_source_rows(
     source_doc: Any, p_visum: ParagraphBoundary, cond_start: int
 ) -> int | None:
     """Non-empty data rows (header excluded) in the Quick Report's own summary table; None if unreadable."""
-    tbl = _vi_summary_table(source_doc, p_visum, cond_start)
+    tbl = _summary_table(source_doc, p_visum, cond_start)
     if tbl is None:
         return None
     try:
@@ -486,15 +507,7 @@ def _resolve_vi_summary_end(source_doc: Any, p_visum: ParagraphBoundary, cond_st
     Ending at the heading's page drops rows that spill onto the next page; ending at
     cond_start would pull in the CBM defect pages that follow the summary.
     """
-    last_page = p_visum.page_number
-    tbl = _vi_summary_table(source_doc, p_visum, cond_start)
-    if tbl is not None:
-        try:
-            tbl_end = tbl.Range.End
-            last_row_end = source_doc.Range(tbl_end - 1, tbl_end - 1)
-            last_page = max(last_page, int(last_row_end.Information(WD_ACTIVE_END_PAGE_NUMBER)))
-        except Exception:
-            pass
+    last_page = _summary_table_last_page(source_doc, p_visum, cond_start)
     try:
         next_page = source_doc.GoTo(WD_GOTO_PAGE, WD_GOTO_ABSOLUTE, last_page + 1)
         if next_page.Start > p_visum.start:
@@ -570,7 +583,6 @@ def _slice_cbm_defects_from_doc(
             start_pos=0,
             end_pos=cond_start,
         )
-    cbm_sum_page = p_cbmsum.page_number if p_cbmsum else None
 
     # Discover VI summary page if present
     p_visum = _find_paragraph(
@@ -579,14 +591,22 @@ def _slice_cbm_defects_from_doc(
         start_pos=0,
         end_pos=cond_start,
     )
-    vi_sum_page = p_visum.page_number if p_visum else None
+
+    # Skip every page a summary table covers, not just its heading page: an overflow page
+    # holds only summary rows and must never become a CBM defect page (#175).
+    scan_end = cond_start if cond_start is not None else int(source_doc.Content.End)
+    summary_pages: set[int] = set()
+    for p_heading in (p_cbmsum, p_visum):
+        if p_heading:
+            last = _summary_table_last_page(source_doc, p_heading, scan_end)
+            summary_pages.update(range(p_heading.page_number, last + 1))
 
     candidate_slices: list[tuple[Path, CbmDefectSliceMetadata]] = []
     temp_files: list[Path] = []
 
     try:
         for p_num in range(2, cond_page):
-            if p_num == cbm_sum_page or p_num == vi_sum_page:
+            if p_num in summary_pages:
                 continue
 
             try:
