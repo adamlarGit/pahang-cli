@@ -3223,3 +3223,111 @@ def test_quick_report_records_explicit_condition_template(locations, tmp_path) -
     inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
     assert inputs[str(template)]["size"] == 7
     assert inputs[str(template)]["modified"]
+
+
+def _environment_with_engr_folder(locations, count: int) -> Path:
+    folder = locations.project / "ENGR"
+    folder.mkdir()
+    for index in range(count):
+        (folder / f"book{index}.xlsx").write_bytes(b"x")
+    return folder
+
+
+def test_same_folder_is_walked_and_recorded_once_in_a_run(locations) -> None:
+    folder = _environment_with_engr_folder(locations, 3)
+
+    def action(environment) -> None:
+        for _ in range(5):
+            environment.get_engr_folder()
+
+    with (
+        patch.object(LocalWorkspaceStorage, "get_engr_folder", return_value=folder),
+        patch("src.run_records.os.walk", wraps=os.walk) as walk,
+    ):
+        run_project_action(action, locations.environment)
+
+    assert walk.call_count == 1
+    inputs = entries_of(read_entries(locations.project_logs), "input")
+    assert sorted(entry["path"] for entry in inputs) == sorted(str(p) for p in folder.iterdir())
+
+
+def test_getters_do_not_walk_when_no_run_is_open(locations) -> None:
+    folder = _environment_with_engr_folder(locations, 3)
+
+    with (
+        patch.object(LocalWorkspaceStorage, "get_engr_folder", return_value=folder),
+        patch("src.run_records.os.walk", wraps=os.walk) as walk,
+    ):
+        assert locations.environment.get_engr_folder() == folder
+
+    assert walk.call_count == 0
+
+
+def test_huge_folder_is_capped_with_a_note_of_what_was_left_out(locations, monkeypatch) -> None:
+    folder = _environment_with_engr_folder(locations, 5)
+    monkeypatch.setattr("src.run_records._MAX_INPUTS_PER_FOLDER", 3)
+
+    run_project_action(lambda environment: current_run().record_input_folder(folder), locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert len(entries_of(entries, "input")) == 3
+    note = entries_of(entries, "input_truncated")[0]
+    assert (note["folder"], note["recorded"], note["left_out"]) == (str(folder), 3, 2)
+
+
+def test_recursive_folder_is_capped_too(locations, monkeypatch) -> None:
+    for index in range(4):
+        _file(locations.project / "survey" / f"m{index}" / "data.dat")
+    monkeypatch.setattr("src.run_records._MAX_INPUTS_PER_FOLDER", 3)
+
+    run_project_action(
+        lambda environment: current_run().record_input_folder(locations.project / "survey", recursive=True),
+        locations.environment,
+    )
+
+    entries = read_entries(locations.project_logs)
+    assert len(entries_of(entries, "input")) == 3
+    assert entries_of(entries, "input_truncated")[0]["left_out"] == 1
+
+
+def test_folder_at_the_limit_has_no_truncation_note(locations, monkeypatch) -> None:
+    folder = _environment_with_engr_folder(locations, 3)
+    monkeypatch.setattr("src.run_records._MAX_INPUTS_PER_FOLDER", 3)
+
+    run_project_action(lambda environment: current_run().record_input_folder(folder), locations.environment)
+
+    assert not entries_of(read_entries(locations.project_logs), "input_truncated")
+
+
+def test_folder_walk_failure_does_not_stop_the_action(locations) -> None:
+    folder = _environment_with_engr_folder(locations, 1)
+    calls: list[str] = []
+
+    def action(environment) -> None:
+        current_run().record_input_folder(folder)
+        calls.append("ran")
+
+    with patch("src.run_records.os.walk", side_effect=OSError("network gone")):
+        run_project_action(action, locations.environment)
+
+    assert calls == ["ran"]
+    assert entries_of(read_entries(locations.project_logs), "input")[0]["path"] == str(folder)
+
+
+def test_recording_a_folder_never_opens_its_files(locations) -> None:
+    folder = _environment_with_engr_folder(locations, 3)
+    opened: list[str] = []
+    real_open = open
+
+    def watching_open(file, *args, **kwargs):
+        opened.append(str(file))
+        return real_open(file, *args, **kwargs)
+
+    def action(environment) -> None:
+        with patch("builtins.open", watching_open):
+            current_run().record_input_folder(folder)
+
+    run_project_action(action, locations.environment)
+
+    assert not [path for path in opened if str(folder) in path]
+    assert len(entries_of(read_entries(locations.project_logs), "input")) == 3

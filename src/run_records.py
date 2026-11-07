@@ -16,7 +16,8 @@ interrupted, crashed or hung.
 
 Every line is one JSON object with a ``type`` and a ``time``. The types are ``run_start``,
 ``environment`` (app, git, Python, Word and Excel versions), ``request``, ``request_update``,
-``input`` (path, size, modified), ``step_start``, ``step_finish``, ``log``, ``progress``,
+``input`` (path, size, modified), ``input_truncated`` (a capped folder: ``folder``, ``recorded``,
+``left_out``), ``step_start``, ``step_finish``, ``log``, ``progress``,
 ``console``, ``warning`` and ``error`` (each with ``traceback`` when there was an exception),
 ``cancelled``, ``result``,
 ``output`` and ``run_finish``. Its ``status`` is ``completed``, ``completed_with_errors``
@@ -73,6 +74,8 @@ _MODULE_LEVEL_LOGGING_CODE = {
     for function in (logging.debug, logging.info, logging.warning, logging.error, logging.critical, logging.log)
 }
 _MAX_DESCRIBE_DEPTH = 12
+# Input entries kept per folder, so a huge raw-data folder can't flood a record.
+_MAX_INPUTS_PER_FOLDER = 200
 _RESULT_OUTPUT_FIELDS = (
     "output_path",
     "output_pdf_path",
@@ -110,6 +113,7 @@ class Run:
         self._warning_messages: set[str] = set()
         self._requests: dict[str, dict[str, Any]] = {}
         self._inputs_seen: set[str] = set()
+        self._input_folders_seen: set[tuple[str, tuple[str, ...], bool]] = set()
         self._outputs_seen: set[str] = set()
 
     def call(self, action: Callable[[], Any]) -> Any:
@@ -166,24 +170,30 @@ class Run:
         """Record a folder's input files, optionally including nested survey files.
 
         ``suffixes`` limits which files count. A folder with nothing to list, or a path that
-        isn't a folder, is recorded as itself.
+        isn't a folder, is recorded as itself. Each folder is walked once in a Run. At most
+        ``_MAX_INPUTS_PER_FOLDER`` files are recorded, in name order, followed by an
+        ``input_truncated`` entry saying how many were left out. Files are never opened.
         """
         if self._file is None:
             return
         try:
-            wanted = {suffix.lower() for suffix in suffixes}
-            root = Path(folder).expanduser()
-            children = root.rglob("*") if recursive else root.iterdir()
-            files = sorted(
-                child
-                for child in children
-                if child.is_file()
-                and not child.name.startswith("~$")
-                and (not wanted or child.suffix.lower() in wanted)
-            )
+            wanted = tuple(sorted(suffix.lower() for suffix in suffixes))
+            key = (str(folder), wanted, recursive)
+            if key in self._input_folders_seen:
+                return
+            self._input_folders_seen.add(key)
+            files = _files_in(folder, wanted, recursive)
         except Exception:
             files = []
-        self.record_inputs(files or [folder])
+        kept = files[:_MAX_INPUTS_PER_FOLDER]
+        self.record_inputs(kept or [folder])
+        if len(files) > len(kept):
+            self._write(
+                "input_truncated",
+                folder=_text_of(folder),
+                recorded=len(kept),
+                left_out=len(files) - len(kept),
+            )
 
     def record_outputs(self, paths: Iterable[Any]) -> None:
         """Record what the action produced. A path already recorded adds nothing."""
@@ -584,6 +594,20 @@ def _ignoring_failure(action: Callable[[], None]) -> None:
         action()
     except Exception:
         pass
+
+
+def _files_in(folder: Any, suffixes: tuple[str, ...], recursive: bool) -> list[str]:
+    """List file paths by directory entry alone, so large folders cost no stat per file."""
+    files: list[str] = []
+    for directory, _, names in os.walk(Path(folder).expanduser()):
+        files.extend(
+            os.path.join(directory, name)
+            for name in names
+            if not name.startswith("~$") and (not suffixes or os.path.splitext(name)[1].lower() in suffixes)
+        )
+        if not recursive:
+            break
+    return sorted(files)
 
 
 def _as_list(value: Any) -> list[Any]:
