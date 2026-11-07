@@ -2,6 +2,10 @@
 
 ## Agent skills
 
+### Running tests
+
+Fast Run and Full Run commands, test markers, and why test tools stay out of `uv.lock`. Read before running or adding a test: `docs/agents/testing.md`.
+
 ### Issue tracker
 
 GitHub Issues via `gh` CLI (`adamlarGit/pahang-cli`). See `docs/agents/issue-tracker.md`.

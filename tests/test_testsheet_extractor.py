@@ -515,6 +515,7 @@ def test_extract_panels_subrow_extraction() -> None:
     assert p3.photo_numbers == (200,)
 
 
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
 def test_benchmark_157_perpustakaan_awam_subrow_extraction() -> None:
     """Verify sub-row and overview photo extraction against PE 157 Perpustakaan Awam benchmark."""
@@ -580,6 +581,7 @@ def test_benchmark_157_perpustakaan_awam_subrow_extraction() -> None:
     assert p4.photo_numbers == (501, 496, 523, 506, 526)
 
 
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
 def test_benchmark_082_ssu_pam_air_kobat_subrow_extraction() -> None:
     """Verify sub-row and overview photo extraction against PE 082 SSU Pam Air Kobat benchmark."""
@@ -629,6 +631,7 @@ def test_benchmark_082_ssu_pam_air_kobat_subrow_extraction() -> None:
     assert pt_panel.has_pt_measurement is True
 
 
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
 def test_benchmark_156_ssu_wisma_mpk_subrow_extraction() -> None:
     """Verify sub-row and overview photo extraction against PE 156 SSU Wisma MPK benchmark."""
@@ -668,6 +671,7 @@ def test_benchmark_156_ssu_wisma_mpk_subrow_extraction() -> None:
     assert bs_panel.secondary_photo == 479
 
 
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
 def test_benchmark_lvdb_and_heater_and_load_amp_real_workbooks() -> None:
     """Verify LVDB naming, model extraction, and panel load/heater amp formatting across real testsheets."""

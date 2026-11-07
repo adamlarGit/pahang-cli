@@ -11,6 +11,7 @@ TAMAN_IBOL_JAYA_PATH = Path(
 )
 
 
+@pytest.mark.live_data
 def test_lepar_utara_panel_details_wiring():
     """Verify panel details extraction matches 33kV/11kV testsheet column wiring:
     - Col C: Panel Feeder No
@@ -48,6 +49,7 @@ def test_lepar_utara_panel_details_wiring():
     assert getattr(p2, "busbar_position", "") == "MAIN"
 
 
+@pytest.mark.live_data
 def test_taman_ibol_jaya_panel_details_wiring():
     """Verify panel details wiring for Taman Ibol Jaya."""
     if not TAMAN_IBOL_JAYA_PATH.exists():

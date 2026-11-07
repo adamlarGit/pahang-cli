@@ -13,7 +13,7 @@ A pull request that resolves exactly one `ready-for-agent` issue, targets the In
 _Avoid_: agent PR, fix PR
 
 **Golden Benchmark**:
-A frozen set of source inputs plus the report output and folder tree they're known to produce, used to catch differences automatically instead of by eye. Synthetic ones live in the repo (e.g. `tests/benchmarks/pe157_perpustakaan_awam`); real-site ones live in the Benchmark Vault.
+A frozen set of source inputs plus the report output and folder tree they're known to produce, used to catch differences automatically instead of by eye. Synthetic ones live in the repo; real-site ones live in the Benchmark Vault.
 _Avoid_: fixture (when you mean the whole input-and-expected-output set), snapshot
 
 **Benchmark Vault**:

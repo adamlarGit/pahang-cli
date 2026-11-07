@@ -21,6 +21,7 @@ from src.testsheet.extractor import TestsheetExtractor
 REAL_DATASET_ROOT = Path(r"\\?\C:\Users\ADAM\Documents\PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD")
 
 
+@pytest.mark.live_data
 @pytest.mark.skipif(
     not REAL_DATASET_ROOT.exists(),
     reason="Real inspection datasets not available on current environment",

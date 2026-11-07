@@ -31,7 +31,14 @@ py-modules = ["config"]
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# Test commands, and why pytest is not a dependency group: see docs/agents/testing.md.
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 norecursedirs = ["scratch"]
+addopts = "-m 'not word and not live_data'"
+strict_markers = true
+markers = [
+    "word: starts real Word or Excel",
+    "live_data: reads live project data under a real project base path",
+]

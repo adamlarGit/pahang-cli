@@ -484,10 +484,8 @@ def setup_pe157_benchmark_environment(root_dir: Path) -> tuple[ProjectEnvironmen
     return env, file_map
 
 
-def materialize_pe157_benchmark_fixture(target_dir: Path | None = None) -> Path:
-    """Materialize persistent benchmark fixture files for PE 157 on disk."""
-    if target_dir is None:
-        target_dir = Path(__file__).parent / "pe157_perpustakaan_awam"
+def materialize_pe157_benchmark_fixture(target_dir: Path) -> Path:
+    """Materialize benchmark fixture files for PE 157 into target_dir."""
     target_dir = Path(target_dir)
 
     ts_path = target_dir / "157. PERPUSTAKAAN AWAM(VCB).xlsx"

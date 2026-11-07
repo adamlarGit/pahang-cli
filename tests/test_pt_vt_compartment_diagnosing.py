@@ -130,6 +130,7 @@ def test_switchgear_scan_adapter_pt_reading_empty_no_breaker_leakage():
     assert panel_ctx["tev"]["ppc"] in ("", "-")
 
 
+@pytest.mark.live_data
 def test_lynas_reference_vt_chamber_prpd_resolution():
     """Verify reference Lynas survey data resolves Panel 3 and Panel 7 PT COMPARTMENT to VT Chamber graphs."""
     raw_us_dir = Path(
@@ -161,6 +162,7 @@ def test_lynas_reference_vt_chamber_prpd_resolution():
     assert g7.name == "GIS_33KV_2S5_CONSUMER_2_VT_CHAMBER_US.png"
 
 
+@pytest.mark.live_data
 def test_ppu_parser_pt_readings_extraction():
     """Ensure 33kV testsheet parser extracts PT readings from row r+3 into SwitchgearPanelSpec."""
     from src.testsheet.parsers.ppu import PpuTestsheetParser

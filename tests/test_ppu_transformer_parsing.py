@@ -395,6 +395,7 @@ def test_extract_tx_sheet_four_power_transformers(tmp_path: Path) -> None:
     assert local_tx.rating_kva == "500kVA"
 
 
+@pytest.mark.live_data
 def test_extract_tx_sheet_real_field_workbook() -> None:
     """Verify parsing against the real field testsheet if present in environment."""
     real_path = Path(
@@ -526,6 +527,7 @@ def test_extract_tx_sheet_slot5_column_w_jengka_layout(tmp_path: Path) -> None:
     assert ltx.serial_no == "EWT63508"
 
 
+@pytest.mark.live_data
 def test_extract_tx_sheet_candidate_real_field_workbooks() -> None:
     """Verify extraction of Slot 5 local transformer model across all candidate real field testsheets (Ticket #132)."""
     candidates = [

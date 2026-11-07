@@ -34,6 +34,8 @@ from src.full_report.slicer import (  # noqa: E402
     _slice_range_to_doc,
 )
 
+pytestmark = pytest.mark.word
+
 STATION = "TEST STATION"
 
 

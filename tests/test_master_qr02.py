@@ -47,6 +47,7 @@ def test_missing_cba_file_raises_file_not_found(tmp_path: Path) -> None:
             pass
 
 
+@pytest.mark.word
 def test_exact_fl_matching(tmp_path: Path) -> None:
     cba_path = tmp_path / "test_cba.xlsx"
 
@@ -88,6 +89,7 @@ def test_exact_fl_matching(tmp_path: Path) -> None:
     wb_read.close()
 
 
+@pytest.mark.word
 def test_unmatched_fl_appends_new_row(tmp_path: Path) -> None:
     cba_path = tmp_path / "test_cba.xlsx"
 
@@ -124,6 +126,7 @@ def test_unmatched_fl_appends_new_row(tmp_path: Path) -> None:
     wb_read.close()
 
 
+@pytest.mark.word
 def test_fallback_append_new_row(tmp_path: Path) -> None:
     cba_path = tmp_path / "test_cba.xlsx"
 

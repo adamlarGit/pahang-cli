@@ -873,6 +873,7 @@ def test_compile_preserves_pristine_document_state_for_activex_isolation(tmp_pat
     assert False not in saved_state_at_open
 
 
+@pytest.mark.word
 @pytest.mark.xfail(
     reason="Ticket #112 Saved=False reverted by Ticket #125 to restore FLIR ActiveX OLE isolation per ADR 0002"
 )
@@ -911,10 +912,12 @@ def test_compile_integration_word_com_session_preserves_proxy_lifecycle(tmp_path
     assert out_file.stat().st_size > 0
 
 
+@pytest.mark.word
+@pytest.mark.live_data
 @pytest.mark.xfail(
     reason="Ticket #112 Saved=False reverted by Ticket #125 to restore FLIR ActiveX OLE isolation per ADR 0002"
 )
-def test_quick_report_workflow_33kv_substations_compilation_regression():
+def test_quick_report_workflow_33kv_substations_compilation_regression(tmp_path: Path):
     """Verify Quick Report batch workflow succeeds for 33kV substations without RPC_E_DISCONNECTED (Ticket #112)."""
     dataset_33kv = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER")
     target_date_dir = dataset_33kv / "TESTSHEET" / "JERANTUT" / "01. OCTOBER" / "22-10-2026"
@@ -924,10 +927,28 @@ def test_quick_report_workflow_33kv_substations_compilation_regression():
     if not tahan_file.exists() or not merting_file.exists():
         pytest.skip("33kV reference testsheets not available on host")
 
+    import shutil
+
     from src.project.environment import ProjectEnvironment
     from src.project.models import ProjectMetadata
     from src.project.storage import LocalWorkspaceStorage
     from src.workflows.quick_report import QuickReportWorkflow
+
+    # Work on a sandbox copy: generate() writes reports under the project base path.
+    sandbox = tmp_path / "thunder_sandbox"
+    date_rel = Path("JERANTUT") / "01. OCTOBER" / "22-10-2026"
+    for rel in (
+        Path("PYTHON"),
+        Path("templates"),
+        Path("TESTSHEET") / date_rel,
+        Path("RAW MATERIAL") / date_rel,
+    ):
+        shutil.copytree(dataset_33kv / rel, sandbox / rel)
+    # The environment reads its PRPD mode from this file when the project has one.
+    project_config = dataset_33kv / "project_config.json"
+    if project_config.exists():
+        shutil.copy2(project_config, sandbox / project_config.name)
+    target_date_dir = sandbox / "TESTSHEET" / date_rel
 
     meta = ProjectMetadata(
         key="test_pahang_33kv",
@@ -938,9 +959,9 @@ def test_quick_report_workflow_33kv_substations_compilation_regression():
         year="2026",
         cycle="CYCLE1",
         technologies=("IR", "US", "TEV"),
-        base_path=str(dataset_33kv),
+        base_path=str(sandbox),
     )
-    storage = LocalWorkspaceStorage(dataset_33kv)
+    storage = LocalWorkspaceStorage(sandbox)
     env = ProjectEnvironment(metadata=meta, storage=storage)
 
     workflow = QuickReportWorkflow()
@@ -951,6 +972,7 @@ def test_quick_report_workflow_33kv_substations_compilation_regression():
     generated_names = [p.name for p in result.generated_paths]
     assert any("KUALA TAHAN" in name for name in generated_names)
     assert any("MERTING" in name for name in generated_names)
+    assert all(p.resolve().is_relative_to(tmp_path.resolve()) for p in result.generated_paths)
 
 
 

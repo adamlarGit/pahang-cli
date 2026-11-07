@@ -29,6 +29,8 @@ PIL_Image = pytest.importorskip("PIL.Image")
 from src.full_report.defect_parser import CbmDefectHeaderParser, CbmDefectSliceMetadata  # noqa: E402
 from src.full_report.slicer import WordComDocumentSlicer  # noqa: E402
 
+pytestmark = pytest.mark.word
+
 STATION = "TEST STATION"
 OVERFLOW_ROWS = 60  # spills each summary table across several pages
 

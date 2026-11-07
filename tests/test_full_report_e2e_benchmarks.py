@@ -126,8 +126,10 @@ def verify_page_breaks_present(doc_or_path: Path | str | docx.Document) -> int:
 # Benchmark Test 1: TALAPIA (PE 5, Raub)
 # ==============================================================================
 
+@pytest.mark.word
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
-def test_e2e_benchmark_talapia_plan_and_interleaving(benchmark_env: ProjectEnvironment):
+def test_e2e_benchmark_talapia_plan_and_interleaving(benchmark_env: ProjectEnvironment, tmp_path: Path):
     """Verifies TALAPIA full report Bill of Materials plan and defect interleaving.
 
     Verifies:
@@ -147,7 +149,7 @@ def test_e2e_benchmark_talapia_plan_and_interleaving(benchmark_env: ProjectEnvir
     qr_path = wf._resolve_quick_report_path(benchmark_env, pkg)
     assert qr_path is not None and qr_path.is_file()
 
-    plan = wf._build_station_plan(pkg, benchmark_env, quick_report_path=qr_path)
+    plan = wf._build_station_plan(pkg, benchmark_env, quick_report_path=qr_path, temp_dir=tmp_path)
     part_names = [p.part_name for p in plan.parts]
     part_types = [p.part_type for p in plan.parts]
 
@@ -204,8 +206,10 @@ def test_e2e_benchmark_talapia_plan_and_interleaving(benchmark_env: ProjectEnvir
 # Benchmark Test 2: CENDERAWASIH NO.1 (PE 179, Kuantan)
 # ==============================================================================
 
+@pytest.mark.word
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
-def test_e2e_benchmark_cenderawasih_fuse_compartment_replacement(benchmark_env: ProjectEnvironment):
+def test_e2e_benchmark_cenderawasih_fuse_compartment_replacement(benchmark_env: ProjectEnvironment, tmp_path: Path):
     """Verifies CENDERAWASIH NO.1 TX fuse compartment defect replaces panel 4 scan page.
 
     Verifies:
@@ -224,7 +228,7 @@ def test_e2e_benchmark_cenderawasih_fuse_compartment_replacement(benchmark_env: 
     qr_path = wf._resolve_quick_report_path(benchmark_env, pkg)
     assert qr_path is not None and qr_path.is_file()
 
-    plan = wf._build_station_plan(pkg, benchmark_env, quick_report_path=qr_path)
+    plan = wf._build_station_plan(pkg, benchmark_env, quick_report_path=qr_path, temp_dir=tmp_path)
     part_names = [p.part_name for p in plan.parts]
     part_types = [p.part_type for p in plan.parts]
 
@@ -258,8 +262,10 @@ def test_e2e_benchmark_cenderawasih_fuse_compartment_replacement(benchmark_env: 
 # Benchmark Test 3: TELEKOM TANAH PUTIH (PE 144, Kuantan)
 # ==============================================================================
 
+@pytest.mark.word
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
-def test_e2e_benchmark_telekom_tanah_putih_tev_interleaving(benchmark_env: ProjectEnvironment):
+def test_e2e_benchmark_telekom_tanah_putih_tev_interleaving(benchmark_env: ProjectEnvironment, tmp_path: Path):
     """Verifies TELEKOM TANAH PUTIH TEV defect pages appended behind each panel scan page.
 
     Verifies:
@@ -281,7 +287,7 @@ def test_e2e_benchmark_telekom_tanah_putih_tev_interleaving(benchmark_env: Proje
     qr_path = wf._resolve_quick_report_path(benchmark_env, pkg)
     assert qr_path is not None and qr_path.is_file()
 
-    plan = wf._build_station_plan(pkg, benchmark_env, quick_report_path=qr_path)
+    plan = wf._build_station_plan(pkg, benchmark_env, quick_report_path=qr_path, temp_dir=tmp_path)
     part_names = [p.part_name for p in plan.parts]
 
     # Verify SWG overview substituted
@@ -322,6 +328,7 @@ def test_e2e_benchmark_telekom_tanah_putih_tev_interleaving(benchmark_env: Proje
 # Benchmark Test 4: ActiveX Preserved & Layout Invariants (ADR 0002)
 # ==============================================================================
 
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
 def test_e2e_benchmark_flir_activex_and_layout_invariants():
     """Verifies compiled benchmark docx deliverables satisfy ADR 0002 layout invariants.
@@ -356,6 +363,8 @@ def test_e2e_benchmark_flir_activex_and_layout_invariants():
 # Benchmark Test 5: Stage 2 Post-Processing PDF Export & Testsheet Merge
 # ==============================================================================
 
+@pytest.mark.word
+@pytest.mark.live_data
 @pytest.mark.skipif(not REAL_DATASET_ROOT.exists(), reason="Real inspection dataset root not found")
 def test_e2e_benchmark_postprocessing_pdf_export_and_merge(
     benchmark_env: ProjectEnvironment,

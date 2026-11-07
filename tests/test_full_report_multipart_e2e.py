@@ -1,7 +1,7 @@
 """End-to-End Multi-Part Full Report Verification & Regression Suite (Ticket #58).
 
 Validates:
-1. Synthetic VCB benchmark fixture in tests/benchmarks/pe157_perpustakaan_awam/:
+1. Synthetic VCB benchmark fixture materialized into a temp folder:
    - 5-panel TAMCO VCB 11kV lineup with transition bay, PT on panel 4, 1 transformer, 1 feeder pillar, and 1 inline CBM defect page.
 2. CLI dry-run telemetry:
    - _print_full_report_dry_run_telemetry displays [Multi-part: X files] for multi-part substations.
@@ -76,9 +76,9 @@ from tests.benchmarks.pe157_fixture import (
 class TestSyntheticVcbBenchmarkFixture:
     """Validate PE 157 PERPUSTAKAAN AWAM synthetic benchmark fixture."""
 
-    def test_materialized_fixture_files_and_models(self) -> None:
-        """Verify persistent benchmark files exist and extract 5-panel VCB topology."""
-        fixture_dir = materialize_pe157_benchmark_fixture()
+    def test_materialized_fixture_files_and_models(self, tmp_path: Path) -> None:
+        """Verify materialized benchmark files exist and extract 5-panel VCB topology."""
+        fixture_dir = materialize_pe157_benchmark_fixture(tmp_path)
         assert fixture_dir.is_dir()
 
         # 1. Testsheet Excel workbook

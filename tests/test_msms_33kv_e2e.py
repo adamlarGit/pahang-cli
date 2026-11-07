@@ -582,6 +582,7 @@ def test_msms_33kv_actions_pipeline_presentation_adapters(synthetic_33kv_env: Pr
         assert "CSV files processed: 1, Rows populated: 1" in out
 
 
+@pytest.mark.live_data
 def test_dry_run_thunder_cycle_4_benchmark_replica(tmp_path: Path) -> None:
     """Dry-run verification against an isolated sandbox replica of thunder_cycle_4_2026_4 benchmark dataset.
 
@@ -779,6 +780,7 @@ def test_msms_33kv_work_order_mapping_integrity(synthetic_33kv_env: ProjectEnvir
     assert pe_wos["CCHL/MPU/G00001"] == "W1616896"
 
 
+@pytest.mark.live_data
 def test_msms_33kv_cli_execution_dry_run_active_project(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     """Verify that CLI execution dry-run against the active project replica executes cleanly without errors."""
     repo = JsonFileProjectRepository()
