@@ -414,7 +414,7 @@ class FullReportWorkflow:
                 current_run().mark_failed()
             else:
                 errors.append(f"No testsheet packages found for target: {target}")
-                current_run().record_warning(errors[0])
+                current_run().record_failure(errors[0])
             return FullReportBatchResult(
                 total_stations=0,
                 succeeded_count=0,

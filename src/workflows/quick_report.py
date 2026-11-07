@@ -122,7 +122,7 @@ class QuickReportWorkflow:
                 current_run().mark_failed()
             elif not inspection.targets:
                 errors = (f"No testsheet packages found for target: {target}",)
-                current_run().record_warning(errors[0])
+                current_run().record_failure(errors[0])
             return QuickReportResult(
                 reports_generated=0,
                 generated_paths=(),

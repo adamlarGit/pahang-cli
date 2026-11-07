@@ -100,7 +100,6 @@ class Run:
         self._lock = threading.RLock()
         self._captures: list[Any] = []
         self._error_messages: set[str] = set()
-        self._warning_messages: set[str] = set()
         self._requests: dict[str, dict[str, Any]] = {}
         self._inputs_seen: set[str] = set()
         self._outputs_seen: set[str] = set()
@@ -188,9 +187,7 @@ class Run:
             pass
 
     def record_warning(self, message: Any) -> None:
-        text = _text_of(message)
-        self._warning_messages.add(text)
-        self._write("warning", message=text)
+        self._write("warning", message=_text_of(message))
 
     def record_error(self, message: Any, exc: BaseException | None = None) -> None:
         """Record that one item failed while the action carried on.
@@ -291,13 +288,8 @@ class Run:
                 self.record_outputs(_as_list(getattr(result, field, None)))
             for warning in _as_list(getattr(result, "warnings", None)):
                 self.record_warning(warning)
-            # A message the workflow already called a warning stays one. The workflow says
-            # when its whole job failed, through mark_failed() or record_failure().
-            errors = [
-                error
-                for error in _as_list(getattr(result, "errors", None))
-                if _text_of(error) not in self._warning_messages
-            ]
+            # The workflow says when its whole job failed, through mark_failed() or record_failure().
+            errors = _as_list(getattr(result, "errors", None))
             for error in errors:
                 self.record_error(error)
             failed_count = getattr(result, "failed_count", 0)

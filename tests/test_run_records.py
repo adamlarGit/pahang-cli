@@ -2520,34 +2520,53 @@ def test_swallowed_office_start_fails_the_test_at_teardown(tmp_path) -> None:
     assert "1 error" in completed.stdout
 
 
-def test_quick_report_with_nothing_found_and_no_errors_is_not_a_failure(locations, capsys) -> None:
-    inspection = QuickReportInspection(targets=(), missing_templates=(), warnings=(), errors=())
+def test_quick_report_unknown_fl_says_failed_so_the_run_is_failed(locations, capsys) -> None:
+    """The workflow's error text also appears in the inspection's warnings, as it does for real."""
+    message = "No testsheet packages found for target: ['FL1']"
+    inspection = QuickReportInspection(targets=(), missing_templates=(), warnings=(message,), errors=())
+    action = QuickReportAction("Generate Quick Report")
 
-    def action(environment) -> object:
-        with patch.object(QuickReportWorkflow, "_plan", return_value=(inspection, [])):
-            return QuickReportWorkflow().generate(["FL1"], environment)
-
-    run_project_action(action, locations.environment)
+    with (
+        patch("src.project_workflow_actions.cli_selectors.select_one", return_value="manual"),
+        patch("builtins.input", return_value="FL1"),
+        patch.object(QuickReportWorkflow, "_plan", return_value=(inspection, [])),
+    ):
+        _run_project_action_object(action, locations)
 
     entries = read_entries(locations.project_logs)
-    assert entries[-1]["status"] == "completed"
-    assert not entries_of(entries, "error")
-    assert "No testsheet packages found" in entries_of(entries, "warning")[0]["message"]
-    assert "Run Record:" not in capsys.readouterr().out
+    assert entries[-1]["status"] == "failed"
+    assert [entry["message"] for entry in entries_of(entries, "error")] == [message]
+    console = capsys.readouterr().out
+    assert f"[FAILED] {message}" in console
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in console
 
 
-def test_full_report_generate_with_nothing_found_and_no_errors_is_not_a_failure(locations, capsys) -> None:
+def test_full_report_generate_finding_nothing_is_a_failed_run(locations, capsys) -> None:
+    message = "No testsheet packages found for target: ['FL1']"
+
     def action(environment) -> object:
         with (
             patch.object(FullReportWorkflow, "_validate_target_existence"),
-            patch.object(FullReportWorkflow, "_discover_packages", return_value=([], [], [])),
+            patch.object(FullReportWorkflow, "_discover_packages", return_value=([], [message], [])),
         ):
             return FullReportWorkflow().generate(["FL1"], environment)
 
     run_project_action(action, locations.environment)
 
-    assert read_entries(locations.project_logs)[-1]["status"] == "completed"
-    assert "Run Record:" not in capsys.readouterr().out
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    assert [entry["message"] for entry in entries_of(entries, "error")] == [message]
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_error_and_warning_with_the_same_text_both_count(locations) -> None:
+    result = QuickReportResult(reports_generated=1, warnings=("same text",), errors=("same text",))
+
+    run_project_action(lambda environment: result, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed_with_errors"
+    assert [entry["message"] for entry in entries_of(entries, "error")] == ["same text"]
 
 
 def test_request_recorded_again_with_the_same_values_adds_nothing(locations) -> None:
