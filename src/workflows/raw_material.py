@@ -950,6 +950,8 @@ class RawMaterialWorkflow:
             warnings,
             errors,
         )
+        if result.errors and not (result.ir_copied_count or result.dg_copied_count or result.us_tev_extracted_count):
+            current_run().mark_failed()
         return result
 
     @staticmethod

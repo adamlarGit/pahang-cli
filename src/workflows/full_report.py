@@ -410,8 +410,11 @@ class FullReportWorkflow:
         packages, warnings, errors = self._discover_packages(target, environment, station=station)
         current_run().record_inputs(package.testsheet_path for package in packages)
         if not packages:
-            if not errors:
+            if errors:
+                current_run().mark_failed()
+            else:
                 errors.append(f"No testsheet packages found for target: {target}")
+                current_run().record_warning(errors[0])
             return FullReportBatchResult(
                 total_stations=0,
                 succeeded_count=0,
@@ -516,6 +519,8 @@ class FullReportWorkflow:
         final_station_results = tuple(r for r in ordered_results if r is not None)
         succeeded_stations = sum(1 for r in final_station_results if r.is_success)
         failed_stations = len(packages) - succeeded_stations
+        if not succeeded_stations:
+            current_run().mark_failed()
 
         if progress_sink:
             progress_sink(

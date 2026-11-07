@@ -293,6 +293,8 @@ def batch_replace_pce_images(
     print(f"Successfully processed: {processed_count} files")
     if failed_count > 0:
         print(f"Failed: {failed_count} files")
+        if not processed_count:
+            current_run().mark_failed()
     return processed_count, failed_count
 
 

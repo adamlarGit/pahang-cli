@@ -34,6 +34,7 @@ def remove_desktop_ini_files(target_directory: str | Path) -> int:
             logging.warning("PowerShell script execution encountered issue, falling back to Python removal: %s", exc)
 
     removed_count = 0
+    failed_count = 0
     for root, _, files in os.walk(target_path):
         for file in files:
             if file.lower() == "desktop.ini":
@@ -44,8 +45,12 @@ def remove_desktop_ini_files(target_directory: str | Path) -> int:
                     removed_count += 1
                     print(f"  ✓ Removed: {full_path}")
                 except Exception as exc:
+                    failed_count += 1
                     current_run().record_error(f"Failed to remove {full_path}: {exc}", exc)
                     print(f"  ❌ Failed to remove {full_path}: {exc}")
+
+    if failed_count and not removed_count:
+        current_run().mark_failed()
 
     if removed_count > 0:
         print(f"\n✓ Successfully removed {removed_count} 'desktop.ini' file(s).")

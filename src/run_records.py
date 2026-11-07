@@ -15,8 +15,8 @@ still leaves everything up to that point. A record with no ``run_finish`` entry 
 interrupted, crashed or hung.
 
 Every line is one JSON object with a ``type`` and a ``time``. The types are ``run_start``,
-``environment`` (app, git, Python, Word and Excel versions), ``request``, ``input`` (path,
-size, modified), ``step_start``, ``step_finish``, ``log``, ``progress``, ``console``,
+``environment`` (app, git, Python, Word and Excel versions), ``request``, ``request_update``
+(what changed in a request already recorded), ``input`` (path, size, modified), ``step_start``, ``step_finish``, ``log``, ``progress``, ``console``,
 ``warning``, ``error`` (with ``traceback`` for an exception), ``cancelled``, ``result``,
 ``output`` and ``run_finish``. Its ``status`` is ``completed``, ``completed_with_errors``
 (some items failed), ``failed`` (the whole job failed) or ``cancelled`` (the operator cancelled
@@ -67,21 +67,6 @@ _MODULE_LEVEL_LOGGING_CODE = {
     for function in (logging.debug, logging.info, logging.warning, logging.error, logging.critical, logging.log)
 }
 _MAX_DESCRIBE_DEPTH = 12
-# What a result reports having done. All zero, alongside errors, means the whole job failed.
-_RESULT_SUCCESS_FIELDS = (
-    "reports_generated",
-    "succeeded_count",
-    "processed_packages",
-    "processed_count",
-    "records_updated",
-    "substations_count",
-    "files_processed",
-    "files_ingested",
-    "csv_files_processed",
-    "total_graphs",
-    "total_wavs_exported",
-    "total_sounds_embedded",
-)
 _RESULT_OUTPUT_FIELDS = (
     "output_path",
     "output_pdf_path",
@@ -115,6 +100,8 @@ class Run:
         self._lock = threading.RLock()
         self._captures: list[Any] = []
         self._error_messages: set[str] = set()
+        self._warning_messages: set[str] = set()
+        self._requests: dict[str, dict[str, Any]] = {}
         self._inputs_seen: set[str] = set()
         self._outputs_seen: set[str] = set()
 
@@ -136,10 +123,25 @@ class Run:
         """Record what was asked for. Unserialisable parts are recorded by a description.
 
         Any path in a request, other than its output paths, is also recorded as an input.
+
+        An action can record what the operator selected, and its workflow can record the
+        full request later. A dict request with the same ``workflow`` as an earlier one adds
+        only what changed, as a ``request_update``, or nothing if nothing did.
         """
         if self._file is None:
             return
-        self._write("request", request=_describe_safely(request))
+        described = _describe_safely(request)
+        workflow = described.get("workflow") if isinstance(described, dict) else None
+        earlier = self._requests.get(workflow) if isinstance(workflow, str) else None
+        if earlier is None:
+            self._write("request", request=described)
+            if isinstance(workflow, str):
+                self._requests[workflow] = dict(described)
+        else:
+            changes = {key: value for key, value in described.items() if earlier.get(key) != value}
+            if changes:
+                self._write("request_update", workflow=workflow, changes=changes)
+                earlier.update(changes)
         self.record_inputs(_input_paths_in(request))
 
     def record_inputs(self, paths: Iterable[Any]) -> None:
@@ -186,7 +188,9 @@ class Run:
             pass
 
     def record_warning(self, message: Any) -> None:
-        self._write("warning", message=_text_of(message))
+        text = _text_of(message)
+        self._warning_messages.add(text)
+        self._write("warning", message=text)
 
     def record_error(self, message: Any, exc: BaseException | None = None) -> None:
         """Record that one item failed while the action carried on.
@@ -203,6 +207,10 @@ class Run:
         """
         self._mark_problem("failed")
         self._write_error(message, exc)
+
+    def mark_failed(self) -> None:
+        """Say that the errors already recorded add up to the whole job failing."""
+        self._mark_problem("failed")
 
     @contextmanager
     def step(self, name: str) -> Iterator[None]:
@@ -256,6 +264,8 @@ class Run:
             _ignoring_failure(capture.start)
 
     def _mark_problem(self, status: str) -> None:
+        if self._file is None and self.path is None:
+            return
         self.failed = True
         if self._status != "failed":
             self._status = status
@@ -281,15 +291,23 @@ class Run:
                 self.record_outputs(_as_list(getattr(result, field, None)))
             for warning in _as_list(getattr(result, "warnings", None)):
                 self.record_warning(warning)
+            # A message the workflow already called a warning stays one. The workflow says
+            # when its whole job failed, through mark_failed() or record_failure().
             errors = [
-                *_as_list(getattr(result, "errors", None)),
-                *_as_list(getattr(result, "failed_packages", None)),
+                error
+                for error in _as_list(getattr(result, "errors", None))
+                if _text_of(error) not in self._warning_messages
             ]
             for error in errors:
                 self.record_error(error)
             failed_count = getattr(result, "failed_count", 0)
-            if errors or (isinstance(failed_count, int) and failed_count > 0):
-                self._mark_problem("failed" if _nothing_succeeded(result) else "completed_with_errors")
+            # Whoever filled failed_packages has recorded those failures, with tracebacks.
+            if (
+                errors
+                or _as_list(getattr(result, "failed_packages", None))
+                or (isinstance(failed_count, int) and failed_count > 0)
+            ):
+                self._mark_problem("completed_with_errors")
         except Exception:
             pass
 
@@ -562,17 +580,6 @@ def _as_list(value: Any) -> list[Any]:
     if isinstance(value, (list, tuple, set, frozenset)):
         return list(value)
     return [value] if isinstance(value, os.PathLike) else []
-
-
-def _nothing_succeeded(result: Any) -> bool:
-    counts = []
-    for field in _RESULT_SUCCESS_FIELDS:
-        value = getattr(result, field, None)
-        if isinstance(value, int):
-            counts.append(value)
-        elif isinstance(value, (list, tuple)):
-            counts.append(len(value))
-    return bool(counts) and sum(counts) == 0
 
 
 def _traceback_of(exc: BaseException) -> str:

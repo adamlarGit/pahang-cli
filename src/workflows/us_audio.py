@@ -475,6 +475,9 @@ class UsAudioWorkflow:
                 )
                 summary.errors.append(err_msg)
 
+        if candidates and len(summary.errors) >= len(candidates):
+            current_run().mark_failed()
+
         summary.elapsed_time = time.perf_counter() - start_time
         return summary
 

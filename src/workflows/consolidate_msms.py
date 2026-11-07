@@ -398,6 +398,8 @@ class ConsolidateMsmsWorkflow:
         current_run().record_outputs([data_msms_path])
 
         result = self.auditor.audit(plan)
+        if result.errors and not result.files_processed:
+            current_run().mark_failed()
 
         if req.progress_sink:
             req.progress_sink(

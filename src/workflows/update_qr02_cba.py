@@ -571,6 +571,8 @@ class UpdateQr02CbaWorkflow:
 
         # 6. Auditor (Verify and return result)
         result = self.auditor.audit(environment, plan, load_result)
+        if result.errors and not result.records_updated:
+            current_run().mark_failed()
 
         if request.progress_sink:
             request.progress_sink(

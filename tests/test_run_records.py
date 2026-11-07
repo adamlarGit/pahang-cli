@@ -35,6 +35,7 @@ from src.cli_session import CliSession
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
+from src.quick_report.compiler import FakeDocumentCompiler
 from src.project_workflow_actions import (
     ConsolidateMsmsAction,
     EnrichMsmsAction,
@@ -59,8 +60,10 @@ from src.workflows.enrich_msms import EnrichMsmsWorkflow
 from src.workflows.full_report import FullReportInspection, FullReportWorkflow
 from src.workflows.full_report_postprocessing import (
     FullReportPostProcessingInspection,
+    FullReportPostProcessingResult,
     FullReportPostProcessingWorkflow,
 )
+from src.workflows.generate_testsheet_folder import GenerateTestsheetFolderStructureWorkflow
 from src.workflows.ingest_msms_csv import IngestMsmsCsvWorkflow
 from src.workflows.models import (
     ConsolidateMsmsRequest,
@@ -68,6 +71,7 @@ from src.workflows.models import (
     EnrichMsmsRequest,
     EnrichMsmsResult,
     GenerateTestsheetFolderRequest,
+    GenerateTestsheetFolderResult,
     IngestMsmsCsvRequest,
     IngestMsmsCsvResult,
     PopulateDataMsmsRequest,
@@ -76,6 +80,7 @@ from src.workflows.models import (
     PopulateTotalPeRequest,
     PopulateTotalPeResult,
     PostProcessingMode,
+    PostProcessingFailure,
     PostProcessingRequest,
     PostProcessingSummary,
     PropagateWoRequest,
@@ -1350,18 +1355,30 @@ def test_error_also_returned_in_the_result_is_recorded_once(locations) -> None:
 
 
 @pytest.mark.parametrize(
-    "result, status",
+    "result",
     [
-        (QuickReportResult(reports_generated=2, errors=("PE 3 failed",)), "completed_with_errors"),
-        (QuickReportResult(reports_generated=0, errors=("PE 3 failed",)), "failed"),
-        (ConsolidateMsmsResult(files_processed=0, errors=("bad xls",)), "failed"),
-        (ConsolidateMsmsResult(files_processed=2, errors=("bad xls",)), "completed_with_errors"),
+        QuickReportResult(reports_generated=2, errors=("PE 3 failed",)),
+        QuickReportResult(reports_generated=0, errors=("PE 3 failed",)),
+        ConsolidateMsmsResult(files_processed=0, errors=("bad xls",)),
     ],
 )
-def test_batch_status_says_whether_anything_succeeded(locations, result, status) -> None:
+def test_errors_in_a_result_alone_never_mean_the_whole_job_failed(locations, result) -> None:
+    """Only the workflow knows that. The module doesn't guess from count fields."""
     run_project_action(lambda environment: result, locations.environment)
 
-    assert read_entries(locations.project_logs)[-1]["status"] == status
+    assert read_entries(locations.project_logs)[-1]["status"] == "completed_with_errors"
+
+
+def test_mark_failed_is_not_downgraded_and_writes_no_entry_of_its_own(locations) -> None:
+    def action(environment) -> QuickReportResult:
+        current_run().mark_failed()
+        return QuickReportResult(reports_generated=1, errors=("PE 3 failed",))
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    assert [entry["message"] for entry in entries_of(entries, "error")] == ["PE 3 failed"]
 
 
 def test_combine_pdfs_hard_stop_is_a_failed_run(locations, monkeypatch, capsys) -> None:
@@ -1535,6 +1552,27 @@ def test_desktop_ini_that_cannot_be_removed_is_recorded(locations, utility_env, 
     ):
         run_registered_utility("Remove desktop.ini files (recursive)")
 
+    assert_problem_recorded(locations.fallback_logs, "failed", "locked", capsys)
+
+
+def test_desktop_ini_with_some_removed_has_errors(locations, utility_env, tmp_path, capsys) -> None:
+    folder = tmp_path / "scan"
+    (folder / "locked").mkdir(parents=True)
+    (folder / "free").mkdir()
+    (folder / "locked" / "desktop.ini").write_text("x", encoding="utf-8")
+    (folder / "free" / "desktop.ini").write_text("x", encoding="utf-8")
+
+    def chmod(path, mode):
+        if Path(path).parent.name == "locked":
+            raise PermissionError("locked")
+
+    with (
+        patch("src.cli_selectors.prompt_directory_path", return_value=folder),
+        patch("src.remove_desktop_ini_workflow.subprocess.run", return_value=SimpleNamespace(returncode=1)),
+        patch("src.remove_desktop_ini_workflow.os.chmod", chmod),
+    ):
+        run_registered_utility("Remove desktop.ini files (recursive)")
+
     assert_problem_recorded(locations.fallback_logs, "completed_with_errors", "locked", capsys)
 
 
@@ -1568,6 +1606,10 @@ def test_quick_report_that_cannot_start_is_a_failed_run(locations, capsys, inspe
 
     entries = read_entries(locations.project_logs)
     assert entries[-1]["status"] == "failed"
+    requests = entries_of(entries, "request")
+    assert [request["request"] for request in requests] == [
+        {"workflow": "Quick Report", "target": ["07-11-2026"]}
+    ]
     captured = capsys.readouterr().out
     assert printed in captured
     assert str(next(locations.project_logs.glob("*.jsonl"))) in captured
@@ -1587,25 +1629,66 @@ def test_full_report_with_nothing_to_process_is_a_failed_run(locations, capsys) 
     with patch("src.project_workflow_actions._prompt_full_report_selection", return_value=["FL1"]):
         _run_project_action_object(action, locations)
 
-    assert read_entries(locations.project_logs)[-1]["status"] == "failed"
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    assert [entry["request"] for entry in entries_of(entries, "request")] == [
+        {"workflow": "Full Report", "target": ["FL1"]}
+    ]
     captured = capsys.readouterr().out
     assert "No substations discovered to process." in captured
     assert str(next(locations.project_logs.glob("*.jsonl"))) in captured
 
 
-def test_postprocessing_with_nothing_to_process_is_a_failed_run(locations, capsys) -> None:
+def test_full_report_with_nothing_found_and_no_errors_is_not_a_failure(locations, capsys) -> None:
+    workflow = MagicMock()
+    workflow.inspect.return_value = FullReportInspection(targets=(), warnings=(), errors=())
+    action = FullReportAction("Generate Full Reports", workflow=workflow)
+
+    with patch("src.project_workflow_actions._prompt_full_report_selection", return_value=["FL1"]):
+        _run_project_action_object(action, locations)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    assert entries_of(entries, "warning")
+    assert entries_of(entries, "request")
+    captured = capsys.readouterr().out
+    assert "No substations discovered to process." in captured
+    assert "Run Record:" not in captured
+
+
+def test_postprocessing_with_nothing_found_and_no_errors_is_not_a_failure(locations, capsys) -> None:
     workflow = MagicMock()
     workflow.inspect.return_value = FullReportPostProcessingInspection(targets=(), warnings=(), errors=())
+    workflow.locate_full_reports_for_fls.return_value = ([], [])
     action = FullReportPostProcessingAction("Post-Process Full Reports", workflow=workflow)
 
     with patch("src.project_workflow_actions._prompt_full_report_selection", return_value=["FL1"]):
-        workflow.locate_full_reports_for_fls.return_value = ([], [])
         _run_project_action_object(action, locations)
 
-    assert read_entries(locations.project_logs)[-1]["status"] == "failed"
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    assert not entries_of(entries, "error")
+    assert [entry["request"] for entry in entries_of(entries, "request")] == [
+        {"workflow": "Full Report Post-Processing", "target": ["FL1"]}
+    ]
     captured = capsys.readouterr().out
     assert "No Full Report documents discovered for post-processing." in captured
-    assert str(next(locations.project_logs.glob("*.jsonl"))) in captured
+    assert "Run Record:" not in captured
+
+
+def test_postprocessing_discovery_errors_are_a_failed_run_with_the_request(locations, capsys) -> None:
+    workflow = MagicMock()
+    workflow.inspect.return_value = FullReportPostProcessingInspection(targets=(), warnings=(), errors=("scan broke",))
+    workflow.locate_full_reports_for_fls.return_value = ([], [])
+    action = FullReportPostProcessingAction("Post-Process Full Reports", workflow=workflow)
+
+    with patch("src.project_workflow_actions._prompt_full_report_selection", return_value=["FL1"]):
+        _run_project_action_object(action, locations)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    assert entries_of(entries, "request")[0]["request"]["target"] == ["FL1"]
+    assert str(next(locations.project_logs.glob("*.jsonl"))) in capsys.readouterr().out
 
 
 def test_pipeline_failed_substation_keeps_traceback_off_the_console(locations, tmp_path, capfd) -> None:
@@ -1636,8 +1719,9 @@ def test_pipeline_failed_substation_keeps_traceback_off_the_console(locations, t
 
     entries = read_entries(locations.project_logs)
     assert entries[-1]["status"] == "failed"
-    tracebacks = [e["traceback"] for e in entries_of(entries, "error") if "traceback" in e]
-    assert any("signature stamp broke" in text for text in tracebacks)
+    errors = entries_of(entries, "error")
+    assert len(errors) == 1, errors
+    assert "signature stamp broke" in errors[0]["traceback"]
     captured = capfd.readouterr()
     assert "Traceback" not in captured.out + captured.err
 
@@ -2434,3 +2518,378 @@ def test_swallowed_office_start_fails_the_test_at_teardown(tmp_path) -> None:
     assert "A test tried to start real Word or Excel" in completed.stdout
     assert "1 passed" in completed.stdout
     assert "1 error" in completed.stdout
+
+
+def test_quick_report_with_nothing_found_and_no_errors_is_not_a_failure(locations, capsys) -> None:
+    inspection = QuickReportInspection(targets=(), missing_templates=(), warnings=(), errors=())
+
+    def action(environment) -> object:
+        with patch.object(QuickReportWorkflow, "_plan", return_value=(inspection, [])):
+            return QuickReportWorkflow().generate(["FL1"], environment)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    assert not entries_of(entries, "error")
+    assert "No testsheet packages found" in entries_of(entries, "warning")[0]["message"]
+    assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_full_report_generate_with_nothing_found_and_no_errors_is_not_a_failure(locations, capsys) -> None:
+    def action(environment) -> object:
+        with (
+            patch.object(FullReportWorkflow, "_validate_target_existence"),
+            patch.object(FullReportWorkflow, "_discover_packages", return_value=([], [], [])),
+        ):
+            return FullReportWorkflow().generate(["FL1"], environment)
+
+    run_project_action(action, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "completed"
+    assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_request_recorded_again_with_the_same_values_adds_nothing(locations) -> None:
+    def action(environment) -> None:
+        current_run().record_request({"workflow": "Quick Report", "target": ["FL1"]})
+        current_run().record_request({"workflow": "Quick Report", "target": ["FL1"], "station": None})
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert len(entries_of(entries, "request")) == 1
+    assert not entries_of(entries, "request_update")
+
+
+def test_later_details_of_a_request_are_recorded_as_an_update(locations) -> None:
+    def action(environment) -> None:
+        current_run().record_request({"workflow": "Full Report", "target": ["FL1"]})
+        current_run().record_request({"workflow": "Full Report", "target": ["FL1"], "station": ["PE ONE"]})
+        current_run().record_request({"workflow": "Full Report", "target": ["FL1"], "station": ["PE ONE"]})
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert len(entries_of(entries, "request")) == 1
+    updates = entries_of(entries, "request_update")
+    assert [(update["workflow"], update["changes"]) for update in updates] == [("Full Report", {"station": ["PE ONE"]})]
+
+
+def test_selected_target_then_generate_gives_one_request_and_one_update(locations) -> None:
+    """The whole Quick Report action: selection recorded first, then the chosen stations."""
+    target_item = SimpleNamespace(station="KUANTAN")
+    other_item = SimpleNamespace(station="TEMERLOH")
+    inspection = QuickReportInspection(targets=(target_item, other_item), missing_templates=(), warnings=(), errors=())
+    empty = QuickReportInspection(targets=(), missing_templates=(), warnings=(), errors=())
+    action = QuickReportAction("Generate Quick Report")
+    prompts = _quick_report_prompts()
+    with (
+        prompts[0], prompts[1],
+        patch("src.project_workflow_actions.cli_selectors.select_multiple", return_value=["KUANTAN"]),
+        patch.object(QuickReportWorkflow, "inspect", return_value=inspection),
+        patch.object(QuickReportWorkflow, "_plan", return_value=(empty, [])),
+    ):
+        _run_project_action_object(action, locations)
+
+    entries = read_entries(locations.project_logs)
+    assert len(entries_of(entries, "request")) == 1
+    assert entries_of(entries, "request_update")[0]["changes"] == {"station": ["KUANTAN"]}
+
+
+def _quick_report_workflow_with_loads(load_results: list[object]) -> QuickReportWorkflow:
+    """Word can't start here: the compiler has no session and the composer is a stub."""
+    workflow = QuickReportWorkflow()
+    workflow._compiler = MagicMock(spec=[])
+    workflow._composer = MagicMock()
+    workflow._composer.load.side_effect = load_results
+    return workflow
+
+
+def _run_quick_report_plans(locations, load_results: list[object]) -> None:
+    plans = [
+        SimpleNamespace(package=SimpleNamespace(testsheet_path=locations.project / f"{index}.xlsx", date_str=""))
+        for index in range(len(load_results))
+    ]
+    inspection = QuickReportInspection(targets=(), missing_templates=(), warnings=(), errors=())
+    workflow = _quick_report_workflow_with_loads(load_results)
+
+    def action(environment) -> object:
+        with (
+            patch.object(QuickReportWorkflow, "_plan", return_value=(inspection, plans)),
+            patch.object(QuickReportWorkflow, "_resolve_substation_display_name", return_value="PE"),
+        ):
+            return workflow.generate(["FL1"], environment)
+
+    run_project_action(action, locations.environment)
+
+
+def test_quick_report_with_every_substation_failed_is_failed(locations) -> None:
+    _run_quick_report_plans(locations, [RuntimeError("one"), RuntimeError("two")])
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "failed"
+
+
+def test_quick_report_with_some_substations_failed_has_errors(locations, tmp_path) -> None:
+    report = _file(tmp_path / "report.docx")
+
+    _run_quick_report_plans(locations, [report, RuntimeError("two")])
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "completed_with_errors"
+
+
+def _run_full_report_batch(locations, outcomes: list[bool]) -> None:
+    """Word can't start here: fake compiler, a stub session, and the substation step is stubbed."""
+    packages = [_package(locations.project / f"{index}.xlsx") for index in range(len(outcomes))]
+    workflow = FullReportWorkflow(compiler=FakeDocumentCompiler())
+
+    def execute(pkg_idx, pkg, word_app, ctx) -> None:
+        ok = outcomes[pkg_idx]
+        ctx.ordered_results[pkg_idx] = SimpleNamespace(is_success=ok, deliverable_paths=())
+        if not ok:
+            ctx.errors.append(f"Failed {pkg_idx}")
+
+    def action(environment) -> object:
+        with (
+            patch.object(FullReportWorkflow, "_validate_target_existence"),
+            patch.object(FullReportWorkflow, "_discover_packages", return_value=(packages, [], [])),
+            patch.object(FullReportWorkflow, "_execute_substation", side_effect=execute),
+        ):
+            return workflow.generate(["FL1"], environment, com_session=MagicMock())
+
+    run_project_action(action, locations.environment)
+
+
+@pytest.mark.parametrize("outcomes, status", [([False, False], "failed"), ([True, False], "completed_with_errors")])
+def test_full_report_batch_status(locations, outcomes, status) -> None:
+    _run_full_report_batch(locations, outcomes)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == status
+
+
+@pytest.mark.parametrize("succeeded, status", [(0, "failed"), (1, "completed_with_errors")])
+def test_postprocessing_batch_status(locations, succeeded, status) -> None:
+    target = SimpleNamespace(
+        is_ready=True,
+        is_multipart=False,
+        validation_result=None,
+        errors=(),
+        stem="PE",
+        date_str="",
+        docx_path=locations.project / "PE.docx",
+        part_docx_paths=(),
+    )
+    workflow = MagicMock()
+    workflow.inspect.return_value = FullReportPostProcessingInspection(targets=(target,), warnings=(), errors=())
+    workflow.locate_full_reports_for_fls.return_value = ([target.docx_path], [])
+    workflow.process.return_value = FullReportPostProcessingResult(
+        total_reports=1 + succeeded, succeeded_count=succeeded, failed_count=1, errors=("PE failed",)
+    )
+    action = FullReportPostProcessingAction("Post-Process Full Reports", workflow=workflow)
+
+    with (
+        patch("src.project_workflow_actions._prompt_full_report_selection", return_value=["FL1"]),
+        patch("src.project_workflow_actions.cli_selectors.select_substations_interactive", return_value=[target]),
+        patch("src.project_workflow_actions.cli_selectors.confirm", return_value=True),
+    ):
+        _run_project_action_object(action, locations)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == status
+
+
+def test_pipeline_result_with_some_failed_records_no_repr_of_the_failure(locations, tmp_path) -> None:
+    package = SubstationPackage(testsheet_xlsx=tmp_path / "1.xlsx", quick_report_docx=tmp_path / "1.docx")
+    summary = PostProcessingSummary(
+        processed_packages=(package,),
+        failed_packages=(PostProcessingFailure(package=package, error="broke"),),
+    )
+
+    run_project_action(lambda environment: summary, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed_with_errors"
+    assert not [e for e in entries_of(entries, "error") if "PostProcessingFailure" in e["message"]]
+
+
+def test_us_tev_with_one_no_data_skip_and_one_failure_has_errors(locations, utility_env, tmp_path) -> None:
+    def graphs_or_failure(self, survey_root, output_dir=None):
+        if Path(survey_root).name == "PE2":
+            raise RuntimeError("survey unreadable")
+        return SubstationGraphResult(skipped_no_data=["no data here"])
+
+    prompts = _tev_prompts([_tev_candidate(tmp_path, "PE1"), _tev_candidate(tmp_path, "PE2")])
+    with (
+        prompts[0], prompts[1], prompts[2], prompts[3], prompts[4],
+        patch.object(UsTevGraphWorkflow, "run_substation", graphs_or_failure),
+    ):
+        run_registered_utility("Generate US+TEV survey graphs")
+
+    entries = read_entries(locations.fallback_logs)
+    assert entries[-1]["status"] == "completed_with_errors"
+    assert not entries_of(entries, "output")
+
+
+def test_us_tev_with_every_substation_failed_is_failed(locations, utility_env, tmp_path) -> None:
+    prompts = _tev_prompts([_tev_candidate(tmp_path, "PE1"), _tev_candidate(tmp_path, "PE2")])
+    with (
+        prompts[0], prompts[1], prompts[2], prompts[3], prompts[4],
+        patch.object(UsTevGraphWorkflow, "run_substation", side_effect=RuntimeError("survey unreadable")),
+    ):
+        run_registered_utility("Generate US+TEV survey graphs")
+
+    entries = read_entries(locations.fallback_logs)
+    assert entries[-1]["status"] == "failed"
+    assert not entries_of(entries, "output")
+
+
+def test_us_tev_lists_output_folders_only_for_substations_that_produced_graphs(
+    locations, utility_env, tmp_path
+) -> None:
+    def graphs_or_failure(self, survey_root, output_dir=None):
+        if Path(survey_root).name == "PE2":
+            raise RuntimeError("survey unreadable")
+        return SubstationGraphResult(generated=[tmp_path / "graph.png"])
+
+    first, second = _tev_candidate(tmp_path, "PE1"), _tev_candidate(tmp_path, "PE2")
+    prompts = _tev_prompts([first, second])
+    with (
+        prompts[0], prompts[1], prompts[2], prompts[3], prompts[4],
+        patch.object(UsTevGraphWorkflow, "run_substation", graphs_or_failure),
+    ):
+        run_registered_utility("Generate US+TEV survey graphs")
+
+    outputs = [entry["path"] for entry in entries_of(read_entries(locations.fallback_logs), "output")]
+    assert outputs == [str(first.output_dir.resolve())]
+
+
+def test_us_audio_with_some_substations_failed_has_errors(locations) -> None:
+    candidates = [UsAudioCandidate(raw_data_dir=locations.project), UsAudioCandidate(raw_data_dir=locations.project)]
+
+    def action(environment) -> object:
+        with patch.object(UsAudioWorkflow, "run_substation", side_effect=[(0, 0), RuntimeError("wav export broke")]):
+            return UsAudioWorkflow().run_batch(candidates)
+
+    run_project_action(action, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "completed_with_errors"
+
+
+def _testsheet_stages(result: GenerateTestsheetFolderResult) -> object:
+    stages = _stub_stages(GenerateTestsheetFolderStructureWorkflow())
+    stages.filter_stage.filter_dates.return_value = (("07-11-2026",), ())
+    stages.loader.load.return_value = ((), ())
+    stages.auditor.audit.return_value = result
+    return stages
+
+
+@pytest.mark.parametrize(
+    "created, status",
+    [((), "failed"), ((Path("made"),), "completed_with_errors")],
+)
+def test_testsheet_folder_status(locations, created, status) -> None:
+    result = GenerateTestsheetFolderResult(
+        station="KUANTAN", month="NOV", created_directories=created, total_dates_processed=1, errors=("missing dir",)
+    )
+    request = GenerateTestsheetFolderRequest(station="KUANTAN", month="NOV", target_dates=("07-11-2026",))
+    stages = _testsheet_stages(result)
+
+    run_project_action(lambda environment: stages.execute(environment, request), locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == status
+
+
+@pytest.mark.parametrize(
+    "copied, status",
+    [((0, 0, 0), "failed"), ((1, 0, 0), "completed_with_errors")],
+)
+def test_raw_material_status_goes_by_what_was_copied(locations, copied, status) -> None:
+    testsheet = _file(locations.project / "TESTSHEET" / "1.xlsx")
+    stages = _stub_stages(RawMaterialWorkflow())
+    stages.extractor.discover_packages.return_value = [_package(testsheet)]
+    stages.auditor.audit.return_value = (
+        None,
+        RawMaterialResult(substations_count=1, ir_copied_count=copied[0], errors=("copy failed",)),
+    )
+    request = RawMaterialRequest(output_path=locations.project / "RAW MATERIAL")
+
+    def action(environment) -> object:
+        with patch.object(stages, "_process_package", return_value=copied):
+            return stages.execute(environment, request)
+
+    run_project_action(action, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == status
+
+
+def _consolidate_stages(result):
+    stages = _stub_stages(ConsolidateMsmsWorkflow())
+    stages.filter_stage.filter_rows.return_value = ([], 0)
+    stages.auditor.audit.return_value = result
+    return stages
+
+
+def _ingest_stages(result):
+    stages = _stub_stages(IngestMsmsCsvWorkflow())
+    stages.extractor.extract_files.return_value = []
+    stages.filter_stage.filter_files.return_value = ([], [])
+    stages.auditor.audit.return_value = result
+    return stages
+
+
+def _data_msms_stages(result):
+    stages = _stub_stages(PopulateDataMsmsWorkflow())
+    stages.extractor.extract.return_value = SimpleNamespace(packages=[], csv_files=[])
+    stages.filter_stage.filter_csv_files.return_value = []
+    stages.auditor.audit.return_value = result
+    return stages
+
+
+@pytest.mark.parametrize(
+    "build, request_object, nothing, something",
+    [
+        (
+            _consolidate_stages,
+            ConsolidateMsmsRequest(),
+            ConsolidateMsmsResult(files_processed=0, errors=("bad",)),
+            ConsolidateMsmsResult(files_processed=1, errors=("bad",)),
+        ),
+        (
+            _ingest_stages,
+            IngestMsmsCsvRequest(),
+            IngestMsmsCsvResult(files_ingested=0, errors=("bad",)),
+            IngestMsmsCsvResult(files_ingested=1, errors=("bad",)),
+        ),
+        (
+            _data_msms_stages,
+            PopulateDataMsmsRequest(),
+            PopulateDataMsmsResult(csv_files_processed=0, errors=("bad",)),
+            PopulateDataMsmsResult(csv_files_processed=1, errors=("bad",)),
+        ),
+    ],
+    ids=["consolidate", "ingest", "populate_data_msms"],
+)
+@pytest.mark.parametrize("outcome", ["nothing", "something"])
+def test_msms_workflow_status_says_whether_anything_succeeded(
+    locations, build, request_object, nothing, something, outcome
+) -> None:
+    stages = build(nothing if outcome == "nothing" else something)
+
+    run_project_action(lambda environment: stages.execute(environment, request_object), locations.environment)
+
+    expected = "failed" if outcome == "nothing" else "completed_with_errors"
+    assert read_entries(locations.project_logs)[-1]["status"] == expected
+
+
+@pytest.mark.parametrize("updated, status", [(0, "failed"), (1, "completed_with_errors")])
+def test_update_qr02_status_says_whether_anything_was_updated(locations, updated, status) -> None:
+    package = _package(locations.project / "1.xlsx")
+    stages = _stub_stages(UpdateQr02CbaWorkflow())
+    stages.extractor.extract_packages.return_value = [package]
+    stages.extractor.extract_records.return_value = ({}, [])
+    stages.filter_stage.filter.return_value = [package]
+    stages.auditor.audit.return_value = UpdateQr02CbaResult(records_updated=updated, errors=("bad",))
+
+    run_project_action(lambda environment: stages.execute(environment, UpdateQr02CbaRequest()), locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == status
+

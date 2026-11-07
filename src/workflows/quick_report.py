@@ -118,8 +118,11 @@ class QuickReportWorkflow:
 
         if not plans:
             errors = inspection.errors
-            if not errors and not inspection.targets:
+            if errors:
+                current_run().mark_failed()
+            elif not inspection.targets:
                 errors = (f"No testsheet packages found for target: {target}",)
+                current_run().record_warning(errors[0])
             return QuickReportResult(
                 reports_generated=0,
                 generated_paths=(),
@@ -483,6 +486,9 @@ class QuickReportWorkflow:
                 verified_paths.append(path)
             else:
                 errors.append(f"Generated report at {path} is missing or 0 bytes.")
+
+        if errors and not verified_paths:
+            current_run().mark_failed()
 
         return QuickReportResult(
             reports_generated=len(verified_paths),

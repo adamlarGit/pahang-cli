@@ -277,6 +277,7 @@ class QuickReportAction(ProjectWorkflowAction):
                 print("Processing cancelled.")
                 return None
 
+            current_run().record_request({"workflow": "Quick Report", "target": selected_targets})
             inspection = workflow.inspect(selected_targets, environment)
             
             if inspection.missing_templates:
@@ -865,6 +866,7 @@ def generate_full_reports_action(
             else:
                 selected_target = target_str
 
+    current_run().record_request({"workflow": "Full Report", "target": selected_target})
     active_workflow = workflow or FullReportWorkflow()
     inspection = active_workflow.inspect(
         selected_target,
@@ -875,7 +877,10 @@ def generate_full_reports_action(
     _print_full_report_dry_run_telemetry(inspection)
 
     if not inspection.targets:
-        current_run().record_failure(f"No substations discovered to process: {list(inspection.errors)}")
+        if inspection.errors:
+            current_run().record_failure(f"No substations discovered to process: {list(inspection.errors)}")
+        else:
+            current_run().record_warning("No substations discovered to process.")
         print("No substations discovered to process.")
         return None
 
@@ -1059,12 +1064,14 @@ def postprocess_full_reports_action(
         )
         if selection is None:
             return None
+        current_run().record_request({"workflow": "Full Report Post-Processing", "target": selection})
         if isinstance(selection, list):
             docx_paths, extra_warnings = active_workflow.locate_full_reports_for_fls(selection, environment)
             inspect_target = docx_paths
         else:
             inspect_target = _map_testsheet_dates_to_full_report_dirs(environment, selection)
     else:
+        current_run().record_request({"workflow": "Full Report Post-Processing", "target": target})
         target_path = Path(target)
         if not target_path.is_absolute():
             full_report_dir = resolve_full_report_dir(environment)
@@ -1089,7 +1096,10 @@ def postprocess_full_reports_action(
     _print_full_report_postprocessing_dry_run_telemetry(inspection)
 
     if not inspection.targets:
-        current_run().record_failure(f"No Full Report documents discovered: {list(inspection.errors)}")
+        if inspection.errors:
+            current_run().record_failure(f"No Full Report documents discovered: {list(inspection.errors)}")
+        else:
+            current_run().record_warning("No Full Report documents discovered for post-processing.")
         print("No Full Report documents discovered for post-processing.")
         return None
 
@@ -1140,6 +1150,10 @@ def postprocess_full_reports_action(
         environment,
         progress_sink=_cli_progress_sink,
     )
+    if (getattr(result, "errors", None) or getattr(result, "failed_count", 0)) and not getattr(
+        result, "succeeded_count", 0
+    ):
+        current_run().mark_failed()
 
     _print_full_report_postprocessing_summary(result)
     return result

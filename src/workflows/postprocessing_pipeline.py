@@ -299,12 +299,14 @@ class PostProcessingPipelineWorkflow:
                     sink(f"Completed deliverable -> {quick_report_pdf.name}")
 
                 except Exception as exc:
-                    current_run().record_error(f"Failed post-processing for substation {pkg.station_name}: {exc}", exc)
+                    current_run().record_error(f"{pkg.station_name}: {exc}", exc)
                     logger.error("Failed post-processing for substation %s: %s", pkg.station_name, exc)
                     failed_packages.append(PostProcessingFailure(package=pkg, error=str(exc)))
                     sink(f"Failed post-processing for {pkg.station_name}: {exc}")
 
         duration = time.time() - start_time
+        if failed_packages and not processed_packages:
+            current_run().mark_failed()
 
         # Stage 5: Summary Result
         return PostProcessingSummary(
