@@ -53,7 +53,12 @@ def _guarded(real_start):
     return guarded_start
 
 
-def pytest_configure(config: pytest.Config) -> None:
+def is_installed() -> bool:
+    return _installed
+
+
+def install_guard() -> None:
+    """Wrap pywin32's start functions. Call once, before any test is collected."""
     global _installed
     if _installed:
         return

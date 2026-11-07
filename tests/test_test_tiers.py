@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from tests import tier_guard
+
 pytest.importorskip("pythoncom")
 
 REPO = Path(__file__).resolve().parent.parent
@@ -34,7 +36,9 @@ def _stub(*args, **kwargs):
 for _name in ("connect", "CoCreateInstance", "CoCreateInstanceEx", "GetActiveObject", "MkParseDisplayName"):
     setattr(pythoncom, _name, _stub)
 
-from tests.conftest import *  # noqa: E402,F403
+from tests.tier_guard import install_guard, pytest_runtest_makereport, pytest_runtest_protocol  # noqa: E402,F401
+
+install_guard()
 """
 
 
@@ -84,6 +88,13 @@ TIERED_SAMPLE = """
     def test_needs_live_data():
         pass
 """
+
+
+def test_suite_conftest_wires_the_guard(request: pytest.FixtureRequest) -> None:
+    hooks = request.config.hook
+    assert tier_guard.is_installed()
+    assert tier_guard.pytest_runtest_protocol in [i.function for i in hooks.pytest_runtest_protocol.get_hookimpls()]
+    assert tier_guard.pytest_runtest_makereport in [i.function for i in hooks.pytest_runtest_makereport.get_hookimpls()]
 
 
 def test_plain_pytest_excludes_word_and_live_data_tests(tmp_path: Path) -> None:
