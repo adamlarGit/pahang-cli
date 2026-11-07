@@ -386,12 +386,15 @@ class Run:
             return
         self._inputs_seen.add(str(path))
         try:
-            stat = os.stat(path)
+            info = os.stat(path)
         except OSError:
             self._write("input", path=str(path), exists=False, size=None, modified=None)
             return
-        modified = datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()
-        self._write("input", path=str(path), exists=True, size=stat.st_size, modified=modified)
+        try:
+            modified = datetime.fromtimestamp(info.st_mtime, timezone.utc).isoformat()
+        except (OSError, OverflowError, ValueError):
+            modified = None
+        self._write("input", path=str(path), exists=True, size=info.st_size, modified=modified)
 
     def _write(self, entry_type: str, **fields: Any) -> None:
         with self._lock:

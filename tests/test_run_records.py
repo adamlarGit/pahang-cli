@@ -3817,3 +3817,27 @@ def test_missing_folder_is_not_noted_as_unreadable(locations, tmp_path) -> None:
     entries = read_entries(locations.project_logs)
     assert not entries_of(entries, "input_unreadable")
     assert entries_of(entries, "input")[0]["exists"] is False
+
+
+def test_one_bad_modified_time_keeps_the_rest_of_the_batch(locations, tmp_path) -> None:
+    first, bad, last = _file(tmp_path / "a.dat"), _file(tmp_path / "b.dat"), _file(tmp_path / "c.dat")
+    real_stat = os.stat
+
+    def stat_with_a_bad_time(path, *args, **kwargs):
+        result = real_stat(path, *args, **kwargs)
+        if str(path) == str(bad):
+            return SimpleNamespace(st_size=result.st_size, st_mtime=-1e30)
+        return result
+
+    def action(environment) -> None:
+        with patch("src.run_records.os.stat", stat_with_a_bad_time):
+            current_run().record_inputs([first, bad, last])
+
+    run_project_action(action, locations.environment)
+
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert set(inputs) == {str(first), str(bad), str(last)}
+    assert inputs[str(bad)]["modified"] is None
+    assert inputs[str(bad)]["exists"] is True
+    assert inputs[str(bad)]["size"] == len(b"content")
+    assert inputs[str(last)]["modified"]
