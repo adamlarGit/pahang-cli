@@ -123,6 +123,10 @@ def test_full_run_option_selects_every_test(tmp_path: Path) -> None:
         'win32com.client.DispatchEx("Excel.Application")',
         'win32com.client.GetObject("C:/fake/REPORT.DOCX")',
         'win32com.client.GetObject("C:/fake/testsheet.xlsx")',
+        'win32com.client.GetObject("C:/fake/data.csv")',
+        'win32com.client.GetObject("C:/fake/book.xlsx!Sheet1")',
+        'win32com.client.GetObject("new:{000209FF-0000-0000-C000-000000000046}")',
+        'win32com.client.GetObject("clsid:00024500-0000-0000-C000-000000000046:")',
     ],
 )
 def test_unmarked_test_starting_office_fails_naming_the_marker(tmp_path: Path, start: str) -> None:

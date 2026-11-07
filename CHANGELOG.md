@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Plain pytest selects the Fast Run, excluding real Office and live-data tests. Documented pinned, frozen uv commands keep test tools out of the app environment and lockfile; PE157 fixture tests write only to temporary folders (#178).
+
 ### Fixed
+- Block unmarked Office activation through CSV files, workbook item monikers, and Office CLSID monikers, with subprocess regression coverage (#178).
 - **US+TEV Survey Graphs Skip Placeholder Measurements (`fix(us-tev-graphs)`, `src/workflows/us_tev_graphs.py`, `src/quick_report/prpd.py`, `tests/test_us_tev_graph_workflow.py`)**:
   - Measurements created without a reading (no `ultrasonic_phase_plot.js` / `eventData.js`) are now skipped before rendering, so Option C no longer launches headless Chrome three times per placeholder and logs a misleading "render exhausted retries" warning; each skip logs `<label>: no <TECH> data recorded (skipped)`.
   - Added `DiscoveredMeasurement.data_file` / `has_recorded_data`; `generate_substation_graphs()` and `run_substation()` return `SubstationGraphResult(generated, skipped_no_data)`, and the `on_progress` callback gains a skipped count.

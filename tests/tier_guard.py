@@ -6,6 +6,8 @@ so a test cannot hide one with `except Exception`, a COM-error skip or an xfail 
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 _OFFICE_PROGID_PREFIXES = ("word.", "excel.")
@@ -15,7 +17,7 @@ _OFFICE_CLSIDS = {
 }
 _OFFICE_FILE_SUFFIXES = (
     ".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm", ".rtf",
-    ".xls", ".xlsx", ".xlsm", ".xlsb", ".xlt", ".xltx", ".xltm",
+    ".xls", ".xlsx", ".xlsm", ".xlsb", ".xlt", ".xltx", ".xltm", ".csv",
 )
 _START_FUNCTIONS = ("connect", "CoCreateInstance", "CoCreateInstanceEx", "GetActiveObject", "MkParseDisplayName")
 
@@ -30,10 +32,15 @@ class MissingWordMarker(RuntimeError):
 
 def _is_office(target: object) -> bool:
     name = str(target).lower()
+    # File monikers can select an item inside a workbook, e.g. book.xlsx!Sheet1.
+    file_name = name.split("!", 1)[0]
+    # MkParseDisplayName also accepts new:{CLSID} and clsid:CLSID: monikers.
+    class_name = re.sub(r"^(?:new:|clsid:)", "", name).split(":", 1)[0]
+    class_id = "{" + class_name.strip("{}") + "}"
     return (
         name.startswith(_OFFICE_PROGID_PREFIXES)
-        or name in _OFFICE_CLSIDS
-        or name.endswith(_OFFICE_FILE_SUFFIXES)
+        or class_id in _OFFICE_CLSIDS
+        or file_name.endswith(_OFFICE_FILE_SUFFIXES)
     )
 
 
