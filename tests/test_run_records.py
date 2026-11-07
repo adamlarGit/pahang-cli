@@ -6,6 +6,7 @@ real %LOCALAPPDATA%: every location used is under pytest's tmp_path.
 
 from __future__ import annotations
 
+import gc
 import io
 import json
 import logging
@@ -14,6 +15,8 @@ import subprocess
 import sys
 import time
 import uuid
+import weakref
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -61,7 +64,11 @@ from src.utility_actions import UtilityAction, get_utility_actions
 from src.workflows.combine_pdfs_with_separator import CombinePdfsWithSeparatorSummary
 from src.workflows.consolidate_msms import ConsolidateMsmsExtractor, ConsolidateMsmsWorkflow
 from src.workflows.enrich_msms import EnrichMsmsWorkflow
-from src.workflows.full_report import FullReportInspection, FullReportWorkflow
+from src.workflows.full_report import (
+    FullReportInspection,
+    FullReportWorkflow,
+    _SubstationExecutionContext,
+)
 from src.workflows.full_report_postprocessing import (
     FullReportPostProcessingInspection,
     FullReportPostProcessingResult,
@@ -3529,3 +3536,160 @@ def test_pipeline_sound_hook_records_raw_data_files(locations, tmp_path, has_raw
     assert entries[-1]["status"] == "completed"
     paths = {entry["path"] for entry in entries_of(entries, "input")}
     assert (str(measurement) in paths) is has_raw_data
+
+
+class _FakeWord:
+    """A plain object standing in for Word. Weakly referenced, to see whether it stays alive."""
+
+    Documents = None
+
+
+def _run_failing_station(locations, tmp_path) -> tuple[weakref.ref, Path]:
+    """Runs the real _execute_substation, with a plan step that fails holding an open file.
+
+    Word can't start: the compiler and slicer are fakes, and Word itself is a plain object.
+    """
+    package = _package(_file(tmp_path / "TS" / "1. PE.xlsx"))
+    temp_root = tmp_path / "temp_root"
+    workflow = FullReportWorkflow(compiler=FakeDocumentCompiler())
+
+    def fail_with_open_file(*args, station_temp_dir, **kwargs):
+        handle = open(station_temp_dir / "held_open.tmp", "w", encoding="utf-8")  # noqa: F841, SIM115
+        raise RuntimeError("station failed")
+
+    context = _SubstationExecutionContext(
+        environment=locations.environment,
+        output_dir=None,
+        base_temp_root=temp_root,
+        keep_temp=False,
+        progress_sink=None,
+        total_packages=1,
+        ordered_results=[None],
+        generated_paths=[],
+        errors=[],
+    )
+    word = _FakeWord()
+    word_ref = weakref.ref(word)
+    with (
+        patch.object(FullReportWorkflow, "_resolve_quick_report_path", return_value=tmp_path / "1. PE.docx"),
+        patch("src.workflows.full_report.validate_finalized_quick_report", return_value=SimpleNamespace(is_valid=True)),
+        patch.object(FullReportWorkflow, "_build_station_plan", side_effect=fail_with_open_file),
+        patch("src.quick_report.compiler.clear_windows_clipboard"),
+    ):
+        workflow._execute_substation(pkg_idx=0, pkg=package, word_app=word, ctx=context)
+    assert context.errors
+    return word_ref, temp_root
+
+
+@contextmanager
+def _no_log_handlers():
+    """pytest's own log handlers keep each record's traceback. The CLI's handlers don't."""
+    saved = list(logging.root.handlers)
+    logging.root.handlers[:] = []
+    try:
+        yield
+    finally:
+        logging.root.handlers[:] = saved
+
+
+def test_failed_station_frees_word_and_its_temp_folder_with_a_run(locations, tmp_path) -> None:
+    def action(environment) -> None:
+        results.append(_run_failing_station(locations, tmp_path))
+        gc.collect()
+        results.append(results[0][0]())
+        results.append(list(results[0][1].iterdir()))
+
+    results: list = []
+    with _no_log_handlers():
+        run_project_action(action, locations.environment)
+
+    assert results[1] is None, "Word is still alive after the station ended"
+    assert results[2] == [], "the station's temp folder was left behind"
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert "station failed" in errors[0]["traceback"]
+
+
+def test_failed_station_frees_word_and_its_temp_folder_with_no_run(locations, tmp_path) -> None:
+    with _no_log_handlers():
+        word_ref, temp_root = _run_failing_station(locations, tmp_path)
+        gc.collect()
+
+    assert word_ref() is None, "Word is still alive after the station ended"
+    assert list(temp_root.iterdir()) == [], "the station's temp folder was left behind"
+
+
+class _WeaklyHeldError(Exception):
+    pass
+
+
+def test_recording_an_exception_keeps_no_reference_to_it(locations) -> None:
+    refs: list = []
+
+    def action(environment) -> None:
+        for record in (current_run().record_error, current_run().record_failure, current_run().record_warning):
+            failure = _WeaklyHeldError("detail")
+            refs.append(weakref.ref(failure))
+            record("recorded", failure)
+            del failure
+        gc.collect()
+        alive_during_the_run.extend(ref() for ref in refs)
+
+    alive_during_the_run: list = []
+    run_project_action(action, locations.environment)
+
+    assert alive_during_the_run == [None, None, None]
+
+
+def test_recording_with_no_open_run_keeps_no_reference_to_the_exception() -> None:
+    failure = _WeaklyHeldError("detail")
+    ref = weakref.ref(failure)
+    current_run().record_error("recorded", failure)
+    del failure
+    gc.collect()
+
+    assert ref() is None
+
+
+def test_recording_with_no_open_run_stores_nothing(tmp_path) -> None:
+    run = current_run()
+    before = (len(run._errors_written), len(run._warning_messages))
+    run.record_error(f"unique {uuid.uuid4().hex}", ValueError("x"))
+    run.record_warning(f"unique {uuid.uuid4().hex}", ValueError("x"))
+
+    assert (len(run._errors_written), len(run._warning_messages)) == before
+
+
+class _UnmarkableError(Exception):
+    def __setattr__(self, name, value):
+        raise AttributeError("no attributes on this one")
+
+
+def test_exception_that_cannot_be_marked_is_recorded_each_time_rather_than_dropped(locations) -> None:
+    def action(environment) -> None:
+        failure = _UnmarkableError("detail")
+        current_run().record_error("first", failure)
+        current_run().record_error("second", failure)
+
+    run_project_action(action, locations.environment)
+
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert [error["message"] for error in errors] == ["first", "second"]
+
+
+def test_exception_marked_by_an_earlier_run_is_recorded_again_by_a_later_one(locations) -> None:
+    failure = ValueError("carried over")
+
+    with open_run("First", locations.environment) as first:
+        first.record_error("from first", failure)
+    with open_run("Second", locations.environment) as second:
+        second.record_error("from second", failure)
+
+    records = sorted(locations.project_logs.glob("*.jsonl"), key=lambda path: path.stat().st_mtime_ns)
+    assert len(records) == 2
+    messages = [
+        json.loads(line)["message"]
+        for record in records
+        for line in record.read_text(encoding="utf-8").splitlines()
+        if json.loads(line)["type"] == "error"
+    ]
+    assert sorted(messages) == ["from first", "from second"]

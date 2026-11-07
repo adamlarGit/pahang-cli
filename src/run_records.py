@@ -74,6 +74,7 @@ _MODULE_LEVEL_LOGGING_CODE = {
     for function in (logging.debug, logging.info, logging.warning, logging.error, logging.critical, logging.log)
 }
 _MAX_DESCRIBE_DEPTH = 12
+_RECORDED_MARK = "_pahang_cli_recorded_by_run"
 # Input entries kept per folder, so a huge raw-data folder can't flood a record.
 _MAX_INPUTS_PER_FOLDER = 200
 _RESULT_OUTPUT_FIELDS = (
@@ -110,7 +111,7 @@ class Run:
         self._captures: list[Any] = []
         self._errors_written: dict[str, int] = {}
         self._error_items_seen: set[tuple[str, str]] = set()
-        self._exceptions_seen: list[BaseException] = []
+        self._mark_token = object()
         self._warning_messages: set[str] = set()
         self._requests: dict[str, dict[str, Any]] = {}
         self._inputs_seen: set[str] = set()
@@ -210,6 +211,8 @@ class Run:
 
     def record_warning(self, message: Any, exc: BaseException | None = None) -> None:
         """Record a warning, which doesn't change the status. A repeat adds nothing."""
+        if self._file is None:
+            return
         text = _text_of(message)
         if text in self._warning_messages:
             return
@@ -300,9 +303,15 @@ class Run:
             self._status = status
 
     def _write_error(self, message: Any, exc: BaseException | None, item: Any = None) -> None:
-        """Write one error, unless this exception or this item's message is already recorded."""
+        """Write one error, unless this exception or this item's message is already recorded.
+
+        Holds no reference to the exception. Its traceback keeps every frame's locals alive, and
+        Word sessions and open files must be freed when a failed station ends.
+        """
+        if self._file is None:
+            return
         text = _text_of(message)
-        if exc is not None and any(exc is seen for seen in self._exceptions_seen):
+        if exc is not None and self._is_marked(exc):
             return
         if item is not None:
             key = (text, _text_of(item))
@@ -313,8 +322,21 @@ class Run:
         if exc is None:
             self._write("error", message=text)
         else:
-            self._exceptions_seen.append(exc)
+            self._mark(exc)
             self._write("error", message=text, exception_type=type(exc).__name__, traceback=_traceback_of(exc))
+
+    def _is_marked(self, exc: BaseException) -> bool:
+        try:
+            return getattr(exc, _RECORDED_MARK, None) is self._mark_token
+        except Exception:
+            return False
+
+    def _mark(self, exc: BaseException) -> None:
+        """Mark an exception as recorded. One that can't be marked is simply recorded again."""
+        try:
+            setattr(exc, _RECORDED_MARK, self._mark_token)
+        except Exception:
+            pass
 
     def _record_result_error(self, error: Any) -> None:
         """Each error a result returns matches one already recorded, or is written now."""
