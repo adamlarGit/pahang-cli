@@ -773,9 +773,12 @@ def _describe_field(owner: Any, name: str, depth: int, enclosing: set[int]) -> A
 
 def _label_of(value: Any) -> str:
     """Describe an object by what it is. Never calls its repr, which can do anything."""
-    kind = "function" if callable(value) and hasattr(value, "__qualname__") else "object"
-    target = value if kind == "function" else type(value)
-    return f"<{kind} {target.__module__}.{target.__qualname__}>"
+    try:
+        kind = "function" if callable(value) and hasattr(value, "__qualname__") else "object"
+        target = value if kind == "function" else type(value)
+        return f"<{kind} {target.__module__}.{target.__qualname__}>"
+    except Exception:
+        return "<could not be described>"
 
 
 def _project_of(environment: Any) -> tuple[str | None, str | None]:

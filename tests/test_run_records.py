@@ -3841,3 +3841,28 @@ def test_one_bad_modified_time_keeps_the_rest_of_the_batch(locations, tmp_path) 
     assert inputs[str(bad)]["exists"] is True
     assert inputs[str(bad)]["size"] == len(b"content")
     assert inputs[str(last)]["modified"]
+
+
+class _HostileCallable:
+    def __call__(self) -> None:
+        pass
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() is broken")
+
+    def __getattr__(self, name: str):
+        raise RuntimeError("attribute access is broken")
+
+
+@pytest.mark.parametrize("record_name", ["record_warning", "record_error", "record_failure"])
+def test_hostile_message_never_raises(locations, record_name) -> None:
+    calls: list[str] = []
+
+    def action(environment) -> None:
+        getattr(current_run(), record_name)(_HostileCallable())
+        calls.append("ran")
+
+    run_project_action(action, locations.environment)
+
+    assert calls == ["ran"]
+    assert read_entries(locations.project_logs)[-1]["type"] == "run_finish"
