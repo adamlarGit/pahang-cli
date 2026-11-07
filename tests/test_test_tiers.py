@@ -348,6 +348,24 @@ def test_guard_ignores_other_com_servers(tmp_path: Path) -> None:
     assert "1 passed" in output
 
 
+@pytest.mark.parametrize("name", ["word.txt", "Word.pdf", "excel.png", "word.notes.pdf"])
+def test_startfile_ignores_non_office_files_named_like_a_progid(tmp_path: Path, name: str) -> None:
+    output = run_pytest(
+        tmp_path,
+        f"""
+        import os
+        import pytest
+        from conftest import RealStartReached
+
+        def test_named_like_progid():
+            with pytest.raises(RealStartReached):
+                os.startfile("{name}")
+        """,
+    )
+
+    assert "1 passed" in output
+
+
 def test_mocked_dispatch_is_not_blocked(tmp_path: Path) -> None:
     output = run_pytest(
         tmp_path,

@@ -33,18 +33,18 @@ class MissingWordMarker(RuntimeError):
     """An unmarked test tried to start real Word or Excel."""
 
 
-def _is_office(target: object) -> bool:
+def _is_office_file_or_class(target: object) -> bool:
     name = str(target).lower()
     # File monikers can select an item inside a workbook, e.g. book.xlsx!Sheet1.
     file_name = name.split("!", 1)[0]
     # MkParseDisplayName also accepts new:{CLSID} and clsid:CLSID: monikers.
     class_name = re.sub(r"^(?:new:|clsid:)", "", name).split(":", 1)[0]
     class_id = "{" + class_name.strip("{}") + "}"
-    return (
-        name.startswith(_OFFICE_PROGID_PREFIXES)
-        or class_id in _OFFICE_CLSIDS
-        or file_name.endswith(_OFFICE_FILE_SUFFIXES)
-    )
+    return class_id in _OFFICE_CLSIDS or file_name.endswith(_OFFICE_FILE_SUFFIXES)
+
+
+def _is_office(target: object) -> bool:
+    return str(target).lower().startswith(_OFFICE_PROGID_PREFIXES) or _is_office_file_or_class(target)
 
 
 def _require_word_marker(target: object) -> None:
@@ -88,7 +88,7 @@ def _guard_launch(event: str, args: tuple) -> None:
             _require_word_marker(target)
     elif event in {"os.startfile", "os.startfile/2"}:
         target = args[0]
-        if _is_office(target) or _is_office_command([target]):
+        if _is_office_file_or_class(target) or _is_office_command([target]):
             _require_word_marker(target)
 
 
