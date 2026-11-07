@@ -100,6 +100,7 @@ class Run:
         self._lock = threading.RLock()
         self._captures: list[Any] = []
         self._error_messages: set[str] = set()
+        self._warning_messages: set[str] = set()
         self._requests: dict[str, dict[str, Any]] = {}
         self._inputs_seen: set[str] = set()
         self._outputs_seen: set[str] = set()
@@ -186,8 +187,14 @@ class Run:
         except Exception:
             pass
 
-    def record_warning(self, message: Any) -> None:
-        self._write("warning", message=_text_of(message))
+    def record_warning(self, message: Any, exc: BaseException | None = None) -> None:
+        """Record a warning, which doesn't change the status. A repeat adds nothing."""
+        text = _text_of(message)
+        if text in self._warning_messages:
+            return
+        self._warning_messages.add(text)
+        fields = {} if exc is None else {"traceback": _traceback_of(exc)}
+        self._write("warning", message=text, **fields)
 
     def record_error(self, message: Any, exc: BaseException | None = None) -> None:
         """Record that one item failed while the action carried on.

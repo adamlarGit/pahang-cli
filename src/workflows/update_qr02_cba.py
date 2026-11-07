@@ -201,6 +201,7 @@ class UpdateQr02CbaExtractor:
             )
         except Exception as exc:
             warn_msg = f"Failed to extract testsheet data from {pkg.testsheet_path}: {exc}"
+            current_run().record_warning(warn_msg, exc)
             warnings.append(warn_msg)
             return None
 
@@ -538,6 +539,8 @@ class UpdateQr02CbaWorkflow:
 
         # 2. Extractor (Read data records)
         records_map, extraction_warnings = self.extractor.extract_records(filtered_packages)
+        if extraction_warnings and not records_map:
+            current_run().record_failure(f"All {len(filtered_packages)} testsheet(s) failed to read.")
         if request.progress_sink:
             for warn_msg in extraction_warnings:
                 request.progress_sink(warn_msg)
@@ -571,8 +574,6 @@ class UpdateQr02CbaWorkflow:
 
         # 6. Auditor (Verify and return result)
         result = self.auditor.audit(environment, plan, load_result)
-        if result.errors and not result.records_updated:
-            current_run().mark_failed()
 
         if request.progress_sink:
             request.progress_sink(

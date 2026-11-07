@@ -2819,27 +2819,50 @@ def test_testsheet_folder_status(locations, created, status) -> None:
     assert read_entries(locations.project_logs)[-1]["status"] == status
 
 
-@pytest.mark.parametrize(
-    "copied, status",
-    [((0, 0, 0), "failed"), ((1, 0, 0), "completed_with_errors")],
-)
-def test_raw_material_status_goes_by_what_was_copied(locations, copied, status) -> None:
-    testsheet = _file(locations.project / "TESTSHEET" / "1.xlsx")
-    stages = _stub_stages(RawMaterialWorkflow())
-    stages.extractor.discover_packages.return_value = [_package(testsheet)]
-    stages.auditor.audit.return_value = (
-        None,
-        RawMaterialResult(substations_count=1, ir_copied_count=copied[0], errors=("copy failed",)),
-    )
+def _run_raw_material_with_reads(locations, read_results: list[object]) -> None:
+    """Testsheet reads are real calls on a stubbed reader. Raw material doesn't use Word or Excel."""
+    packages = [_package(_file(locations.project / "TESTSHEET" / f"{i}.xlsx")) for i in range(len(read_results))]
+    stages = RawMaterialWorkflow()
+    extractor = stages.extractor
+    extractor.extractor = MagicMock()
+    extractor.extractor.extract_testsheet_data.side_effect = read_results
+    stages = _stub_stages(stages, extractor=extractor)
+    stages.auditor.audit.return_value = (None, RawMaterialResult(substations_count=len(packages)))
     request = RawMaterialRequest(output_path=locations.project / "RAW MATERIAL")
 
+    def process(environment, request, package, warnings, camera_config=None):
+        extractor._load_testsheet_data(package, warnings)
+        return 0, 0, 0
+
     def action(environment) -> object:
-        with patch.object(stages, "_process_package", return_value=copied):
+        with (
+            patch.object(extractor, "discover_packages", return_value=packages),
+            patch.object(extractor, "load_pe_alignment_data", return_value=set()),
+            patch.object(stages, "_process_package", side_effect=process),
+        ):
             return stages.execute(environment, request)
 
     run_project_action(action, locations.environment)
 
-    assert read_entries(locations.project_logs)[-1]["status"] == status
+
+def test_raw_material_with_every_testsheet_unreadable_is_failed(locations, capsys) -> None:
+    _run_raw_material_with_reads(locations, [RuntimeError("bad sheet one"), RuntimeError("bad sheet two")])
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    assert entries_of(entries, "error")
+    assert "bad sheet one" in entries_of(entries, "warning")[0]["traceback"]
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_raw_material_with_some_testsheets_unreadable_keeps_them_as_warnings(locations, capsys) -> None:
+    _run_raw_material_with_reads(locations, [RuntimeError("bad sheet one"), MagicMock()])
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    assert not entries_of(entries, "error")
+    assert "bad sheet one" in entries_of(entries, "warning")[0]["traceback"]
+    assert "Run Record:" not in capsys.readouterr().out
 
 
 def _consolidate_stages(result):
@@ -2901,19 +2924,58 @@ def test_msms_workflow_status_says_whether_anything_succeeded(
     assert read_entries(locations.project_logs)[-1]["status"] == expected
 
 
-@pytest.mark.parametrize("updated, status", [(0, "failed"), (1, "completed_with_errors")])
-def test_update_qr02_status_says_whether_anything_was_updated(locations, updated, status) -> None:
-    package = _package(locations.project / "1.xlsx")
-    stages = _stub_stages(UpdateQr02CbaWorkflow())
-    stages.extractor.extract_packages.return_value = [package]
-    stages.extractor.extract_records.return_value = ({}, [])
-    stages.filter_stage.filter.return_value = [package]
-    stages.auditor.audit.return_value = UpdateQr02CbaResult(records_updated=updated, errors=("bad",))
+def _run_update_qr02_with_reads(locations, read_results: list[object]) -> None:
+    """Testsheet reads are real calls on a stubbed reader, and the loader that uses Excel is a stub."""
+    packages = [_package(locations.project / f"{i}.xlsx") for i in range(len(read_results))]
+    workflow = UpdateQr02CbaWorkflow()
+    extractor = workflow.extractor
+    extractor.data_extractor = MagicMock()
+    extractor.data_extractor.extract_testsheet_data.side_effect = read_results
+    stages = _stub_stages(workflow, extractor=extractor)
+    stages.filter_stage.filter.return_value = packages
+    stages.auditor.audit.return_value = UpdateQr02CbaResult(records_updated=0)
+    action = UpdateQr02CbaAction("Update QR02")
 
-    run_project_action(lambda environment: stages.execute(environment, UpdateQr02CbaRequest()), locations.environment)
+    with (
+        patch("src.project_workflow_actions.cli_selectors.select_one", return_value="auto"),
+        patch("src.workflows.update_qr02_cba.UpdateQr02CbaWorkflow", return_value=stages),
+        patch.object(extractor, "extract_packages", return_value=packages),
+    ):
+        _run_project_action_object(action, locations)
 
-    assert read_entries(locations.project_logs)[-1]["status"] == status
 
+def test_update_qr02_with_every_testsheet_unreadable_is_failed(locations, capsys) -> None:
+    _run_update_qr02_with_reads(locations, [RuntimeError("bad sheet one"), RuntimeError("bad sheet two")])
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    assert entries_of(entries, "error")
+    assert "bad sheet one" in entries_of(entries, "warning")[0]["traceback"]
+    console = capsys.readouterr().out
+    assert "Records updated: 0" in console
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in console
+
+
+def test_update_qr02_with_some_testsheets_unreadable_keeps_them_as_warnings(locations, capsys) -> None:
+    _run_update_qr02_with_reads(locations, [RuntimeError("bad sheet one"), MagicMock()])
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    assert not entries_of(entries, "error")
+    assert "bad sheet one" in entries_of(entries, "warning")[0]["traceback"]
+    assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_warning_returned_in_the_result_after_being_recorded_appears_once(locations) -> None:
+    def action(environment) -> QuickReportResult:
+        current_run().record_warning("photo missing", ValueError("detail"))
+        return QuickReportResult(reports_generated=1, warnings=("photo missing",))
+
+    run_project_action(action, locations.environment)
+
+    warnings = entries_of(read_entries(locations.project_logs), "warning")
+    assert len(warnings) == 1
+    assert "detail" in warnings[0]["traceback"]
 
 
 def _catalog_with_a_broken_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

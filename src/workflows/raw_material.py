@@ -160,6 +160,9 @@ class RawMaterialPreflightGuard:
             raise RuntimeError(f"TOTAL PE.xlsx pre-check failed while reading: {e}")
 
 
+_TESTSHEET_READ_FAILED = "Failed to extract testsheet data from"
+
+
 class RawMaterialExtractor:
     """Pure I/O reading stage for Raw Material workflow."""
 
@@ -267,7 +270,9 @@ class RawMaterialExtractor:
             try:
                 data = self.extractor.extract_testsheet_data(pkg.testsheet_path)
             except Exception as ex:
-                warnings.append(f"Failed to extract testsheet data from {pkg.testsheet_path}: {ex}")
+                warn_msg = f"{_TESTSHEET_READ_FAILED} {pkg.testsheet_path}: {ex}"
+                current_run().record_warning(warn_msg, ex)
+                warnings.append(warn_msg)
         return data
 
     def _scan_photos(self, unsorted_dir: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
@@ -941,6 +946,10 @@ class RawMaterialWorkflow:
             total_dg_copied += dg_copied
             total_us_tev_extracted += us_tev_extracted
 
+        unreadable = sum(warning.startswith(_TESTSHEET_READ_FAILED) for warning in warnings)
+        if packages and unreadable >= len(packages):
+            current_run().record_failure(f"All {len(packages)} testsheet(s) failed to read.")
+
         self._record_output_folder(environment)
         _, result = self.auditor.audit(
             substations_count,
@@ -950,8 +959,6 @@ class RawMaterialWorkflow:
             warnings,
             errors,
         )
-        if result.errors and not (result.ir_copied_count or result.dg_copied_count or result.us_tev_extracted_count):
-            current_run().mark_failed()
         return result
 
     @staticmethod
