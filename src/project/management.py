@@ -12,6 +12,7 @@ from src.project.environment import ProjectEnvironment, create_project_environme
 from src.project.models import ProjectMetadata
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage
+from src.run_records import save_failure
 
 
 logger = logging.getLogger(__name__)
@@ -249,6 +250,9 @@ def select_active_project_wizard(
             environment = create_project_environment(project_key, repository=repository)
         except Exception as exc:
             print(f"Project activation failed: {exc}")
+            record_path = save_failure("Select Active Project", exc)
+            if record_path:
+                print(f"Run Record: {record_path}")
             last_project_key = project_key
             continue
 

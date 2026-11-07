@@ -36,6 +36,7 @@ from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
 from src.quick_report.compiler import FakeDocumentCompiler
+from src.project_settings_actions import handle_switch_project, handle_view_project_info
 from src.project_workflow_actions import (
     ConsolidateMsmsAction,
     EnrichMsmsAction,
@@ -116,6 +117,7 @@ from src.workflow_cli import (
     _run_project_workflow_menu,
     _run_recorded_action,
     _run_utility_actions_menu,
+    _select_project,
 )
 
 
@@ -2912,3 +2914,70 @@ def test_update_qr02_status_says_whether_anything_was_updated(locations, updated
 
     assert read_entries(locations.project_logs)[-1]["status"] == status
 
+
+
+def _catalog_with_a_broken_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A registered project whose base path is a file, so its folders can't be created."""
+    blocker = tmp_path / "base_path_is_a_file"
+    blocker.write_text("x", encoding="utf-8")
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(
+        json.dumps({"projects": {"broken": {"name": "Broken", "base_path": str(blocker)}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("config._CONFIG_FILE", catalog)
+
+
+def _prompts_choosing_the_broken_project():
+    return (
+        patch("src.project.management.prompt_for_project_key", side_effect=["broken", None]),
+        patch("src.project.management.first_run_setup", return_value=True),
+    )
+
+
+def _assert_activation_failure_saved(locations, session, capsys) -> None:
+    entries = read_entries(locations.fallback_logs)
+    assert entries[-1]["status"] == "failed"
+    assert entries_of(entries, "error")[0]["traceback"]
+    assert entries[0]["project_key"] is None
+    console = capsys.readouterr().out
+    assert "Project activation failed:" in console
+    assert f"Run Record: {next(locations.fallback_logs.glob('*.jsonl'))}" in console
+    assert session.active_project is None
+
+
+def test_project_activation_failure_is_saved_in_the_fallback_folder(locations, tmp_path, monkeypatch, capsys) -> None:
+    _catalog_with_a_broken_project(tmp_path, monkeypatch)
+    session = CliSession(persistence_file=tmp_path / ".active_project.json")
+    prompts = _prompts_choosing_the_broken_project()
+
+    with prompts[0], prompts[1]:
+        assert _select_project(session) is None
+
+    _assert_activation_failure_saved(locations, session, capsys)
+
+
+@pytest.mark.parametrize("handler", [handle_switch_project, handle_view_project_info])
+def test_project_settings_callers_of_the_wizard_still_work(locations, tmp_path, monkeypatch, capsys, handler) -> None:
+    _catalog_with_a_broken_project(tmp_path, monkeypatch)
+    session = CliSession(persistence_file=tmp_path / ".active_project.json")
+    prompts = _prompts_choosing_the_broken_project()
+
+    with prompts[0], prompts[1]:
+        handler(session)
+
+    _assert_activation_failure_saved(locations, session, capsys)
+
+
+def test_activating_a_project_normally_saves_nothing(locations, tmp_path, capsys) -> None:
+    session = CliSession(persistence_file=tmp_path / ".active_project.json")
+
+    with (
+        patch("src.project.management.prompt_for_project_key", return_value="good"),
+        patch("src.project.management.first_run_setup", return_value=True),
+        patch("src.project.management.create_project_environment", return_value=locations.environment),
+    ):
+        assert _select_project(session) is locations.environment
+
+    assert not locations.fallback_logs.exists()
+    assert "Run Record:" not in capsys.readouterr().out
