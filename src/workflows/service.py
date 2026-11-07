@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from functools import wraps
+from typing import TYPE_CHECKING, Callable, TypeVar
 
 from src.run_records import current_run
 from src.workflows.models import (
@@ -45,6 +46,21 @@ if TYPE_CHECKING:
     )
 
 
+_Result = TypeVar("_Result")
+
+
+def _timed_work(method: Callable[..., _Result]) -> Callable[..., _Result]:
+    """Time a service workflow as one Step. Every prompt has been answered by the time it's called."""
+    name = f"Workflow: {method.__name__.removeprefix('run_')}"
+
+    @wraps(method)
+    def timed(*args: object, **kwargs: object) -> _Result:
+        with current_run().step(name):
+            return method(*args, **kwargs)
+
+    return timed
+
+
 def _record_request(environment: ProjectEnvironment, request: object) -> None:
     """Add a request and the project's workbooks to the open Run Record, if there is one."""
     run = current_run()
@@ -60,6 +76,7 @@ def _record_request(environment: ProjectEnvironment, request: object) -> None:
 class WorkflowService:
     """Core workflow service executing project operations."""
 
+    @_timed_work
     def run_generate_testsheet_folder(
         self,
         environment: ProjectEnvironment,
@@ -74,6 +91,7 @@ class WorkflowService:
 
         return GenerateTestsheetFolderStructureWorkflow().execute(environment, request)
 
+    @_timed_work
     def run_populate_total_pe(
         self, environment: ProjectEnvironment, request: PopulateTotalPeRequest
     ) -> PopulateTotalPeResult:
@@ -83,6 +101,7 @@ class WorkflowService:
         workflow = PopulateTotalPeWorkflow()
         return workflow.execute(environment, request)
 
+    @_timed_work
     def run_raw_material(
         self, environment: ProjectEnvironment, request: RawMaterialRequest
     ) -> RawMaterialResult:
@@ -92,6 +111,7 @@ class WorkflowService:
         workflow = RawMaterialWorkflow()
         return workflow.execute(environment, request)
 
+    @_timed_work
     def run_update_qr02_cba(
         self, environment: ProjectEnvironment, request: UpdateQr02CbaRequest
     ) -> UpdateQr02CbaResult:
@@ -103,6 +123,7 @@ class WorkflowService:
         return workflow.execute(environment, request)
 
 
+    @_timed_work
     def run_whatsapp(
         self, environment: ProjectEnvironment, request: WhatsAppReportRequest
     ) -> WhatsAppReportResult:
@@ -113,6 +134,7 @@ class WorkflowService:
         workflow = WhatsAppReportWorkflow()
         return workflow.execute(environment, request)
 
+    @_timed_work
     def run_propagate_wo(
         self, environment: ProjectEnvironment, request: PropagateWoRequest | None = None
     ) -> PropagateWoResult:
@@ -123,6 +145,7 @@ class WorkflowService:
         workflow = PropagateWoWorkflow()
         return workflow.execute(environment, request)
 
+    @_timed_work
     def run_consolidate_msms(
         self, environment: ProjectEnvironment, request: ConsolidateMsmsRequest | None = None
     ) -> ConsolidateMsmsResult:
@@ -133,6 +156,7 @@ class WorkflowService:
         workflow = ConsolidateMsmsWorkflow()
         return workflow.execute(environment, request)
 
+    @_timed_work
     def run_enrich_msms(
         self, environment: ProjectEnvironment, request: EnrichMsmsRequest | None = None
     ) -> EnrichMsmsResult:
@@ -143,6 +167,7 @@ class WorkflowService:
         workflow = EnrichMsmsWorkflow()
         return workflow.execute(environment, request)
 
+    @_timed_work
     def run_ingest_msms_csv(
         self, environment: ProjectEnvironment, request: IngestMsmsCsvRequest | None = None
     ) -> IngestMsmsCsvResult:
@@ -154,6 +179,7 @@ class WorkflowService:
         workflow = IngestMsmsCsvWorkflow()
         return workflow.execute(environment, req)
 
+    @_timed_work
     def run_populate_data_msms(
         self, environment: ProjectEnvironment, request: PopulateDataMsmsRequest | None = None
     ) -> PopulateDataMsmsResult:
@@ -165,6 +191,7 @@ class WorkflowService:
         workflow = PopulateDataMsmsWorkflow()
         return workflow.execute(environment, req)
 
+    @_timed_work
     def run_postprocessing_pipeline(
         self,
         environment: ProjectEnvironment,
@@ -176,6 +203,7 @@ class WorkflowService:
         workflow = PostProcessingPipelineWorkflow()
         return workflow.execute(environment, request)
 
+    @_timed_work
     def run_full_report_postprocessing(
         self,
         environment: ProjectEnvironment,

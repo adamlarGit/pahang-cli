@@ -12,6 +12,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import date
@@ -42,6 +43,7 @@ from src.project_workflow_actions import (
     EnrichMsmsAction,
     FullReportAction,
     FullReportPostProcessingAction,
+    GenerateTestsheetFolderAction,
     IngestMsmsCsvAction,
     PopulateDataMsmsAction,
     PopulateTotalPeAction,
@@ -1083,8 +1085,8 @@ def test_steps_are_timed_and_a_failed_step_is_marked(locations) -> None:
     run_project_action(action, locations.environment)
 
     entries = read_entries(locations.project_logs)
-    assert [entry["name"] for entry in entries_of(entries, "step_start")] == ["Execute action", "Substation A", "Substation B"]
-    finished = [entry for entry in entries_of(entries, "step_finish") if entry["name"] != "Execute action"]
+    assert [entry["name"] for entry in entries_of(entries, "step_start")] == ["Substation A", "Substation B"]
+    finished = entries_of(entries, "step_finish")
     assert [(entry["name"], entry["status"]) for entry in finished] == [
         ("Substation A", "completed"),
         ("Substation B", "failed"),
@@ -3059,19 +3061,51 @@ def test_same_error_gains_its_traceback_if_first_recorded_without_one(locations)
     assert [("traceback" in error) for error in errors] == [False, True]
 
 
-@pytest.mark.parametrize("fails", [False, True])
-def test_action_boundary_records_a_timed_execution_step(locations, fails) -> None:
-    def action(environment):
-        if fails:
-            raise RuntimeError("execution failed")
+def test_time_spent_waiting_on_a_prompt_is_in_no_step(locations) -> None:
+    """A fake prompt sleeps, then a real action calls the service, whose workflow is stubbed."""
+    wait_seconds = 0.5
+
+    def slow_prompt(*args, **kwargs) -> str:
+        time.sleep(wait_seconds)
+        return "KUANTAN"
+
+    action = GenerateTestsheetFolderAction("Generate TESTSHEET Folder Structure")
+    result = GenerateTestsheetFolderResult(station="KUANTAN", month="NOV")
+    module = "src.project_workflow_actions.cli_selectors"
+    with (
+        patch(f"{module}.select_or_create_testsheet_station", side_effect=slow_prompt),
+        patch(f"{module}.select_or_create_testsheet_month", return_value="NOV"),
+        patch(f"{module}.prompt_target_inspection_dates", return_value=("07-11-2026",)),
+        patch("src.workflows.generate_testsheet_folder.GenerateTestsheetFolderStructureWorkflow") as workflow,
+    ):
+        workflow.return_value.execute.return_value = result
+        _run_project_action_object(action, locations)
+
+    entries = read_entries(locations.project_logs)
+    finished = entries_of(entries, "step_finish")
+    assert [entry["name"] for entry in finished] == ["Workflow: generate_testsheet_folder"]
+    assert finished[0]["duration_seconds"] < wait_seconds
+    assert entries[-1]["duration_seconds"] >= wait_seconds
+
+
+def test_action_with_no_steps_of_its_own_records_none(locations) -> None:
+    run_project_action(lambda environment: time.sleep(0.01), locations.environment)
+
+    assert not entries_of(read_entries(locations.project_logs), "step_start")
+
+
+def test_service_workflow_failure_marks_its_step_failed(locations) -> None:
+    def action(environment) -> None:
+        with patch("src.workflows.propagate_wo.PropagateWoWorkflow") as workflow:
+            workflow.return_value.execute.side_effect = RuntimeError("workbook locked")
+            WorkflowService().run_propagate_wo(environment)
 
     run_project_action(action, locations.environment)
+
     entries = read_entries(locations.project_logs)
-    assert entries_of(entries, "step_start")[0]["name"] == "Execute action"
-    finish = entries_of(entries, "step_finish")[-1]
-    assert finish["name"] == "Execute action"
-    assert finish["duration_seconds"] >= 0
-    assert finish["status"] == ("failed" if fails else "completed")
+    finished = entries_of(entries, "step_finish")
+    assert [(entry["name"], entry["status"]) for entry in finished] == [("Workflow: propagate_wo", "failed")]
+    assert entries[-1]["status"] == "failed"
 
 
 def test_nested_survey_files_have_individual_metadata(locations, tmp_path) -> None:

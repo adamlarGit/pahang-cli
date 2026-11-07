@@ -115,8 +115,7 @@ class Run:
     def call(self, action: Callable[[], Any]) -> Any:
         """Run the action, record its outcome, and re-raise its failure unchanged."""
         try:
-            with self.step("Execute action"):
-                result = action()
+            result = action()
         except OperationCancelled as exc:
             self._status = "cancelled"
             self._write("cancelled", message=_text_of(exc))
