@@ -13,7 +13,11 @@ _OFFICE_CLSIDS = {
     "{000209ff-0000-0000-c000-000000000046}",  # Word.Application
     "{00024500-0000-0000-c000-000000000046}",  # Excel.Application
 }
-_START_FUNCTIONS = ("connect", "CoCreateInstance", "CoCreateInstanceEx", "GetActiveObject")
+_OFFICE_FILE_SUFFIXES = (
+    ".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm", ".rtf",
+    ".xls", ".xlsx", ".xlsm", ".xlsb", ".xlt", ".xltx", ".xltm",
+)
+_START_FUNCTIONS = ("connect", "CoCreateInstance", "CoCreateInstanceEx", "GetActiveObject", "MkParseDisplayName")
 
 _current_item: pytest.Item | None = None
 _blocked_starts: list[str] = []
@@ -26,7 +30,11 @@ class MissingWordMarker(RuntimeError):
 
 def _is_office(target: object) -> bool:
     name = str(target).lower()
-    return name.startswith(_OFFICE_PROGID_PREFIXES) or name in _OFFICE_CLSIDS
+    return (
+        name.startswith(_OFFICE_PROGID_PREFIXES)
+        or name in _OFFICE_CLSIDS
+        or name.endswith(_OFFICE_FILE_SUFFIXES)
+    )
 
 
 def _guarded(real_start):

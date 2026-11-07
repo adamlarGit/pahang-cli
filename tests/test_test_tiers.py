@@ -31,7 +31,7 @@ def _stub(*args, **kwargs):
     raise RealStartReached(f"real COM start reached: {args[0]}")
 
 
-for _name in ("connect", "CoCreateInstance", "CoCreateInstanceEx", "GetActiveObject"):
+for _name in ("connect", "CoCreateInstance", "CoCreateInstanceEx", "GetActiveObject", "MkParseDisplayName"):
     setattr(pythoncom, _name, _stub)
 
 from tests.conftest import *  # noqa: E402,F403
@@ -109,6 +109,8 @@ def test_full_run_option_selects_every_test(tmp_path: Path) -> None:
         'win32com.client.GetActiveObject("Word.Application")',
         'win32com.client.Dispatch("Excel.Application")',
         'win32com.client.DispatchEx("Excel.Application")',
+        'win32com.client.GetObject("C:/fake/REPORT.DOCX")',
+        'win32com.client.GetObject("C:/fake/testsheet.xlsx")',
     ],
 )
 def test_unmarked_test_starting_office_fails_naming_the_marker(tmp_path: Path, start: str) -> None:
@@ -261,6 +263,8 @@ def test_guard_ignores_other_com_servers(tmp_path: Path) -> None:
         def test_other_server():
             with pytest.raises(RealStartReached):
                 win32com.client.Dispatch("Shell.Application")
+            with pytest.raises(RealStartReached):
+                win32com.client.GetObject("winmgmts:")
         """,
     )
 
