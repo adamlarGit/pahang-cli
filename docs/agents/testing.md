@@ -14,6 +14,18 @@ uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 pytest --overrid
 
 A Full Run starts real Word and reads live project folders. Close Word and Excel first, because #176 suggests these runs can close an open Word window. It needs `.cli_config.json` and `.active_project.json`; without them, some live-data tests skip.
 
+## Running part of a tier
+
+Add these after `pytest` in the commands above.
+
+- One tier: `-m word` or `-m live_data`.
+- One marked test: `--override-ini=addopts= tests/test_file.py::test_name`.
+
+Selection has two traps:
+
+- Any `-m` you pass replaces the default one, so `-m "not slow"` also selects `word` and `live_data` tests.
+- A node ID alone keeps the default `-m`, so a marked test is deselected and nothing runs.
+
 ## Why `uv run --frozen --with`
 
 These commands run on the locked packages and bring in pinned test tools for that run only. `uv.lock` stays unchanged and pytest stays out of `.venv`.

@@ -1,7 +1,7 @@
 """End-to-End Multi-Part Full Report Verification & Regression Suite (Ticket #58).
 
 Validates:
-1. Synthetic VCB benchmark fixture in tests/benchmarks/pe157_perpustakaan_awam/:
+1. Synthetic VCB benchmark fixture materialized into a temp folder:
    - 5-panel TAMCO VCB 11kV lineup with transition bay, PT on panel 4, 1 transformer, 1 feeder pillar, and 1 inline CBM defect page.
 2. CLI dry-run telemetry:
    - _print_full_report_dry_run_telemetry displays [Multi-part: X files] for multi-part substations.
