@@ -21,6 +21,7 @@ Every entry has `type` and an ISO 8601 UTC `time`.
 | `request` | Full request, including selected dates, substations and options; objects such as converters and sinks are described by type |
 | `request_update` | `workflow` identifying an earlier request and `changes` to apply in order |
 | `input` | Path, existence, size in bytes, and modified time in UTC; missing paths have null size/time |
+| `input_truncated` | `folder`, `recorded` and `left_out`, when a folder held more files than the per-folder limit |
 | `step_start`, `step_finish` | Step name; finishes add status and duration in seconds, and error text when raised |
 | `log` | Logger name, level, message and exception traceback when supplied |
 | `progress`, `console` | Existing stdout lines; prompt-toolkit drawing is excluded |
@@ -31,16 +32,18 @@ Every entry has `type` and an ISO 8601 UTC `time`.
 
 Final statuses are `completed`, `completed_with_errors` (some batch items failed), `failed` (the whole job failed), or `cancelled` (explicit `OperationCancelled`). Older actions that return normally on cancellation finish as `completed`. Returning an error list alone means partial failure unless the workflow explicitly reports that its whole job failed.
 
-Requests may appear first as selections and later as complete workflow requests. Apply `request_update.changes` over the earlier request with the same `workflow`. Unchanged values are omitted; keys omitted by a later update retain their earlier values. Identical input/output paths and repeated warning/error messages are deduplicated; an error can acquire a later traceback.
+Requests may appear first as selections and later as complete workflow requests. Apply `request_update.changes` over the earlier request with the same `workflow`. Unchanged values are omitted; keys omitted by a later update retain their earlier values. Identical input and output paths and repeated warning text are recorded once. Each error keeps its own entry, even when two substations fail with identical text. An error isn't repeated when the same exception is recorded again, when the same item fails the same way in a second pass, such as inspect then generate, or when a result returns an error already recorded.
 
-Every action has an `Execute action` Step. Report generation also times per-substation composition and Full Report plan building. Input discovery includes selected reports, testsheets, raw photos and archives, survey files, resolved templates, and shared workbooks. Directory discovery can include additional candidate files, without reading their contents.
+Steps measure work, never time spent waiting on prompts. Workflows run through `WorkflowService` have one `Workflow: <name>` Step. Report generation times per-substation composition and Full Report plan building. Other actions may have no Steps.
+
+Input discovery includes selected reports, testsheets, raw photos and archives, survey files, resolved templates, and shared workbooks. Directory discovery can include candidate files the workflow doesn't go on to use. Each folder is listed once per Run and its files are never opened. At most 200 files per folder are recorded, followed by an `input_truncated` entry; change `_MAX_INPUTS_PER_FOLDER` in `src/run_records.py` to adjust this.
 
 ## Developer integration and tests
 
 The action-running layer opens and closes records. Workflows add detail through `current_run()`, whose methods do nothing outside a recorded action. Use `record_request`, `record_inputs`, `record_input_folder`, `record_outputs`, `record_warning`, `record_error`, and `step`. Report a whole-job failure with `record_failure` or `mark_failed`. Nested runs reuse the outer recording context and do not create another file.
 
-Version discovery reads Office installation metadata from the registry and executable files. It never dispatches Word or Excel. Recording errors are swallowed, including errors opening or writing the JSONL file. Console output retains its existing destinations, levels and formatting; recording captures `src` logger messages and direct root logging calls. The CLI does not reconfigure logging handlers during an action.
+Version discovery reads Office installation metadata from the registry and executable files. It never dispatches Word or Excel. Recording errors are swallowed, including errors opening or writing the JSONL file. Console output retains its existing destinations, levels and formatting. During a Run, recording captures `src` logger messages and direct root logging calls: a temporary handler stands in for the root logger's handlers and passes on what they'd have received, and the originals are restored afterwards.
 
 `PAHANG_CLI_RUN_RECORD_DIR` overrides every location, with no fallback. The suite-wide pytest configuration sets it to a temporary folder, including for child processes. Location-policy tests remove the override only while both project and fallback paths point under `tmp_path`. Never use a real project folder to test record writing.
 
-Run focused validation with `uv run --with pytest python -m pytest tests/test_run_records.py -q`. Console compatibility also requires an interactive Windows console check; see the ticket verification notes.
+Run tests as described in `docs/agents/testing.md`. Changes to prompts or console capture also need a hand check in a real console; see [the verification notes](run_records_verification.md).
