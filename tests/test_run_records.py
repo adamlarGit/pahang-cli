@@ -20,8 +20,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import openpyxl
+import pythoncom
 import pytest
 import questionary
+import win32com.client
 from prompt_toolkit.application import create_app_session
 from prompt_toolkit.data_structures import Size
 from prompt_toolkit.input import create_pipe_input
@@ -112,6 +114,19 @@ from src.workflow_cli import (
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(autouse=True)
+def _no_real_office(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail any test in this file that tries to start real Word or Excel."""
+
+    def blocked(*args, **kwargs):
+        raise AssertionError(f"Real Word or Excel must not start in these tests: {args!r}")
+
+    monkeypatch.setattr(win32com.client, "Dispatch", blocked)
+    monkeypatch.setattr(win32com.client, "DispatchEx", blocked)
+    monkeypatch.setattr(win32com.client.gencache, "EnsureDispatch", blocked)
+    monkeypatch.setattr(pythoncom, "CoCreateInstance", blocked)
 
 
 def make_environment(base_path: Path, key: str = "fake_project") -> ProjectEnvironment:
@@ -1936,14 +1951,24 @@ def _case_combine_with_separator(locations, tmp_path):
 
 def _case_docx_to_pdf(locations, tmp_path):
     docx = _file(tmp_path / "folder" / "1.docx")
-    with _answers(str(docx.parent)), patch("src.workflows.docx_to_pdf.ComDocumentConverter", _FakeConverterClass):
+    with (
+        _answers(str(docx.parent)),
+        patch("src.workflows.docx_to_pdf.ComDocumentConverter", _FakeConverterClass),
+        # Without this, the fake passes the loop's isinstance check and it starts real Word.
+        patch("src.workflows.docx_to_pdf.win32com", None),
+    ):
         run_registered_utility("Convert DOCX to PDF (batch)")
     return {"input_directory": str(docx.parent)}, [docx], [docx.resolve().with_suffix(".pdf")]
 
 
 def _case_testsheet_to_pdf(locations, tmp_path):
     sheet = _file(tmp_path / "folder" / "1.xlsx")
-    with _answers(str(sheet.parent)), patch("src.workflows.testsheet_to_pdf.ComDocumentConverter", _FakeConverterClass):
+    with (
+        _answers(str(sheet.parent)),
+        patch("src.workflows.testsheet_to_pdf.ComDocumentConverter", _FakeConverterClass),
+        # Without this, the fake passes the loop's isinstance check and it starts real Excel.
+        patch("src.workflows.testsheet_to_pdf.win32com", None),
+    ):
         run_registered_utility("Convert Testsheet to PDF (batch)")
     return {"folder_path": str(sheet.parent)}, [sheet], [sheet.resolve().with_suffix(".pdf")]
 
