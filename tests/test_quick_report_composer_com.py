@@ -944,6 +944,10 @@ def test_quick_report_workflow_33kv_substations_compilation_regression(tmp_path:
         Path("RAW MATERIAL") / date_rel,
     ):
         shutil.copytree(dataset_33kv / rel, sandbox / rel)
+    # The environment reads its PRPD mode from this file when the project has one.
+    project_config = dataset_33kv / "project_config.json"
+    if project_config.exists():
+        shutil.copy2(project_config, sandbox / project_config.name)
     target_date_dir = sandbox / "TESTSHEET" / date_rel
 
     meta = ProjectMetadata(
