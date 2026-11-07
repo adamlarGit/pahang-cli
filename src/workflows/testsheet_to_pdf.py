@@ -13,6 +13,7 @@ except ImportError:
     win32com = None  # type: ignore[assignment]
 
 from src.postprocessing.converters import ComDocumentConverter, DocumentConverter
+from src.run_records import current_run
 from src.workflows.progress import ProgressSink, QuantityProgressTracker
 
 SUPPORTED_TESTSHEET_EXTENSIONS = {".xls", ".xlsx", ".xlsm", ".xlsb"}
@@ -70,6 +71,7 @@ def convert_testsheet_folder_to_pdf(
                 converter.convert_testsheet_to_pdf(testsheet_path, output_path, excel_app=excel_app)
             else:
                 converter.convert_testsheet_to_pdf(testsheet_path, output_path)
+            current_run().record_outputs([output_path])
             converted += 1
     finally:
         if excel_app is not None:
@@ -91,6 +93,8 @@ def convert_testsheet_folder_to_pdf(
 def run_testsheet_to_pdf() -> TestsheetToPdfSummary:
     """Interactive entrypoint for batch testsheet to PDF conversion."""
     folder_path = input("Enter the path to the folder containing testsheet files: ").strip().strip('"')
+    current_run().record_request({"workflow": "Testsheet to PDF", "folder_path": folder_path})
+    current_run().record_input_folder(folder_path, SUPPORTED_TESTSHEET_EXTENSIONS)
     summary = convert_testsheet_folder_to_pdf(folder_path)
     print(f"Converted {summary.converted_count} testsheet file(s) to PDF in {summary.input_directory}.")
     return summary

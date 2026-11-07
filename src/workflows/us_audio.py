@@ -412,6 +412,7 @@ class UsAudioWorkflow:
             if candidate.survey_dir and Path(candidate.survey_dir).is_dir():
                 out_dir = candidate.resolve_sounds_output_dir()
                 wav_paths = export_substation_16bit_wavs(candidate.survey_dir, out_dir)
+                current_run().record_outputs([out_dir])
                 wavs_exported += len(wav_paths)
             else:
                 logger.info(
@@ -428,6 +429,7 @@ class UsAudioWorkflow:
                         survey_root=candidate.survey_dir,
                         package=candidate.package,
                     )
+                    current_run().record_outputs([pdf_target])
                     sounds_embedded += embedded
 
         return wavs_exported, sounds_embedded
@@ -722,6 +724,24 @@ def run_generate_us_audio_action(environment: Any) -> UsAudioWorkflowSummary | N
     if not selected_candidates:
         print("No substations selected. Operation cancelled.")
         return None
+
+    current_run().record_request(
+        {
+            "workflow": "US Audio",
+            "dates": folder_dates,
+            "mode": effective_mode,
+            "substations": [candidate.display_name for candidate in selected_candidates],
+        }
+    )
+    for candidate in selected_candidates:
+        current_run().record_inputs(
+            [
+                candidate.survey_dir,
+                candidate.full_report_pdf,
+                candidate.quick_report_pdf,
+                getattr(candidate.package, "testsheet_path", None),
+            ]
+        )
 
     workflow = UsAudioWorkflow(mode=effective_mode)
     print(

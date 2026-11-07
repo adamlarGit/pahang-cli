@@ -16,6 +16,7 @@ from src.master.total_pe import (
     TotalPeRepository,
 )
 from src.project.environment import ProjectEnvironment
+from src.run_records import current_run
 from src.testsheet.models import SubstationTestsheetPackage
 from src.testsheet.parsers.common import normalize_fl_erms
 from src.testsheet.repository import SubstationTestsheetRepository
@@ -412,6 +413,7 @@ class PopulateTotalPeWorkflow:
             mode=request.mode,
             eager_extract=False,
         )
+        current_run().record_inputs(package.testsheet_path for package in packages)
 
         existing_auto_keys: set[tuple[str, str]] | None = None
         if request.mode == PopulateMode.AUTO:
@@ -448,6 +450,7 @@ class PopulateTotalPeWorkflow:
 
         plan = self.transformer.build_plan(total_pe_path, hydrated_packages)
         load_output = self.loader.upsert_packages(plan)
+        current_run().record_outputs([total_pe_path])
 
         result = self.auditor.audit(environment, plan, load_output)
 

@@ -282,6 +282,7 @@ def batch_replace_pce_images(
         print(f"\n[{processed_count + failed_count + 1}] Processing file: {filename}")
         try:
             replace_pce_images(full_path, photo1_path, photo2_path, output_path=out_path, mode=mode)
+            current_run().record_outputs([out_path])
             processed_count += 1
         except Exception as e:
             current_run().record_error(f"Failed to process {filename}: {e}", e)
@@ -410,6 +411,18 @@ def run_replace_images(env: ProjectEnvironment | None = None) -> ReplaceImagesSu
         print("Cancelled signature selection for img2.")
         return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=None, mode=mode, processed_count=0, failed_count=0)
 
+    current_run().record_request(
+        {
+            "workflow": "Replace Signatures",
+            "target": target,
+            "photo1": photo1_path,
+            "photo2": photo2_path,
+            "mode": mode,
+        }
+    )
+    current_run().record_input_folder(target, (".xlsx",))
+    current_run().record_inputs([photo1_path, photo2_path])
+
     print(f"\n=== Running {mode.upper()} replacement ===")
     print(f"Target : {target}")
     print(f"Img1   : {photo1_path if photo1_path else '[None - Text Removal Only]'}")
@@ -427,6 +440,7 @@ def run_replace_images(env: ProjectEnvironment | None = None) -> ReplaceImagesSu
                 out_dir.mkdir(parents=True, exist_ok=True)
                 out_path = out_dir / target.name
             replace_pce_images(target, photo1_path, photo2_path, output_path=out_path, mode=mode)
+            current_run().record_outputs([out_path])
             return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=photo2_path, mode=mode, processed_count=1, failed_count=0)
         except Exception as e:
             current_run().record_failure(f"Failed to process file {target}: {e}", e)

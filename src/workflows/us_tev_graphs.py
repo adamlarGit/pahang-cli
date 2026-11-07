@@ -353,6 +353,17 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
     prpd_config = environment.get_prpd_config()
     render_mode = getattr(prpd_config, "mode", "option_c")
 
+    current_run().record_request(
+        {
+            "workflow": "US+TEV Survey Graphs",
+            "dates": folder_dates,
+            "mode": render_mode,
+            "substations": [_format_package_label(candidate.package) for candidate in selected_candidates],
+        }
+    )
+    current_run().record_inputs(candidate.survey_dir for candidate in selected_candidates)
+    current_run().record_inputs(candidate.package.testsheet_path for candidate in selected_candidates)
+
     workflow = UsTevGraphWorkflow(mode=render_mode)
     try:
         workflow.check_browser_prerequisite()
@@ -376,6 +387,7 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
         print(f"[{idx}/{total}] {pe_name}: Generated {count} graphs{skipped_note} -> {out_dir}")
 
     summary = workflow.run_batch(batch, on_progress=_on_progress)
+    current_run().record_outputs(candidate.output_dir for candidate in selected_candidates)
 
     print("\n" + "=" * 80)
     print("US+TEV SURVEY GRAPH GENERATION SUMMARY")

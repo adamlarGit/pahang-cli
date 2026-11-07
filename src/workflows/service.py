@@ -116,7 +116,7 @@ class WorkflowService:
     def run_propagate_wo(
         self, environment: ProjectEnvironment, request: PropagateWoRequest | None = None
     ) -> PropagateWoResult:
-        _record_request(environment, request)
+        _record_request(environment, request or PropagateWoRequest())
         if request and request.progress_sink:
             request.progress_sink("Executing Propagate Work Orders workflow...")
         from src.workflows.propagate_wo import PropagateWoWorkflow
@@ -126,7 +126,7 @@ class WorkflowService:
     def run_consolidate_msms(
         self, environment: ProjectEnvironment, request: ConsolidateMsmsRequest | None = None
     ) -> ConsolidateMsmsResult:
-        _record_request(environment, request)
+        _record_request(environment, request or ConsolidateMsmsRequest())
         if request and request.progress_sink:
             request.progress_sink("Executing Consolidate MSMS workflow...")
         from src.workflows.consolidate_msms import ConsolidateMsmsWorkflow
@@ -136,7 +136,7 @@ class WorkflowService:
     def run_enrich_msms(
         self, environment: ProjectEnvironment, request: EnrichMsmsRequest | None = None
     ) -> EnrichMsmsResult:
-        _record_request(environment, request)
+        _record_request(environment, request or EnrichMsmsRequest())
         if request and request.progress_sink:
             request.progress_sink("Executing Enrich MSMS workflow...")
         from src.workflows.enrich_msms import EnrichMsmsWorkflow
@@ -146,7 +146,7 @@ class WorkflowService:
     def run_ingest_msms_csv(
         self, environment: ProjectEnvironment, request: IngestMsmsCsvRequest | None = None
     ) -> IngestMsmsCsvResult:
-        _record_request(environment, request)
+        _record_request(environment, request or IngestMsmsCsvRequest())
         req = request or IngestMsmsCsvRequest()
         if req.progress_sink:
             req.progress_sink("Executing Ingest MSMS CSV workflow...")
@@ -157,7 +157,7 @@ class WorkflowService:
     def run_populate_data_msms(
         self, environment: ProjectEnvironment, request: PopulateDataMsmsRequest | None = None
     ) -> PopulateDataMsmsResult:
-        _record_request(environment, request)
+        _record_request(environment, request or PopulateDataMsmsRequest())
         req = request or PopulateDataMsmsRequest()
         if req.progress_sink:
             req.progress_sink("Executing Populate Data MSMS workflow...")
@@ -170,7 +170,7 @@ class WorkflowService:
         environment: ProjectEnvironment,
         request: PostProcessingRequest | None = None,
     ) -> PostProcessingSummary:
-        _record_request(environment, request)
+        _record_request(environment, request or PostProcessingRequest())
         from src.workflows.postprocessing_pipeline import PostProcessingPipelineWorkflow
 
         workflow = PostProcessingPipelineWorkflow()

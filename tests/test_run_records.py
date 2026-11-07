@@ -12,11 +12,14 @@ import logging
 import os
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import openpyxl
 import pytest
 import questionary
 from prompt_toolkit.application import create_app_session
@@ -30,31 +33,68 @@ from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
 from src.project_workflow_actions import (
+    ConsolidateMsmsAction,
+    EnrichMsmsAction,
     FullReportAction,
     FullReportPostProcessingAction,
+    IngestMsmsCsvAction,
+    PopulateDataMsmsAction,
+    PopulateTotalPeAction,
     ProjectWorkflowAction,
+    PropagateWoAction,
     QuickReportAction,
+    RawMaterialAction,
+    UpdateQr02CbaAction,
+    WhatsAppReportAction,
 )
 from src.run_records import RECORD_DIR_OVERRIDE_VARIABLE, current_run, open_run
 from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 from src.utility_actions import UtilityAction, get_utility_actions
-from src.workflows.consolidate_msms import ConsolidateMsmsExtractor
+from src.workflows.combine_pdfs_with_separator import CombinePdfsWithSeparatorSummary
+from src.workflows.consolidate_msms import ConsolidateMsmsExtractor, ConsolidateMsmsWorkflow
+from src.workflows.enrich_msms import EnrichMsmsWorkflow
 from src.workflows.full_report import FullReportInspection, FullReportWorkflow
 from src.workflows.full_report_postprocessing import (
     FullReportPostProcessingInspection,
     FullReportPostProcessingWorkflow,
 )
+from src.workflows.ingest_msms_csv import IngestMsmsCsvWorkflow
 from src.workflows.models import (
+    ConsolidateMsmsRequest,
     ConsolidateMsmsResult,
+    EnrichMsmsRequest,
+    EnrichMsmsResult,
+    GenerateTestsheetFolderRequest,
+    IngestMsmsCsvRequest,
+    IngestMsmsCsvResult,
+    PopulateDataMsmsRequest,
+    PopulateDataMsmsResult,
+    PopulateMode,
+    PopulateTotalPeRequest,
+    PopulateTotalPeResult,
     PostProcessingMode,
     PostProcessingRequest,
     PostProcessingSummary,
+    PropagateWoRequest,
+    PropagateWoResult,
     QuickReportInspection,
     QuickReportResult,
+    RawMaterialRequest,
+    RawMaterialResult,
+    UpdateQr02CbaRequest,
+    UpdateQr02CbaResult,
+    WhatsAppReportRequest,
+    WhatsAppReportResult,
 )
+from src.workflows.pdf_extract import PdfExtractSummary
+from src.workflows.populate_data_msms import PopulateDataMsmsWorkflow
+from src.workflows.populate_total_pe import PopulateTotalPeWorkflow
 from src.workflows.postprocessing_pipeline import PostProcessingPipelineWorkflow
+from src.workflows.propagate_wo import PropagateWoWorkflow
 from src.workflows.quick_report import QuickReportWorkflow
+from src.workflows.raw_material import RawMaterialWorkflow
 from src.workflows.service import WorkflowService
+from src.workflows.update_qr02_cba import UpdateQr02CbaWorkflow
 from src.workflows.us_audio import UsAudioCandidate, UsAudioWorkflow
 from src.workflows.us_tev_graphs import (
     BrowserPrerequisiteError,
@@ -62,6 +102,7 @@ from src.workflows.us_tev_graphs import (
     UsTevCandidate,
     UsTevGraphWorkflow,
 )
+from src.workflows.whatsapp import WhatsAppReportWorkflow
 from src.workflow_cli import (
     _run_action,
     _run_project_workflow_menu,
@@ -455,18 +496,37 @@ def test_tests_reading_the_active_project_cannot_write_into_it(tmp_path, monkeyp
     assert not local_app_data.exists()
 
 
-def test_protection_reaches_a_child_process() -> None:
-    """Subprocesses and xdist workers inherit the redirect from the environment."""
-    probe = "import os; from src.run_records import RECORD_DIR_OVERRIDE_VARIABLE as v; print(os.environ[v])"
+def test_protection_reaches_a_child_process(tmp_path) -> None:
+    """A child process's Run lands in the suite's redirect folder, and nowhere else."""
+    project = tmp_path / "project"
+    project.mkdir()
+    local_app_data = tmp_path / "local_app_data"
+    label = f"child-{uuid.uuid4().hex}"
+    script = (
+        "import sys\n"
+        "from types import SimpleNamespace\n"
+        "from src.run_records import open_run\n"
+        "environment = SimpleNamespace(project_key='child_project', base_path=sys.argv[2])\n"
+        "with open_run(sys.argv[1], environment) as run:\n"
+        "    run.call(lambda: None)\n"
+        "print(run.path)\n"
+    )
     completed = subprocess.run(
-        [sys.executable, "-c", probe],
+        [sys.executable, "-c", script, label, str(project)],
         cwd=REPO_ROOT,
+        env={**os.environ, "LOCALAPPDATA": str(local_app_data)},
         capture_output=True,
         text=True,
         timeout=60,
         check=True,
     )
-    assert completed.stdout.strip() == os.environ[RECORD_DIR_OVERRIDE_VARIABLE]
+
+    record = Path(completed.stdout.strip())
+    assert record.parent == Path(os.environ[RECORD_DIR_OVERRIDE_VARIABLE])
+    assert label in record.name
+    assert json.loads(record.read_text(encoding="utf-8").splitlines()[0])["project_key"] == "child_project"
+    assert not (project / "logs").exists()
+    assert not local_app_data.exists()
 
 
 def test_unwritable_override_never_falls_through_to_a_real_location(tmp_path, monkeypatch) -> None:
@@ -794,38 +854,105 @@ def test_service_records_its_request_and_describes_what_cannot_be_serialised(loc
     assert entries[-1]["status"] == "completed"
 
 
-@pytest.mark.parametrize(
-    "call_service, patch_target",
-    [
-        (lambda s, e, r: s.run_populate_total_pe(e, r), "src.workflows.service.PopulateTotalPeWorkflow"),
-        (lambda s, e, r: s.run_raw_material(e, r), "src.workflows.service.RawMaterialWorkflow"),
-        (lambda s, e, r: s.run_propagate_wo(e, r), "src.workflows.propagate_wo.PropagateWoWorkflow"),
-        (lambda s, e, r: s.run_consolidate_msms(e, r), "src.workflows.consolidate_msms.ConsolidateMsmsWorkflow"),
-        (lambda s, e, r: s.run_enrich_msms(e, r), "src.workflows.enrich_msms.EnrichMsmsWorkflow"),
-        (lambda s, e, r: s.run_ingest_msms_csv(e, r), "src.workflows.ingest_msms_csv.IngestMsmsCsvWorkflow"),
-        (lambda s, e, r: s.run_populate_data_msms(e, r), "src.workflows.populate_data_msms.PopulateDataMsmsWorkflow"),
-        (lambda s, e, r: s.run_update_qr02_cba(e, r), "src.workflows.update_qr02_cba.UpdateQr02CbaWorkflow"),
-        (lambda s, e, r: s.run_whatsapp(e, r), "src.workflows.whatsapp.WhatsAppReportWorkflow"),
-        (
-            lambda s, e, r: s.run_generate_testsheet_folder(e, r),
-            "src.workflows.generate_testsheet_folder.GenerateTestsheetFolderStructureWorkflow",
-        ),
-    ],
-)
-def test_every_service_workflow_records_its_request_centrally(locations, call_service, patch_target) -> None:
+def _progress_sink(message: str) -> None:
+    pass
+
+
+_SERVICE_WORKFLOW_CASES = {
+    "populate_total_pe": (
+        lambda s, e, r: s.run_populate_total_pe(e, r),
+        "src.workflows.service.PopulateTotalPeWorkflow",
+        PopulateTotalPeRequest(mode=PopulateMode.AUTO, target_folder_names=("07-11-2026",), progress_sink=_progress_sink),
+    ),
+    "raw_material": (
+        lambda s, e, r: s.run_raw_material(e, r),
+        "src.workflows.service.RawMaterialWorkflow",
+        RawMaterialRequest(output_path=Path("RAW"), target_dir=Path("TS"), progress_sink=_progress_sink),
+    ),
+    "propagate_wo": (
+        lambda s, e, r: s.run_propagate_wo(e, r),
+        "src.workflows.propagate_wo.PropagateWoWorkflow",
+        PropagateWoRequest(target_date="07-11-2026", overwrite=True, progress_sink=_progress_sink),
+    ),
+    "consolidate_msms": (
+        lambda s, e, r: s.run_consolidate_msms(e, r),
+        "src.workflows.consolidate_msms.ConsolidateMsmsWorkflow",
+        ConsolidateMsmsRequest(progress_sink=_progress_sink),
+    ),
+    "enrich_msms": (
+        lambda s, e, r: s.run_enrich_msms(e, r),
+        "src.workflows.enrich_msms.EnrichMsmsWorkflow",
+        EnrichMsmsRequest(progress_sink=_progress_sink),
+    ),
+    "ingest_msms_csv": (
+        lambda s, e, r: s.run_ingest_msms_csv(e, r),
+        "src.workflows.ingest_msms_csv.IngestMsmsCsvWorkflow",
+        IngestMsmsCsvRequest(progress_sink=_progress_sink),
+    ),
+    "populate_data_msms": (
+        lambda s, e, r: s.run_populate_data_msms(e, r),
+        "src.workflows.populate_data_msms.PopulateDataMsmsWorkflow",
+        PopulateDataMsmsRequest(mode=PopulateMode.ALL, overwrite=True, progress_sink=_progress_sink),
+    ),
+    "update_qr02_cba": (
+        lambda s, e, r: s.run_update_qr02_cba(e, r),
+        "src.workflows.update_qr02_cba.UpdateQr02CbaWorkflow",
+        UpdateQr02CbaRequest(mode=PopulateMode.AUTO, progress_sink=_progress_sink),
+    ),
+    "whatsapp": (
+        lambda s, e, r: s.run_whatsapp(e, r),
+        "src.workflows.whatsapp.WhatsAppReportWorkflow",
+        WhatsAppReportRequest(target_date=date(2026, 11, 7), report_dir=Path("QR"), progress_sink=_progress_sink),
+    ),
+    "generate_testsheet_folder": (
+        lambda s, e, r: s.run_generate_testsheet_folder(e, r),
+        "src.workflows.generate_testsheet_folder.GenerateTestsheetFolderStructureWorkflow",
+        GenerateTestsheetFolderRequest(station="KUANTAN", month="NOV", target_dates=("07-11-2026",), progress_sink=_progress_sink),
+    ),
+}
+
+
+@pytest.mark.parametrize("case", list(_SERVICE_WORKFLOW_CASES))
+def test_every_service_workflow_records_its_request_centrally(locations, case) -> None:
+    call_service, patch_target, request = _SERVICE_WORKFLOW_CASES[case]
     (locations.project / "PYTHON").mkdir()
     (locations.project / "PYTHON" / "TOTAL PE.xlsx").write_bytes(b"123")
 
     def action(environment) -> None:
         with patch(patch_target):
-            call_service(WorkflowService(), environment, _FakeRequest())
+            call_service(WorkflowService(), environment, request)
 
     run_project_action(action, locations.environment)
 
     entries = read_entries(locations.project_logs)
-    assert entries_of(entries, "request")[0]["request"] == "<object test_run_records._FakeRequest>"
+    recorded = entries_of(entries, "request")[0]["request"]
+    assert recorded["__type__"] == type(request).__name__
+    assert recorded["progress_sink"] == "<function test_run_records._progress_sink>"
     inputs = {entry["path"]: entry for entry in entries_of(entries, "input")}
     assert inputs[str(locations.project / "PYTHON" / "TOTAL PE.xlsx")]["size"] == 3
+    assert entries[-1]["status"] == "completed"
+
+
+def test_real_request_field_values_are_kept_readable(locations) -> None:
+    _, _, request = _SERVICE_WORKFLOW_CASES["whatsapp"]
+
+    run_project_action(lambda environment: current_run().record_request(request), locations.environment)
+
+    recorded = entries_of(read_entries(locations.project_logs), "request")[0]["request"]
+    assert recorded["target_date"] == "2026-11-07"
+    assert recorded["report_dir"] == "QR"
+
+
+def test_service_with_no_request_records_the_default_it_uses(locations) -> None:
+    def action(environment) -> None:
+        with patch("src.workflows.propagate_wo.PropagateWoWorkflow"):
+            WorkflowService().run_propagate_wo(environment)
+
+    run_project_action(action, locations.environment)
+
+    recorded = entries_of(read_entries(locations.project_logs), "request")[0]["request"]
+    assert recorded["__type__"] == "PropagateWoRequest"
+    assert recorded["overwrite"] is False
 
 
 def test_request_that_cannot_be_described_does_not_stop_the_action(locations) -> None:
@@ -1724,3 +1851,486 @@ def test_cancelled_prompt_still_raises_value_error_for_existing_callers() -> Non
         pytest.raises(ValueError, match="Operation cancelled"),
     ):
         get_or_create_utility_environment()
+
+
+class _FakeConverterClass:
+    """Replaces ComDocumentConverter, so the real conversion loops run with no COM."""
+
+    def convert_docx_to_pdf(self, source, target, **kwargs) -> None:
+        pass
+
+    def convert_testsheet_to_pdf(self, source, target, **kwargs) -> None:
+        pass
+
+    def merge_pdfs(self, first, second, target) -> None:
+        pass
+
+
+def _file(path: Path, content: bytes = b"content") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return path
+
+
+def _answers(*answers: str):
+    return patch("builtins.input", side_effect=list(answers))
+
+
+def _stub_stages(workflow, **stages):
+    for name in ("preflight_guard", "extractor", "filter_stage", "transformer", "loader", "auditor"):
+        setattr(workflow, name, stages.get(name, MagicMock()))
+    return workflow
+
+
+def _package(path: Path) -> SubstationTestsheetPackage:
+    return SubstationTestsheetPackage(
+        testsheet_path=path,
+        unsorted_raw_data_dir=path.parent,
+        station="KUANTAN",
+        month="NOV",
+        date_str="07-11-2026",
+        substation_number=1,
+    )
+
+
+def _case_rename(locations, tmp_path):
+    source = _file(tmp_path / "in" / "1 name.txt")
+    target = _file(tmp_path / "out" / "1 old.txt")
+    with _answers(str(source.parent), str(target.parent)):
+        run_registered_utility("Rename files (match names from input dir)")
+    return {"input_directory": str(source.parent)}, [source, target], [target.parent.resolve()]
+
+
+def _case_extract(locations, tmp_path):
+    pdf = _file(tmp_path / "scan.pdf")
+    summary = PdfExtractSummary(pdf_path=pdf, total_pages=1, extracted_sections=1, cleaned_pdf_path=pdf)
+    with _answers(str(pdf)), patch("src.workflows.pdf_extract.extract_pdf_sections_and_clean", return_value=summary):
+        run_registered_utility("Extract PE pages from PDF (black-page detection)")
+    return {"pdf_path": str(pdf)}, [pdf], [pdf]
+
+
+def _case_combine(locations, tmp_path):
+    first = _file(tmp_path / "primary" / "1.pdf")
+    second = _file(tmp_path / "secondary" / "1.pdf")
+    with (
+        _answers(str(first.parent), str(second.parent)),
+        patch("src.workflows.combine_pdfs.ComDocumentConverter", _FakeConverterClass),
+    ):
+        run_registered_utility("Combine PDFs from primary and secondary folders")
+    return {"primary_folder": str(first.parent)}, [first, second], [first.resolve()]
+
+
+def _case_combine_with_separator(locations, tmp_path):
+    separator = _file(tmp_path / "separator.pdf")
+    pdf = _file(tmp_path / "folder" / "1.pdf")
+    combined = tmp_path / "folder" / "combined_pdf" / "combined.pdf"
+    summary = CombinePdfsWithSeparatorSummary(pdf.parent, separator, combined, 1)
+    with (
+        patch.object(ProjectEnvironment, "get_template", return_value=separator),
+        patch("src.cli_selectors.select_testsheet_subfolder", return_value=pdf.parent),
+        patch("src.workflows.combine_pdfs_with_separator.combine_pdfs_with_separator", return_value=summary),
+    ):
+        run_registered_utility("Combine PDFs with separator sheet")
+    return {"target_folder": str(pdf.parent)}, [pdf, separator], [combined]
+
+
+def _case_docx_to_pdf(locations, tmp_path):
+    docx = _file(tmp_path / "folder" / "1.docx")
+    with _answers(str(docx.parent)), patch("src.workflows.docx_to_pdf.ComDocumentConverter", _FakeConverterClass):
+        run_registered_utility("Convert DOCX to PDF (batch)")
+    return {"input_directory": str(docx.parent)}, [docx], [docx.resolve().with_suffix(".pdf")]
+
+
+def _case_testsheet_to_pdf(locations, tmp_path):
+    sheet = _file(tmp_path / "folder" / "1.xlsx")
+    with _answers(str(sheet.parent)), patch("src.workflows.testsheet_to_pdf.ComDocumentConverter", _FakeConverterClass):
+        run_registered_utility("Convert Testsheet to PDF (batch)")
+    return {"folder_path": str(sheet.parent)}, [sheet], [sheet.resolve().with_suffix(".pdf")]
+
+
+def _case_rename_flir(locations, tmp_path):
+    raw = _file(tmp_path / "raw" / "a.jpg")
+    out = tmp_path / "out"
+    with _answers(str(raw.parent), str(out), "5"):
+        run_registered_utility("Rename FLIR raw files numbering")
+    return {"input_folder": str(raw.parent), "starting_number": "5"}, [raw], [out.resolve()]
+
+
+def _case_diagonal(locations, tmp_path):
+    workbook = tmp_path / "folder" / "1.xlsx"
+    workbook.parent.mkdir()
+    openpyxl.Workbook().save(workbook)
+    with _answers(str(workbook.parent)):
+        run_registered_utility("Apply diagonal borders to blank cells")
+    output = workbook.parent.resolve() / "processed_testsheet" / "1.xlsx"
+    return {"target_path": str(workbook.parent)}, [workbook], [output]
+
+
+def _case_replace_signatures(locations, tmp_path):
+    workbook = _file(tmp_path / "1.xlsx")
+    signature = _file(tmp_path / "sign.png")
+    prompts = (
+        _answers(str(workbook)),
+        patch("src.cli_selectors.select_one", return_value="placeholder"),
+        patch("src.workflows.replace_signatures._select_signature_path", return_value=(signature, "person")),
+        patch("src.workflows.replace_signatures.replace_pce_images"),
+    )
+    with prompts[0], prompts[1], prompts[2], prompts[3]:
+        run_registered_utility("Replace signature images in testsheets")
+    output = workbook.resolve().parent / "processed_testsheet" / "1.xlsx"
+    return {"mode": "placeholder", "target": str(workbook.resolve())}, [workbook.resolve(), signature], [output]
+
+
+def _case_us_tev_graphs(locations, tmp_path):
+    candidate = _tev_candidate(tmp_path, "PE1")
+    testsheet = _file(candidate.package.testsheet_path)
+    prompts = _tev_prompts([candidate])
+    result = SubstationGraphResult(generated=[tmp_path / "graph.png"])
+    with (
+        prompts[0], prompts[1], prompts[2], prompts[3], prompts[4],
+        patch.object(UsTevGraphWorkflow, "run_substation", return_value=result),
+    ):
+        run_registered_utility("Generate US+TEV survey graphs")
+    return {"mode": "option_b", "dates": ["07-11-2026"]}, [candidate.survey_dir, testsheet], [candidate.output_dir]
+
+
+def _case_us_audio(locations, tmp_path):
+    survey = tmp_path / "survey"
+    survey.mkdir()
+    pdf = _file(tmp_path / "report.pdf")
+    sounds = tmp_path / "sounds"
+    candidate = UsAudioCandidate(raw_data_dir=survey, survey_dir=survey, sounds_output_dir=sounds, full_report_pdf=pdf)
+    module = "src.workflows.us_audio"
+    prompts = (
+        patch(f"{module}.select_one", side_effect=["both", "enter_dates"]),
+        patch(f"{module}.prompt_target_inspection_dates_with_ranges", return_value=["07-11-2026"]),
+        patch(f"{module}.discover_us_audio_candidate_substations", return_value=[candidate]),
+        patch(f"{module}.select_us_audio_substations_interactive", return_value=[candidate]),
+        patch(f"{module}.export_substation_16bit_wavs", return_value=[]),
+        patch(f"{module}.embed_survey_ultrasound_into_pdf", return_value=1),
+    )
+    with prompts[0], prompts[1], prompts[2], prompts[3], prompts[4], prompts[5]:
+        run_registered_utility("Generate US 16-bit audio & embed sounds into PDFs")
+    return {"mode": "both", "dates": ["07-11-2026"]}, [survey, pdf], [sounds, pdf]
+
+
+def _case_remove_desktop_ini(locations, tmp_path):
+    folder = tmp_path / "scan"
+    folder.mkdir()
+    with (
+        patch("src.cli_selectors.prompt_directory_path", return_value=folder),
+        patch("src.remove_desktop_ini_workflow.remove_desktop_ini_files", return_value=0),
+    ):
+        run_registered_utility("Remove desktop.ini files (recursive)")
+    return {"target_path": str(folder)}, [folder], []
+
+
+_UTILITY_RECORDING_CASES = {
+    "rename": _case_rename,
+    "extract_pe": _case_extract,
+    "combine": _case_combine,
+    "combine_with_separator": _case_combine_with_separator,
+    "docx_to_pdf": _case_docx_to_pdf,
+    "testsheet_to_pdf": _case_testsheet_to_pdf,
+    "rename_flir": _case_rename_flir,
+    "diagonal": _case_diagonal,
+    "replace_signatures": _case_replace_signatures,
+    "us_tev_graphs": _case_us_tev_graphs,
+    "us_audio": _case_us_audio,
+    "remove_desktop_ini": _case_remove_desktop_ini,
+}
+
+
+def _assert_recorded(entries: list[dict], request_fields: dict, inputs: list[Path], outputs: list[Path]) -> None:
+    requests = [entry["request"] for entry in entries_of(entries, "request")]
+    assert requests, "no request entry"
+    assert requests[0] is not None
+    for field, value in request_fields.items():
+        assert requests[0][field] == value, field
+    recorded_inputs = {entry["path"]: entry for entry in entries_of(entries, "input")}
+    for path in inputs:
+        assert str(path) in recorded_inputs, f"{path} not in {list(recorded_inputs)}"
+        assert recorded_inputs[str(path)]["exists"] is True
+        assert recorded_inputs[str(path)]["modified"]
+    recorded_outputs = {entry["path"] for entry in entries_of(entries, "output")}
+    for path in outputs:
+        assert str(path) in recorded_outputs, f"{path} not in {recorded_outputs}"
+
+
+@pytest.mark.parametrize("case", list(_UTILITY_RECORDING_CASES))
+def test_utility_action_records_request_inputs_and_outputs(locations, utility_env, tmp_path, case, capsys) -> None:
+    request_fields, inputs, outputs = _UTILITY_RECORDING_CASES[case](locations, tmp_path)
+
+    entries = read_entries(locations.fallback_logs)
+    assert entries[-1]["status"] == "completed", capsys.readouterr().out
+    _assert_recorded(entries, request_fields, inputs, outputs)
+
+
+def _case_populate_total_pe(locations):
+    testsheet = _file(locations.project / "TESTSHEET" / "1.xlsx")
+    total_pe = _file(locations.project / "PYTHON" / "TOTAL PE.xlsx")
+    package = _package(testsheet)
+    stages = _stub_stages(PopulateTotalPeWorkflow())
+    stages.extractor.discover_packages.return_value = [package]
+    stages.extractor.hydrate_packages_metadata.return_value = [package]
+    stages.extractor.get_existing_auto_keys.return_value = set()
+    stages.filter_stage.filter_packages.return_value = [package]
+    stages.loader.upsert_packages.return_value = (1, 0)
+    stages.auditor.audit.return_value = PopulateTotalPeResult(new_rows_added=1)
+    action = PopulateTotalPeAction("Populate TOTAL PE")
+    with (
+        patch("src.project_workflow_actions.cli_selectors.select_one", return_value="auto"),
+        patch("src.workflows.service.PopulateTotalPeWorkflow", return_value=stages),
+    ):
+        _run_project_action_object(action, locations)
+    return "PopulateTotalPeRequest", [testsheet, total_pe], [total_pe]
+
+
+def _case_raw_material(locations):
+    testsheet = _file(locations.project / "TESTSHEET" / "1.xlsx")
+    stages = _stub_stages(RawMaterialWorkflow())
+    stages.extractor.discover_packages.return_value = [_package(testsheet)]
+    stages.auditor.audit.return_value = (None, RawMaterialResult(substations_count=1))
+    action = RawMaterialAction("Raw Material")
+    with (
+        patch("src.project_workflow_actions.cli_selectors.select_pahang_date_folder", return_value=testsheet.parent),
+        patch("src.workflows.service.RawMaterialWorkflow", return_value=stages),
+        patch.object(stages, "_process_package", return_value=(0, 0, 0)),
+    ):
+        _run_project_action_object(action, locations)
+    return "RawMaterialRequest", [testsheet], [locations.project / "RAW MATERIAL"]
+
+
+def _case_update_qr02(locations):
+    testsheet = _file(locations.project / "TESTSHEET" / "1.xlsx")
+    package = _package(testsheet)
+    workflow = UpdateQr02CbaWorkflow()
+    loader = workflow.loader
+    stages = _stub_stages(workflow, loader=loader)
+    stages.extractor.extract_packages.return_value = [package]
+    stages.extractor.extract_records.return_value = ({}, [])
+    stages.filter_stage.filter.return_value = [package]
+    stages.transformer.transform.return_value = SimpleNamespace(
+        station_plans=[SimpleNamespace(station="KUANTAN", records=[], packages=[package])]
+    )
+    stages.auditor.audit.return_value = UpdateQr02CbaResult(records_updated=1)
+    action = UpdateQr02CbaAction("Update QR02")
+    workbook = locations.environment.storage.get_engr_cba_path("KUANTAN", "2026", voltage_type="11kV")
+    with (
+        patch("src.project_workflow_actions.cli_selectors.select_one", return_value="auto"),
+        patch("src.workflows.update_qr02_cba.UpdateQr02CbaWorkflow", return_value=stages),
+        patch.object(loader, "_create_repository"),
+    ):
+        _run_project_action_object(action, locations)
+    return "UpdateQr02CbaRequest", [testsheet], [workbook]
+
+
+def _case_consolidate(locations):
+    xls = _file(locations.project / "PYTHON" / "MSMS" / "a.xls")
+    data_msms = locations.project / "PYTHON" / "DATA MSMS.xlsx"
+    stages = _stub_stages(ConsolidateMsmsWorkflow())
+    stages.extractor.read_xls_file.return_value = ([], None)
+    stages.filter_stage.filter_rows.return_value = ([], 0)
+    stages.auditor.audit.return_value = ConsolidateMsmsResult(files_processed=1)
+    action = ConsolidateMsmsAction("Consolidate")
+    with patch("src.workflows.consolidate_msms.ConsolidateMsmsWorkflow", return_value=stages):
+        _run_project_action_object(action, locations)
+    return "ConsolidateMsmsRequest", [xls], [data_msms]
+
+
+def _case_ingest(locations):
+    csv = _file(locations.project / "PYTHON" / "MSMS" / "RAW DATA" / "a.csv")
+    ingested = locations.project / "PYTHON" / "MSMS" / "TO BE FILLED" / "a.csv"
+    stages = _stub_stages(IngestMsmsCsvWorkflow())
+    stages.extractor.extract_files.return_value = [csv]
+    stages.filter_stage.filter_files.return_value = ([csv], [])
+    stages.auditor.audit.return_value = IngestMsmsCsvResult(files_ingested=1, ingested_files=(ingested,))
+    action = IngestMsmsCsvAction("Ingest")
+    with patch("src.workflows.ingest_msms_csv.IngestMsmsCsvWorkflow", return_value=stages):
+        _run_project_action_object(action, locations)
+    return "IngestMsmsCsvRequest", [csv], [ingested]
+
+
+def _case_enrich(locations):
+    data_msms = _file(locations.project / "PYTHON" / "DATA MSMS.xlsx")
+    total_pe = _file(locations.project / "PYTHON" / "TOTAL PE.xlsx")
+    stages = _stub_stages(EnrichMsmsWorkflow())
+    stages.filter_stage.filter_rows.return_value = ([], 0, 0, [], 0)
+    stages.auditor.audit.return_value = EnrichMsmsResult()
+    action = EnrichMsmsAction("Enrich")
+    with patch("src.workflows.enrich_msms.EnrichMsmsWorkflow", return_value=stages):
+        _run_project_action_object(action, locations)
+    return "EnrichMsmsRequest", [data_msms, total_pe], [data_msms]
+
+
+def _case_propagate(locations):
+    data_msms = _file(locations.project / "PYTHON" / "DATA MSMS.xlsx")
+    total_pe = _file(locations.project / "PYTHON" / "TOTAL PE.xlsx")
+    stages = _stub_stages(PropagateWoWorkflow())
+    stages.auditor.audit.return_value = PropagateWoResult()
+    action = PropagateWoAction("Propagate")
+    with patch("src.workflows.propagate_wo.PropagateWoWorkflow", return_value=stages):
+        _run_project_action_object(action, locations)
+    return "PropagateWoRequest", [data_msms, total_pe], [total_pe]
+
+
+def _case_populate_data_msms(locations):
+    testsheet = _file(locations.project / "TESTSHEET" / "1.xlsx")
+    csv = _file(locations.project / "PYTHON" / "MSMS" / "TO BE FILLED" / "a.csv")
+    stages = _stub_stages(PopulateDataMsmsWorkflow())
+    stages.extractor.extract.return_value = SimpleNamespace(packages=[_package(testsheet)], csv_files=[csv])
+    stages.filter_stage.filter_csv_files.return_value = [csv]
+    stages.auditor.audit.return_value = PopulateDataMsmsResult(csv_files_processed=1)
+    action = PopulateDataMsmsAction("Populate Data MSMS")
+    with (
+        patch("src.project_workflow_actions.cli_selectors.select_one", return_value="auto"),
+        patch("src.workflows.populate_data_msms.PopulateDataMsmsWorkflow", return_value=stages),
+    ):
+        _run_project_action_object(action, locations)
+    return "PopulateDataMsmsRequest", [testsheet, csv], [csv]
+
+
+def _case_whatsapp(locations):
+    docx = _file(locations.project / "QUICK" / "1.docx")
+    report = locations.project / "WHATSAPP" / "report.docx"
+    stages = _stub_stages(WhatsAppReportWorkflow())
+    stages.extractor.extract.return_value = SimpleNamespace(substation_docx_files=[docx], resources=None)
+    stages.auditor.audit.return_value = WhatsAppReportResult(substations_count=1, output_path=report)
+    action = WhatsAppReportAction("WhatsApp")
+    resources = SimpleNamespace(quick_report_dir=docx.parent)
+    with (
+        patch.object(ProjectEnvironment, "get_whatsapp_report_resources", return_value=resources),
+        patch("src.project_workflow_actions._select_whatsapp_report_batch", return_value=docx.parent),
+        patch("src.workflows.whatsapp.WhatsAppReportWorkflow", return_value=stages),
+    ):
+        _run_project_action_object(action, locations)
+    return "WhatsAppReportRequest", [docx], [report]
+
+
+_PROJECT_RECORDING_CASES = {
+    "populate_total_pe": _case_populate_total_pe,
+    "raw_material": _case_raw_material,
+    "update_qr02": _case_update_qr02,
+    "consolidate": _case_consolidate,
+    "ingest": _case_ingest,
+    "enrich": _case_enrich,
+    "propagate": _case_propagate,
+    "populate_data_msms": _case_populate_data_msms,
+    "whatsapp": _case_whatsapp,
+}
+
+
+@pytest.mark.parametrize("case", list(_PROJECT_RECORDING_CASES))
+def test_project_workflow_records_real_request_inputs_and_outputs(locations, case, capsys) -> None:
+    request_type, inputs, outputs = _PROJECT_RECORDING_CASES[case](locations)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed", capsys.readouterr().out
+    _assert_recorded(entries, {"__type__": request_type}, inputs, outputs)
+
+
+def test_pipeline_records_each_target_package_as_inputs(locations, tmp_path) -> None:
+    testsheet = _file(tmp_path / "TS" / "1. PE.xlsx")
+    report = _file(tmp_path / "QR" / "1. PE.docx")
+    package = SubstationPackage(testsheet_xlsx=testsheet, quick_report_docx=report, station_name="PE ONE")
+    request = PostProcessingRequest(mode=PostProcessingMode.BY_FL, target_packages=(package,), converter=_FakeConverter())
+
+    def action(environment) -> object:
+        module = "src.workflows.postprocessing_pipeline"
+        with (
+            patch(f"{module}.validate_postprocessing_preflight", side_effect=_StopWorkflow("stop here")),
+        ):
+            return WorkflowService().run_postprocessing_pipeline(environment, request)
+
+    run_project_action(action, locations.environment)
+
+    inputs = {entry["path"] for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert {str(testsheet), str(report)} <= inputs
+
+
+def test_recording_does_not_add_prompts_or_change_answers(locations, utility_env, tmp_path) -> None:
+    """The entry functions must ask exactly what they asked before."""
+    raw = _file(tmp_path / "raw" / "a.jpg")
+    prompts: list[str] = []
+    answers = iter([str(raw.parent), str(tmp_path / "out"), ""])
+
+    def recording_input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return next(answers)
+
+    with patch("builtins.input", recording_input):
+        run_registered_utility("Rename FLIR raw files numbering")
+
+    assert prompts == [
+        "Enter the input folder path: ",
+        "Enter the output folder path: ",
+        "Enter the starting number [1]: ",
+    ]
+    assert (tmp_path / "out" / "FLIR0001.jpg").exists()
+
+
+def test_input_folder_with_nothing_to_list_is_recorded_as_itself(locations, tmp_path) -> None:
+    missing = tmp_path / "gone"
+    single_file = _file(tmp_path / "one.xlsx")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+
+    def action(environment) -> None:
+        run = current_run()
+        run.record_input_folder(missing)
+        run.record_input_folder(single_file)
+        run.record_input_folder(empty)
+
+    run_project_action(action, locations.environment)
+
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert inputs[str(missing)]["exists"] is False
+    assert inputs[str(single_file)]["size"] == len(b"content")
+    assert inputs[str(empty)]["exists"] is True
+
+
+def test_same_input_and_output_are_recorded_once(locations, tmp_path) -> None:
+    path = _file(tmp_path / "TOTAL PE.xlsx")
+
+    def action(environment) -> None:
+        current_run().record_inputs([path, path])
+        current_run().record_outputs([path, path, None])
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert len(entries_of(entries, "input")) == 1
+    assert [entry["path"] for entry in entries_of(entries, "output")] == [str(path)]
+
+
+@pytest.mark.parametrize("field", ["cleaned_pdf_path", "output_directory", "output_folder", "output_pdf_path"])
+def test_result_output_fields_are_recorded(locations, tmp_path, field) -> None:
+    run_project_action(lambda environment: SimpleNamespace(**{field: tmp_path / "made"}), locations.environment)
+
+    outputs = entries_of(read_entries(locations.project_logs), "output")
+    assert [entry["path"] for entry in outputs] == [str(tmp_path / "made")]
+
+
+def test_output_path_that_cannot_be_worked_out_does_not_stop_update_qr02(locations) -> None:
+    testsheet = _file(locations.project / "TESTSHEET" / "1.xlsx")
+    package = _package(testsheet)
+    workflow = UpdateQr02CbaWorkflow()
+    loader = workflow.loader
+    stages = _stub_stages(workflow, loader=loader)
+    stages.extractor.extract_packages.return_value = [package]
+    stages.extractor.extract_records.return_value = ({}, [])
+    stages.filter_stage.filter.return_value = [package]
+    stages.transformer.transform.return_value = SimpleNamespace(
+        station_plans=[SimpleNamespace(station="NOT A STATION", records=[], packages=[package])]
+    )
+    stages.auditor.audit.return_value = UpdateQr02CbaResult(records_updated=1)
+
+    def action(environment) -> object:
+        with patch.object(loader, "_create_repository"):
+            return stages.execute(environment, UpdateQr02CbaRequest())
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    assert not entries_of(entries, "output")

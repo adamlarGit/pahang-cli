@@ -18,6 +18,7 @@ from src.postprocessing.converters import (
     DocumentConverter,
     configure_uniform_printer,
 )
+from src.run_records import current_run
 from src.workflows.progress import ProgressSink, QuantityProgressTracker
 
 
@@ -80,6 +81,7 @@ def convert_docx_folder_to_pdf(
                 converter.convert_docx_to_pdf(docx_path, output_path, word_app=word_app, session=session)
             else:
                 converter.convert_docx_to_pdf(docx_path, output_path, session=session)
+            current_run().record_outputs([output_path])
             converted += 1
     finally:
         if owns_word and word_app is not None:
@@ -130,6 +132,8 @@ def convert_docx_folder_to_pdf(
 def run_docx_to_pdf() -> DocxToPdfSummary:
     """Interactive entrypoint for batch DOCX to PDF conversion."""
     input_directory = input("Enter the path to the folder that you want to convert to pdf: ").strip().strip('"')
+    current_run().record_request({"workflow": "DOCX to PDF", "input_directory": input_directory})
+    current_run().record_input_folder(input_directory, (".docx",))
     summary = convert_docx_folder_to_pdf(input_directory)
     print(f"Converted {summary.converted_count} DOCX file(s) to PDF in {summary.input_directory}.")
     return summary

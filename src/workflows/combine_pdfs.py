@@ -61,6 +61,7 @@ def combine_primary_secondary_pdfs(
 
         tracker.emit(idx, f"Merging PDF: {filename}")
         converter.merge_pdfs(primary_path, secondary_path, primary_path)
+        current_run().record_outputs([primary_path])
 
         logging.info(f"Successfully merged and replaced: {filename}")
         merged_count += 1
@@ -77,6 +78,11 @@ def run_combine_pdfs() -> CombinePdfsSummary:
     """Interactive entrypoint for combining PDFs from primary and secondary folders."""
     primary_folder = input("Enter primary folder directory: ").strip().strip('"')
     secondary_folder = input("Enter secondary folder directory: ").strip().strip('"')
+    current_run().record_request(
+        {"workflow": "Combine PDFs", "primary_folder": primary_folder, "secondary_folder": secondary_folder}
+    )
+    current_run().record_input_folder(primary_folder, (".pdf",))
+    current_run().record_input_folder(secondary_folder, (".pdf",))
 
     try:
         summary = combine_primary_secondary_pdfs(primary_folder, secondary_folder)

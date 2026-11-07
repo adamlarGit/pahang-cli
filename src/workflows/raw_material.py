@@ -21,6 +21,7 @@ from src.core.normalizers import (
     normalize_substation_tokens,
 )
 from src.project.environment import ProjectEnvironment
+from src.run_records import current_run
 from src.project.models import CameraConfig
 from src.project.storage import extract_numerical_prefix, parse_substation_stem
 from src.testsheet.extractor import TestsheetExtractor
@@ -917,6 +918,7 @@ class RawMaterialWorkflow:
 
         total_pe_path = environment.storage.get_total_pe_path()
         packages = self.extractor.discover_packages(environment, request)
+        current_run().record_inputs(package.testsheet_path for package in packages)
 
         existing_tuples = self.extractor.load_pe_alignment_data(total_pe_path)
         self.filter_stage.verify_pe_alignment(packages, existing_tuples)
@@ -939,6 +941,7 @@ class RawMaterialWorkflow:
             total_dg_copied += dg_copied
             total_us_tev_extracted += us_tev_extracted
 
+        self._record_output_folder(environment)
         _, result = self.auditor.audit(
             substations_count,
             total_ir_copied,
@@ -948,6 +951,13 @@ class RawMaterialWorkflow:
             errors,
         )
         return result
+
+    @staticmethod
+    def _record_output_folder(environment: ProjectEnvironment) -> None:
+        try:
+            current_run().record_outputs([environment.storage.get_raw_material_dir()])
+        except Exception:
+            pass
 
     def _process_package(
         self,

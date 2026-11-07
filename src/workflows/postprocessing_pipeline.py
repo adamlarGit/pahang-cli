@@ -104,6 +104,8 @@ class PostProcessingPipelineWorkflow:
                 warnings=("No matching substation packages found for target criteria.",),
             )
 
+        current_run().record_inputs(package.testsheet_xlsx for package in target_packages)
+        current_run().record_inputs(package.quick_report_docx for package in target_packages)
         sink(f"Queued {len(target_packages)} substation package(s) for processing.")
 
         # Stage 2: Pre-Flight Validation & Renaming Sync

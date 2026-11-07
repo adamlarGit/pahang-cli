@@ -148,6 +148,11 @@ def run_rename_files() -> RenameFilesSummary:
     """Interactive entrypoint for renaming files to match input directory ordering."""
     input_directory = input("Enter path to input folder: ").strip().strip('"')
     output_directory = input("Enter path to output folder: ").strip().strip('"')
+    current_run().record_request(
+        {"workflow": "Rename Files", "input_directory": input_directory, "output_directory": output_directory}
+    )
+    current_run().record_input_folder(input_directory)
+    current_run().record_input_folder(output_directory)
 
     try:
         summary = rename_files_match(input_directory, output_directory)

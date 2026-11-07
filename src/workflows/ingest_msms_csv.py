@@ -16,6 +16,7 @@ import shutil
 from typing import Sequence
 
 from src.project.environment import ProjectEnvironment
+from src.run_records import current_run
 from src.workflows.models import IngestMsmsCsvRequest, IngestMsmsCsvResult
 
 
@@ -353,6 +354,7 @@ class IngestMsmsCsvWorkflow:
         self.preflight_guard.validate(environment)
 
         raw_csv_files = environment.storage.list_msms_raw_csv_files()
+        current_run().record_inputs(raw_csv_files)
         raw_dir = environment.storage.get_msms_raw_data_dir()
         to_be_filled_dir = environment.storage.get_msms_to_be_filled_dir()
 

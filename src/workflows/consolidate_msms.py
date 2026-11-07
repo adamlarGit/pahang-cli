@@ -357,6 +357,7 @@ class ConsolidateMsmsWorkflow:
         data_msms_path = environment.storage.get_data_msms_path()
         completed_dir = environment.storage.get_python_msms_completed_dir()
         xls_files = environment.storage.list_msms_xls_files()
+        current_run().record_inputs(xls_files)
 
         existing_wos = self.extractor.get_existing_wos(data_msms_path)
 
@@ -394,6 +395,7 @@ class ConsolidateMsmsWorkflow:
             req.progress_sink(f"Appending {len(plan.rows_to_append)} rows to {data_msms_path.name}...")
 
         self.loader.load(plan)
+        current_run().record_outputs([data_msms_path])
 
         result = self.auditor.audit(plan)
 

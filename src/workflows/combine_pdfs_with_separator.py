@@ -119,6 +119,12 @@ def run_combine_pdfs_with_separator(environment: object | None = None) -> Combin
         print("Operation cancelled.")
         return None
 
+    current_run().record_request(
+        {"workflow": "Combine PDFs With Separator", "target_folder": target_dir, "separator_path": separator_path}
+    )
+    current_run().record_input_folder(target_dir, (".pdf",))
+    current_run().record_inputs([separator_path])
+
     try:
         summary = combine_pdfs_with_separator(target_dir, separator_path)
         print(f"\n[SUCCESS] Merged {summary.merged_count} file(s) into '{summary.output_pdf_path}'.")

@@ -73,4 +73,7 @@ def run_remove_desktop_ini(environment: 'ProjectEnvironment | None' = None) -> i
     if not target_path:
         return 0
 
+    current_run().record_request({"workflow": "Remove desktop.ini", "target_path": target_path})
+    current_run().record_inputs([target_path])
+
     return remove_desktop_ini_files(target_path)

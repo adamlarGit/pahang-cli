@@ -84,6 +84,10 @@ _RESULT_SUCCESS_FIELDS = (
 )
 _RESULT_OUTPUT_FIELDS = (
     "output_path",
+    "output_pdf_path",
+    "output_directory",
+    "output_folder",
+    "cleaned_pdf_path",
     "generated_paths",
     "deliverables",
     "final_deliverables",
@@ -111,6 +115,8 @@ class Run:
         self._lock = threading.RLock()
         self._captures: list[Any] = []
         self._error_messages: set[str] = set()
+        self._inputs_seen: set[str] = set()
+        self._outputs_seen: set[str] = set()
 
     def call(self, action: Callable[[], Any]) -> Any:
         """Run the action, record its outcome, and re-raise its failure unchanged."""
@@ -146,12 +152,36 @@ class Run:
         except Exception:
             pass
 
+    def record_input_folder(self, folder: Any, suffixes: Iterable[str] = ()) -> None:
+        """Record the files directly inside a folder, with no recursion.
+
+        ``suffixes`` limits which files count. A folder with nothing to list, or a path that
+        isn't a folder, is recorded as itself.
+        """
+        if self._file is None:
+            return
+        try:
+            wanted = {suffix.lower() for suffix in suffixes}
+            files = sorted(
+                child
+                for child in Path(folder).expanduser().iterdir()
+                if child.is_file()
+                and not child.name.startswith("~$")
+                and (not wanted or child.suffix.lower() in wanted)
+            )
+        except Exception:
+            files = []
+        self.record_inputs(files or [folder])
+
     def record_outputs(self, paths: Iterable[Any]) -> None:
+        """Record what the action produced. A path already recorded adds nothing."""
         if self._file is None:
             return
         try:
             for path in paths:
-                self._write("output", path=str(path))
+                if path is not None and str(path) not in self._outputs_seen:
+                    self._outputs_seen.add(str(path))
+                    self._write("output", path=str(path))
         except Exception:
             pass
 
@@ -264,8 +294,9 @@ class Run:
             pass
 
     def _record_input(self, path: Any) -> None:
-        if not isinstance(path, (str, os.PathLike)):
+        if not isinstance(path, (str, os.PathLike)) or str(path) in self._inputs_seen:
             return
+        self._inputs_seen.add(str(path))
         try:
             stat = os.stat(path)
         except OSError:
