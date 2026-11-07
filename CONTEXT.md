@@ -22,6 +22,12 @@ An interface (`src/project/repository.py`) providing methods for accessing and p
 ### ProjectEnvironment
 A composite facade (`src/project/environment.py`) combining `ProjectMetadata` and `WorkspaceStorage`.
 
+### Run Record
+The saved account of one workflow execution: what was asked for, which inputs and software version were involved, how long each Step took, and what it produced, warned about or failed on. It holds enough to identify what happened without copying any input files. Distinct from operator-facing progress messages, which report a run while it happens. _Avoid_: telemetry (already means pre-flight inspection data), log (when you mean one whole execution).
+
+### Step
+One named, timed stage inside a Run Record, such as slicing a Quick Report or exporting a PDF. Steps are recorded only where the detail helps with diagnosis, so a simple workflow may have few of them.
+
 ### PrpdConfig & PrpdMode
 Domain configuration model (`src/project/models.py`) controlling the Phase-Resolved Partial Discharge (PRPD) graph generation strategy across Quick Report CBM defect detail pages.
 - **`PrpdMode`**: Supported generation modes:
@@ -303,7 +309,9 @@ Replacing images in a Word-exported PDF with the original pixels held in the sou
 _Avoid_: image swap, image patching, re-embedding
 
 ### Restoration Report
-The per-part account of Source Image Restoration: images restored, images left unmatched, and whether the part fell back to its unrestored native PDF. Shown to the operator in the batch summary and never persisted.
+The per-part account of Source Image Restoration: images restored, images kept as Word rendered, and whether the part fell back to its unrestored native PDF. Shown to the operator in the batch summary and never persisted.
+An image is kept as Word rendered when no original in the source document is a confident match (**unmatched**), or when several originals look too alike to choose between (**ambiguous**). Neither replaces anything, so neither can put a wrong picture in the deliverable; the image is just not upgraded.
+_Avoid_: mismatch (no image is ever swapped for a non-matching one)
 
 ### ThermogramSourcePreservationPolicy
 The Full Report thermogram-fidelity requirement. PDF conversion must retain the source pixel dimensions of every sampled thermogram without downsampling; lossless PDF stream encoding is permitted because it does not discard image information. A target output resolution such as `300 DPI` is an implementation setting, not evidence that this policy is met.
