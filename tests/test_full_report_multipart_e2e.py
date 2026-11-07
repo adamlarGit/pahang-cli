@@ -76,9 +76,9 @@ from tests.benchmarks.pe157_fixture import (
 class TestSyntheticVcbBenchmarkFixture:
     """Validate PE 157 PERPUSTAKAAN AWAM synthetic benchmark fixture."""
 
-    def test_materialized_fixture_files_and_models(self) -> None:
-        """Verify persistent benchmark files exist and extract 5-panel VCB topology."""
-        fixture_dir = materialize_pe157_benchmark_fixture()
+    def test_materialized_fixture_files_and_models(self, tmp_path: Path) -> None:
+        """Verify materialized benchmark files exist and extract 5-panel VCB topology."""
+        fixture_dir = materialize_pe157_benchmark_fixture(tmp_path)
         assert fixture_dir.is_dir()
 
         # 1. Testsheet Excel workbook
