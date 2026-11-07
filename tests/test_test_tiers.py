@@ -41,9 +41,10 @@ from tests.conftest import *  # noqa: E402,F403
 def _write_repo_options(folder: Path) -> None:
     """Copy the repo's real default options into folder, so pytest's root stays inside it."""
     options = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["pytest"]["ini_options"]
+    scalars = "".join(f"{key} = {value}\n" for key, value in options.items() if not isinstance(value, list))
     markers = "\n    ".join(options["markers"])
     (folder / "pytest.ini").write_text(
-        f"[pytest]\npythonpath = {REPO.as_posix()}\naddopts = {options['addopts']}\nmarkers =\n    {markers}\n",
+        f"[pytest]\npythonpath = {REPO.as_posix()}\n{scalars}markers =\n    {markers}\n",
         encoding="utf-8",
     )
 
@@ -285,6 +286,24 @@ def test_mocked_dispatch_is_not_blocked(tmp_path: Path) -> None:
     )
 
     assert "1 passed" in output
+
+
+@pytest.mark.parametrize("options", [(), (FULL_RUN_OPTION,)], ids=["fast-run", "full-run"])
+def test_misspelled_marker_is_a_collection_error(tmp_path: Path, options: tuple[str, ...]) -> None:
+    output = run_pytest(
+        tmp_path,
+        """
+        import pytest
+
+        @pytest.mark.live_dta
+        def test_misspelled():
+            pass
+        """,
+        *options,
+    )
+
+    assert "1 error" in output
+    assert "'live_dta' not found in `markers`" in output
 
 
 def _fingerprint(folder: Path) -> dict[str, str]:
