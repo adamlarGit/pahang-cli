@@ -36,7 +36,6 @@ from src.postprocessing.converters import (
     configure_uniform_printer,
     safe_unlink_with_retry,
 )
-from src.run_records import current_run
 from src.project.storage import (
     extract_numerical_prefix,
     extract_prefix_safe,
@@ -44,6 +43,7 @@ from src.project.storage import (
 )
 from src.quick_report.extractor import DAILY_DATE_FOLDER_PATTERN
 from src.quick_report.prpd import discover_ultratev_survey_dir
+from src.run_records import current_run
 from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
 
 if TYPE_CHECKING:

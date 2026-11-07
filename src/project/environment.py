@@ -9,6 +9,7 @@ from src.core.contract import ContractScope
 from src.project.models import CameraConfig, ProjectMetadata, PrpdConfig
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
+from src.run_records import OperationCancelled
 from src.whatsapp.models import WhatsAppReportResources
 
 
@@ -320,7 +321,7 @@ def get_or_create_utility_environment(target_dir: Path | None = None) -> Project
             must_exist=False
         )
         if target_dir is None:
-            raise ValueError("Operation cancelled, no target directory provided.")
+            raise OperationCancelled("Operation cancelled, no target directory provided.")
 
     base_p = target_dir
     # Try to find a logical base path

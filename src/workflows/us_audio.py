@@ -21,7 +21,6 @@ try:
 except ImportError:
     import fitz
 
-from src.run_records import current_run
 from src.cli_selectors import (
     SelectOption,
     prompt_target_inspection_dates_with_ranges,
@@ -52,6 +51,7 @@ from src.quick_report.prpd import (
     discover_ultratev_survey_dir,
     resolve_survey_container_dir,
 )
+from src.run_records import current_run
 from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 
 logger = logging.getLogger(__name__)

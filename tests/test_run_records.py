@@ -1654,3 +1654,73 @@ def test_root_logger_method_on_unconfigured_root_prints_as_it_does_without_a_run
     assert logging.root.handlers == []
     logged = entries_of(read_entries(locations.project_logs), "log")
     assert [entry["message"] for entry in logged] == ["rootmethod", "hidden"]
+
+
+class _BadStr(Exception):
+    def __str__(self) -> str:
+        raise RuntimeError("str() of this exception is broken")
+
+
+def test_exception_with_a_broken_str_reaches_the_caller_unchanged(locations) -> None:
+    def failing() -> None:
+        raise _BadStr()
+
+    with open_run("Fake", locations.environment) as run, pytest.raises(_BadStr):
+        run.call(failing)
+
+    entries = read_entries(locations.project_logs)
+    assert entries_of(entries, "error")[0]["exception_type"] == "_BadStr"
+    assert entries[-1]["status"] == "failed"
+
+
+def test_failure_building_the_captures_does_not_stop_the_action(locations, monkeypatch) -> None:
+    def broken(*args, **kwargs):
+        raise RuntimeError("handler cannot be built")
+
+    monkeypatch.setattr(logging.Handler, "__init__", broken)
+    calls: list[str] = []
+
+    run_project_action(lambda environment: calls.append("ran"), locations.environment)
+
+    assert calls == ["ran"]
+    assert read_entries(locations.project_logs)[-1]["type"] == "run_finish"
+
+
+def test_record_file_is_closed_when_a_run_cannot_start(locations, monkeypatch) -> None:
+    def broken():
+        raise RuntimeError("cannot capture")
+
+    monkeypatch.setattr("src.run_records._capture_versions", broken)
+    calls: list[str] = []
+
+    run_project_action(lambda environment: calls.append("ran"), locations.environment)
+
+    assert calls == ["ran"]
+    # Windows refuses to delete a file that is still open.
+    next(locations.project_logs.glob("*.jsonl")).unlink()
+
+
+def test_cancelling_the_transient_environment_prompt_is_not_a_failure(locations, capsys) -> None:
+    with (
+        patch("src.project.environment.load_project_environment", return_value=None),
+        patch("src.cli_selectors.prompt_directory_path", return_value=None),
+    ):
+        run_registered_utility("Remove desktop.ini files (recursive)")
+
+    console = capsys.readouterr().out
+    assert "Action failed: Operation cancelled" in console
+    assert "Run Record:" not in console
+    entries = read_entries(locations.fallback_logs)
+    assert entries[-1]["status"] == "cancelled"
+    assert not entries_of(entries, "error")
+
+
+def test_cancelled_prompt_still_raises_value_error_for_existing_callers() -> None:
+    from src.project.environment import get_or_create_utility_environment
+
+    with (
+        patch("src.project.environment.load_project_environment", return_value=None),
+        patch("src.cli_selectors.prompt_directory_path", return_value=None),
+        pytest.raises(ValueError, match="Operation cancelled"),
+    ):
+        get_or_create_utility_environment()

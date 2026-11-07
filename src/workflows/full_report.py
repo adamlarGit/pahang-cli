@@ -27,7 +27,6 @@ from src.full_report.attribution import (
     quarantine_deliverable,
 )
 from src.full_report.composer import FullReportComposer
-from src.run_records import current_run
 from src.full_report.photo_resolver import RawPhotoResolver
 from src.full_report.plan_builder import (
     FullReportPlanBuilder,
@@ -65,6 +64,7 @@ from src.quick_report.utils import (
     sanitize_filename,
 )
 from src.core.topology import SwitchgearArchetype, VoltageClass
+from src.run_records import current_run
 from src.testsheet.models import (
     PowerTransformerSpec,
     SubstationEquipmentPackage,

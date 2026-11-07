@@ -19,11 +19,11 @@ from src.quick_report.extractor import (
 )
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.transformer import QuickReportTransformer
-from src.run_records import current_run
 from src.quick_report.utils import (
     normalize_functional_location_input,
     sanitize_filename,
 )
+from src.run_records import current_run
 from src.testsheet.models import SubstationTestsheetPackage
 from src.workflows.models import (
     QuickReportInspection,

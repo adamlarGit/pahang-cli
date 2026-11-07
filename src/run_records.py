@@ -17,11 +17,15 @@ interrupted, crashed or hung.
 Every line is one JSON object with a ``type`` and a ``time``. The types are ``run_start``,
 ``environment`` (app, git, Python, Word and Excel versions), ``request``, ``input`` (path,
 size, modified), ``step_start``, ``step_finish``, ``log``, ``progress``, ``console``,
-``warning``, ``error`` (with ``traceback`` for an exception), ``result``, ``output`` and
-``run_finish`` (``status`` is ``completed``, ``completed_with_errors`` or ``failed``).
+``warning``, ``error`` (with ``traceback`` for an exception), ``cancelled``, ``result``,
+``output`` and ``run_finish``. Its ``status`` is ``completed``, ``completed_with_errors``
+(some items failed), ``failed`` (the whole job failed) or ``cancelled`` (the operator cancelled
+by way of ``OperationCancelled``; a cancel that just returns is recorded as ``completed``).
 
 Records live in ``<project base path>/logs/``. Runs with no real project folder use
-``%LOCALAPPDATA%\\pahang-cli\\logs\\``.
+``%LOCALAPPDATA%\\pahang-cli\\logs\\``. Setting the environment variable
+``PAHANG_CLI_RUN_RECORD_DIR`` sends every record to that folder instead, with no fallback.
+The test suite relies on this, and it works the same way in production.
 
 Nothing here may stop a workflow: a problem saving a Run Record is swallowed, and the
 Run carries on recording nothing. ``current_run()`` always returns a usable Run, which
@@ -91,6 +95,10 @@ _RESULT_OUTPUT_FIELDS = (
 _current: "Run | None" = None
 
 
+class OperationCancelled(ValueError):
+    """The operator cancelled a prompt. Reaches the action layer, but isn't a failure."""
+
+
 class Run:
     """One open Run Record. Every method is safe to call and never raises."""
 
@@ -108,6 +116,10 @@ class Run:
         """Run the action, record its outcome, and re-raise its failure unchanged."""
         try:
             result = action()
+        except OperationCancelled as exc:
+            self._status = "cancelled"
+            self._write("cancelled", message=_text_of(exc))
+            raise
         except Exception as exc:
             self.record_failure(exc, exc)
             raise
@@ -189,9 +201,7 @@ class Run:
         global _current
         if self._file is not None and _current is None:
             _current = self
-            self._captures = [_LoggerCapture(self), _ConsoleCapture(self)]
-            for capture in self._captures:
-                _ignoring_failure(capture.start)
+            _ignoring_failure(self._start_captures)
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -209,6 +219,11 @@ class Run:
                 duration_seconds=round(time.perf_counter() - self._started, 3),
             )
         self._close()
+
+    def _start_captures(self) -> None:
+        self._captures = [_LoggerCapture(self), _ConsoleCapture(self)]
+        for capture in self._captures:
+            _ignoring_failure(capture.start)
 
     def _mark_problem(self, status: str) -> None:
         self.failed = True
@@ -490,6 +505,7 @@ def save_failure(label: str, exc: BaseException) -> Path | None:
 
 
 def _start_run(label: str, project_key: str | None, base_path: str | None) -> Run:
+    run = Run()
     try:
         record_file, path = _create_record_file(label, base_path)
         run = Run(record_file, path)
@@ -497,6 +513,7 @@ def _start_run(label: str, project_key: str | None, base_path: str | None) -> Ru
         run._write("environment", **_capture_versions())
         return run
     except Exception:
+        run._close()
         return Run()
 
 
@@ -618,6 +635,7 @@ def _active_project() -> tuple[str | None, str | None]:
 
     Utility actions build their environment after a Run opens. Building one here would
     create project subfolders, so this only reads the saved project and its catalog.
+    A utility action's record deliberately goes in the active project's logs/ folder.
     """
     try:
         from src.cli_session import load_last_project_key
