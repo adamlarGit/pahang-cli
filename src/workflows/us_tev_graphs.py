@@ -366,7 +366,8 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
             "substations": [_format_package_label(candidate.package) for candidate in selected_candidates],
         }
     )
-    current_run().record_inputs(candidate.survey_dir for candidate in selected_candidates)
+    for candidate in selected_candidates:
+        current_run().record_input_folder(candidate.survey_dir, recursive=True)
     current_run().record_inputs(candidate.package.testsheet_path for candidate in selected_candidates)
 
     workflow = UsTevGraphWorkflow(mode=render_mode)

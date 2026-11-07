@@ -717,3 +717,29 @@ Implement the complete composer, workflow orchestrators, and CLI actions:
 - **3+ Switchgear Lineups**: Stations with 3 or more independent switchgear lineups.
 - **3+ Transformers**: Large stations with 3 or 4 transformers.
 - **Independent from Quick Report**: Standalone Full Report generation that bypasses the Quick Report.
+
+
+## Related runtime diagnostics - parent #177
+
+### #183 - Save a Run Record for every workflow execution
+
+- **Status**: Closed
+- **Ticket**: [#183](https://github.com/adamlarGit/pahang-cli/issues/183), [local specification](tickets/183-save-run-record.md).
+- **Scope**: Shared action boundary for all project workflows and utilities, including Full Report generation and post-processing.
+
+```mermaid
+graph LR
+    T183["#183 Save a Run Record for every workflow execution - Closed"]
+```
+
+- [x] Every project workflow and utility action produces one flushed JSON Lines Run Record.
+- [x] Failures include full tracebacks and show the Run Record path on the console.
+- [x] Interrupted executions leave readable records without a run_finish entry.
+- [x] Records include versions, project key, full request, input metadata, outputs, warnings, errors, and timed Steps.
+- [x] Version capture never starts Word or Excel.
+- [x] Logger and progress output are captured while console behavior stays unchanged.
+- [x] Transient utilities and absent project folders use the per-user fallback without creating logs in the typed folder.
+- [x] Unwritable recording locations never stop an action.
+- [x] Suite-wide test isolation prevents Run Records from reaching real project folders, including subprocesses.
+- [x] Behavior is tested through fake actions at the action-running layer against temporary paths.
+- [x] Interactive prompts were manually checked in a real Windows console; results are captured in PR-ready verification notes.

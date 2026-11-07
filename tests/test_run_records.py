@@ -1083,8 +1083,8 @@ def test_steps_are_timed_and_a_failed_step_is_marked(locations) -> None:
     run_project_action(action, locations.environment)
 
     entries = read_entries(locations.project_logs)
-    assert [entry["name"] for entry in entries_of(entries, "step_start")] == ["Substation A", "Substation B"]
-    finished = entries_of(entries, "step_finish")
+    assert [entry["name"] for entry in entries_of(entries, "step_start")] == ["Execute action", "Substation A", "Substation B"]
+    finished = [entry for entry in entries_of(entries, "step_finish") if entry["name"] != "Execute action"]
     assert [(entry["name"], entry["status"]) for entry in finished] == [
         ("Substation A", "completed"),
         ("Substation B", "failed"),
@@ -2992,7 +2992,7 @@ def test_project_activation_failure_is_saved_in_the_fallback_folder(locations, t
 
 
 @pytest.mark.parametrize("handler", [handle_switch_project, handle_view_project_info])
-def test_project_settings_callers_of_the_wizard_still_work(locations, tmp_path, monkeypatch, capsys, handler) -> None:
+def test_project_settings_activation_failures_are_not_recorded(locations, tmp_path, monkeypatch, capsys, handler) -> None:
     _catalog_with_a_broken_project(tmp_path, monkeypatch)
     session = CliSession(persistence_file=tmp_path / ".active_project.json")
     prompts = _prompts_choosing_the_broken_project()
@@ -3000,7 +3000,10 @@ def test_project_settings_callers_of_the_wizard_still_work(locations, tmp_path, 
     with prompts[0], prompts[1]:
         handler(session)
 
-    _assert_activation_failure_saved(locations, session, capsys)
+    assert not locations.fallback_logs.exists()
+    assert not locations.project_logs.exists()
+    assert "Project activation failed:" in capsys.readouterr().out
+    assert session.active_project is None
 
 
 def test_activating_a_project_normally_saves_nothing(locations, tmp_path, capsys) -> None:
@@ -3054,3 +3057,135 @@ def test_same_error_gains_its_traceback_if_first_recorded_without_one(locations)
 
     errors = entries_of(read_entries(locations.project_logs), "error")
     assert [("traceback" in error) for error in errors] == [False, True]
+
+
+@pytest.mark.parametrize("fails", [False, True])
+def test_action_boundary_records_a_timed_execution_step(locations, fails) -> None:
+    def action(environment):
+        if fails:
+            raise RuntimeError("execution failed")
+
+    run_project_action(action, locations.environment)
+    entries = read_entries(locations.project_logs)
+    assert entries_of(entries, "step_start")[0]["name"] == "Execute action"
+    finish = entries_of(entries, "step_finish")[-1]
+    assert finish["name"] == "Execute action"
+    assert finish["duration_seconds"] >= 0
+    assert finish["status"] == ("failed" if fails else "completed")
+
+
+def test_nested_survey_files_have_individual_metadata(locations, tmp_path) -> None:
+    survey = tmp_path / "survey"
+    metadata = _file(survey / "survey_metadata.js")
+    reading = _file(survey / "SWG1" / "reading" / "eventData.js")
+    _file(survey / "~$locked.js")
+    run_project_action(
+        lambda environment: current_run().record_input_folder(survey, recursive=True),
+        locations.environment,
+    )
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert set(inputs) == {str(metadata), str(reading)}
+    assert inputs[str(reading)]["size"] == 7
+    assert inputs[str(reading)]["modified"]
+
+
+def test_full_report_records_quick_report_before_validation(locations, tmp_path) -> None:
+    testsheet = _file(tmp_path / "1. PE.xlsx")
+    report = _file(tmp_path / "1. PE.docx")
+    package = _package(testsheet)
+    workflow = FullReportWorkflow()
+
+    def action(environment):
+        with (
+            patch.object(workflow, "_validate_target_existence"),
+            patch.object(workflow, "_discover_packages", return_value=([package], [], [])),
+            patch.object(workflow, "_resolve_quick_report_path", return_value=report),
+            patch("src.workflows.full_report.validate_finalized_quick_report", side_effect=ValueError("invalid report")),
+        ):
+            workflow.generate(["FL1"], environment, com_session=MagicMock())
+
+    run_project_action(action, locations.environment)
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert inputs[str(report)]["size"] == 7
+    assert inputs[str(report)]["modified"]
+
+
+def test_raw_material_records_selected_photos_and_archives(locations, tmp_path) -> None:
+    testsheet = _file(tmp_path / "1. PE.xlsx")
+    ir = _file(tmp_path / "IR" / "FLIR0001.jpg")
+    dg = _file(tmp_path / "DG" / "IMG0001.jpg")
+    archive = _file(tmp_path / "US" / "1.zip")
+    package = _package(testsheet)
+    workflow = _stub_stages(RawMaterialWorkflow())
+    workflow.extractor.discover_packages.return_value = [package]
+    workflow.extractor.extract_package_data.return_value = SimpleNamespace(
+        testsheet_data=None, ir_photos=[ir], dg_photos=[dg], us_tev_archives=[archive], substation_folder_name="001"
+    )
+    workflow.filter_stage.filter_ir_photos.return_value = [(ir, 1)]
+    workflow.filter_stage.filter_dg_photos.return_value = [(dg, 1)]
+    workflow.filter_stage.filter_us_tev_archives.return_value = [archive]
+    workflow.loader.execute_plan.return_value = (1, 1, 1)
+    workflow.auditor.audit.return_value = (None, RawMaterialResult(substations_count=1))
+    request = RawMaterialRequest(output_path=tmp_path / "out")
+    run_project_action(lambda environment: workflow.execute(environment, request), locations.environment)
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert {str(ir), str(dg), str(archive)} <= inputs.keys()
+    assert all(inputs[str(path)]["size"] == 7 for path in (ir, dg, archive))
+
+
+def test_postprocessing_records_testsheet_pdf_before_validation(locations, tmp_path) -> None:
+    docx = _file(tmp_path / "KUANTAN" / "11. NOVEMBER" / "07-11-2026" / "1. PE.docx")
+    pdf = _file(tmp_path / "processed_testsheet" / "pdf" / "1. PE.pdf")
+    workflow = FullReportPostProcessingWorkflow()
+
+    def action(environment):
+        with (
+            patch.object(workflow, "_discover_docx_files", return_value=([docx], [], [])),
+            patch("src.workflows.full_report_postprocessing.resolve_processed_testsheet_pdf_path", return_value=pdf),
+            patch("src.workflows.full_report_postprocessing.validate_processed_testsheet_pdf", side_effect=_StopWorkflow),
+        ):
+            workflow.process(str(docx), environment)
+
+    run_project_action(action, locations.environment)
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert inputs[str(pdf)]["size"] == 7
+    assert inputs[str(pdf)]["modified"]
+
+
+def test_shared_project_resources_have_input_metadata(locations, tmp_path) -> None:
+    template = _file(tmp_path / "templates" / "whatsapp.docx")
+    master = _file(tmp_path / "ENGR" / "QR03 CBA.xlsx")
+    photo = _file(tmp_path / "RAW DATA" / "IR" / "FLIR0001.jpg")
+    environment = locations.environment
+
+    def action(env):
+        with (
+            patch.object(env.storage, "get_template", return_value=template),
+            patch.object(env.storage, "get_engr_folder", return_value=master.parent),
+            patch.object(env.storage, "get_substation_raw_data_dir", return_value=photo.parent.parent),
+        ):
+            assert env.get_template("whatsapp_template") == template
+            assert env.get_engr_folder() == master.parent
+            assert env.get_substation_raw_data_dir("KUANTAN", "11. NOVEMBER", "07-11-2026", 1) == photo.parent.parent
+
+    run_project_action(action, environment)
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert {str(template), str(master), str(photo)} <= inputs.keys()
+    assert all(inputs[str(path)]["size"] == 7 for path in (template, master, photo))
+
+
+def test_quick_report_records_explicit_condition_template(locations, tmp_path) -> None:
+    template = _file(tmp_path / "condition.docx")
+    workflow = QuickReportWorkflow()
+
+    def action(environment):
+        with (
+            patch.object(workflow, "_validate_templates", return_value=()),
+            patch.object(workflow._extractor, "extract", return_value=[]),
+        ):
+            workflow.generate(["FL1"], environment, condition_template=template)
+
+    run_project_action(action, locations.environment)
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert inputs[str(template)]["size"] == 7
+    assert inputs[str(template)]["modified"]

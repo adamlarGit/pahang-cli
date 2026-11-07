@@ -576,6 +576,7 @@ class FullReportWorkflow:
 
         # 1. Pre-flight validation
         qr_path = self._resolve_quick_report_path(ctx.environment, pkg)
+        current_run().record_inputs([qr_path])
         val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
         if not val_res.is_valid:
             # SubstationIsolatedBatchResiliencePolicy: record upfront validation failure
@@ -608,24 +609,26 @@ class FullReportWorkflow:
 
         try:
             # 3. Slicing & Plan building
-            plan = self._build_station_plan(
-                pkg,
-                ctx.environment,
-                quick_report_path=qr_path,
-                output_dir=ctx.output_dir,
-                station_temp_dir=station_temp_dir,
-            )
+            with current_run().step(f"Build Full Report plan: {st_name}"):
+                plan = self._build_station_plan(
+                    pkg,
+                    ctx.environment,
+                    quick_report_path=qr_path,
+                    output_dir=ctx.output_dir,
+                    station_temp_dir=station_temp_dir,
+                )
 
             # 4. Rendering & Compilation
             rendered_dir = station_temp_dir / "rendered"
             rendered_dir.mkdir(parents=True, exist_ok=True)
 
-            comp_res = self._composer.compose(
-                plan,
-                keep_temp=ctx.keep_temp,
-                temp_dir=rendered_dir,
-                base_dir=ctx.environment.base_path,
-            )
+            with current_run().step(f"Compose Full Report: {st_name}"):
+                comp_res = self._composer.compose(
+                    plan,
+                    keep_temp=ctx.keep_temp,
+                    temp_dir=rendered_dir,
+                    base_dir=ctx.environment.base_path,
+                )
 
             out_path = comp_res.output_path
             if not out_path or not out_path.exists() or out_path.stat().st_size == 0:
@@ -771,6 +774,7 @@ class FullReportWorkflow:
         date_str = pkg.date_str or "01-01-2026"
 
         qr_path = self._resolve_quick_report_path(environment, pkg)
+        current_run().record_inputs([qr_path])
         val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
 
         cbm_defects, vi_defects = self._extract_defects_safe(pkg, environment)
@@ -909,6 +913,9 @@ class FullReportWorkflow:
             cand = Path(pkg.raw_data_dir)
             if cand.exists():
                 raw_dir = cand
+
+        if raw_dir is not None:
+            current_run().record_input_folder(raw_dir, recursive=True)
 
         eq_pkg = self._resolve_equipment_package(pkg)
         panels = []

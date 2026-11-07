@@ -9,7 +9,7 @@ from src.core.contract import ContractScope
 from src.project.models import CameraConfig, ProjectMetadata, PrpdConfig
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage, WorkspaceStorage
-from src.run_records import OperationCancelled
+from src.run_records import OperationCancelled, current_run
 from src.whatsapp.models import WhatsAppReportResources
 
 
@@ -89,7 +89,9 @@ class ProjectEnvironment:
         return self.storage.get_full_report_dir()
 
     def get_engr_folder(self) -> Path:
-        return self.storage.get_engr_folder()
+        folder = self.storage.get_engr_folder()
+        current_run().record_input_folder(folder, (".xlsx", ".xlsm", ".xls"))
+        return folder
 
     def list_engr_files(self) -> list[Path]:
         return self.storage.list_engr_files()
@@ -113,12 +115,15 @@ class ProjectEnvironment:
         date_str: str | None,
         substation_number: int,
     ) -> Path | None:
-        return self.storage.get_substation_raw_data_dir(
+        folder = self.storage.get_substation_raw_data_dir(
             station=station,
             month=month,
             date_str=date_str,
             substation_number=substation_number,
         )
+        if folder is not None:
+            current_run().record_input_folder(folder, recursive=True)
+        return folder
 
     def get_po_number(self) -> str:
 
@@ -138,8 +143,11 @@ class ProjectEnvironment:
         if hasattr(config, "CBM_DEFECT_TEMPLATES") and key in config.CBM_DEFECT_TEMPLATES:
             folder_name = self.get_cbm_defect_folder_name()
             filename = config.CBM_DEFECT_TEMPLATES[key]
-            return self.storage.get_cbm_defect_template(folder_name, filename)
-        return self.storage.get_template(key)
+            path = self.storage.get_cbm_defect_template(folder_name, filename)
+        else:
+            path = self.storage.get_template(key)
+        current_run().record_inputs([path])
+        return path
 
     def get_whatsapp_template(self) -> Path:
         return self.get_template("whatsapp_template")
@@ -181,13 +189,17 @@ class ProjectEnvironment:
         return self.storage.get_full_report_templates_dir()
 
     def get_full_report_census_template(self) -> Path:
-        return self.storage.get_full_report_census_template()
+        path = self.storage.get_full_report_census_template()
+        current_run().record_inputs([path])
+        return path
 
     def get_full_report_normal_templates_dir(self, folder_name: str = "NORMAL IR US TEV") -> Path:
         return self.storage.get_full_report_normal_templates_dir(folder_name)
 
     def get_full_report_normal_template(self, filename: str, folder_name: str = "NORMAL IR US TEV") -> Path:
-        return self.storage.get_full_report_normal_template(filename, folder_name)
+        path = self.storage.get_full_report_normal_template(filename, folder_name)
+        current_run().record_inputs([path])
+        return path
 
     def list_testsheet_folders(self) -> list[Path]:
         return self.storage.list_testsheet_folders()

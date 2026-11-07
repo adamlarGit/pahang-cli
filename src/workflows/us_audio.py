@@ -737,6 +737,8 @@ def run_generate_us_audio_action(environment: Any) -> UsAudioWorkflowSummary | N
         }
     )
     for candidate in selected_candidates:
+        if candidate.survey_dir is not None:
+            current_run().record_input_folder(candidate.survey_dir, recursive=True)
         current_run().record_inputs(
             [
                 candidate.survey_dir,

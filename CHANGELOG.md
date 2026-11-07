@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Save a flushed JSON Lines Run Record for every project workflow and utility action, including software versions, request, input metadata, outputs, warnings, full error tracebacks, logger/progress output, and timed Steps (#183).
+- Show the record path after failed or partially failed actions; use a per-user fallback for transient utilities and failures before project selection. Recording failures never stop an action.
+- Force all test Run Records into temporary folders and test crash survival, console compatibility, Office-free version discovery, and workflow/utility coverage.
+
 ### Fixed
+- Keep Settings and project management actions outside Run Record capture, including recoverable project activation failures.
+- Capture consumed Quick Reports, Testsheet PDFs, raw photos, survey files, templates, and shared workbook metadata, with report planning/composition timings.
 - **US+TEV Survey Graphs Skip Placeholder Measurements (`fix(us-tev-graphs)`, `src/workflows/us_tev_graphs.py`, `src/quick_report/prpd.py`, `tests/test_us_tev_graph_workflow.py`)**:
   - Measurements created without a reading (no `ultrasonic_phase_plot.js` / `eventData.js`) are now skipped before rendering, so Option C no longer launches headless Chrome three times per placeholder and logs a misleading "render exhausted retries" warning; each skip logs `<label>: no <TECH> data recorded (skipped)`.
   - Added `DiscoveredMeasurement.data_file` / `has_recorded_data`; `generate_substation_graphs()` and `run_substation()` return `SubstationGraphResult(generated, skipped_no_data)`, and the `on_progress` callback gains a skipped count.

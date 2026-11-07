@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from functools import partial
 from typing import Callable, Sequence
 
 from src import cli_menu, run_records
@@ -19,10 +20,10 @@ from src.utility_actions import UtilityAction, get_utility_actions
 def run_cli(session: CliSession | None = None) -> None:
     """Run the interactive CLI until the operator exits."""
     if sys.platform == "win32":
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        if hasattr(sys.stderr, "reconfigure"):
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        for stream in (sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is not None:
+                reconfigure(encoding="utf-8", errors="replace")
     from src import __version__
 
     print("\n" + "=" * 55)
@@ -86,12 +87,16 @@ def _run_recorded_action(action_label: str, callback: Callable[[], object], envi
 def _select_project(session: CliSession) -> object:
     """Select a project. A failure here has no project, so its Run Record uses the per-user folder."""
     try:
-        return select_active_project_wizard(session)
+        return select_active_project_wizard(session, on_activation_failure=_record_selection_failure)
     except Exception as exc:
-        record_path = run_records.save_failure("Select Active Project", exc)
-        if record_path:
-            print(f"Run Record: {record_path}")
+        _record_selection_failure(exc)
         raise
+
+
+def _record_selection_failure(exc: Exception) -> None:
+    record_path = run_records.save_failure("Select Active Project", exc)
+    if record_path:
+        print(f"Run Record: {record_path}")
 
 
 def _run_project_workflow_menu(
@@ -114,7 +119,7 @@ def _run_project_workflow_menu(
         if selection is None:
             return
         if isinstance(selection, ProjectWorkflowAction):
-            _run_recorded_action(selection.label, lambda: selection.run(environment), environment)
+            _run_recorded_action(selection.label, partial(selection.run, environment), environment)
         elif selection is cli_menu.SessionCommand.CHANGE_ACTIVE_PROJECT:
             _select_project(session)
         elif selection is cli_menu.SessionCommand.BACK:

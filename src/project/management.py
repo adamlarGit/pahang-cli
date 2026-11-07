@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Callable
 
 from src import cli_selectors
 from src.cli_session import CliSession
@@ -12,7 +13,6 @@ from src.project.environment import ProjectEnvironment, create_project_environme
 from src.project.models import ProjectMetadata
 from src.project.repository import JsonFileProjectRepository, ProjectRepository
 from src.project.storage import LocalWorkspaceStorage
-from src.run_records import save_failure
 
 
 logger = logging.getLogger(__name__)
@@ -223,8 +223,9 @@ def select_active_project_wizard(
     session: CliSession,
     allow_cancel: bool = True,
     repository: ProjectRepository | None = None,
+    on_activation_failure: Callable[[Exception], None] | None = None,
 ) -> ProjectEnvironment | None:
-    """Select and activate a project for the current CLI session."""
+    """Select and activate a project, optionally reporting recoverable activation failures."""
     if repository is None:
         repository = JsonFileProjectRepository()
 
@@ -250,9 +251,8 @@ def select_active_project_wizard(
             environment = create_project_environment(project_key, repository=repository)
         except Exception as exc:
             print(f"Project activation failed: {exc}")
-            record_path = save_failure("Select Active Project", exc)
-            if record_path:
-                print(f"Run Record: {record_path}")
+            if on_activation_failure is not None:
+                on_activation_failure(exc)
             last_project_key = project_key
             continue
 

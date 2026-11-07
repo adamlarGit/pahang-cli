@@ -148,7 +148,8 @@ class QuickReportWorkflow:
                 else:
                     progress_sink(f"[{idx}/{len(plans)}] Generating quick report for {station_name}...")
             try:
-                out_p = self._composer.load(p)
+                with current_run().step(f"Compose Quick Report: {station_name}"):
+                    out_p = self._composer.load(p)
                 if out_p:
                     generated_paths.append(out_p)
             except Exception as e:
@@ -212,6 +213,7 @@ class QuickReportWorkflow:
 
         folders, fls = self._resolve_target(target, environment)
         cond_tpl = self._resolve_condition_template(environment, condition_template)
+        current_run().record_inputs([cond_tpl])
         missing_templates = self._validate_templates(environment, cond_tpl)
 
         warnings: list[str] = []

@@ -1021,6 +1021,10 @@ class RawMaterialWorkflow:
             station_name=substation_name,
         )
 
+        current_run().record_inputs(path for path, _ in (*filtered_ir, *filtered_dg))
+        for archive in matched_us_tevs:
+            current_run().record_input_folder(archive, recursive=True)
+
         plan = self.transformer.build_plan(
             environment=environment,
             package=pkg,

@@ -115,7 +115,8 @@ class Run:
     def call(self, action: Callable[[], Any]) -> Any:
         """Run the action, record its outcome, and re-raise its failure unchanged."""
         try:
-            result = action()
+            with self.step("Execute action"):
+                result = action()
         except OperationCancelled as exc:
             self._status = "cancelled"
             self._write("cancelled", message=_text_of(exc))
@@ -162,8 +163,8 @@ class Run:
         except Exception:
             pass
 
-    def record_input_folder(self, folder: Any, suffixes: Iterable[str] = ()) -> None:
-        """Record the files directly inside a folder, with no recursion.
+    def record_input_folder(self, folder: Any, suffixes: Iterable[str] = (), *, recursive: bool = False) -> None:
+        """Record a folder's input files, optionally including nested survey files.
 
         ``suffixes`` limits which files count. A folder with nothing to list, or a path that
         isn't a folder, is recorded as itself.
@@ -172,9 +173,11 @@ class Run:
             return
         try:
             wanted = {suffix.lower() for suffix in suffixes}
+            root = Path(folder).expanduser()
+            children = root.rglob("*") if recursive else root.iterdir()
             files = sorted(
                 child
-                for child in Path(folder).expanduser().iterdir()
+                for child in children
                 if child.is_file()
                 and not child.name.startswith("~$")
                 and (not wanted or child.suffix.lower() in wanted)

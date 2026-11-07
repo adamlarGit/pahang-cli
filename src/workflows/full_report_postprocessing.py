@@ -803,6 +803,7 @@ class FullReportPostProcessingWorkflow:
             stem = group.stem
 
         ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment, stem=stem)
+        current_run().record_inputs([ts_pdf])
         validate_processed_testsheet_pdf(ts_pdf, stem=stem, raise_on_error=True)
         assert ts_pdf is not None
 
@@ -1094,6 +1095,7 @@ class FullReportPostProcessingWorkflow:
         clean_sub_name = re.sub(r"\s*\([^()]*\)$", "", clean_sub_name).strip()
 
         ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment, stem=stem)
+        current_run().record_inputs([ts_pdf])
         val_res = validate_processed_testsheet_pdf(ts_pdf, stem=stem, raise_on_error=False)
 
         if output_dir:

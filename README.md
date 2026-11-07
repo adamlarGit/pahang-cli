@@ -108,6 +108,8 @@ PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD/
 
 The interactive CLI provides three primary menus (`Project Workflows`, `Utility Actions`, and `Settings`).
 
+Each project workflow and utility action saves a [Run Record](docs/workflows/run_records.md) in the project's `logs/` folder (or `%LOCALAPPDATA%\pahang-cli\logs\` without a real project). When an action fails, send the file shown after `Run Record:` to the developer. Settings and project management actions are excluded.
+
 ### 🏗️ Project Workflows (Project-Scoped)
 Automates end-to-end engineering tasks against the currently active workspace.
 
