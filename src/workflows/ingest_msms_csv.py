@@ -382,8 +382,6 @@ class IngestMsmsCsvWorkflow:
         ingested_paths = self.loader.load(plan)
 
         result = self.auditor.audit(plan, ingested_paths)
-        if result.errors and not result.files_ingested:
-            current_run().mark_failed()
 
         if req.progress_sink:
             req.progress_sink(

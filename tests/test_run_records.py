@@ -2872,22 +2872,6 @@ def _consolidate_stages(result):
     return stages
 
 
-def _ingest_stages(result):
-    stages = _stub_stages(IngestMsmsCsvWorkflow())
-    stages.extractor.extract_files.return_value = []
-    stages.filter_stage.filter_files.return_value = ([], [])
-    stages.auditor.audit.return_value = result
-    return stages
-
-
-def _data_msms_stages(result):
-    stages = _stub_stages(PopulateDataMsmsWorkflow())
-    stages.extractor.extract.return_value = SimpleNamespace(packages=[], csv_files=[])
-    stages.filter_stage.filter_csv_files.return_value = []
-    stages.auditor.audit.return_value = result
-    return stages
-
-
 @pytest.mark.parametrize(
     "build, request_object, nothing, something",
     [
@@ -2897,20 +2881,8 @@ def _data_msms_stages(result):
             ConsolidateMsmsResult(files_processed=0, errors=("bad",)),
             ConsolidateMsmsResult(files_processed=1, errors=("bad",)),
         ),
-        (
-            _ingest_stages,
-            IngestMsmsCsvRequest(),
-            IngestMsmsCsvResult(files_ingested=0, errors=("bad",)),
-            IngestMsmsCsvResult(files_ingested=1, errors=("bad",)),
-        ),
-        (
-            _data_msms_stages,
-            PopulateDataMsmsRequest(),
-            PopulateDataMsmsResult(csv_files_processed=0, errors=("bad",)),
-            PopulateDataMsmsResult(csv_files_processed=1, errors=("bad",)),
-        ),
     ],
-    ids=["consolidate", "ingest", "populate_data_msms"],
+    ids=["consolidate"],
 )
 @pytest.mark.parametrize("outcome", ["nothing", "something"])
 def test_msms_workflow_status_says_whether_anything_succeeded(

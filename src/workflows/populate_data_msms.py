@@ -1175,8 +1175,6 @@ class PopulateDataMsmsWorkflow:
         current_run().record_outputs(target_csvs)
 
         result = self.auditor.audit(transformations, files_moved=files_moved)
-        if result.errors and not result.csv_files_processed:
-            current_run().mark_failed()
 
         if req.progress_sink:
             req.progress_sink(

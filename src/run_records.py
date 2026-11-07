@@ -15,12 +15,18 @@ still leaves everything up to that point. A record with no ``run_finish`` entry 
 interrupted, crashed or hung.
 
 Every line is one JSON object with a ``type`` and a ``time``. The types are ``run_start``,
-``environment`` (app, git, Python, Word and Excel versions), ``request``, ``request_update``
-(what changed in a request already recorded), ``input`` (path, size, modified), ``step_start``, ``step_finish``, ``log``, ``progress``, ``console``,
-``warning``, ``error`` (with ``traceback`` for an exception), ``cancelled``, ``result``,
+``environment`` (app, git, Python, Word and Excel versions), ``request``, ``request_update``,
+``input`` (path, size, modified), ``step_start``, ``step_finish``, ``log``, ``progress``,
+``console``, ``warning`` and ``error`` (each with ``traceback`` when there was an exception),
+``cancelled``, ``result``,
 ``output`` and ``run_finish``. Its ``status`` is ``completed``, ``completed_with_errors``
 (some items failed), ``failed`` (the whole job failed) or ``cancelled`` (the operator cancelled
 by way of ``OperationCancelled``; a cancel that just returns is recorded as ``completed``).
+
+A ``request_update`` has ``workflow``, naming an earlier ``request`` with that ``workflow`` value,
+and ``changes``, the fields that differ from it. To rebuild the final request, apply each
+``changes`` over the ``request`` in order. A new key whose value is ``None`` is left out, because
+it reads the same as a missing key. A key left out of a later request stays in the rebuilt one.
 
 Records live in ``<project base path>/logs/``. Runs with no real project folder use
 ``%LOCALAPPDATA%\\pahang-cli\\logs\\``. Setting the environment variable
@@ -123,7 +129,8 @@ class Run:
     def record_request(self, request: Any) -> None:
         """Record what was asked for. Unserialisable parts are recorded by a description.
 
-        Any path in a request, other than its output paths, is also recorded as an input.
+        For a dataclass request, any path field other than an output path is also recorded as
+        an input. A dict request's paths aren't, so its caller records them with record_inputs().
 
         An action can record what the operator selected, and its workflow can record the
         full request later. A dict request with the same ``workflow`` as an earlier one adds
