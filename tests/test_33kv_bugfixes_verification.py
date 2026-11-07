@@ -6,6 +6,7 @@ Bug B: Cable Cellar Overview in Full Report Overview & Summary
 
 from __future__ import annotations
 
+import pytest
 from pathlib import Path
 
 from src.core.topology import (
@@ -484,6 +485,7 @@ def test_ticket_117_feedback_loop_assertion(tmp_path: Path) -> None:
 # ==============================================================================
 
 
+@pytest.mark.live_data
 def test_ticket_121_pt_compartment_elimination_kuala_tahan(tmp_path: Path) -> None:
     """Ticket #121: Verify PT COMPARTMENT elimination on Panels 1-4 and preservation on Panel 5
 
@@ -726,6 +728,7 @@ def test_ticket_121_pt_compartment_elimination_kuala_tahan(tmp_path: Path) -> No
 # ==============================================================================
 
 
+@pytest.mark.live_data
 def test_ticket_125_activex_cirviewer_isolation_kuala_tahan_and_merting() -> None:
     """Ticket #125: Verify per-page ActiveX CIRViewer isolation in Word COM deliverables (#ADR-0002).
 

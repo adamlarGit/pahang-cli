@@ -873,6 +873,7 @@ def test_compile_preserves_pristine_document_state_for_activex_isolation(tmp_pat
     assert False not in saved_state_at_open
 
 
+@pytest.mark.word
 @pytest.mark.xfail(
     reason="Ticket #112 Saved=False reverted by Ticket #125 to restore FLIR ActiveX OLE isolation per ADR 0002"
 )
@@ -911,6 +912,8 @@ def test_compile_integration_word_com_session_preserves_proxy_lifecycle(tmp_path
     assert out_file.stat().st_size > 0
 
 
+@pytest.mark.word
+@pytest.mark.live_data
 @pytest.mark.xfail(
     reason="Ticket #112 Saved=False reverted by Ticket #125 to restore FLIR ActiveX OLE isolation per ADR 0002"
 )

@@ -825,6 +825,7 @@ def test_propagate_wo_workflow_idempotency(tmp_path: Path) -> None:
     assert res3.updated_count == 1
 
 
+@pytest.mark.live_data
 def test_propagate_wo_workflow_33kv_thunder_cycle4_e2e_100_percent(tmp_path: Path) -> None:
     """Acceptance Test: Achieves 100% match rate (25/25 work orders) on 33kV Thunder Cycle 4 dataset."""
     src_33kv = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\PYTHON")

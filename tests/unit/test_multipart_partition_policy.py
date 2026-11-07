@@ -1,5 +1,6 @@
 """Unit tests for MultiPartPartitionPolicy chunk destination paths and panel name sanitization (#64)."""
 
+import pytest
 from pathlib import Path
 
 from src.full_report.plan_builder import (
@@ -222,6 +223,7 @@ def test_census_builder_dual_switchgear_voltage_priority() -> None:
     assert "VCB" in vcb_row.equipment
 
 
+@pytest.mark.live_data
 def test_multipart_partition_live_jengka_chunk_structure() -> None:
     """Ticket #130: Live end-to-end plan chunk sequence verification on CJEN/PMU/J00001 (PMU JENGKA)."""
     from src.testsheet.parsers.ppu import PpuTestsheetParser

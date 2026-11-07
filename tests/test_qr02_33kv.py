@@ -256,6 +256,7 @@ def _create_synthetic_750_39_wb(cba_path: Path) -> None:
     wb.close()
 
 
+@pytest.mark.word
 def test_qr02_33kv_transaction_exact_fl_match_updates_cycle4(tmp_path: Path) -> None:
     from src.master.qr02 import Qr02Cba33kVTransaction
 
@@ -308,6 +309,7 @@ def test_qr02_33kv_transaction_exact_fl_match_updates_cycle4(tmp_path: Path) -> 
     wb_read.close()
 
 
+@pytest.mark.word
 def test_qr02_33kv_transaction_unmatched_fl_appends_new_row(tmp_path: Path) -> None:
     from src.master.qr02 import Qr02Cba33kVTransaction
 
@@ -362,6 +364,7 @@ def test_qr02_33kv_transaction_unmatched_fl_appends_new_row(tmp_path: Path) -> N
     wb_read.close()
 
 
+@pytest.mark.word
 def test_qr02_33kv_transaction_custom_cycle(tmp_path: Path) -> None:
     from src.master.qr02 import Qr02Cba33kVTransaction
 
@@ -396,6 +399,7 @@ def test_qr02_33kv_transaction_custom_cycle(tmp_path: Path) -> None:
     wb_read.close()
 
 
+@pytest.mark.word
 def test_qr02_33kv_atomic_rollback_on_error(tmp_path: Path) -> None:
     from src.master.qr02 import Qr02Cba33kVTransaction
 

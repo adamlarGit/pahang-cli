@@ -795,6 +795,7 @@ def test_enrich_msms_workflow_e2e_33kv(tmp_path: Path):
     assert rows[3][6] == 2
 
 
+@pytest.mark.live_data
 def test_enrich_msms_workflow_thunder_cycle_4_regression(tmp_path: Path):
     """Integration regression against actual 33kV Thunder Cycle 4 dataset if available."""
     src_dir = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\PYTHON")

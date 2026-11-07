@@ -1591,6 +1591,7 @@ def test_transformer_scan_adapter_dynamic_prpd_resolution_ptx_ltx(
     assert prpd_ltx and Path(prpd_ltx).exists()
 
 
+@pytest.mark.live_data
 def test_33kv_mini_ppu_part07_tx_scanning_pages_prpd(
     mock_substation_info: dict[str, str],
     tmp_path: Path,
@@ -1707,6 +1708,7 @@ def test_switchgear_scan_adapter_compartment_specific_ultrasound_from_catalog(tm
     assert hasattr(adapter, "render_swg_scan_pages")
 
 
+@pytest.mark.live_data
 def test_switchgear_scan_adapter_33kv_kuala_tahan_and_merting_end_to_end(tmp_path: Path):
     """End-to-end test verifying compartment-specific ultrasound graphs on 22-10-2026 substations."""
     from src.quick_report.prpd import generate_all_substation_prpd_graphs
@@ -1785,6 +1787,7 @@ def test_switchgear_scan_adapter_33kv_kuala_tahan_and_merting_end_to_end(tmp_pat
                 assert h_cb != h_busbar, f"Breaker and Busbar graph contents identical for panel {p_no} in {ts_path.stem}"
 
 
+@pytest.mark.live_data
 def test_switchgear_scan_adapter_33kv_gebeng_us_prpd_graphs(tmp_path: Path):
     """Verify compartment-specific ultrasound graphs for 33kV GIS at SSU KPC GEBENG."""
     from src.quick_report.prpd import generate_all_substation_prpd_graphs, discover_ultratev_survey_dir
@@ -1885,6 +1888,7 @@ def test_switchgear_scan_adapter_dual_switchgear_resolution(tmp_path: Path):
     assert us1 != us2
 
 
+@pytest.mark.live_data
 def test_switchgear_scan_adapter_dual_switchgear_jengka_live(tmp_path: Path):
     """Ticket #129: End-to-end verification on CJEN/PMU/J00001 (40. PMU JENGKA 132-11-33kV)."""
     from src.quick_report.prpd import generate_all_substation_prpd_graphs, discover_ultratev_survey_dir

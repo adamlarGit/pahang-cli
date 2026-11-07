@@ -1378,6 +1378,7 @@ def test_generate_all_substation_prpd_graphs_with_panels(tmp_path: Path):
     assert catalog["swg"]["feeder_5"] == catalog["swg"][2]
 
 
+@pytest.mark.live_data
 def test_discover_22_10_2026_substations_regression():
     """Verify feeder-aligned survey discovery for 22-10-2026 real substations (KT and Merting)."""
     from src.testsheet.parsers.ppu import PpuTestsheetParser

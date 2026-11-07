@@ -593,6 +593,7 @@ def test_ppu_gps_coordinate_extraction(tmp_path: Path) -> None:
     assert meta5.gps_coordinate == ""
 
 
+@pytest.mark.live_data
 def test_ppu_extract_gps_production_kuala_tahan() -> None:
     prod_path = Path(
         r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\TESTSHEET\JERANTUT\01. OCTOBER\22-10-2026\33. MINI PPU KUALA TAHAN 33-11kV (VI).xlsx"

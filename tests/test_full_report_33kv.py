@@ -1069,6 +1069,7 @@ class TestDualVoltageLineupIsolationAndWrappedContainers:
         assert cable_item.context["panel"]["tev"]["ppc"] == "20"
 
 
+@pytest.mark.live_data
 def test_full_report_ssu_lynas_compiles_intermediate_parts_and_chunks(tmp_path: Path) -> None:
     """Regression test (Ticket #138): SSU LYNAS 33kV intermediate parts and chunks compile without [Errno 22]."""
     from src.testsheet.parsers.ppu import PpuTestsheetParser
