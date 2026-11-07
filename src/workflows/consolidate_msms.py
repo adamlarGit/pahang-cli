@@ -18,6 +18,7 @@ import openpyxl
 import pandas as pd
 
 from src.core.normalizers import normalize_fl_erms
+from src.run_records import current_run
 from src.project.environment import ProjectEnvironment
 from src.workflows.models import (
     ConsolidateMsmsRequest,
@@ -99,9 +100,11 @@ class ConsolidateMsmsExtractor:
         try:
             tables = pd.read_html(str(xls_path), flavor="lxml")
         except ValueError as e:
+            current_run().record_error(f"Failed to read HTML table in '{xls_path.name}': {e}", e)
             logger.warning(f"No tables found in '{xls_path.name}': {e}")
             return [], f"Failed to read HTML table in '{xls_path.name}': {e}"
         except Exception as e:
+            current_run().record_error(f"Failed to read HTML table in '{xls_path.name}': {e}", e)
             return [], f"Failed to read HTML table in '{xls_path.name}': {e}"
 
         if not tables or tables[0].empty:

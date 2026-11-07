@@ -32,6 +32,7 @@ from src.workflows.full_report_postprocessing import (
     FullReportPostProcessingWorkflow,
 )
 from src.project.storage import resolve_full_report_dir
+from src.run_records import current_run
 from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.service import WorkflowService
 
@@ -279,12 +280,14 @@ class QuickReportAction(ProjectWorkflowAction):
             inspection = workflow.inspect(selected_targets, environment)
             
             if inspection.missing_templates:
+                current_run().record_failure(f"Quick Report templates missing: {list(inspection.missing_templates)}")
                 print(f"Cannot generate Quick Report: {len(inspection.missing_templates)} required template(s) missing:")
                 for tpl in inspection.missing_templates:
                     print(f"  - {tpl}")
                 return None
 
             if inspection.errors and not inspection.targets:
+                current_run().record_failure(f"Quick Report inspection failed: {list(inspection.errors)}")
                 print(f"Inspection found {len(inspection.errors)} error(s):")
                 for err in inspection.errors:
                     print(f"  - {err}")
@@ -872,6 +875,7 @@ def generate_full_reports_action(
     _print_full_report_dry_run_telemetry(inspection)
 
     if not inspection.targets:
+        current_run().record_failure(f"No substations discovered to process: {list(inspection.errors)}")
         print("No substations discovered to process.")
         return None
 
@@ -1085,6 +1089,7 @@ def postprocess_full_reports_action(
     _print_full_report_postprocessing_dry_run_telemetry(inspection)
 
     if not inspection.targets:
+        current_run().record_failure(f"No Full Report documents discovered: {list(inspection.errors)}")
         print("No Full Report documents discovered for post-processing.")
         return None
 

@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import questionary
@@ -29,20 +29,39 @@ from src.cli_session import CliSession
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
-from src.project_workflow_actions import ProjectWorkflowAction
+from src.project_workflow_actions import (
+    FullReportAction,
+    FullReportPostProcessingAction,
+    ProjectWorkflowAction,
+    QuickReportAction,
+)
 from src.run_records import RECORD_DIR_OVERRIDE_VARIABLE, current_run, open_run
-from src.utility_actions import UtilityAction
-from src.workflows.full_report import FullReportWorkflow
-from src.workflows.full_report_postprocessing import FullReportPostProcessingWorkflow
+from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
+from src.utility_actions import UtilityAction, get_utility_actions
+from src.workflows.consolidate_msms import ConsolidateMsmsExtractor
+from src.workflows.full_report import FullReportInspection, FullReportWorkflow
+from src.workflows.full_report_postprocessing import (
+    FullReportPostProcessingInspection,
+    FullReportPostProcessingWorkflow,
+)
 from src.workflows.models import (
+    ConsolidateMsmsResult,
     PostProcessingMode,
     PostProcessingRequest,
     PostProcessingSummary,
     QuickReportInspection,
     QuickReportResult,
 )
+from src.workflows.postprocessing_pipeline import PostProcessingPipelineWorkflow
 from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.service import WorkflowService
+from src.workflows.us_audio import UsAudioCandidate, UsAudioWorkflow
+from src.workflows.us_tev_graphs import (
+    BrowserPrerequisiteError,
+    SubstationGraphResult,
+    UsTevCandidate,
+    UsTevGraphWorkflow,
+)
 from src.workflow_cli import (
     _run_action,
     _run_project_workflow_menu,
@@ -1104,3 +1123,447 @@ def test_text_the_record_file_cannot_encode_does_not_end_the_record(locations) -
     entries = read_entries(locations.project_logs)
     assert entries_of(entries, "warning")
     assert entries[-1]["type"] == "run_finish"
+
+
+def run_registered_utility(label: str) -> None:
+    """Choose a real utility action from the registry, then leave the menu."""
+    action = next(item for item in get_utility_actions() if item.label == label)
+    with patch("src.cli_menu.select_utility_action", side_effect=[action, None]):
+        _run_utility_actions_menu([action])
+
+
+@pytest.fixture
+def utility_env(locations):
+    """A project environment for utility actions. Records still use the fallback folder."""
+    with patch("src.project.environment.load_project_environment", return_value=locations.environment):
+        yield locations.environment
+
+
+def assert_problem_recorded(folder: Path, status: str, marker: str, capsys) -> list[dict]:
+    """The Run's status, a traceback naming the failure, and the path on the console."""
+    entries = read_entries(folder)
+    assert entries[-1]["type"] == "run_finish"
+    assert entries[-1]["status"] == status
+    tracebacks = [entry["traceback"] for entry in entries_of(entries, "error") if "traceback" in entry]
+    assert any(marker in text for text in tracebacks), f"no traceback with {marker!r} in {tracebacks}"
+    record_path = next(folder.glob("*.jsonl"))
+    assert f"Run Record: {record_path}" in capsys.readouterr().out
+    return entries
+
+
+def test_record_error_finishes_as_completed_with_errors_and_shows_the_path(locations, capsys) -> None:
+    def action(environment) -> None:
+        try:
+            raise ValueError("substation 3 is bad")
+        except ValueError as exc:
+            current_run().record_error("Substation 3 failed", exc)
+
+    run_project_action(action, locations.environment)
+
+    assert_problem_recorded(locations.project_logs, "completed_with_errors", "substation 3 is bad", capsys)
+
+
+def test_record_failure_is_not_downgraded_by_what_the_action_returns(locations, capsys) -> None:
+    def action(environment) -> QuickReportResult:
+        try:
+            raise ValueError("whole job broke")
+        except ValueError as exc:
+            current_run().record_failure("It all failed", exc)
+        return QuickReportResult(reports_generated=1, errors=("one more",))
+
+    run_project_action(action, locations.environment)
+
+    assert_problem_recorded(locations.project_logs, "failed", "whole job broke", capsys)
+
+
+def test_error_also_returned_in_the_result_is_recorded_once(locations) -> None:
+    def action(environment) -> QuickReportResult:
+        try:
+            raise ValueError("detail")
+        except ValueError as exc:
+            current_run().record_error("Failed to process PE 3: detail", exc)
+        return QuickReportResult(reports_generated=1, errors=("Failed to process PE 3: detail",))
+
+    run_project_action(action, locations.environment)
+
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert len(errors) == 1
+    assert "traceback" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "result, status",
+    [
+        (QuickReportResult(reports_generated=2, errors=("PE 3 failed",)), "completed_with_errors"),
+        (QuickReportResult(reports_generated=0, errors=("PE 3 failed",)), "failed"),
+        (ConsolidateMsmsResult(files_processed=0, errors=("bad xls",)), "failed"),
+        (ConsolidateMsmsResult(files_processed=2, errors=("bad xls",)), "completed_with_errors"),
+    ],
+)
+def test_batch_status_says_whether_anything_succeeded(locations, result, status) -> None:
+    run_project_action(lambda environment: result, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == status
+
+
+def test_combine_pdfs_hard_stop_is_a_failed_run(locations, monkeypatch, capsys) -> None:
+    answers = iter([str(locations.project / "no_primary"), str(locations.project / "no_secondary")])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+
+    run_registered_utility("Combine PDFs from primary and secondary folders")
+
+    captured = capsys.readouterr()
+    assert "HARD STOP: Primary folder not found" in captured.out
+    entries = read_entries(locations.fallback_logs)
+    assert entries[-1]["status"] == "failed"
+    assert "Primary folder not found" in entries_of(entries, "error")[0]["traceback"]
+    assert str(next(locations.fallback_logs.glob("*.jsonl"))) in captured.out
+
+
+def test_combine_with_separator_missing_template_is_a_failed_run(locations, utility_env, capsys) -> None:
+    with patch.object(ProjectEnvironment, "get_template", side_effect=RuntimeError("no separator template")):
+        run_registered_utility("Combine PDFs with separator sheet")
+
+    assert_problem_recorded(locations.fallback_logs, "failed", "no separator template", capsys)
+
+
+def test_combine_with_separator_hard_stop_is_a_failed_run(locations, utility_env, tmp_path, capsys) -> None:
+    separator = tmp_path / "separator.pdf"
+    separator.write_bytes(b"pdf")
+    empty_folder = tmp_path / "no_pdfs"
+    empty_folder.mkdir()
+
+    with (
+        patch.object(ProjectEnvironment, "get_template", return_value=separator),
+        patch("src.cli_selectors.select_testsheet_subfolder", return_value=empty_folder),
+    ):
+        run_registered_utility("Combine PDFs with separator sheet")
+
+    assert_problem_recorded(locations.fallback_logs, "failed", "No PDF files found", capsys)
+
+
+def test_whatsapp_utility_failure_is_a_failed_run(locations, utility_env, capsys) -> None:
+    with patch.object(ProjectEnvironment, "get_whatsapp_report_resources", side_effect=RuntimeError("no total pe")):
+        run_registered_utility("Generate WhatsApp report (from Quick Reports)")
+
+    assert_problem_recorded(locations.fallback_logs, "failed", "no total pe", capsys)
+
+
+def test_propagate_wo_utility_failure_is_a_failed_run(locations, utility_env, capsys) -> None:
+    with patch.object(WorkflowService, "run_propagate_wo", side_effect=RuntimeError("workbook locked")):
+        run_registered_utility("Propagate Work Orders (DATA MSMS -> TOTAL PE)")
+
+    assert_problem_recorded(locations.fallback_logs, "failed", "workbook locked", capsys)
+
+
+def test_rename_files_hard_stop_is_a_failed_run(locations, monkeypatch, capsys) -> None:
+    """Today this also hits a pre-existing NameError on logging. The record holds both causes."""
+    answers = iter([str(locations.project / "no_input"), str(locations.project / "no_output")])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(answers))
+
+    run_registered_utility("Rename files (match names from input dir)")
+
+    assert_problem_recorded(locations.fallback_logs, "failed", "Input directory not found", capsys)
+
+
+def _tev_candidate(tmp_path: Path, name: str) -> UsTevCandidate:
+    survey = tmp_path / name
+    survey.mkdir()
+    package = SimpleNamespace(substation_name=name, date_str="", testsheet_path=tmp_path / f"{name}.xlsx")
+    return UsTevCandidate(package=package, raw_data_dir=survey, survey_dir=survey, output_dir=survey / "graphs")
+
+
+def _tev_prompts(candidates: list[UsTevCandidate]):
+    module = "src.workflows.us_tev_graphs"
+    return (
+        patch(f"{module}.select_one", return_value="enter_dates"),
+        patch(f"{module}.prompt_target_inspection_dates_with_ranges", return_value=["07-11-2026"]),
+        patch(f"{module}.discover_us_tev_candidate_substations", return_value=candidates),
+        patch(f"{module}.select_us_tev_substations_interactive", return_value=candidates),
+        patch.object(ProjectEnvironment, "get_prpd_config", return_value=SimpleNamespace(mode="option_b")),
+    )
+
+
+def test_us_tev_missing_browser_is_a_failed_run(locations, utility_env, tmp_path, capsys) -> None:
+    prompts = _tev_prompts([_tev_candidate(tmp_path, "PE1")])
+    with (
+        prompts[0], prompts[1], prompts[2], prompts[3], prompts[4],
+        patch.object(UsTevGraphWorkflow, "check_browser_prerequisite", side_effect=BrowserPrerequisiteError("no chrome")),
+    ):
+        run_registered_utility("Generate US+TEV survey graphs")
+
+    assert_problem_recorded(locations.fallback_logs, "failed", "no chrome", capsys)
+
+
+def test_us_tev_batch_with_one_failed_substation_has_errors_and_a_traceback(
+    locations, utility_env, tmp_path, capsys
+) -> None:
+    def graphs_or_failure(self, survey_root, output_dir=None):
+        if Path(survey_root).name == "PE2":
+            raise RuntimeError("survey unreadable")
+        return SubstationGraphResult(generated=[tmp_path / "graph.png"])
+
+    prompts = _tev_prompts([_tev_candidate(tmp_path, "PE1"), _tev_candidate(tmp_path, "PE2")])
+    with (
+        prompts[0], prompts[1], prompts[2], prompts[3], prompts[4],
+        patch.object(UsTevGraphWorkflow, "run_substation", graphs_or_failure),
+    ):
+        run_registered_utility("Generate US+TEV survey graphs")
+
+    assert_problem_recorded(locations.fallback_logs, "completed_with_errors", "survey unreadable", capsys)
+
+
+def test_us_audio_failed_substation_has_a_traceback(locations, capsys) -> None:
+    candidate = UsAudioCandidate(raw_data_dir=locations.project)
+
+    def action(environment) -> object:
+        with patch.object(UsAudioWorkflow, "run_substation", side_effect=RuntimeError("wav export broke")):
+            return UsAudioWorkflow().run_batch([candidate])
+
+    run_project_action(action, locations.environment)
+
+    assert_problem_recorded(locations.project_logs, "failed", "wav export broke", capsys)
+
+
+def _signature_prompts(answer: str):
+    return (
+        patch("builtins.input", return_value=answer),
+        patch("src.cli_selectors.select_one", return_value="placeholder"),
+        patch("src.workflows.replace_signatures._select_signature_path", return_value=(None, "__none__")),
+    )
+
+
+def test_replace_signatures_on_one_file_failing_is_a_failed_run(locations, utility_env, tmp_path, capsys) -> None:
+    workbook = tmp_path / "PE1.xlsx"
+    workbook.write_bytes(b"x")
+    prompts = _signature_prompts(str(workbook))
+    with (
+        prompts[0], prompts[1], prompts[2],
+        patch("src.workflows.replace_signatures.replace_pce_images", side_effect=RuntimeError("bad workbook")),
+    ):
+        run_registered_utility("Replace signature images in testsheets")
+
+    assert_problem_recorded(locations.fallback_logs, "failed", "bad workbook", capsys)
+
+
+@pytest.mark.parametrize("good_files, status", [(1, "completed_with_errors"), (0, "failed")])
+def test_replace_signatures_batch_status(locations, utility_env, tmp_path, capsys, good_files, status) -> None:
+    folder = tmp_path / "batch"
+    folder.mkdir()
+    (folder / "bad.xlsx").write_bytes(b"x")
+    if good_files:
+        (folder / "good.xlsx").write_bytes(b"x")
+
+    def replace(path, *args, **kwargs):
+        if Path(path).name == "bad.xlsx":
+            raise RuntimeError("bad workbook")
+
+    prompts = _signature_prompts(str(folder))
+    with prompts[0], prompts[1], prompts[2], patch("src.workflows.replace_signatures.replace_pce_images", replace):
+        run_registered_utility("Replace signature images in testsheets")
+
+    assert_problem_recorded(locations.fallback_logs, status, "bad workbook", capsys)
+
+
+def test_desktop_ini_that_cannot_be_removed_is_recorded(locations, utility_env, tmp_path, capsys) -> None:
+    folder = tmp_path / "scan"
+    folder.mkdir()
+    (folder / "desktop.ini").write_text("x", encoding="utf-8")
+
+    with (
+        patch("src.cli_selectors.prompt_directory_path", return_value=folder),
+        patch("src.remove_desktop_ini_workflow.subprocess.run", return_value=SimpleNamespace(returncode=1)),
+        patch("src.remove_desktop_ini_workflow.os.chmod", side_effect=PermissionError("locked")),
+    ):
+        run_registered_utility("Remove desktop.ini files (recursive)")
+
+    assert_problem_recorded(locations.fallback_logs, "completed_with_errors", "locked", capsys)
+
+
+def _quick_report_prompts():
+    return (
+        patch("src.project_workflow_actions.cli_selectors.select_one", return_value="browse_dates"),
+        patch(
+            "src.project_workflow_actions.cli_selectors.select_pahang_inspection_dates_interactive",
+            return_value=("07-11-2026",),
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "inspection, printed",
+    [
+        (QuickReportInspection((), ("Sticker template missing",), (), ()), "Cannot generate Quick Report"),
+        (QuickReportInspection((), (), (), ("Package discovery failed: boom",)), "Inspection found 1 error(s)"),
+    ],
+)
+def test_quick_report_that_cannot_start_is_a_failed_run(locations, capsys, inspection, printed) -> None:
+    action = QuickReportAction("Generate Quick Report")
+    session = CliSession(persistence_file=locations.project / ".active", active_project=locations.environment)
+    prompts = _quick_report_prompts()
+    with (
+        prompts[0], prompts[1],
+        patch("src.cli_menu.select_project_workflow_action", side_effect=[action, None]),
+        patch.object(QuickReportWorkflow, "inspect", return_value=inspection),
+    ):
+        _run_project_workflow_menu(session, [action])
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    captured = capsys.readouterr().out
+    assert printed in captured
+    assert str(next(locations.project_logs.glob("*.jsonl"))) in captured
+
+
+def _run_project_action_object(action, locations) -> None:
+    session = CliSession(persistence_file=locations.project / ".active", active_project=locations.environment)
+    with patch("src.cli_menu.select_project_workflow_action", side_effect=[action, None]):
+        _run_project_workflow_menu(session, [action])
+
+
+def test_full_report_with_nothing_to_process_is_a_failed_run(locations, capsys) -> None:
+    workflow = MagicMock()
+    workflow.inspect.return_value = FullReportInspection(targets=(), warnings=(), errors=("discovery broke",))
+    action = FullReportAction("Generate Full Reports", workflow=workflow)
+
+    with patch("src.project_workflow_actions._prompt_full_report_selection", return_value=["FL1"]):
+        _run_project_action_object(action, locations)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "failed"
+    captured = capsys.readouterr().out
+    assert "No substations discovered to process." in captured
+    assert str(next(locations.project_logs.glob("*.jsonl"))) in captured
+
+
+def test_postprocessing_with_nothing_to_process_is_a_failed_run(locations, capsys) -> None:
+    workflow = MagicMock()
+    workflow.inspect.return_value = FullReportPostProcessingInspection(targets=(), warnings=(), errors=())
+    action = FullReportPostProcessingAction("Post-Process Full Reports", workflow=workflow)
+
+    with patch("src.project_workflow_actions._prompt_full_report_selection", return_value=["FL1"]):
+        workflow.locate_full_reports_for_fls.return_value = ([], [])
+        _run_project_action_object(action, locations)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "failed"
+    captured = capsys.readouterr().out
+    assert "No Full Report documents discovered for post-processing." in captured
+    assert str(next(locations.project_logs.glob("*.jsonl"))) in captured
+
+
+def test_pipeline_failed_substation_keeps_traceback_off_the_console(locations, tmp_path, capfd) -> None:
+    package = SubstationPackage(
+        testsheet_xlsx=tmp_path / "TS" / "1. PE.xlsx",
+        quick_report_docx=tmp_path / "QR" / "1. PE.docx",
+        station_name="PE ONE",
+    )
+    (tmp_path / "TS").mkdir()
+    request = PostProcessingRequest(
+        mode=PostProcessingMode.BY_FL,
+        target_packages=(package,),
+        apply_signatures=True,
+        vendor_signature_path=tmp_path / "sign.png",
+        converter=_FakeConverter(),
+    )
+
+    def action(environment) -> object:
+        module = "src.workflows.postprocessing_pipeline"
+        with (
+            patch(f"{module}.validate_postprocessing_preflight"),
+            patch(f"{module}.discover_substation_packages", return_value=[package]),
+            patch(f"{module}.replace_pce_images", side_effect=RuntimeError("signature stamp broke")),
+        ):
+            return PostProcessingPipelineWorkflow().execute(environment, request)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    tracebacks = [e["traceback"] for e in entries_of(entries, "error") if "traceback" in e]
+    assert any("signature stamp broke" in text for text in tracebacks)
+    captured = capfd.readouterr()
+    assert "Traceback" not in captured.out + captured.err
+
+
+def test_full_report_discovery_failure_has_a_traceback(locations, capsys) -> None:
+    workflow = FullReportWorkflow()
+
+    def action(environment) -> object:
+        with (
+            patch.object(FullReportWorkflow, "_validate_target_existence"),
+            patch.object(workflow, "_extractor") as extractor,
+        ):
+            extractor.extract.side_effect = RuntimeError("testsheet scan broke")
+            return workflow.generate(["FL1"], environment)
+
+    run_project_action(action, locations.environment)
+
+    assert_problem_recorded(locations.project_logs, "failed", "testsheet scan broke", capsys)
+
+
+def test_full_report_inspection_failure_has_a_traceback(locations, capsys) -> None:
+    package = SubstationTestsheetPackage(
+        testsheet_path=locations.project / "a.xlsx",
+        unsorted_raw_data_dir=locations.project,
+        station="KUANTAN",
+        month="NOV",
+        date_str="07-11-2026",
+        substation_number=1,
+    )
+    workflow = FullReportWorkflow()
+
+    def action(environment) -> object:
+        with (
+            patch.object(FullReportWorkflow, "_validate_target_existence"),
+            patch.object(FullReportWorkflow, "_discover_packages", return_value=([package], [], [])),
+            patch.object(FullReportWorkflow, "_inspect_single_package", side_effect=RuntimeError("inspection broke")),
+        ):
+            return workflow.inspect(["FL1"], environment)
+
+    run_project_action(action, locations.environment)
+
+    assert_problem_recorded(locations.project_logs, "completed_with_errors", "inspection broke", capsys)
+
+
+def test_quick_report_discovery_failure_has_a_traceback(locations, capsys) -> None:
+    workflow = QuickReportWorkflow()
+
+    def action(environment) -> object:
+        with patch.object(workflow, "_extractor") as extractor:
+            extractor.extract.side_effect = RuntimeError("testsheet scan broke")
+            return workflow.inspect(["FL1"], environment)
+
+    run_project_action(action, locations.environment)
+
+    assert_problem_recorded(locations.project_logs, "completed_with_errors", "testsheet scan broke", capsys)
+
+
+def test_quick_report_failed_substation_has_a_traceback(locations, capsys) -> None:
+    package = SimpleNamespace(data=object(), substation_name="PE ONE", testsheet_path=locations.project / "a.xlsx")
+    workflow = QuickReportWorkflow()
+
+    def action(environment) -> object:
+        with (
+            patch.object(workflow, "_extractor") as extractor,
+            patch.object(QuickReportWorkflow, "_resolve_substation_display_name", return_value="PE ONE"),
+        ):
+            extractor.extract.return_value = [package]
+            extractor.extract_defects.side_effect = RuntimeError("defect sheet broke")
+            return workflow.inspect(Path("07-11-2026"), environment)
+
+    with patch.object(QuickReportWorkflow, "_resolve_target", return_value=(["07-11-2026"], [])):
+        run_project_action(action, locations.environment)
+
+    assert_problem_recorded(locations.project_logs, "completed_with_errors", "defect sheet broke", capsys)
+
+
+def test_consolidate_unreadable_xls_has_a_traceback(locations, tmp_path, capsys) -> None:
+    bad_file = tmp_path / "bad.xls"
+    bad_file.write_bytes(b"not a table")
+
+    def action(environment) -> None:
+        with patch("src.workflows.consolidate_msms.pd.read_html", side_effect=RuntimeError("html parser broke")):
+            ConsolidateMsmsExtractor().read_xls_file(bad_file)
+
+    run_project_action(action, locations.environment)
+
+    assert_problem_recorded(locations.project_logs, "completed_with_errors", "html parser broke", capsys)

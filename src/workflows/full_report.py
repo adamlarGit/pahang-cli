@@ -337,6 +337,7 @@ class FullReportWorkflow:
                 telemetries.append(telem)
             except Exception as exc:
                 err_msg = f"Failed to inspect {st_name}: {exc}"
+                current_run().record_error(err_msg, exc)
                 errors.append(err_msg)
                 logger.exception(err_msg)
                 telemetries.append(
@@ -687,6 +688,7 @@ class FullReportWorkflow:
         except Exception as exc:
             # SubstationIsolatedBatchResiliencePolicy
             err_msg = f"Failed to compile Full Report for {st_name}: {exc}"
+            current_run().record_error(err_msg, exc)
             ctx.errors.append(err_msg)
             logger.exception(err_msg)
             ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
@@ -1274,6 +1276,7 @@ class FullReportWorkflow:
                     and normalize_functional_location_input(pkg.data.fl_erms) in target_fls
                 ]
         except Exception as exc:
+            current_run().record_error(f"Package discovery failed: {exc}", exc)
             errors.append(f"Package discovery failed: {exc}")
             return [], warnings, errors
 

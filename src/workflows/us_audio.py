@@ -21,6 +21,7 @@ try:
 except ImportError:
     import fitz
 
+from src.run_records import current_run
 from src.cli_selectors import (
     SelectOption,
     prompt_target_inspection_dates_with_ranges,
@@ -463,6 +464,7 @@ class UsAudioWorkflow:
                 summary.total_sounds_embedded += sounds
             except Exception as exc:
                 err_msg = f"{name}: {exc}"
+                current_run().record_error(err_msg, exc)
                 logger.error(
                     "[ERROR] Failed processing US audio for %s: %s",
                     name,

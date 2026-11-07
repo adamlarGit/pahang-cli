@@ -9,6 +9,7 @@ from pathlib import Path
 
 from PyPDF2 import PdfMerger
 
+from src.run_records import current_run
 from src.workflows.progress import ProgressSink, QuantityProgressTracker
 
 
@@ -104,6 +105,7 @@ def run_combine_pdfs_with_separator(environment: object | None = None) -> Combin
     try:
         separator_path = env.get_template("separator_sheet")
     except Exception as err:
+        current_run().record_failure(f"Could not resolve separator sheet template: {err}", err)
         print(f"\n [X] HARD STOP: Could not resolve separator sheet template: {err}\n")
         logging.error("Combine PDFs with separator aborted: %s", err)
         return None
@@ -122,6 +124,7 @@ def run_combine_pdfs_with_separator(environment: object | None = None) -> Combin
         print(f"\n[SUCCESS] Merged {summary.merged_count} file(s) into '{summary.output_pdf_path}'.")
         return summary
     except (ValueError, FileNotFoundError) as err:
+        current_run().record_failure(f"Combine PDFs with separator aborted: {err}", err)
         print(f"\n [X] HARD STOP: {err}\n")
         logging.error("Combine PDFs with separator aborted: %s", err)
         return None

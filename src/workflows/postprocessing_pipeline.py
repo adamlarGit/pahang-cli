@@ -14,6 +14,7 @@ from src.postprocessing.converters import (
 )
 from src.project.environment import ProjectEnvironment
 from src.quick_report.prpd import discover_ultratev_survey_dir
+from src.run_records import current_run
 from src.testsheet.models import SubstationPackage
 from src.testsheet.repository import LocalTestsheetPackageRepository
 from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
@@ -296,6 +297,7 @@ class PostProcessingPipelineWorkflow:
                     sink(f"Completed deliverable -> {quick_report_pdf.name}")
 
                 except Exception as exc:
+                    current_run().record_error(f"Failed post-processing for substation {pkg.station_name}: {exc}", exc)
                     logger.error("Failed post-processing for substation %s: %s", pkg.station_name, exc)
                     failed_packages.append(PostProcessingFailure(package=pkg, error=str(exc)))
                     sink(f"Failed post-processing for {pkg.station_name}: {exc}")

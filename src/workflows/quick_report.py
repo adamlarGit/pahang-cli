@@ -150,6 +150,7 @@ class QuickReportWorkflow:
                     generated_paths.append(out_p)
             except Exception as e:
                 # SubstationIsolatedBatchResiliencePolicy
+                current_run().record_error(f"Failed to process {station_name}: {e}", e)
                 errors.append(f"Failed to process {station_name}: {e}")
                 logger.exception(f"Failed to process {station_name}")
 
@@ -244,6 +245,7 @@ class QuickReportWorkflow:
                     and normalize_functional_location_input(pkg.data.fl_erms) in target_fls
                 ]
         except Exception as exc:
+            current_run().record_error(f"Package discovery failed: {exc}", exc)
             errors.append(f"Package discovery failed: {exc}")
             inspection = QuickReportInspection(
                 targets=(),
@@ -294,6 +296,7 @@ class QuickReportWorkflow:
                 items.append(item)
             except Exception as e:
                 # SubstationIsolatedBatchResiliencePolicy
+                current_run().record_error(f"Failed to process {station_name}: {e}", e)
                 errors.append(f"Failed to process {station_name}: {e}")
                 logger.exception(f"Failed to process {station_name}")
 

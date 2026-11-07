@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.postprocessing.converters import ComDocumentConverter, DocumentConverter
+from src.run_records import current_run
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ def run_combine_pdfs() -> CombinePdfsSummary:
         print(f"Successfully merged {summary.merged_count} PDF file(s).")
         return summary
     except (ValueError, FileNotFoundError) as err:
+        current_run().record_failure(f"Combine PDFs aborted: {err}", err)
         print(f"\n [X] HARD STOP: {err}\n")
         logging.error("Combine PDFs aborted: %s", err)
         return CombinePdfsSummary(

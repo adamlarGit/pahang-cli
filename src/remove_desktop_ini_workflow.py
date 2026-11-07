@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from src.run_records import current_run
+
 
 def remove_desktop_ini_files(target_directory: str | Path) -> int:
     """Recursively remove all desktop.ini files from target_directory."""
@@ -42,6 +44,7 @@ def remove_desktop_ini_files(target_directory: str | Path) -> int:
                     removed_count += 1
                     print(f"  ✓ Removed: {full_path}")
                 except Exception as exc:
+                    current_run().record_error(f"Failed to remove {full_path}: {exc}", exc)
                     print(f"  ❌ Failed to remove {full_path}: {exc}")
 
     if removed_count > 0:

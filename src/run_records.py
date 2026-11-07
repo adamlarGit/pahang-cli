@@ -59,6 +59,21 @@ _GIT_TIMEOUT_SECONDS = 5
 _PROGRESS_LINE = re.compile(r"\s*\[(PROGRESS|\d+/\d+)\]")
 _OWN_LOGGER_NAMES = ("root", "config", "__main__")
 _MAX_DESCRIBE_DEPTH = 12
+# What a result reports having done. All zero, alongside errors, means the whole job failed.
+_RESULT_SUCCESS_FIELDS = (
+    "reports_generated",
+    "succeeded_count",
+    "processed_packages",
+    "processed_count",
+    "records_updated",
+    "substations_count",
+    "files_processed",
+    "files_ingested",
+    "csv_files_processed",
+    "total_graphs",
+    "total_wavs_exported",
+    "total_sounds_embedded",
+)
 _RESULT_OUTPUT_FIELDS = (
     "output_path",
     "generated_paths",
@@ -83,13 +98,14 @@ class Run:
         self._status = "completed"
         self._lock = threading.RLock()
         self._captures: list[Any] = []
+        self._error_messages: set[str] = set()
 
     def call(self, action: Callable[[], Any]) -> Any:
         """Run the action, record its outcome, and re-raise its failure unchanged."""
         try:
             result = action()
         except Exception as exc:
-            self._record_failure(exc)
+            self.record_failure(exc, exc)
             raise
         self._record_result(result)
         return result
@@ -127,8 +143,20 @@ class Run:
         self._write("warning", message=_text_of(message))
 
     def record_error(self, message: Any, exc: BaseException | None = None) -> None:
-        fields = {} if exc is None else {"traceback": "".join(traceback.format_exception(exc))}
-        self._write("error", message=_text_of(message), **fields)
+        """Record that one item failed while the action carried on.
+
+        The Run finishes as ``completed_with_errors`` and the console shows the record's path.
+        """
+        self._mark_problem("completed_with_errors")
+        self._write_error(message, exc)
+
+    def record_failure(self, message: Any, exc: BaseException | None = None) -> None:
+        """Record that the action's whole job failed, even though it returns normally.
+
+        The Run finishes as ``failed`` and the console shows the record's path.
+        """
+        self._mark_problem("failed")
+        self._write_error(message, exc)
 
     @contextmanager
     def step(self, name: str) -> Iterator[None]:
@@ -178,15 +206,21 @@ class Run:
             )
         self._close()
 
-    def _record_failure(self, exc: BaseException) -> None:
+    def _mark_problem(self, status: str) -> None:
         self.failed = True
-        self._status = "failed"
-        self._write(
-            "error",
-            message=str(exc),
-            exception_type=type(exc).__name__,
-            traceback="".join(traceback.format_exception(exc)),
-        )
+        if self._status != "failed":
+            self._status = status
+
+    def _write_error(self, message: Any, exc: BaseException | None) -> None:
+        """Write one error. A result repeating an error already recorded adds nothing."""
+        text = _text_of(message)
+        if exc is None:
+            if text not in self._error_messages:
+                self._error_messages.add(text)
+                self._write("error", message=text)
+            return
+        self._error_messages.add(text)
+        self._write("error", message=text, exception_type=type(exc).__name__, traceback=_traceback_of(exc))
 
     def _record_result(self, result: Any) -> None:
         """Take outputs, warnings and errors from what the action returned, if it says."""
@@ -206,8 +240,7 @@ class Run:
                 self.record_error(error)
             failed_count = getattr(result, "failed_count", 0)
             if errors or (isinstance(failed_count, int) and failed_count > 0):
-                self.failed = True
-                self._status = "completed_with_errors"
+                self._mark_problem("failed" if _nothing_succeeded(result) else "completed_with_errors")
         except Exception:
             pass
 
@@ -418,7 +451,7 @@ def open_run(label: str, environment: Any = None) -> Run:
 def save_failure(label: str, exc: BaseException) -> Path | None:
     """Save a failure from before any project is selected, in the per-user folder."""
     with _start_run(label, None, None) as run:
-        run._record_failure(exc)
+        run.record_failure(exc, exc)
     return run.path
 
 
@@ -444,6 +477,24 @@ def _as_list(value: Any) -> list[Any]:
     if isinstance(value, (list, tuple, set, frozenset)):
         return list(value)
     return [value] if isinstance(value, os.PathLike) else []
+
+
+def _nothing_succeeded(result: Any) -> bool:
+    counts = []
+    for field in _RESULT_SUCCESS_FIELDS:
+        value = getattr(result, field, None)
+        if isinstance(value, int):
+            counts.append(value)
+        elif isinstance(value, (list, tuple)):
+            counts.append(len(value))
+    return bool(counts) and sum(counts) == 0
+
+
+def _traceback_of(exc: BaseException) -> str:
+    try:
+        return "".join(traceback.format_exception(exc))
+    except Exception:
+        return _label_of(exc)
 
 
 def _text_of(value: Any) -> str:

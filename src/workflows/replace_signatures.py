@@ -19,6 +19,7 @@ from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from src import cli_selectors
 from src.postprocessing.converters import classify_sheet_layout
 from src.project.storage import repair_openpyxl_zip
+from src.run_records import current_run
 
 
 @dataclass(frozen=True)
@@ -283,6 +284,7 @@ def batch_replace_pce_images(
             replace_pce_images(full_path, photo1_path, photo2_path, output_path=out_path, mode=mode)
             processed_count += 1
         except Exception as e:
+            current_run().record_error(f"Failed to process {filename}: {e}", e)
             print(f" -> ERROR processing {filename}: {str(e)}")
             failed_count += 1
 
@@ -427,6 +429,7 @@ def run_replace_images(env: ProjectEnvironment | None = None) -> ReplaceImagesSu
             replace_pce_images(target, photo1_path, photo2_path, output_path=out_path, mode=mode)
             return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=photo2_path, mode=mode, processed_count=1, failed_count=0)
         except Exception as e:
+            current_run().record_failure(f"Failed to process file {target}: {e}", e)
             print(f"[ERROR] Failed to process file {target}: {e}")
             return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=photo2_path, mode=mode, processed_count=0, failed_count=1)
     else:

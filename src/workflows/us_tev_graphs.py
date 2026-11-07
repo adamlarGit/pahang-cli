@@ -13,6 +13,7 @@ from pathlib import Path
 import time
 from typing import Any, Callable, Sequence
 
+from src.run_records import current_run
 from src.cli_selectors import (
     SelectOption,
     prompt_target_inspection_dates_with_ranges,
@@ -236,6 +237,7 @@ class UsTevGraphWorkflow:
                     on_progress(idx, total, item_label, count, skipped, output_dir)
             except Exception as exc:
                 err_msg = f"Failed generating graphs for {item_label}: {exc}"
+                current_run().record_error(err_msg, exc)
                 logger.error(err_msg, exc_info=True)
                 summary.errors.append(err_msg)
 
@@ -355,6 +357,7 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
     try:
         workflow.check_browser_prerequisite()
     except BrowserPrerequisiteError as exc:
+        current_run().record_failure(f"Browser Prerequisite Error: {exc}", exc)
         print(f"\n[ERROR] Browser Prerequisite Error: {exc}")
         return None
 

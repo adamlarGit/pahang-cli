@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.project.storage import extract_prefix_safe
+from src.run_records import current_run
 
 
 @dataclass(frozen=True)
@@ -156,6 +157,7 @@ def run_rename_files() -> RenameFilesSummary:
         tracker.complete(f"Total renamed: {len(summary.renamed)} items.")
         return summary
     except (ValueError, FileExistsError, FileNotFoundError) as err:
+        current_run().record_failure(f"Rename files aborted: {err}", err)
         print(f"\n [X] HARD STOP: {err}\n")
         logging.error("Rename files aborted: %s", err)
         return RenameFilesSummary(
