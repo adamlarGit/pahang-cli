@@ -87,7 +87,7 @@ def _guard_launch(event: str, args: tuple) -> None:
         if _is_office_command(target):
             _require_word_marker(target)
     elif event in {"os.startfile", "os.startfile/2"}:
-        target = args[0]
+        target = os.fsdecode(args[0])
         if _is_office_file_or_class(target) or _is_office_command([target]):
             _require_word_marker(target)
 

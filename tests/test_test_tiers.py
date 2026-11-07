@@ -175,6 +175,7 @@ def test_unmarked_test_starting_office_fails_naming_the_marker(tmp_path: Path, s
         'os.startfile("C:/fake/report.docx")',
         'os.startfile("C:/fake/workbook.xlsx")',
         'os.startfile("C:/fake/data.csv")',
+        'os.startfile(b"C:/fake/report.docx")',
     ],
 )
 def test_unmarked_office_process_or_file_launch_fails(tmp_path: Path, start: str) -> None:

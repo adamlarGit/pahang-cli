@@ -43,7 +43,7 @@ A guard in `tests/tier_guard.py` fails a test without the `word` marker that rea
 
 The guard also blocks direct Word/Excel launches through `subprocess` and Office files opened through `os.startfile`. It leaves other programs and non-Office files alone.
 
-The guard runs inside pytest's Python process. It cannot inspect what a child program or shell script later launches; tests that start Office indirectly still need the `word` marker. It is a test guard, not a process sandbox.
+The guard runs inside pytest's Python process. It can't see `subprocess` calls with `shell=True`, because it doesn't parse shell strings, or what a child program or shell script later launches. Tests that start Office those ways still need the `word` marker. It is a test guard, not a process sandbox.
 
 ## Client folders
 
