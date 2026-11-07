@@ -16,8 +16,9 @@ interrupted, crashed or hung.
 
 Every line is one JSON object with a ``type`` and a ``time``. The types are ``run_start``,
 ``environment`` (app, git, Python, Word and Excel versions), ``request``, ``request_update``,
-``input`` (path, size, modified), ``input_truncated`` (a capped folder: ``folder``, ``recorded``,
-``left_out``), ``step_start``, ``step_finish``, ``log``, ``progress``,
+``input`` (path, size, modified; ``modified`` is null if unknown), ``input_truncated`` (a capped
+folder: ``folder``, ``recorded``, ``left_out``, ``left_out_is_a_minimum``), ``input_unreadable``
+(``folder``), ``step_start``, ``step_finish``, ``log``, ``progress``,
 ``console``, ``warning`` and ``error`` (each with ``traceback`` when there was an exception),
 ``cancelled``, ``result``,
 ``output`` and ``run_finish``. Its ``status`` is ``completed``, ``completed_with_errors``
@@ -49,6 +50,7 @@ import math
 import os
 import platform
 import re
+import stat
 import subprocess
 import sys
 import threading
@@ -58,7 +60,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator, Mapping
+from typing import Any, Callable, Iterable, Iterator, Mapping, NamedTuple
 
 # When set, every Run Record goes to this folder and no other location is tried.
 # The test suite sets it so that no test can write into a real project folder.
@@ -77,6 +79,8 @@ _MAX_DESCRIBE_DEPTH = 12
 _RECORDED_MARK = "_pahang_cli_recorded_by_run"
 # Input entries kept per folder, so a huge raw-data folder can't flood a record.
 _MAX_INPUTS_PER_FOLDER = 200
+# Directory entries looked at per folder, so a huge tree can't stall a report.
+_MAX_ENTRIES_WALKED = 50_000
 _RESULT_OUTPUT_FIELDS = (
     "output_path",
     "output_pdf_path",
@@ -172,9 +176,12 @@ class Run:
         """Record a folder's input files, optionally including nested survey files.
 
         ``suffixes`` limits which files count. A folder with nothing to list, or a path that
-        isn't a folder, is recorded as itself. Each folder is walked once in a Run. At most
-        ``_MAX_INPUTS_PER_FOLDER`` files are recorded, in name order, followed by an
-        ``input_truncated`` entry saying how many were left out. Files are never opened.
+        isn't a folder, is recorded as itself. Each folder is walked once in a Run, without
+        following junctions or symlinks, and the walk stops after ``_MAX_ENTRIES_WALKED`` entries.
+        At most ``_MAX_INPUTS_PER_FOLDER`` files are recorded, in name order, followed by an
+        ``input_truncated`` entry saying how many were left out. ``left_out_is_a_minimum`` is true
+        if the walk stopped early. Each subfolder that can't be read gets an ``input_unreadable``
+        entry. Files are never opened.
         """
         if self._file is None:
             return
@@ -184,18 +191,21 @@ class Run:
             if key in self._input_folders_seen:
                 return
             self._input_folders_seen.add(key)
-            files = _files_in(folder, wanted, recursive)
+            listing = _list_folder(folder, wanted, recursive)
         except Exception:
-            files = []
-        kept = files[:_MAX_INPUTS_PER_FOLDER]
+            listing = _FolderListing([], False, [])
+        kept = listing.files[:_MAX_INPUTS_PER_FOLDER]
         self.record_inputs(kept or [folder])
-        if len(files) > len(kept):
+        if len(listing.files) > len(kept) or listing.stopped_early:
             self._write(
                 "input_truncated",
                 folder=_text_of(folder),
                 recorded=len(kept),
-                left_out=len(files) - len(kept),
+                left_out=len(listing.files) - len(kept),
+                left_out_is_a_minimum=listing.stopped_early,
             )
+        for unreadable in listing.unreadable:
+            self._write("input_unreadable", folder=unreadable)
 
     def record_outputs(self, paths: Iterable[Any]) -> None:
         """Record what the action produced. A path already recorded adds nothing."""
@@ -636,10 +646,25 @@ def _ignoring_failure(action: Callable[[], None]) -> None:
         pass
 
 
-def _files_in(folder: Any, suffixes: tuple[str, ...], recursive: bool) -> list[str]:
+class _FolderListing(NamedTuple):
+    files: list[str]
+    stopped_early: bool
+    unreadable: list[str]
+
+
+def _list_folder(folder: Any, suffixes: tuple[str, ...], recursive: bool) -> _FolderListing:
     """List file paths by directory entry alone, so large folders cost no stat per file."""
     files: list[str] = []
-    for directory, _, names in os.walk(Path(folder).expanduser()):
+    unreadable: list[str] = []
+    stopped_early = False
+    entries_seen = 0
+
+    def note_unreadable(error: OSError) -> None:
+        # A missing folder, or a file given as a folder, is recorded as itself by the caller.
+        if not isinstance(error, (FileNotFoundError, NotADirectoryError)):
+            unreadable.append(str(error.filename))
+
+    for directory, subfolders, names in os.walk(Path(folder).expanduser(), onerror=note_unreadable):
         files.extend(
             os.path.join(directory, name)
             for name in names
@@ -647,7 +672,24 @@ def _files_in(folder: Any, suffixes: tuple[str, ...], recursive: bool) -> list[s
         )
         if not recursive:
             break
-    return sorted(files)
+        subfolders[:] = [name for name in subfolders if not _is_link(os.path.join(directory, name))]
+        entries_seen += len(subfolders) + len(names)
+        if entries_seen >= _MAX_ENTRIES_WALKED:
+            stopped_early = True
+            break
+    return _FolderListing(sorted(files), stopped_early, unreadable)
+
+
+def _is_link(path: str) -> bool:
+    """True for a symlink or junction. os.walk follows junctions on its own."""
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return True
+    junction_tag = getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", None)
+    return stat.S_ISLNK(info.st_mode) or (
+        junction_tag is not None and getattr(info, "st_reparse_tag", None) == junction_tag
+    )
 
 
 def _as_list(value: Any) -> list[Any]:

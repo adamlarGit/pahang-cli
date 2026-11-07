@@ -3693,3 +3693,127 @@ def test_exception_marked_by_an_earlier_run_is_recorded_again_by_a_later_one(loc
         if json.loads(line)["type"] == "error"
     ]
     assert sorted(messages) == ["from first", "from second"]
+
+
+def _make_junction(link: Path, target: Path) -> None:
+    completed = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True, timeout=30
+    )
+    if completed.returncode != 0:
+        pytest.skip(f"could not create a junction: {completed.stderr}")
+
+
+def test_folder_walk_does_not_follow_a_real_junction(locations, tmp_path) -> None:
+    outside = _file(tmp_path / "outside" / "not_an_input.dat").parent
+    survey = tmp_path / "survey"
+    inside = _file(survey / "inside.dat")
+    link = survey / "linked"
+    _make_junction(link, outside)
+
+    try:
+        assert (link / "not_an_input.dat").exists()
+        run_project_action(
+            lambda environment: current_run().record_input_folder(survey, recursive=True), locations.environment
+        )
+    finally:
+        os.rmdir(link)
+
+    paths = {entry["path"] for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert paths == {str(inside)}
+
+
+def test_folder_walk_does_not_follow_a_real_symlink(locations, tmp_path) -> None:
+    outside = _file(tmp_path / "outside" / "not_an_input.dat").parent
+    survey = tmp_path / "survey"
+    inside = _file(survey / "inside.dat")
+    try:
+        os.symlink(outside, survey / "linked", target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"this account can't create symlinks: {exc}")
+
+    run_project_action(
+        lambda environment: current_run().record_input_folder(survey, recursive=True), locations.environment
+    )
+
+    paths = {entry["path"] for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert paths == {str(inside)}
+
+
+def test_walk_stops_after_the_entry_limit_and_says_the_count_is_a_minimum(locations, monkeypatch) -> None:
+    for folder in range(6):
+        for index in range(4):
+            _file(locations.project / "survey" / f"d{folder}" / f"f{index}.dat")
+    monkeypatch.setattr("src.run_records._MAX_ENTRIES_WALKED", 10)
+    monkeypatch.setattr("src.run_records._MAX_INPUTS_PER_FOLDER", 3)
+
+    run_project_action(
+        lambda environment: current_run().record_input_folder(locations.project / "survey", recursive=True),
+        locations.environment,
+    )
+
+    entries = read_entries(locations.project_logs)
+    assert len(entries_of(entries, "input")) == 3
+    note = entries_of(entries, "input_truncated")[0]
+    assert note["left_out_is_a_minimum"] is True
+    assert note["recorded"] == 3
+    assert note["left_out"] < 24 - 3
+
+
+def test_walk_stopped_early_gets_a_note_even_with_nothing_over_the_cap(locations, monkeypatch) -> None:
+    for folder in range(6):
+        _file(locations.project / "survey" / f"d{folder}" / "f.dat")
+    monkeypatch.setattr("src.run_records._MAX_ENTRIES_WALKED", 2)
+
+    run_project_action(
+        lambda environment: current_run().record_input_folder(locations.project / "survey", recursive=True),
+        locations.environment,
+    )
+
+    note = entries_of(read_entries(locations.project_logs), "input_truncated")[0]
+    assert note["left_out"] == 0
+    assert note["left_out_is_a_minimum"] is True
+
+
+def test_complete_walk_says_the_count_is_exact(locations, monkeypatch) -> None:
+    folder = _environment_with_engr_folder(locations, 5)
+    monkeypatch.setattr("src.run_records._MAX_INPUTS_PER_FOLDER", 3)
+
+    run_project_action(lambda environment: current_run().record_input_folder(folder), locations.environment)
+
+    note = entries_of(read_entries(locations.project_logs), "input_truncated")[0]
+    assert note["left_out_is_a_minimum"] is False
+
+
+def test_unreadable_subfolder_gets_a_note_and_the_rest_are_recorded(locations) -> None:
+    """Uses a stubbed os.scandir: a real denied folder would need its permissions changed."""
+    survey = locations.project / "survey"
+    readable = _file(survey / "open" / "reading.dat")
+    denied = survey / "denied"
+    _file(denied / "hidden.dat")
+    real_scandir = os.scandir
+
+    def scandir(path):
+        if str(path) == str(denied):
+            raise PermissionError(13, "Access is denied", str(denied))
+        return real_scandir(path)
+
+    def action(environment) -> None:
+        with patch("os.scandir", scandir):
+            current_run().record_input_folder(survey, recursive=True)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    assert {entry["path"] for entry in entries_of(entries, "input")} == {str(readable)}
+    assert [entry["folder"] for entry in entries_of(entries, "input_unreadable")] == [str(denied)]
+
+
+def test_missing_folder_is_not_noted_as_unreadable(locations, tmp_path) -> None:
+    missing = tmp_path / "gone"
+
+    run_project_action(lambda environment: current_run().record_input_folder(missing), locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert not entries_of(entries, "input_unreadable")
+    assert entries_of(entries, "input")[0]["exists"] is False
