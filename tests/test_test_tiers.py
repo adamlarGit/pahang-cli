@@ -9,6 +9,7 @@ import hashlib
 import subprocess
 import sys
 import textwrap
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -37,19 +38,28 @@ from tests.conftest import *  # noqa: E402,F403
 """
 
 
+def _write_repo_options(folder: Path) -> None:
+    """Copy the repo's real default options into folder, so pytest's root stays inside it."""
+    options = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["pytest"]["ini_options"]
+    markers = "\n    ".join(options["markers"])
+    (folder / "pytest.ini").write_text(
+        f"[pytest]\npythonpath = {REPO.as_posix()}\naddopts = {options['addopts']}\nmarkers =\n    {markers}\n",
+        encoding="utf-8",
+    )
+
+
 def run_pytest(tmp_path: Path, sample: str, *options: str) -> str:
     """Run pytest with the repo's real options on a sample test file and return its output."""
+    _write_repo_options(tmp_path)
     (tmp_path / "conftest.py").write_text(SAMPLE_CONFTEST, encoding="utf-8")
     (tmp_path / "test_sample.py").write_text(textwrap.dedent(sample), encoding="utf-8")
     result = subprocess.run(
         [
             sys.executable, "-m", "pytest",
-            "-c", str(REPO / "pyproject.toml"),
-            "--rootdir", str(tmp_path),
             "-p", "no:cacheprovider",
             "-rA",
             *options,
-            str(tmp_path / "test_sample.py"),
+            "test_sample.py",
         ],
         cwd=tmp_path,
         capture_output=True,
