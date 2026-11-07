@@ -20,8 +20,9 @@ Every entry has `type` and an ISO 8601 UTC `time`.
 | `environment` | App version, git SHA, Python, Word and Excel versions; unreadable versions are `unknown` |
 | `request` | Full request, including selected dates, substations and options; objects such as converters and sinks are described by type |
 | `request_update` | `workflow` identifying an earlier request and `changes` to apply in order |
-| `input` | Path, existence, size in bytes, and modified time in UTC; missing paths have null size/time |
-| `input_truncated` | `folder`, `recorded` and `left_out`, when a folder held more files than the per-folder limit |
+| `input` | Path, existence, size in bytes, and modified time in UTC; missing paths have null size/time, and an unreadable time is null |
+| `input_truncated` | `folder`, `recorded`, `left_out` and `left_out_is_a_minimum`, when a folder held more files than the per-folder limit or its walk stopped early |
+| `input_unreadable` | `folder`, a subfolder that couldn't be listed |
 | `step_start`, `step_finish` | Step name; finishes add status and duration in seconds, and error text when raised |
 | `log` | Logger name, level, message and exception traceback when supplied |
 | `progress`, `console` | Existing stdout lines; prompt-toolkit drawing is excluded |
@@ -36,7 +37,9 @@ Requests may appear first as selections and later as complete workflow requests.
 
 Steps measure work, never time spent waiting on prompts. Workflows run through `WorkflowService` have one `Workflow: <name>` Step. Report generation times per-substation composition and Full Report plan building. Other actions may have no Steps.
 
-Input discovery includes selected reports, testsheets, raw photos and archives, survey files, resolved templates, and shared workbooks. Directory discovery can include candidate files the workflow doesn't go on to use. Each folder is listed once per Run and its files are never opened. At most 200 files per folder are recorded, followed by an `input_truncated` entry; change `_MAX_INPUTS_PER_FOLDER` in `src/run_records.py` to adjust this.
+Input discovery includes selected reports, testsheets, raw photos and archives, raw-data and survey files, resolved templates, and shared workbooks. Quick Report, Full Report, post-processing and the 1-Click pipeline all record the substation's raw-data folder. Directory discovery can include candidate files the workflow doesn't go on to use.
+
+Each folder is listed once per Run and its files are never opened. Junctions and symlinks aren't followed, so files behind them aren't recorded. At most 200 files per folder are recorded, followed by an `input_truncated` entry. The listing stops after 50,000 directory entries; `left_out_is_a_minimum` is then true, because the real total is higher. Change `_MAX_INPUTS_PER_FOLDER` or `_MAX_ENTRIES_WALKED` in `src/run_records.py` to adjust these.
 
 ## Developer integration and tests
 
