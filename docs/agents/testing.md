@@ -41,9 +41,13 @@ A test that does both gets both markers.
 
 A guard in `tests/tier_guard.py` fails a test without the `word` marker that reaches Word or Excel through pywin32: `Dispatch`, `DispatchEx`, `GetActiveObject`, or `GetObject` on an Office file (including CSV files, workbook item monikers, and Office CLSID monikers). CSV activation is guarded conservatively because its registered handler can be Excel. It applies to Fast and Full Runs, and a skip, an xfail or `except Exception` can't hide the failure.
 
-The guard also blocks direct Word/Excel launches through `subprocess` and Office files opened through `os.startfile`. It leaves other programs and non-Office files alone.
+The guard also blocks Word and Excel launched through `subprocess`, as list commands or quoted paths, and Office files opened through `os.startfile`.
 
-The guard runs inside pytest's Python process. It can't see `subprocess` calls with `shell=True`, because it doesn't parse shell strings, or what a child program or shell script later launches. Tests that start Office those ways still need the `word` marker. It is a test guard, not a process sandbox.
+It is a safety net for the routes this repo uses, not a sandbox:
+
+- **Not caught:** an unquoted path containing spaces in a `subprocess` string, such as `C:\Program Files\...\WINWORD.EXE`, and some unusual moniker forms.
+- **Not covered:** `shell=True`, `os.system`, `os.spawn*`, `os.exec*`, `win32api.ShellExecute`, `win32process.CreateProcess`, and child programs or scripts. A search found none of these starting Office in `src`, `tests` or `scripts` today. A test that starts Office these ways still needs the `word` marker.
+- **False positives:** `os.startfile` on a folder named like Office (such as `excel` or `Winword`) is blocked, and `GetObject` treats any name starting `word.` or `excel.` as Office.
 
 ## Client folders
 
