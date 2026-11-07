@@ -100,6 +100,7 @@ class Run:
         self._lock = threading.RLock()
         self._captures: list[Any] = []
         self._error_messages: set[str] = set()
+        self._errors_with_traceback: set[str] = set()
         self._warning_messages: set[str] = set()
         self._requests: dict[str, dict[str, Any]] = {}
         self._inputs_seen: set[str] = set()
@@ -275,15 +276,16 @@ class Run:
             self._status = status
 
     def _write_error(self, message: Any, exc: BaseException | None) -> None:
-        """Write one error. A result repeating an error already recorded adds nothing."""
+        """Write one error. A repeat adds nothing, unless it brings the first traceback."""
         text = _text_of(message)
         if exc is None:
             if text not in self._error_messages:
                 self._error_messages.add(text)
                 self._write("error", message=text)
-            return
-        self._error_messages.add(text)
-        self._write("error", message=text, exception_type=type(exc).__name__, traceback=_traceback_of(exc))
+        elif text not in self._errors_with_traceback:
+            self._error_messages.add(text)
+            self._errors_with_traceback.add(text)
+            self._write("error", message=text, exception_type=type(exc).__name__, traceback=_traceback_of(exc))
 
     def _record_result(self, result: Any) -> None:
         """Take outputs, warnings and errors from what the action returned, if it says."""

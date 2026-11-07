@@ -3043,3 +3043,42 @@ def test_activating_a_project_normally_saves_nothing(locations, tmp_path, capsys
 
     assert not locations.fallback_logs.exists()
     assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_one_bad_substation_gives_one_error_when_inspect_and_generate_both_plan(locations) -> None:
+    package = SimpleNamespace(data=object(), substation_name="PE ONE", testsheet_path=locations.project / "a.xlsx")
+    workflow = QuickReportWorkflow()
+
+    def action(environment) -> object:
+        with (
+            patch.object(workflow, "_extractor") as extractor,
+            patch.object(QuickReportWorkflow, "_resolve_substation_display_name", return_value="PE ONE"),
+            patch.object(QuickReportWorkflow, "_resolve_target", return_value=(["07-11-2026"], [])),
+            patch.object(QuickReportWorkflow, "_validate_templates", return_value=()),
+        ):
+            extractor.extract.return_value = [package]
+            extractor.extract_defects.side_effect = RuntimeError("defect sheet broke")
+            workflow.inspect(Path("07-11-2026"), environment)
+            return workflow.generate(Path("07-11-2026"), environment)
+
+    with patch.object(QuickReportWorkflow, "_target_path_exists", return_value=True):
+        run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    errors = entries_of(entries, "error")
+    assert len(errors) == 1, errors
+    assert "defect sheet broke" in errors[0]["traceback"]
+    assert entries[-1]["status"] == "failed"
+
+
+def test_same_error_gains_its_traceback_if_first_recorded_without_one(locations) -> None:
+    def action(environment) -> None:
+        current_run().record_error("same text")
+        current_run().record_error("same text", ValueError("detail"))
+        current_run().record_error("same text", ValueError("detail"))
+        current_run().record_error("same text")
+
+    run_project_action(action, locations.environment)
+
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert [("traceback" in error) for error in errors] == [False, True]
