@@ -172,3 +172,4 @@ When contributing new workflows or modifying existing features:
 2. **Update `CHANGELOG.md`**: Log every feature, fix, or breaking change under an unreleased/version header (`Keep a Changelog`).
 3. **Update `docs/`**: Add deep technical mechanics directly to markdown guides inside `docs/` (e.g. `docs/workflows/`).
 4. **Keep `README.md` Lean**: Maintain this landing page as a high-level overview. Do not append multi-page implementation details directly to `README.md`.
+5. **Run the tests**: Use the Fast Run during development and a Full Run before merging. The commands are in [`docs/agents/testing.md`](docs/agents/testing.md).
