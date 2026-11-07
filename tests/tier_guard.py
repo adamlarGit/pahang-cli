@@ -1,12 +1,15 @@
 """Guard that stops tests without the `word` marker from starting real Word or Excel.
 
-It wraps pywin32's low-level start functions, so mocks of `win32com.client.Dispatch` and
-friends never reach it. A blocked start is recorded and fails the test when it is reported,
+It wraps pywin32's low-level start functions and audits direct OS launches, so mocks
+that never launch Office remain usable. A blocked start is recorded and fails the test when it is reported,
 so a test cannot hide one with `except Exception`, a COM-error skip or an xfail marker.
 """
 from __future__ import annotations
 
+import os
 import re
+import sys
+from pathlib import PureWindowsPath
 
 import pytest
 
@@ -44,20 +47,49 @@ def _is_office(target: object) -> bool:
     )
 
 
+def _require_word_marker(target: object) -> None:
+    if _current_item is not None and _current_item.get_closest_marker("word"):
+        return
+    where = _current_item.nodeid if _current_item else "Test collection"
+    message = (
+        f"{where} tried to start real {target} without the `word` marker. "
+        "Use a fake, or mark the test with @pytest.mark.word."
+    )
+    if _current_item is not None:
+        _blocked_starts.append(message)
+    raise MissingWordMarker(message)
+
+
 def _guarded(real_start):
     def guarded_start(target, *args, **kwargs):
-        if _is_office(target) and (_current_item is None or not _current_item.get_closest_marker("word")):
-            where = _current_item.nodeid if _current_item else "Test collection"
-            message = (
-                f"{where} tried to start real {target} without the `word` marker. "
-                "Use a fake, or mark the test with @pytest.mark.word."
-            )
-            if _current_item is not None:
-                _blocked_starts.append(message)
-            raise MissingWordMarker(message)
+        if _is_office(target):
+            _require_word_marker(target)
         return real_start(target, *args, **kwargs)
 
     return guarded_start
+
+
+def _is_office_command(command: object) -> bool:
+    if isinstance(command, (list, tuple)):
+        executable = os.fsdecode(command[0]) if command else ""
+    else:
+        # Windows command lines quote executable paths containing spaces.
+        match = re.match(r'\s*(?:"([^"]+)"|(\S+))', os.fsdecode(command))
+        executable = (match.group(1) or match.group(2)) if match else ""
+    return PureWindowsPath(executable).name.lower() in {"winword", "winword.exe", "excel", "excel.exe"}
+
+
+def _guard_launch(event: str, args: tuple) -> None:
+    # Audit hooks preserve Popen's class identity and run before the OS launch.
+    if event == "subprocess.Popen":
+        executable, command = args[:2]
+        target = [executable] if executable is not None else command
+        if _is_office_command(target):
+            _require_word_marker(target)
+    elif event in {"os.startfile", "os.startfile/2"}:
+        target = args[0]
+        if _is_office(target) or _is_office_command([target]):
+            _require_word_marker(target)
 
 
 def is_installed() -> bool:
@@ -65,16 +97,18 @@ def is_installed() -> bool:
 
 
 def install_guard() -> None:
-    """Wrap pywin32's start functions. Call once, before any test is collected."""
+    """Guard COM and direct OS launches. Call once, before test collection."""
     global _installed
     if _installed:
         return
     try:
         import pythoncom
     except ImportError:
-        return
-    for name in _START_FUNCTIONS:
-        setattr(pythoncom, name, _guarded(getattr(pythoncom, name)))
+        pythoncom = None
+    if pythoncom is not None:
+        for name in _START_FUNCTIONS:
+            setattr(pythoncom, name, _guarded(getattr(pythoncom, name)))
+    sys.addaudithook(_guard_launch)
     _installed = True
 
 

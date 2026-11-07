@@ -22,6 +22,10 @@ flowchart TD
 - [x] Test tools stay out of the app environment; no dependency group or lockfile change.
 - [x] Suite validation leaves tracked PE157 benchmark files unchanged.
 
+Independent code review: Standards 0 findings; Spec 1 direct-launch bypass
+addressed. Follow-up affected tests: 54 passed. Fast Run: 2,065 passed, with
+only the three existing #179 failures. Details are in the local ticket.
+
 ## Related work
 
 - #179: baseline test failure triage.

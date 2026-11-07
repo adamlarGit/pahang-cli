@@ -42,3 +42,24 @@ conservative because its registered COM handler can be Excel.
 
 The broader suite is not claimed green; baseline failure triage belongs to #179,
 and speed/parallelism work belongs to #180 and #182.
+
+
+## Independent code review follow-up
+
+Reviewed the full branch against `dc10cd3` on both axes, in separate agents.
+
+- Standards: zero findings, including review of the follow-up fix.
+- Spec: one partial requirement: direct process/file launches could bypass the
+  COM-only guard. Added an audit hook for direct Word/Excel subprocess launches
+  and Office files opened with `os.startfile`.
+- Seven safe sample regressions failed before the fix. Added quoted executable
+  paths and an executable opened through `os.startfile` too. Marked Office launches
+  and non-Office launches remain allowed.
+- Affected validation: 54 passed (tier/guard and batch-safety tests).
+- The guard runs in pytest's process. A child program or shell script can launch
+  another program outside that process; the docs explicitly retain this boundary.
+  Building a descendant process sandbox is outside this test guard's scope.
+- Both independent reviewers found no further concrete issue in the fix.
+- Follow-up Fast Run: 2,065 passed, 3 failed, 50 deselected in 263.65 seconds.
+  Only the same three #179 failures remain. The lockfile and tracked benchmark
+  files remain unchanged, and pytest remains outside `.venv`.

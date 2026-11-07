@@ -1,6 +1,6 @@
 """Fast Run and Full Run behaviour, checked by running pytest on small sample tests.
 
-Every sample run replaces pywin32's low-level start functions with a stub before the
+Every sample run replaces COM and OS launch functions with stubs before the
 guard wraps them, so these tests cannot start real Word or Excel even if the guard breaks.
 """
 from __future__ import annotations
@@ -22,6 +22,10 @@ REPO = Path(__file__).resolve().parent.parent
 FULL_RUN_OPTION = "--override-ini=addopts="
 
 SAMPLE_CONFTEST = """
+import os
+import subprocess
+import sys
+
 import pythoncom
 
 
@@ -30,11 +34,25 @@ class RealStartReached(Exception):
 
 
 def _stub(*args, **kwargs):
-    raise RealStartReached(f"real COM start reached: {args[0]}")
+    raise RealStartReached(f"real launch reached: {args[0]}")
 
 
 for _name in ("connect", "CoCreateInstance", "CoCreateInstanceEx", "GetActiveObject", "MkParseDisplayName"):
     setattr(pythoncom, _name, _stub)
+
+class _FakePopen(subprocess.Popen):
+    def __init__(self, args, *positional, **kwargs):
+        sys.audit("subprocess.Popen", kwargs.get("executable"), args, None, None)
+        _stub(args)
+
+
+def _fake_startfile(path, *args, **kwargs):
+    sys.audit("os.startfile", path, kwargs.get("operation", "open"))
+    return _stub(path)
+
+
+subprocess.Popen = _FakePopen
+os.startfile = _fake_startfile
 
 from tests.tier_guard import install_guard, pytest_runtest_makereport, pytest_runtest_protocol  # noqa: E402,F401
 
@@ -142,7 +160,38 @@ def test_unmarked_test_starting_office_fails_naming_the_marker(tmp_path: Path, s
 
     assert "1 failed" in output
     assert "@pytest.mark.word" in output
-    assert "real COM start reached" not in output
+    assert "real launch reached" not in output
+
+
+@pytest.mark.parametrize(
+    "start",
+    [
+        'subprocess.Popen(["WINWORD.EXE"])',
+        'subprocess.run(["EXCEL.EXE"])',
+        'subprocess.Popen(["alias"], executable="EXCEL.EXE")',
+        'subprocess.Popen(["C:/Program Files/Microsoft Office/WINWORD.EXE"])',
+        'subprocess.Popen(\'"C:/Program Files/Microsoft Office/WINWORD.EXE" /q\')',
+        'os.startfile("C:/fake/WINWORD.EXE")',
+        'os.startfile("C:/fake/report.docx")',
+        'os.startfile("C:/fake/workbook.xlsx")',
+        'os.startfile("C:/fake/data.csv")',
+    ],
+)
+def test_unmarked_office_process_or_file_launch_fails(tmp_path: Path, start: str) -> None:
+    output = run_pytest(
+        tmp_path,
+        f"""
+        import os
+        import subprocess
+
+        def test_unmarked():
+            {start}
+        """,
+    )
+
+    assert "1 failed" in output
+    assert "@pytest.mark.word" in output
+    assert "real launch reached" not in output
 
 
 @pytest.mark.parametrize(
@@ -252,6 +301,8 @@ def test_word_marked_test_may_start_office(tmp_path: Path) -> None:
         tmp_path,
         """
         import pytest
+        import os
+        import subprocess
         import win32com.client
         from conftest import RealStartReached
 
@@ -261,6 +312,10 @@ def test_word_marked_test_may_start_office(tmp_path: Path) -> None:
                 win32com.client.Dispatch("Word.Application")
             with pytest.raises(RealStartReached):
                 win32com.client.DispatchEx("Excel.Application")
+            with pytest.raises(RealStartReached):
+                subprocess.Popen(["WINWORD.EXE"])
+            with pytest.raises(RealStartReached):
+                os.startfile("C:/fake/workbook.xlsx")
         """,
         FULL_RUN_OPTION,
     )
@@ -272,6 +327,8 @@ def test_guard_ignores_other_com_servers(tmp_path: Path) -> None:
     output = run_pytest(
         tmp_path,
         """
+        import os
+        import subprocess
         import pytest
         import win32com.client
         from conftest import RealStartReached
@@ -281,6 +338,10 @@ def test_guard_ignores_other_com_servers(tmp_path: Path) -> None:
                 win32com.client.Dispatch("Shell.Application")
             with pytest.raises(RealStartReached):
                 win32com.client.GetObject("winmgmts:")
+            with pytest.raises(RealStartReached):
+                subprocess.Popen(["python", "-c", "pass"])
+            with pytest.raises(RealStartReached):
+                os.startfile("C:/fake/image.png")
         """,
     )
 

@@ -41,7 +41,9 @@ A test that does both gets both markers.
 
 A guard in `tests/tier_guard.py` fails a test without the `word` marker that reaches Word or Excel through pywin32: `Dispatch`, `DispatchEx`, `GetActiveObject`, or `GetObject` on an Office file (including CSV files, workbook item monikers, and Office CLSID monikers). CSV activation is guarded conservatively because its registered handler can be Excel. It applies to Fast and Full Runs, and a skip, an xfail or `except Exception` can't hide the failure.
 
-The guard doesn't see `WINWORD.EXE` launched directly, `os.startfile`, or child Python processes, so a test using those needs the marker without the guard's help.
+The guard also blocks direct Word/Excel launches through `subprocess` and Office files opened through `os.startfile`. It leaves other programs and non-Office files alone.
+
+The guard runs inside pytest's Python process. It cannot inspect what a child program or shell script later launches; tests that start Office indirectly still need the `word` marker. It is a test guard, not a process sandbox.
 
 ## Client folders
 
