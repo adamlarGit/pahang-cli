@@ -6,7 +6,9 @@ real %LOCALAPPDATA%: every location used is under pytest's tmp_path.
 
 from __future__ import annotations
 
+import io
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -15,6 +17,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
+import questionary
+from prompt_toolkit.application import create_app_session
+from prompt_toolkit.data_structures import Size
+from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.output.vt100 import Vt100_Output
 
 from src import __version__
 from src.cli_session import CliSession
@@ -24,7 +31,12 @@ from src.project.storage import LocalWorkspaceStorage
 from src.project_workflow_actions import ProjectWorkflowAction
 from src.run_records import RECORD_DIR_OVERRIDE_VARIABLE
 from src.utility_actions import UtilityAction
-from src.workflow_cli import _run_project_workflow_menu, _run_utility_actions_menu
+from src.workflow_cli import (
+    _run_action,
+    _run_project_workflow_menu,
+    _run_recorded_action,
+    _run_utility_actions_menu,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -440,3 +452,269 @@ def test_unwritable_override_never_falls_through_to_a_real_location(tmp_path, mo
     assert calls == ["ran"]
     assert not (project / "logs").exists()
     assert not local_app_data.exists()
+
+
+def _noisy_action() -> None:
+    """Writes to the console and the loggers in every way the CLI does."""
+    print("plain print")
+    print("[PROGRESS] Found 2 packages")
+    print("[1/2] Generating report", flush=True)
+    print("no newline at the end ", end="")
+    print("of this line")
+    logging.getLogger("src.fake").info("src info is hidden on the console")
+    logging.getLogger("src.fake").warning("src warning one")
+    logging.debug("direct debug is hidden on the console")
+    logging.info("direct info is hidden on the console")
+    logging.getLogger("src.fake").warning("src warning two")
+    logging.warning("direct warning")
+    logging.getLogger("src.fake").warning("src warning three")
+    logging.getLogger("thirdparty.lib").debug("third party debug is hidden on the console")
+    logging.getLogger("thirdparty.lib").warning("third party warning")
+    print("last print, with no newline", end="")
+
+
+def _failing_noisy_action() -> None:
+    _noisy_action()
+    raise RuntimeError("noisy failure")
+
+
+def _console_handler_like_main_py() -> list[logging.Handler]:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("MAIN - %(levelname)s - %(message)s"))
+    return [handler]
+
+
+@pytest.fixture(params=["installed_entry_point", "main_py"])
+def console_setup(request, monkeypatch):
+    """start_cli.bat runs the pahang-cli entry point, which configures no logging at all."""
+    monkeypatch.setattr(logging.root, "handlers", [])
+    level_before = logging.root.level
+    logging.root.setLevel(logging.WARNING)
+
+    def reset() -> None:
+        logging.root.handlers[:] = [] if request.param == "installed_entry_point" else _console_handler_like_main_py()
+
+    yield reset
+    logging.root.setLevel(level_before)
+
+
+@pytest.mark.parametrize("behaviour", [_noisy_action, _failing_noisy_action])
+def test_console_output_is_identical_with_and_without_a_run(locations, console_setup, capsys, behaviour) -> None:
+    console_setup()
+    _run_action("Fake", behaviour)
+    without_run = capsys.readouterr()
+
+    console_setup()
+    _run_recorded_action("Fake", behaviour, locations.environment)
+    with_run = capsys.readouterr()
+
+    record_line = [line for line in with_run.out.splitlines() if line.startswith("Run Record: ")]
+    assert with_run.err == without_run.err
+    assert with_run.out.replace(f"{record_line[0]}\n" if record_line else "", "") == without_run.out
+    assert "hidden" not in with_run.err + with_run.out
+    assert "src warning one" in with_run.err
+    assert "third party warning" in with_run.err
+
+
+def test_entry_point_console_keeps_its_exact_log_formats(locations, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(logging.root, "handlers", [])
+
+    _run_recorded_action("Fake", _noisy_action, locations.environment)
+
+    assert capsys.readouterr().err.splitlines() == [
+        "src warning one",
+        # logging.debug() above configured the root logger, as it does without a Run.
+        "WARNING:src.fake:src warning two",
+        "WARNING:root:direct warning",
+        "WARNING:src.fake:src warning three",
+        "WARNING:thirdparty.lib:third party warning",
+    ]
+
+
+def test_library_logger_with_null_handler_stays_silent(locations, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(logging.root, "handlers", [])
+    library = logging.getLogger("quiet_library")
+    library.addHandler(logging.NullHandler())
+
+    try:
+        _run_recorded_action("Fake", lambda: library.warning("kept quiet"), locations.environment)
+    finally:
+        library.handlers.clear()
+
+    assert capsys.readouterr().err == ""
+
+
+def test_logger_and_progress_output_flow_into_the_record(locations, console_setup) -> None:
+    console_setup()
+
+    _run_recorded_action("Fake", _noisy_action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    logged = {(entry["level"], entry["message"]) for entry in entries_of(entries, "log")}
+    assert ("INFO", "src info is hidden on the console") in logged
+    assert ("DEBUG", "direct debug is hidden on the console") in logged
+    assert ("INFO", "direct info is hidden on the console") in logged
+    assert ("WARNING", "src warning one") in logged
+    assert ("WARNING", "third party warning") in logged
+    assert not any("third party debug" in message for _, message in logged)
+
+    assert [entry["text"] for entry in entries_of(entries, "progress")] == [
+        "[PROGRESS] Found 2 packages",
+        "[1/2] Generating report",
+    ]
+    console_lines = [entry["text"] for entry in entries_of(entries, "console")]
+    assert "plain print" in console_lines
+    assert "no newline at the end of this line" in console_lines
+    assert "last print, with no newline" in console_lines
+    assert entries[-1]["type"] == "run_finish"
+
+
+def test_logged_exception_keeps_its_traceback(locations) -> None:
+    def action(environment) -> None:
+        try:
+            raise ValueError("inner detail")
+        except ValueError:
+            logging.getLogger("src.fake").exception("swallowed")
+
+    run_project_action(action, locations.environment)
+
+    logged = next(e for e in entries_of(read_entries(locations.project_logs), "log") if e["message"] == "swallowed")
+    assert "inner detail" in logged["traceback"]
+
+
+class _Stop(BaseException):
+    """Stands in for an interruption such as Ctrl+C."""
+
+
+@pytest.mark.parametrize("ending", [None, RuntimeError("failed"), _Stop()])
+def test_console_and_logging_are_restored_after_a_run(locations, console_setup, ending) -> None:
+    console_setup()
+    stdout_before = sys.stdout
+    handlers_before = list(logging.root.handlers)
+    level_before = logging.root.level
+    seen: dict[str, object] = {}
+
+    def action() -> None:
+        seen["stdout"] = sys.stdout
+        if ending is not None:
+            raise ending
+
+    if isinstance(ending, _Stop):
+        with pytest.raises(_Stop):
+            _run_recorded_action("Fake", action, locations.environment)
+    else:
+        _run_recorded_action("Fake", action, locations.environment)
+
+    assert seen["stdout"] is not stdout_before, "the Run should have been capturing"
+    assert sys.stdout is stdout_before
+    assert logging.root.handlers[: len(handlers_before)] == handlers_before
+    assert not [h for h in logging.root.handlers if type(h).__module__ == "src.run_records"]
+    assert logging.root.level == level_before
+    assert logging.getLogger("src.fake").getEffectiveLevel() == level_before
+
+
+def test_nothing_is_changed_when_no_record_can_be_opened(locations, tmp_path, monkeypatch) -> None:
+    _block_every_location(locations, monkeypatch, tmp_path)
+    seen: dict[str, object] = {}
+
+    def action() -> None:
+        seen["stdout"] = sys.stdout
+        seen["level"] = logging.root.level
+
+    stdout_before, level_before = sys.stdout, logging.root.level
+    _run_recorded_action("Fake", action, locations.environment)
+
+    assert seen == {"stdout": stdout_before, "level": level_before}
+
+
+def test_console_keeps_working_after_a_mid_run_write_failure(locations, monkeypatch, capsys) -> None:
+    real_open = open
+
+    def open_failing_later(*args, **kwargs):
+        return _FileThatFailsAfter(real_open(*args, **kwargs), good_writes=2)
+
+    monkeypatch.setattr("src.run_records.open", open_failing_later, raising=False)
+
+    def action(environment) -> None:
+        print("first line after the disk filled up")
+        logging.getLogger("src.fake").warning("logged after the disk filled up")
+        print("second line after the disk filled up")
+
+    run_project_action(action, locations.environment)
+
+    captured = capsys.readouterr()
+    assert "first line after the disk filled up" in captured.out
+    assert "second line after the disk filled up" in captured.out
+
+
+def test_handler_added_during_a_run_stays_after_it(locations) -> None:
+    extra = logging.NullHandler()
+
+    def action(environment) -> None:
+        logging.root.addHandler(extra)
+
+    try:
+        run_project_action(action, locations.environment)
+        assert extra in logging.root.handlers
+    finally:
+        logging.root.removeHandler(extra)
+
+
+def test_console_stream_looks_the_same_to_code_that_inspects_it(locations, capsys) -> None:
+    seen: list[object] = []
+
+    def action() -> None:
+        stream = sys.stdout
+        seen.extend([stream.encoding, stream.isatty(), stream.errors])
+
+    _run_recorded_action("Fake", action, locations.environment)
+
+    assert seen == [sys.stdout.encoding, sys.stdout.isatty(), sys.stdout.errors]
+
+
+def test_console_write_error_reaches_the_caller_unchanged(locations, monkeypatch) -> None:
+    """Workflow code may rely on seeing UnicodeEncodeError from print on a narrow console."""
+
+    class AsciiOnly(io.StringIO):
+        def write(self, text: str) -> int:
+            return super().write(text.encode("ascii").decode("ascii"))
+
+    monkeypatch.setattr(sys, "stdout", AsciiOnly())
+    caught: list[type] = []
+
+    def action() -> None:
+        try:
+            print("⚡")
+        except UnicodeEncodeError as exc:
+            caught.append(type(exc))
+
+    _run_recorded_action("Fake", action, locations.environment)
+
+    assert caught == [UnicodeEncodeError]
+
+
+def test_prompt_runs_normally_and_its_drawing_is_not_recorded(locations, capsys) -> None:
+    """Runs a real questionary prompt with its output on the captured stream.
+
+    This is the worst case, where prompt_toolkit writes through the capture. In the CLI
+    the top-level menu binds prompt_toolkit to the real console before any Run opens.
+    Only a hand check in a real console can confirm how that console behaves.
+    """
+    answers: list[str] = []
+
+    def action() -> None:
+        print("before the prompt")
+        output = Vt100_Output(sys.stdout, lambda: Size(rows=24, columns=80), term="xterm")
+        with create_pipe_input() as pipe, create_app_session(input=pipe, output=output):
+            pipe.send_text("j\r")
+            answers.append(questionary.select("Pick a thing", choices=["first", "second"]).ask())
+        print("after the prompt")
+
+    _run_recorded_action("Fake", action, locations.environment)
+
+    assert answers == ["second"]
+    assert "Pick a thing" in capsys.readouterr().out
+    entries = read_entries(locations.project_logs)
+    console_lines = [entry["text"] for entry in entries_of(entries, "console")]
+    assert console_lines == ["before the prompt", "after the prompt"]
+    assert "Pick a thing" not in json.dumps(entries)
