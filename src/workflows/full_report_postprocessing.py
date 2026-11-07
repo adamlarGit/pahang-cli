@@ -916,6 +916,8 @@ class FullReportPostProcessingWorkflow:
                     raw_dir = environment.storage.get_substation_raw_data_dir(
                         station, month, date_str, pe_num
                     )
+                if raw_dir is not None:
+                    current_run().record_input_folder(raw_dir, recursive=True)
 
                 survey_root = discover_ultratev_survey_dir(raw_dir)
                 if survey_root is not None and survey_root.exists():

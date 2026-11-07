@@ -37,6 +37,7 @@ from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
 from src.quick_report.compiler import FakeDocumentCompiler
+from src.quick_report.transformer import QuickReportTransformer
 from src.project_settings_actions import handle_switch_project, handle_view_project_info
 from src.project_workflow_actions import (
     ConsolidateMsmsAction,
@@ -65,6 +66,7 @@ from src.workflows.full_report_postprocessing import (
     FullReportPostProcessingInspection,
     FullReportPostProcessingResult,
     FullReportPostProcessingWorkflow,
+    PostProcessingTargetGroup,
 )
 from src.workflows.generate_testsheet_folder import GenerateTestsheetFolderStructureWorkflow
 from src.workflows.ingest_msms_csv import IngestMsmsCsvWorkflow
@@ -3448,3 +3450,82 @@ def test_recording_a_folder_never_opens_its_files(locations) -> None:
 
     assert not [path for path in opened if str(folder) in path]
     assert len(entries_of(read_entries(locations.project_logs), "input")) == 3
+
+
+def _raw_data_folder(locations) -> tuple[Path, Path]:
+    measurement = _file(locations.project / "RAW MATERIAL" / "PE1" / "US" / "survey" / "reading.dat")
+    return locations.project / "RAW MATERIAL" / "PE1", measurement
+
+
+@pytest.mark.parametrize("has_raw_data", [True, False])
+def test_quick_report_plan_records_raw_data_files(locations, has_raw_data) -> None:
+    raw_dir, measurement = _raw_data_folder(locations)
+    package = SimpleNamespace(data=MagicMock(), station="KUANTAN", month="NOV", date_str="07-11-2026", substation_number=1)
+
+    def action(environment) -> None:
+        # Nothing after the raw-data lookup matters here, so stop straight after it.
+        with patch("src.quick_report.transformer.ContractScope.from_source", side_effect=_StopWorkflow("stop")):
+            QuickReportTransformer().transform(package, [], [], environment)
+
+    with patch.object(
+        LocalWorkspaceStorage, "get_substation_raw_data_dir", return_value=raw_dir if has_raw_data else None
+    ):
+        run_project_action(action, locations.environment)
+
+    paths = {entry["path"] for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert (str(measurement) in paths) is has_raw_data
+
+
+@pytest.mark.parametrize("has_raw_data", [True, False])
+def test_full_report_postprocessing_sound_hook_records_raw_data_files(locations, tmp_path, has_raw_data) -> None:
+    raw_dir, measurement = _raw_data_folder(locations)
+    docx = _file(tmp_path / "FULL" / "KUANTAN" / "NOV" / "07-11-2026" / "1. PE.docx")
+    out_pdf = _file(docx.with_suffix(".pdf"))
+    group = PostProcessingTargetGroup(stem="1. PE", docx_paths=(docx,))
+    # A stub converter, so this can't reach Word.
+    workflow = FullReportPostProcessingWorkflow(converter=MagicMock())
+
+    def action(environment) -> None:
+        workflow._compile_deliverable(group, tmp_path / "ts.pdf", out_pdf, environment=environment)
+
+    with patch.object(
+        LocalWorkspaceStorage, "get_substation_raw_data_dir", return_value=raw_dir if has_raw_data else None
+    ):
+        run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    paths = {entry["path"] for entry in entries_of(entries, "input")}
+    assert (str(measurement) in paths) is has_raw_data
+
+
+@pytest.mark.parametrize("has_raw_data", [True, False])
+def test_pipeline_sound_hook_records_raw_data_files(locations, tmp_path, has_raw_data) -> None:
+    raw_dir, measurement = _raw_data_folder(locations)
+    package = SubstationPackage(
+        testsheet_xlsx=_file(tmp_path / "TS" / "1. PE.xlsx"),
+        quick_report_docx=_file(tmp_path / "QR" / "1. PE.docx"),
+        station_name="PE ONE",
+    )
+    # A stub converter, and the workbook steps are patched, so this can't reach Word or Excel.
+    request = PostProcessingRequest(mode=PostProcessingMode.BY_FL, target_packages=(package,), converter=MagicMock())
+    module = "src.workflows.postprocessing_pipeline"
+
+    def action(environment) -> object:
+        with (
+            patch(f"{module}.validate_postprocessing_preflight"),
+            patch(f"{module}.discover_substation_packages", return_value=[package]),
+            patch(f"{module}.replace_pce_images"),
+            patch(f"{module}.process_workbook"),
+        ):
+            return PostProcessingPipelineWorkflow().execute(environment, request)
+
+    with patch.object(
+        LocalWorkspaceStorage, "get_substation_raw_data_dir", return_value=raw_dir if has_raw_data else None
+    ):
+        run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    paths = {entry["path"] for entry in entries_of(entries, "input")}
+    assert (str(measurement) in paths) is has_raw_data
