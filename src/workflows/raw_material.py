@@ -21,9 +21,9 @@ from src.core.normalizers import (
     normalize_substation_tokens,
 )
 from src.project.environment import ProjectEnvironment
-from src.run_records import current_run
 from src.project.models import CameraConfig
 from src.project.storage import extract_numerical_prefix, parse_substation_stem
+from src.run_records import current_run
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import PhotoRange, SubstationTestsheetPackage, TestsheetData
 from src.testsheet.repository import SubstationTestsheetRepository

@@ -18,8 +18,8 @@ import openpyxl
 import pandas as pd
 
 from src.core.normalizers import normalize_fl_erms
-from src.run_records import current_run
 from src.project.environment import ProjectEnvironment
+from src.run_records import current_run
 from src.workflows.models import (
     ConsolidateMsmsRequest,
     ConsolidateMsmsResult,

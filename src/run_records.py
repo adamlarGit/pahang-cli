@@ -364,6 +364,9 @@ class _LoggerCapture(logging.Handler):
         root.isEnabledFor = lambda level: root.manager.disable < level
 
     def stop(self) -> None:
+        # During a Run, logging.basicConfig() and removeHandler() on a root handler that was
+        # there before the Run don't take effect, because this handler has replaced them on
+        # the root. Nothing in src does either.
         root = logging.getLogger()
         vars(root).pop("isEnabledFor", None)
         added_during_run = [h for h in root.handlers if h is not self and h not in self._console_handlers]

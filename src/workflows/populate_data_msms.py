@@ -28,8 +28,8 @@ from src.core.normalizers import (
     normalize_for_csv,
 )
 from src.project.environment import ProjectEnvironment
-from src.run_records import current_run
 from src.quick_report.defects import MasterQr03DefectRepository, ViDefectRecord
+from src.run_records import current_run
 from src.testsheet.feeder_thermal import (
     FEEDER_CHANNEL_COLUMNS,
     extract_board_average_temperature,
