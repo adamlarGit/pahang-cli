@@ -19,6 +19,7 @@ from src.quick_report.extractor import (
 )
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.transformer import QuickReportTransformer
+from src.run_records import current_run
 from src.quick_report.utils import (
     normalize_functional_location_input,
     sanitize_filename,
@@ -83,6 +84,15 @@ class QuickReportWorkflow:
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
+        current_run().record_request(
+            {
+                "workflow": "Quick Report",
+                "target": target,
+                "station": station,
+                "condition_template": condition_template,
+            }
+        )
+
         # Fail fast if an explicit Path target was given but missing
         if isinstance(target, Path):
             if not self._target_path_exists(target, environment):
@@ -116,6 +126,8 @@ class QuickReportWorkflow:
                 warnings=inspection.warnings,
                 errors=errors,
             )
+
+        current_run().record_inputs(plan.package.testsheet_path for plan in plans)
 
         if progress_sink:
             progress_sink(f"Found {len(plans)} packages to process.")

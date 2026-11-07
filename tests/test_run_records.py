@@ -12,6 +12,7 @@ import logging
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -29,8 +30,19 @@ from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
 from src.project_workflow_actions import ProjectWorkflowAction
-from src.run_records import RECORD_DIR_OVERRIDE_VARIABLE
+from src.run_records import RECORD_DIR_OVERRIDE_VARIABLE, current_run, open_run
 from src.utility_actions import UtilityAction
+from src.workflows.full_report import FullReportWorkflow
+from src.workflows.full_report_postprocessing import FullReportPostProcessingWorkflow
+from src.workflows.models import (
+    PostProcessingMode,
+    PostProcessingRequest,
+    PostProcessingSummary,
+    QuickReportInspection,
+    QuickReportResult,
+)
+from src.workflows.quick_report import QuickReportWorkflow
+from src.workflows.service import WorkflowService
 from src.workflow_cli import (
     _run_action,
     _run_project_workflow_menu,
@@ -144,6 +156,7 @@ def test_failed_run_records_full_traceback_and_console_shows_path(locations, cap
 
     console = capsys.readouterr().out
     assert "Action failed: template is broken" in console
+    assert "[TIMER] Workflow 'Fake Workflow' completed in" in console
     record_path = next(locations.project_logs.glob("*.jsonl"))
     assert str(record_path) in console
 
@@ -718,3 +731,376 @@ def test_prompt_runs_normally_and_its_drawing_is_not_recorded(locations, capsys)
     console_lines = [entry["text"] for entry in entries_of(entries, "console")]
     assert console_lines == ["before the prompt", "after the prompt"]
     assert "Pick a thing" not in json.dumps(entries)
+
+
+class _FakeRequest:
+    """A request with nothing to serialise, for workflows whose request type doesn't matter."""
+
+    progress_sink = None
+
+
+class _FakeConverter:
+    """Stands in for a converter: an object that JSON cannot express."""
+
+
+def test_service_records_its_request_and_describes_what_cannot_be_serialised(locations, tmp_path) -> None:
+    signature = tmp_path / "vendor_signature.png"
+    signature.write_bytes(b"12345")
+    request = PostProcessingRequest(
+        mode=PostProcessingMode.BY_DATE,
+        target_dates=("07.11.2026",),
+        vendor_signature_path=signature,
+        converter=_FakeConverter(),
+        progress_sink=_FakeConverter(),
+    )
+    summary = PostProcessingSummary()
+
+    def action(environment) -> PostProcessingSummary:
+        with patch("src.workflows.postprocessing_pipeline.PostProcessingPipelineWorkflow") as workflow:
+            workflow.return_value.execute.return_value = summary
+            return WorkflowService().run_postprocessing_pipeline(environment, request)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    recorded = entries_of(entries, "request")[0]["request"]
+    assert recorded["__type__"] == "PostProcessingRequest"
+    assert recorded["mode"] == "BY_DATE"
+    assert recorded["target_dates"] == ["07.11.2026"]
+    assert recorded["vendor_signature_path"] == str(signature)
+    assert recorded["converter"] == "<object test_run_records._FakeConverter>"
+    inputs = {entry["path"]: entry for entry in entries_of(entries, "input")}
+    assert inputs[str(signature)]["size"] == 5
+    assert inputs[str(signature)]["modified"]
+    assert entries[-1]["status"] == "completed"
+
+
+@pytest.mark.parametrize(
+    "call_service, patch_target",
+    [
+        (lambda s, e, r: s.run_populate_total_pe(e, r), "src.workflows.service.PopulateTotalPeWorkflow"),
+        (lambda s, e, r: s.run_raw_material(e, r), "src.workflows.service.RawMaterialWorkflow"),
+        (lambda s, e, r: s.run_propagate_wo(e, r), "src.workflows.propagate_wo.PropagateWoWorkflow"),
+        (lambda s, e, r: s.run_consolidate_msms(e, r), "src.workflows.consolidate_msms.ConsolidateMsmsWorkflow"),
+        (lambda s, e, r: s.run_enrich_msms(e, r), "src.workflows.enrich_msms.EnrichMsmsWorkflow"),
+        (lambda s, e, r: s.run_ingest_msms_csv(e, r), "src.workflows.ingest_msms_csv.IngestMsmsCsvWorkflow"),
+        (lambda s, e, r: s.run_populate_data_msms(e, r), "src.workflows.populate_data_msms.PopulateDataMsmsWorkflow"),
+        (lambda s, e, r: s.run_update_qr02_cba(e, r), "src.workflows.update_qr02_cba.UpdateQr02CbaWorkflow"),
+        (lambda s, e, r: s.run_whatsapp(e, r), "src.workflows.whatsapp.WhatsAppReportWorkflow"),
+        (
+            lambda s, e, r: s.run_generate_testsheet_folder(e, r),
+            "src.workflows.generate_testsheet_folder.GenerateTestsheetFolderStructureWorkflow",
+        ),
+    ],
+)
+def test_every_service_workflow_records_its_request_centrally(locations, call_service, patch_target) -> None:
+    (locations.project / "PYTHON").mkdir()
+    (locations.project / "PYTHON" / "TOTAL PE.xlsx").write_bytes(b"123")
+
+    def action(environment) -> None:
+        with patch(patch_target):
+            call_service(WorkflowService(), environment, _FakeRequest())
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries_of(entries, "request")[0]["request"] == "<object test_run_records._FakeRequest>"
+    inputs = {entry["path"]: entry for entry in entries_of(entries, "input")}
+    assert inputs[str(locations.project / "PYTHON" / "TOTAL PE.xlsx")]["size"] == 3
+
+
+def test_request_that_cannot_be_described_does_not_stop_the_action(locations) -> None:
+    class Hostile:
+        def __getattribute__(self, name):
+            raise RuntimeError("no attribute access at all")
+
+        def __repr__(self):
+            raise RuntimeError("no repr either")
+
+    @dataclass
+    class WithBrokenField:
+        fine: str
+        hostile: object
+
+        @property
+        def broken(self):
+            raise RuntimeError("broken property")
+
+    circular: list[object] = []
+    circular.append(circular)
+    requests = [Hostile(), WithBrokenField("kept", Hostile()), circular, {"nan": float("nan"), Hostile(): 1}]
+    calls: list[str] = []
+
+    def action(environment) -> None:
+        for request in requests:
+            current_run().record_request(request)
+        calls.append("ran")
+
+    run_project_action(action, locations.environment)
+
+    assert calls == ["ran"]
+    entries = read_entries(locations.project_logs)
+    recorded = [entry["request"] for entry in entries_of(entries, "request")]
+    assert len(recorded) == 4
+    assert recorded[1]["fine"] == "kept"
+    assert entries[-1]["status"] == "completed"
+
+
+def test_result_that_cannot_be_described_does_not_stop_the_action(locations, capsys) -> None:
+    class Hostile:
+        def __getattribute__(self, name):
+            raise RuntimeError("no attribute access at all")
+
+    run_project_action(lambda environment: Hostile(), locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "completed"
+    assert "Action failed" not in capsys.readouterr().out
+
+
+def test_outputs_warnings_and_errors_come_from_the_result(locations, tmp_path, capsys) -> None:
+    report = tmp_path / "report.docx"
+    result = QuickReportResult(
+        reports_generated=1,
+        generated_paths=(report,),
+        warnings=("photo missing",),
+        errors=("PE 3 failed",),
+    )
+
+    run_project_action(lambda environment: result, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert [entry["path"] for entry in entries_of(entries, "output")] == [str(report)]
+    assert [entry["message"] for entry in entries_of(entries, "warning")] == ["photo missing"]
+    assert [entry["message"] for entry in entries_of(entries, "error")] == ["PE 3 failed"]
+    assert entries_of(entries, "result")[0]["result"]["reports_generated"] == 1
+    assert entries[-1]["status"] == "completed_with_errors"
+    assert str(next(locations.project_logs.glob("*.jsonl"))) in capsys.readouterr().out
+
+
+def test_clean_result_finishes_as_completed(locations, tmp_path, capsys) -> None:
+    result = QuickReportResult(reports_generated=1, generated_paths=(tmp_path / "report.docx",))
+
+    run_project_action(lambda environment: result, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "completed"
+    assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_steps_are_timed_and_a_failed_step_is_marked(locations) -> None:
+    def action(environment) -> None:
+        with current_run().step("Substation A"):
+            pass
+        try:
+            with current_run().step("Substation B"):
+                raise ValueError("bad testsheet")
+        except ValueError:
+            pass
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert [entry["name"] for entry in entries_of(entries, "step_start")] == ["Substation A", "Substation B"]
+    finished = entries_of(entries, "step_finish")
+    assert [(entry["name"], entry["status"]) for entry in finished] == [
+        ("Substation A", "completed"),
+        ("Substation B", "failed"),
+    ]
+    assert finished[0]["duration_seconds"] >= 0
+    assert "bad testsheet" in finished[1]["error"]
+    assert entries[-1]["status"] == "completed"
+
+
+def test_inputs_are_recorded_without_copying_and_missing_ones_are_marked(locations, tmp_path) -> None:
+    present = tmp_path / "testsheet.xlsx"
+    present.write_bytes(b"1234567")
+    missing = tmp_path / "gone.xlsx"
+    logs_before = set(tmp_path.rglob("*"))
+
+    def action(environment) -> None:
+        current_run().record_inputs([present, str(missing), None, object()])
+
+    run_project_action(action, locations.environment)
+
+    inputs = {entry["path"]: entry for entry in entries_of(read_entries(locations.project_logs), "input")}
+    assert inputs[str(present)]["size"] == 7
+    assert inputs[str(missing)]["size"] is None
+    assert not inputs[str(missing)]["exists"]
+    assert logs_before >= {p for p in tmp_path.rglob("*") if locations.project_logs not in [p, *p.parents]}
+
+
+def test_recording_with_no_open_run_does_nothing_and_never_raises(tmp_path) -> None:
+    run = current_run()
+    run.record_request({"a": 1})
+    run.record_inputs([tmp_path])
+    run.record_outputs([tmp_path])
+    run.record_warning("nobody is listening")
+    run.record_error("nobody is listening", ValueError("x"))
+    with run.step("nothing"):
+        pass
+    assert run.path is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_run_inside_a_run_keeps_one_record(locations) -> None:
+    def action(environment) -> None:
+        with open_run("Inner") as inner:
+            inner.call(lambda: print("from inside"))
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert len(entries_of(entries, "run_start")) == 1
+    assert entries_of(entries, "console")[0]["text"] == "from inside"
+
+
+def test_quick_report_records_request_and_inputs_directly(locations, tmp_path) -> None:
+    testsheet = tmp_path / "testsheet.xlsx"
+    testsheet.write_bytes(b"12")
+    plan = SimpleNamespace(package=SimpleNamespace(testsheet_path=testsheet))
+    inspection = QuickReportInspection(targets=(), missing_templates=(), warnings=(), errors=())
+
+    def stop_after_planning(message: str) -> None:
+        if message.startswith("Found"):
+            raise _StopWorkflow(message)
+
+    def action(environment) -> None:
+        with patch.object(QuickReportWorkflow, "_plan", return_value=(inspection, [plan])):
+            QuickReportWorkflow().generate(["FL1"], environment, station="KUANTAN", progress_sink=stop_after_planning)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    request = entries_of(entries, "request")[0]["request"]
+    assert request == {"workflow": "Quick Report", "target": ["FL1"], "station": "KUANTAN", "condition_template": None}
+    assert entries_of(entries, "input")[0]["path"] == str(testsheet)
+
+
+def test_full_report_records_request_and_inputs_directly(locations, tmp_path) -> None:
+    testsheet = tmp_path / "testsheet.xlsx"
+    testsheet.write_bytes(b"12")
+    package = SimpleNamespace(testsheet_path=testsheet)
+
+    def stop_after_discovery(message: str) -> None:
+        if message.startswith("Found"):
+            raise _StopWorkflow(message)
+
+    def action(environment) -> None:
+        with (
+            patch.object(FullReportWorkflow, "_validate_target_existence"),
+            patch.object(FullReportWorkflow, "_discover_packages", return_value=([package], [], [])),
+        ):
+            FullReportWorkflow().generate(["FL1"], environment, progress_sink=stop_after_discovery)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    request = entries_of(entries, "request")[0]["request"]
+    assert request["workflow"] == "Full Report"
+    assert request["target"] == ["FL1"]
+    assert entries_of(entries, "input")[0]["path"] == str(testsheet)
+
+
+def test_full_report_postprocessing_records_request_and_inputs_directly(locations, tmp_path) -> None:
+    docx = tmp_path / "full_report.docx"
+    docx.write_bytes(b"123")
+
+    def action(environment) -> None:
+        with (
+            patch.object(FullReportPostProcessingWorkflow, "_discover_docx_files", return_value=([docx], [], [])),
+            patch.object(FullReportPostProcessingWorkflow, "_group_multipart_targets", side_effect=_StopWorkflow),
+        ):
+            FullReportPostProcessingWorkflow().process("07.11.2026", environment)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    request = entries_of(entries, "request")[0]["request"]
+    assert request["workflow"] == "Full Report Post-Processing"
+    assert request["target"] == "07.11.2026"
+    assert entries_of(entries, "input")[0]["path"] == str(docx)
+
+
+class _StopWorkflow(Exception):
+    """Ends a real workflow straight after the part under test, before it reaches Word."""
+
+
+def _record_com_attempts(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    import pythoncom
+    import win32com.client
+
+    attempts: list[str] = []
+
+    def attempt(name: str):
+        def fail(*args, **kwargs):
+            attempts.append(name)
+            raise AssertionError(f"{name} must not be called while capturing versions")
+
+        return fail
+
+    monkeypatch.setattr(win32com.client, "Dispatch", attempt("Dispatch"))
+    monkeypatch.setattr(win32com.client, "DispatchEx", attempt("DispatchEx"))
+    monkeypatch.setattr(win32com.client.gencache, "EnsureDispatch", attempt("EnsureDispatch"))
+    monkeypatch.setattr(pythoncom, "CoCreateInstance", attempt("CoCreateInstance"))
+    return attempts
+
+
+def test_capturing_versions_attempts_no_com_dispatch(locations, monkeypatch) -> None:
+    attempts = _record_com_attempts(monkeypatch)
+
+    run_project_action(lambda environment: None, locations.environment)
+
+    assert attempts == []
+    assert entries_of(read_entries(locations.project_logs), "environment")
+
+
+def test_capturing_versions_does_not_even_load_com_in_a_fresh_process(tmp_path) -> None:
+    script = (
+        "import sys\n"
+        "from src.run_records import open_run\n"
+        "with open_run('Fresh') as run:\n"
+        "    run.call(lambda: None)\n"
+        "assert 'win32com' not in sys.modules, 'win32com was imported'\n"
+        "assert 'pythoncom' not in sys.modules, 'pythoncom was imported'\n"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=REPO_ROOT,
+        env={**os.environ, RECORD_DIR_OVERRIDE_VARIABLE: str(tmp_path)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert read_entries(tmp_path)[-1]["type"] == "run_finish"
+
+
+def test_capture_setup_failure_does_not_stop_the_action(locations, monkeypatch) -> None:
+    def broken(*args, **kwargs):
+        raise RuntimeError("logging is broken")
+
+    monkeypatch.setattr(logging.Logger, "setLevel", broken)
+    calls: list[str] = []
+
+    run_project_action(lambda environment: calls.append("ran"), locations.environment)
+
+    assert calls == ["ran"]
+    assert read_entries(locations.project_logs)[-1]["type"] == "run_finish"
+
+
+def test_input_prompt_still_reads_its_answer_during_a_run(locations, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("KUANTAN\n"))
+    answers: list[str] = []
+
+    _run_recorded_action("Fake", lambda: answers.append(input("Functional Locations: ")), locations.environment)
+
+    assert answers == ["KUANTAN"]
+    assert "Functional Locations: " in capsys.readouterr().out
+
+
+def test_text_the_record_file_cannot_encode_does_not_end_the_record(locations) -> None:
+    run_project_action(lambda environment: current_run().record_warning("bad \udc80 text"), locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries_of(entries, "warning")
+    assert entries[-1]["type"] == "run_finish"

@@ -36,6 +36,7 @@ from src.postprocessing.converters import (
     configure_uniform_printer,
     safe_unlink_with_retry,
 )
+from src.run_records import current_run
 from src.project.storage import (
     extract_numerical_prefix,
     extract_prefix_safe,
@@ -606,10 +607,21 @@ class FullReportPostProcessingWorkflow:
 
         start_time = time.time()
 
+        current_run().record_request(
+            {
+                "workflow": "Full Report Post-Processing",
+                "target": target,
+                "station": station,
+                "fail_fast": fail_fast,
+                "output_dir": output_dir,
+            }
+        )
+
         if progress_sink:
             progress_sink("Discovering Full Report documents for post-processing...")
 
         docx_files, warnings, errors = self._discover_docx_files(target, environment, station=station)
+        current_run().record_inputs(docx_files)
         if not docx_files:
             if not errors:
                 errors.append(f"No Full Report documents found for target: {target}")

@@ -27,6 +27,7 @@ from src.full_report.attribution import (
     quarantine_deliverable,
 )
 from src.full_report.composer import FullReportComposer
+from src.run_records import current_run
 from src.full_report.photo_resolver import RawPhotoResolver
 from src.full_report.plan_builder import (
     FullReportPlanBuilder,
@@ -389,12 +390,24 @@ class FullReportWorkflow:
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
+        current_run().record_request(
+            {
+                "workflow": "Full Report",
+                "target": target,
+                "station": station,
+                "keep_temp": keep_temp,
+                "temp_dir": temp_dir,
+                "output_dir": output_dir,
+            }
+        )
+
         self._validate_target_existence(target, environment)
 
         if progress_sink:
             progress_sink("Discovering target packages for Full Report...")
 
         packages, warnings, errors = self._discover_packages(target, environment, station=station)
+        current_run().record_inputs(package.testsheet_path for package in packages)
         if not packages:
             if not errors:
                 errors.append(f"No testsheet packages found for target: {target}")

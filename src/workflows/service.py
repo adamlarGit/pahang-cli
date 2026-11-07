@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from src.run_records import current_run
 from src.workflows.models import (
     ConsolidateMsmsRequest,
     ConsolidateMsmsResult,
@@ -44,6 +45,18 @@ if TYPE_CHECKING:
     )
 
 
+def _record_request(environment: ProjectEnvironment, request: object) -> None:
+    """Add a request and the project's workbooks to the open Run Record, if there is one."""
+    run = current_run()
+    run.record_request(request)
+    if run.path is not None:
+        try:
+            workbooks = (environment.get_total_pe_path(), environment.get_data_msms_path())
+            run.record_inputs(path for path in workbooks if path.exists())
+        except Exception:
+            pass
+
+
 class WorkflowService:
     """Core workflow service executing project operations."""
 
@@ -52,6 +65,7 @@ class WorkflowService:
         environment: ProjectEnvironment,
         request: GenerateTestsheetFolderRequest,
     ) -> GenerateTestsheetFolderResult:
+        _record_request(environment, request)
         if request.progress_sink:
             request.progress_sink(
                 f"Generating folder structure for {request.station} / {request.month}..."
@@ -63,6 +77,7 @@ class WorkflowService:
     def run_populate_total_pe(
         self, environment: ProjectEnvironment, request: PopulateTotalPeRequest
     ) -> PopulateTotalPeResult:
+        _record_request(environment, request)
         if request.progress_sink:
             request.progress_sink("Executing Populate TOTAL PE workflow...")
         workflow = PopulateTotalPeWorkflow()
@@ -71,6 +86,7 @@ class WorkflowService:
     def run_raw_material(
         self, environment: ProjectEnvironment, request: RawMaterialRequest
     ) -> RawMaterialResult:
+        _record_request(environment, request)
         if request.progress_sink:
             request.progress_sink(f"Executing Raw Material workflow on {request.output_path}...")
         workflow = RawMaterialWorkflow()
@@ -79,6 +95,7 @@ class WorkflowService:
     def run_update_qr02_cba(
         self, environment: ProjectEnvironment, request: UpdateQr02CbaRequest
     ) -> UpdateQr02CbaResult:
+        _record_request(environment, request)
         if request.progress_sink:
             request.progress_sink("Executing Update QR02 CBA workflow...")
         from src.workflows.update_qr02_cba import UpdateQr02CbaWorkflow
@@ -89,6 +106,7 @@ class WorkflowService:
     def run_whatsapp(
         self, environment: ProjectEnvironment, request: WhatsAppReportRequest
     ) -> WhatsAppReportResult:
+        _record_request(environment, request)
         if request.progress_sink:
             request.progress_sink("Executing WhatsApp Report generation...")
         from src.workflows.whatsapp import WhatsAppReportWorkflow
@@ -98,6 +116,7 @@ class WorkflowService:
     def run_propagate_wo(
         self, environment: ProjectEnvironment, request: PropagateWoRequest | None = None
     ) -> PropagateWoResult:
+        _record_request(environment, request)
         if request and request.progress_sink:
             request.progress_sink("Executing Propagate Work Orders workflow...")
         from src.workflows.propagate_wo import PropagateWoWorkflow
@@ -107,6 +126,7 @@ class WorkflowService:
     def run_consolidate_msms(
         self, environment: ProjectEnvironment, request: ConsolidateMsmsRequest | None = None
     ) -> ConsolidateMsmsResult:
+        _record_request(environment, request)
         if request and request.progress_sink:
             request.progress_sink("Executing Consolidate MSMS workflow...")
         from src.workflows.consolidate_msms import ConsolidateMsmsWorkflow
@@ -116,6 +136,7 @@ class WorkflowService:
     def run_enrich_msms(
         self, environment: ProjectEnvironment, request: EnrichMsmsRequest | None = None
     ) -> EnrichMsmsResult:
+        _record_request(environment, request)
         if request and request.progress_sink:
             request.progress_sink("Executing Enrich MSMS workflow...")
         from src.workflows.enrich_msms import EnrichMsmsWorkflow
@@ -125,6 +146,7 @@ class WorkflowService:
     def run_ingest_msms_csv(
         self, environment: ProjectEnvironment, request: IngestMsmsCsvRequest | None = None
     ) -> IngestMsmsCsvResult:
+        _record_request(environment, request)
         req = request or IngestMsmsCsvRequest()
         if req.progress_sink:
             req.progress_sink("Executing Ingest MSMS CSV workflow...")
@@ -135,6 +157,7 @@ class WorkflowService:
     def run_populate_data_msms(
         self, environment: ProjectEnvironment, request: PopulateDataMsmsRequest | None = None
     ) -> PopulateDataMsmsResult:
+        _record_request(environment, request)
         req = request or PopulateDataMsmsRequest()
         if req.progress_sink:
             req.progress_sink("Executing Populate Data MSMS workflow...")
@@ -147,6 +170,7 @@ class WorkflowService:
         environment: ProjectEnvironment,
         request: PostProcessingRequest | None = None,
     ) -> PostProcessingSummary:
+        _record_request(environment, request)
         from src.workflows.postprocessing_pipeline import PostProcessingPipelineWorkflow
 
         workflow = PostProcessingPipelineWorkflow()

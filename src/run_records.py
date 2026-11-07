@@ -14,6 +14,15 @@ A Run Record is one JSON Lines file, flushed line by line, so a Word hang or a c
 still leaves everything up to that point. A record with no ``run_finish`` entry was
 interrupted, crashed or hung.
 
+Every line is one JSON object with a ``type`` and a ``time``. The types are ``run_start``,
+``environment`` (app, git, Python, Word and Excel versions), ``request``, ``input`` (path,
+size, modified), ``step_start``, ``step_finish``, ``log``, ``progress``, ``console``,
+``warning``, ``error`` (with ``traceback`` for an exception), ``result``, ``output`` and
+``run_finish`` (``status`` is ``completed``, ``completed_with_errors`` or ``failed``).
+
+Records live in ``<project base path>/logs/``. Runs with no real project folder use
+``%LOCALAPPDATA%\\pahang-cli\\logs\\``.
+
 Nothing here may stop a workflow: a problem saving a Run Record is swallowed, and the
 Run carries on recording nothing. ``current_run()`` always returns a usable Run, which
 records nothing when no Run is open, so callers never check for one.
@@ -21,8 +30,11 @@ records nothing when no Run is open, so callers never check for one.
 
 from __future__ import annotations
 
+import dataclasses
+import enum
 import json
 import logging
+import math
 import os
 import platform
 import re
@@ -32,9 +44,10 @@ import threading
 import time
 import traceback
 import uuid
-from datetime import datetime, timezone
+from contextlib import contextmanager
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable, Iterator, Mapping
 
 # When set, every Run Record goes to this folder and no other location is tried.
 # The test suite sets it so that no test can write into a real project folder.
@@ -45,6 +58,16 @@ _UNKNOWN = "unknown"
 _GIT_TIMEOUT_SECONDS = 5
 _PROGRESS_LINE = re.compile(r"\s*\[(PROGRESS|\d+/\d+)\]")
 _OWN_LOGGER_NAMES = ("root", "config", "__main__")
+_MAX_DESCRIBE_DEPTH = 12
+_RESULT_OUTPUT_FIELDS = (
+    "output_path",
+    "generated_paths",
+    "deliverables",
+    "final_deliverables",
+    "created_directories",
+    "ingested_files",
+    "files_moved",
+)
 
 _current: "Run | None" = None
 
@@ -64,10 +87,71 @@ class Run:
     def call(self, action: Callable[[], Any]) -> Any:
         """Run the action, record its outcome, and re-raise its failure unchanged."""
         try:
-            return action()
+            result = action()
         except Exception as exc:
             self._record_failure(exc)
             raise
+        self._record_result(result)
+        return result
+
+    def record_request(self, request: Any) -> None:
+        """Record what was asked for. Unserialisable parts are recorded by a description.
+
+        Any path in a request, other than its output paths, is also recorded as an input.
+        """
+        if self._file is None:
+            return
+        self._write("request", request=_describe_safely(request))
+        self.record_inputs(_input_paths_in(request))
+
+    def record_inputs(self, paths: Iterable[Any]) -> None:
+        """Record each input file's path, size and modified time, with no copy and no hash."""
+        if self._file is None:
+            return
+        try:
+            for path in paths:
+                self._record_input(path)
+        except Exception:
+            pass
+
+    def record_outputs(self, paths: Iterable[Any]) -> None:
+        if self._file is None:
+            return
+        try:
+            for path in paths:
+                self._write("output", path=str(path))
+        except Exception:
+            pass
+
+    def record_warning(self, message: Any) -> None:
+        self._write("warning", message=_text_of(message))
+
+    def record_error(self, message: Any, exc: BaseException | None = None) -> None:
+        fields = {} if exc is None else {"traceback": "".join(traceback.format_exception(exc))}
+        self._write("error", message=_text_of(message), **fields)
+
+    @contextmanager
+    def step(self, name: str) -> Iterator[None]:
+        """Record one named, timed stage. A failure inside it passes straight through."""
+        started = time.perf_counter()
+        self._write("step_start", name=name)
+        try:
+            yield
+        except BaseException as exc:
+            self._write(
+                "step_finish",
+                name=name,
+                status="failed",
+                error=_text_of(exc),
+                duration_seconds=round(time.perf_counter() - started, 3),
+            )
+            raise
+        self._write(
+            "step_finish",
+            name=name,
+            status="completed",
+            duration_seconds=round(time.perf_counter() - started, 3),
+        )
 
     def __enter__(self) -> "Run":
         global _current
@@ -75,7 +159,7 @@ class Run:
             _current = self
             self._captures = [_LoggerCapture(self), _ConsoleCapture(self)]
             for capture in self._captures:
-                capture.start()
+                _ignoring_failure(capture.start)
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -83,7 +167,7 @@ class Run:
         if _current is self:
             _current = None
             for capture in self._captures:
-                capture.stop()
+                _ignoring_failure(capture.stop)
         # Anything escaping here is an interruption such as Ctrl+C, so the record is
         # left with no finish entry, which is what marks it as interrupted.
         if exc_type is None:
@@ -104,15 +188,54 @@ class Run:
             traceback="".join(traceback.format_exception(exc)),
         )
 
+    def _record_result(self, result: Any) -> None:
+        """Take outputs, warnings and errors from what the action returned, if it says."""
+        if self._file is None or result is None:
+            return
+        try:
+            self._write("result", result=_describe_safely(result))
+            for field in _RESULT_OUTPUT_FIELDS:
+                self.record_outputs(_as_list(getattr(result, field, None)))
+            for warning in _as_list(getattr(result, "warnings", None)):
+                self.record_warning(warning)
+            errors = [
+                *_as_list(getattr(result, "errors", None)),
+                *_as_list(getattr(result, "failed_packages", None)),
+            ]
+            for error in errors:
+                self.record_error(error)
+            failed_count = getattr(result, "failed_count", 0)
+            if errors or (isinstance(failed_count, int) and failed_count > 0):
+                self.failed = True
+                self._status = "completed_with_errors"
+        except Exception:
+            pass
+
+    def _record_input(self, path: Any) -> None:
+        if not isinstance(path, (str, os.PathLike)):
+            return
+        try:
+            stat = os.stat(path)
+        except OSError:
+            self._write("input", path=str(path), exists=False, size=None, modified=None)
+            return
+        modified = datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat()
+        self._write("input", path=str(path), exists=True, size=stat.st_size, modified=modified)
+
     def _write(self, entry_type: str, **fields: Any) -> None:
         with self._lock:
             if self._file is None:
                 return
             try:
                 entry = {"type": entry_type, "time": datetime.now(timezone.utc).isoformat(), **fields}
-                self._file.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                line = json.dumps(entry, ensure_ascii=False) + "\n"
+            except Exception:
+                return
+            try:
+                self._file.write(line)
                 self._file.flush()
             except Exception:
+                # Stop here rather than risk a half-written line in the middle of the file.
                 self._close()
 
     def _close(self) -> None:
@@ -160,7 +283,7 @@ class _LoggerCapture(logging.Handler):
         if was_enabled or record.name in _OWN_LOGGER_NAMES or record.name.startswith("src."):
             self._record(record)
         if record.name == "root" and not self._console_handlers:
-            self._configure_like_module_level_logging()
+            _ignoring_failure(self._configure_like_module_level_logging)
         if was_enabled:
             self._hand_on(record)
 
@@ -308,6 +431,89 @@ def _start_run(label: str, project_key: str | None, base_path: str | None) -> Ru
         return run
     except Exception:
         return Run()
+
+
+def _ignoring_failure(action: Callable[[], None]) -> None:
+    try:
+        action()
+    except Exception:
+        pass
+
+
+def _as_list(value: Any) -> list[Any]:
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return list(value)
+    return [value] if isinstance(value, os.PathLike) else []
+
+
+def _text_of(value: Any) -> str:
+    try:
+        return value if isinstance(value, str) else str(value)
+    except Exception:
+        return _label_of(value)
+
+
+def _input_paths_in(request: Any) -> list[Any]:
+    try:
+        if not dataclasses.is_dataclass(request):
+            return []
+        values = [
+            getattr(request, field.name)
+            for field in dataclasses.fields(request)
+            if "output" not in field.name
+        ]
+        return [path for value in values for path in _as_list(value) if isinstance(path, os.PathLike)]
+    except Exception:
+        return []
+
+
+def _describe_safely(value: Any) -> Any:
+    try:
+        return _describe(value, 0, set())
+    except Exception:
+        return "<could not be described>"
+
+
+def _describe(value: Any, depth: int, enclosing: set[int]) -> Any:
+    """Turn a value into something JSON can hold, describing whatever it can't."""
+    if isinstance(value, enum.Enum):
+        return value.name
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else str(value)
+    if isinstance(value, os.PathLike):
+        return str(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if depth >= _MAX_DESCRIBE_DEPTH or id(value) in enclosing:
+        return _label_of(value)
+
+    inner = enclosing | {id(value)}
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        described = {"__type__": type(value).__name__}
+        for field in dataclasses.fields(value):
+            described[field.name] = _describe_field(value, field.name, depth, inner)
+        return described
+    if isinstance(value, Mapping):
+        return {_text_of(key): _describe(item, depth + 1, inner) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_describe(item, depth + 1, inner) for item in value]
+    return _label_of(value)
+
+
+def _describe_field(owner: Any, name: str, depth: int, enclosing: set[int]) -> Any:
+    try:
+        return _describe(getattr(owner, name), depth + 1, enclosing)
+    except Exception:
+        return "<could not be described>"
+
+
+def _label_of(value: Any) -> str:
+    """Describe an object by what it is. Never calls its repr, which can do anything."""
+    kind = "function" if callable(value) and hasattr(value, "__qualname__") else "object"
+    target = value if kind == "function" else type(value)
+    return f"<{kind} {target.__module__}.{target.__qualname__}>"
 
 
 def _project_of(environment: Any) -> tuple[str | None, str | None]:
