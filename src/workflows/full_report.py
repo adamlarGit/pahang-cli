@@ -1288,7 +1288,7 @@ class FullReportWorkflow:
                     and normalize_functional_location_input(pkg.data.fl_erms) in target_fls
                 ]
         except Exception as exc:
-            current_run().record_error(f"Package discovery failed: {exc}", exc)
+            current_run().record_error(f"Package discovery failed: {exc}", exc, item="discovery")
             errors.append(f"Package discovery failed: {exc}")
             return [], warnings, errors
 

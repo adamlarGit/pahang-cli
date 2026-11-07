@@ -3083,17 +3083,99 @@ def test_one_bad_substation_gives_one_error_when_inspect_and_generate_both_plan(
     assert entries[-1]["status"] == "failed"
 
 
-def test_same_error_gains_its_traceback_if_first_recorded_without_one(locations) -> None:
-    def action(environment) -> None:
-        current_run().record_error("same text")
-        current_run().record_error("same text", ValueError("detail"))
-        current_run().record_error("same text", ValueError("detail"))
-        current_run().record_error("same text")
+def test_two_substations_failing_with_identical_text_both_keep_an_entry(locations) -> None:
+    """Different substations can share a display name, so their messages can be identical."""
+    _run_quick_report_plans(locations, [RuntimeError("same failure"), RuntimeError("same failure")])
+
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert len(errors) == 2, errors
+    assert errors[0]["message"] == errors[1]["message"]
+    assert all("same failure" in error["traceback"] for error in errors)
+
+
+def test_pipeline_with_two_identical_failures_keeps_both_with_tracebacks(locations, tmp_path) -> None:
+    (tmp_path / "TS").mkdir()
+    packages = tuple(
+        SubstationPackage(
+            testsheet_xlsx=tmp_path / "TS" / f"{index}. PE.xlsx",
+            quick_report_docx=tmp_path / "QR" / f"{index}. PE.docx",
+            station_name="SAME NAME",
+        )
+        for index in (1, 2)
+    )
+    request = PostProcessingRequest(
+        mode=PostProcessingMode.BY_FL,
+        target_packages=packages,
+        apply_signatures=True,
+        vendor_signature_path=tmp_path / "sign.png",
+        converter=_FakeConverter(),
+    )
+
+    def action(environment) -> object:
+        module = "src.workflows.postprocessing_pipeline"
+        with (
+            patch(f"{module}.validate_postprocessing_preflight"),
+            patch(f"{module}.discover_substation_packages", return_value=list(packages)),
+            patch(f"{module}.replace_pce_images", side_effect=[RuntimeError("stamp broke"), RuntimeError("stamp broke")]),
+        ):
+            return PostProcessingPipelineWorkflow().execute(environment, request)
 
     run_project_action(action, locations.environment)
 
     errors = entries_of(read_entries(locations.project_logs), "error")
-    assert [("traceback" in error) for error in errors] == [False, True]
+    assert len(errors) == 2, errors
+    assert all("stamp broke" in error["traceback"] for error in errors)
+
+
+def test_identical_errors_only_in_the_result_both_keep_an_entry(locations) -> None:
+    result = QuickReportResult(reports_generated=1, errors=("same text", "same text"))
+
+    run_project_action(lambda environment: result, locations.environment)
+
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert [error["message"] for error in errors] == ["same text", "same text"]
+
+
+def test_result_repeating_one_of_two_recorded_errors_adds_only_the_extra(locations) -> None:
+    def action(environment) -> QuickReportResult:
+        current_run().record_error("same text", ValueError("one"))
+        return QuickReportResult(reports_generated=1, errors=("same text", "same text"))
+
+    run_project_action(action, locations.environment)
+
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert [("traceback" in error) for error in errors] == [True, False]
+
+
+def test_same_exception_object_recorded_twice_gives_one_entry(locations) -> None:
+    def action(environment) -> None:
+        failure = ValueError("detail")
+        current_run().record_error("first site", failure)
+        raise failure
+
+    run_project_action(action, locations.environment)
+
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert [error["message"] for error in errors] == ["first site"]
+    assert read_entries(locations.project_logs)[-1]["status"] == "failed"
+
+
+def test_full_report_inspect_then_generate_discovery_failure_gives_one_entry(locations) -> None:
+    workflow = FullReportWorkflow()
+
+    def action(environment) -> object:
+        with (
+            patch.object(FullReportWorkflow, "_validate_target_existence"),
+            patch.object(workflow, "_extractor") as extractor,
+        ):
+            extractor.extract.side_effect = RuntimeError("testsheet scan broke")
+            workflow.inspect(["FL1"], environment)
+            return workflow.generate(["FL1"], environment)
+
+    run_project_action(action, locations.environment)
+
+    errors = entries_of(read_entries(locations.project_logs), "error")
+    assert len(errors) == 1, errors
 
 
 def test_time_spent_waiting_on_a_prompt_is_in_no_step(locations) -> None:

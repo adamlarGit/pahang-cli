@@ -108,8 +108,9 @@ class Run:
         self._status = "completed"
         self._lock = threading.RLock()
         self._captures: list[Any] = []
-        self._error_messages: set[str] = set()
-        self._errors_with_traceback: set[str] = set()
+        self._errors_written: dict[str, int] = {}
+        self._error_items_seen: set[tuple[str, str]] = set()
+        self._exceptions_seen: list[BaseException] = []
         self._warning_messages: set[str] = set()
         self._requests: dict[str, dict[str, Any]] = {}
         self._inputs_seen: set[str] = set()
@@ -216,13 +217,17 @@ class Run:
         fields = {} if exc is None else {"traceback": _traceback_of(exc)}
         self._write("warning", message=text, **fields)
 
-    def record_error(self, message: Any, exc: BaseException | None = None) -> None:
+    def record_error(self, message: Any, exc: BaseException | None = None, *, item: Any = None) -> None:
         """Record that one item failed while the action carried on.
 
         The Run finishes as ``completed_with_errors`` and the console shows the record's path.
+
+        Two different items can fail with identical text, so each call keeps its own entry.
+        ``item`` names what failed, for work done twice in a Run: the same text for the same
+        item adds nothing, such as when a report is planned by both inspect and generate.
         """
         self._mark_problem("completed_with_errors")
-        self._write_error(message, exc)
+        self._write_error(message, exc, item)
 
     def record_failure(self, message: Any, exc: BaseException | None = None) -> None:
         """Record that the action's whole job failed, even though it returns normally.
@@ -294,17 +299,30 @@ class Run:
         if self._status != "failed":
             self._status = status
 
-    def _write_error(self, message: Any, exc: BaseException | None) -> None:
-        """Write one error. A repeat adds nothing, unless it brings the first traceback."""
+    def _write_error(self, message: Any, exc: BaseException | None, item: Any = None) -> None:
+        """Write one error, unless this exception or this item's message is already recorded."""
         text = _text_of(message)
+        if exc is not None and any(exc is seen for seen in self._exceptions_seen):
+            return
+        if item is not None:
+            key = (text, _text_of(item))
+            if key in self._error_items_seen:
+                return
+            self._error_items_seen.add(key)
+        self._errors_written[text] = self._errors_written.get(text, 0) + 1
         if exc is None:
-            if text not in self._error_messages:
-                self._error_messages.add(text)
-                self._write("error", message=text)
-        elif text not in self._errors_with_traceback:
-            self._error_messages.add(text)
-            self._errors_with_traceback.add(text)
+            self._write("error", message=text)
+        else:
+            self._exceptions_seen.append(exc)
             self._write("error", message=text, exception_type=type(exc).__name__, traceback=_traceback_of(exc))
+
+    def _record_result_error(self, error: Any) -> None:
+        """Each error a result returns matches one already recorded, or is written now."""
+        text = _text_of(error)
+        if self._errors_written.get(text, 0) > 0:
+            self._errors_written[text] -= 1
+        else:
+            self._write("error", message=text)
 
     def _record_result(self, result: Any) -> None:
         """Take outputs, warnings and errors from what the action returned, if it says."""
@@ -319,7 +337,7 @@ class Run:
             # The workflow says when its whole job failed, through mark_failed() or record_failure().
             errors = _as_list(getattr(result, "errors", None))
             for error in errors:
-                self.record_error(error)
+                self._record_result_error(error)
             failed_count = getattr(result, "failed_count", 0)
             # Whoever filled failed_packages has recorded those failures, with tracebacks.
             if (
