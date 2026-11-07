@@ -83,12 +83,23 @@ def _run_recorded_action(action_label: str, callback: Callable[[], object], envi
             print(f"Run Record: {run.path}")
 
 
+def _select_project(session: CliSession) -> object:
+    """Select a project. A failure here has no project, so its Run Record uses the per-user folder."""
+    try:
+        return select_active_project_wizard(session)
+    except Exception as exc:
+        record_path = run_records.save_failure("Select Active Project", exc)
+        if record_path:
+            print(f"Run Record: {record_path}")
+        raise
+
+
 def _run_project_workflow_menu(
     session: CliSession,
     project_actions: Sequence[ProjectWorkflowAction],
 ) -> None:
     """Run the project workflow submenu."""
-    if session.active_project is None and select_active_project_wizard(session) is None:
+    if session.active_project is None and _select_project(session) is None:
         return
 
     while True:
@@ -105,7 +116,7 @@ def _run_project_workflow_menu(
         if isinstance(selection, ProjectWorkflowAction):
             _run_recorded_action(selection.label, lambda: selection.run(environment), environment)
         elif selection is cli_menu.SessionCommand.CHANGE_ACTIVE_PROJECT:
-            select_active_project_wizard(session)
+            _select_project(session)
         elif selection is cli_menu.SessionCommand.BACK:
             return
 

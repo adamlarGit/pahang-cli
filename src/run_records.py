@@ -57,14 +57,7 @@ class Run:
         try:
             return action()
         except Exception as exc:
-            self.failed = True
-            self._status = "failed"
-            self._write(
-                "error",
-                message=str(exc),
-                exception_type=type(exc).__name__,
-                traceback="".join(traceback.format_exception(exc)),
-            )
+            self._record_failure(exc)
             raise
 
     def __enter__(self) -> "Run":
@@ -80,6 +73,16 @@ class Run:
                 duration_seconds=round(time.perf_counter() - self._started, 3),
             )
         self._close()
+
+    def _record_failure(self, exc: BaseException) -> None:
+        self.failed = True
+        self._status = "failed"
+        self._write(
+            "error",
+            message=str(exc),
+            exception_type=type(exc).__name__,
+            traceback="".join(traceback.format_exception(exc)),
+        )
 
     def _write(self, entry_type: str, **fields: Any) -> None:
         if self._file is None:
@@ -102,7 +105,18 @@ class Run:
 
 def open_run(label: str, environment: Any = None) -> Run:
     """Open a Run Record for one execution. Never raises."""
-    project_key, base_path = _project_of(environment)
+    project_key, base_path = _project_of(environment) if environment is not None else _active_project()
+    return _start_run(label, project_key, base_path)
+
+
+def save_failure(label: str, exc: BaseException) -> Path | None:
+    """Save a failure from before any project is selected, in the per-user folder."""
+    with _start_run(label, None, None) as run:
+        run._record_failure(exc)
+    return run.path
+
+
+def _start_run(label: str, project_key: str | None, base_path: str | None) -> Run:
     record_file, path = _create_record_file(label, base_path)
     run = Run(record_file, path)
     run._write("run_start", label=label, project_key=project_key, base_path=base_path)
@@ -115,11 +129,30 @@ def _project_of(environment: Any) -> tuple[str | None, str | None]:
     try:
         key = environment.project_key
         base_path = Path(environment.base_path)
+        if key == _UTILITY_PROJECT_KEY or not base_path.is_dir():
+            return key, None
+        return key, str(base_path)
     except Exception:
         return None, None
-    if key == _UTILITY_PROJECT_KEY or not base_path.is_dir():
-        return key, None
-    return key, str(base_path)
+
+
+def _active_project() -> tuple[str | None, str | None]:
+    """Find the project a utility action will use, without changing anything on disk.
+
+    Utility actions build their environment after a Run opens. Building one here would
+    create project subfolders, so this only reads the saved project and its catalog.
+    """
+    try:
+        from src.cli_session import load_last_project_key
+        from src.project.repository import JsonFileProjectRepository
+
+        key = load_last_project_key()
+        if key is None:
+            return None, None
+        base_path = Path(JsonFileProjectRepository().get(key).base_path)
+        return key, str(base_path) if base_path.is_dir() else None
+    except Exception:
+        return None, None
 
 
 def _create_record_file(label: str, base_path: str | None) -> tuple[Any, Path | None]:
