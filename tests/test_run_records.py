@@ -24,6 +24,7 @@ import pythoncom
 import pytest
 import questionary
 import win32com.client
+import win32com.client.dynamic
 from prompt_toolkit.application import create_app_session
 from prompt_toolkit.data_structures import Size
 from prompt_toolkit.input import create_pipe_input
@@ -117,16 +118,31 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.fixture(autouse=True)
-def _no_real_office(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fail any test in this file that tries to start real Word or Excel."""
+def _no_real_office(monkeypatch: pytest.MonkeyPatch):
+    """Fail any test in this file that tries to start real Word or Excel.
 
-    def blocked(*args, **kwargs):
-        raise AssertionError(f"Real Word or Excel must not start in these tests: {args!r}")
+    The action layer catches Exception, so raising alone could pass unnoticed. Attempts are
+    logged and fail the test at teardown. This stays even with a suite-wide guard, because
+    no test here may ever start Office, whatever markers it has.
+    """
+    attempts: list[str] = []
 
-    monkeypatch.setattr(win32com.client, "Dispatch", blocked)
-    monkeypatch.setattr(win32com.client, "DispatchEx", blocked)
-    monkeypatch.setattr(win32com.client.gencache, "EnsureDispatch", blocked)
-    monkeypatch.setattr(pythoncom, "CoCreateInstance", blocked)
+    def blocked(name: str):
+        def fail(*args, **kwargs):
+            attempts.append(f"{name}{args!r}")
+            raise AssertionError(f"Real Word or Excel must not start in these tests: {name}{args!r}")
+
+        return fail
+
+    monkeypatch.setattr(win32com.client, "Dispatch", blocked("Dispatch"))
+    monkeypatch.setattr(win32com.client, "DispatchEx", blocked("DispatchEx"))
+    monkeypatch.setattr(win32com.client.gencache, "EnsureDispatch", blocked("EnsureDispatch"))
+    monkeypatch.setattr(win32com.client.dynamic, "Dispatch", blocked("dynamic.Dispatch"))
+    monkeypatch.setattr(pythoncom, "CoCreateInstance", blocked("CoCreateInstance"))
+    monkeypatch.setattr(pythoncom, "CoCreateInstanceEx", blocked("CoCreateInstanceEx"))
+    yield attempts
+    if attempts:
+        pytest.fail(f"A test tried to start real Word or Excel: {attempts}", pytrace=False)
 
 
 def make_environment(base_path: Path, key: str = "fake_project") -> ProjectEnvironment:
@@ -2359,3 +2375,62 @@ def test_output_path_that_cannot_be_worked_out_does_not_stop_update_qr02(locatio
     entries = read_entries(locations.project_logs)
     assert entries[-1]["status"] == "completed"
     assert not entries_of(entries, "output")
+
+
+def test_blocked_office_start_is_logged_even_when_the_action_layer_swallows_it(
+    locations, _no_real_office, capsys
+) -> None:
+    """The guard's own proof. The call is blocked, and it's logged for teardown to fail on."""
+    # A class name that doesn't exist, so even a broken guard couldn't start Word.
+    run_project_action(lambda environment: win32com.client.DispatchEx("Pahang.DoesNotExist"), locations.environment)
+
+    assert "Action failed" in capsys.readouterr().out
+    assert _no_real_office == ["DispatchEx('Pahang.DoesNotExist',)"]
+    _no_real_office.clear()  # This test expected the attempt. Teardown would fail on it.
+
+
+@pytest.mark.parametrize(
+    "start",
+    [
+        "win32com.client.Dispatch('Pahang.DoesNotExist')",
+        "win32com.client.DispatchEx('Pahang.DoesNotExist')",
+        "win32com.client.gencache.EnsureDispatch('Pahang.DoesNotExist')",
+        "win32com.client.dynamic.Dispatch('Pahang.DoesNotExist')",
+        "pythoncom.CoCreateInstance('Pahang.DoesNotExist')",
+        "pythoncom.CoCreateInstanceEx('Pahang.DoesNotExist')",
+    ],
+)
+def test_every_office_start_route_is_blocked(_no_real_office, start) -> None:
+    with pytest.raises(AssertionError, match="must not start"):
+        eval(start)  # noqa: S307 - fixed strings above
+
+    assert len(_no_real_office) == 1
+    _no_real_office.clear()
+
+
+def test_swallowed_office_start_fails_the_test_at_teardown(tmp_path) -> None:
+    """Runs a small test file in its own pytest, through the action layer, and expects it to fail."""
+    sample = tmp_path / "test_sample.py"
+    sample.write_text(
+        "import win32com.client\n"
+        "from src.workflow_cli import _run_action\n"
+        "from tests.test_run_records import _no_real_office\n"
+        "\n"
+        "def test_swallowed():\n"
+        "    # A class name that doesn't exist, so even a broken guard couldn't start Word.\n"
+        "    _run_action('Fake', lambda: win32com.client.DispatchEx('Pahang.DoesNotExist'))\n",
+        encoding="utf-8",
+    )
+    completed = subprocess.run(
+        [sys.executable, "-m", "pytest", str(sample), "-q", "--no-header", "-p", "no:cacheprovider", "--rootdir", str(tmp_path)],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    assert completed.returncode != 0, completed.stdout
+    assert "A test tried to start real Word or Excel" in completed.stdout
+    assert "1 passed" in completed.stdout
+    assert "1 error" in completed.stdout
