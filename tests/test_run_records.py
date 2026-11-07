@@ -2821,7 +2821,7 @@ def test_testsheet_folder_status(locations, created, status) -> None:
     assert read_entries(locations.project_logs)[-1]["status"] == status
 
 
-def _run_raw_material_with_reads(locations, read_results: list[object]) -> None:
+def _run_raw_material_with_reads(locations, read_results: list[object], copied=(0, 0, 0)) -> None:
     """Testsheet reads are real calls on a stubbed reader. Raw material doesn't use Word or Excel."""
     packages = [_package(_file(locations.project / "TESTSHEET" / f"{i}.xlsx")) for i in range(len(read_results))]
     stages = RawMaterialWorkflow()
@@ -2834,7 +2834,7 @@ def _run_raw_material_with_reads(locations, read_results: list[object]) -> None:
 
     def process(environment, request, package, warnings, camera_config=None):
         extractor._load_testsheet_data(package, warnings)
-        return 0, 0, 0
+        return copied
 
     def action(environment) -> object:
         with (
@@ -2855,6 +2855,41 @@ def test_raw_material_with_every_testsheet_unreadable_is_failed(locations, capsy
     assert entries_of(entries, "error")
     assert "bad sheet one" in entries_of(entries, "warning")[0]["traceback"]
     assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_raw_material_with_every_testsheet_unreadable_but_photos_copied_has_errors(locations, capsys) -> None:
+    _run_raw_material_with_reads(locations, [RuntimeError("bad sheet one")], copied=(4, 0, 0))
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed_with_errors"
+    assert "1 testsheet(s)" in entries_of(entries, "error")[0]["message"]
+    assert "bad sheet one" in entries_of(entries, "warning")[0]["traceback"]
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_raw_material_status_does_not_depend_on_warning_text(locations) -> None:
+    """A warning that merely reads like an unreadable testsheet isn't one."""
+    testsheet = _file(locations.project / "TESTSHEET" / "1.xlsx")
+    stages = _stub_stages(RawMaterialWorkflow())
+    stages.extractor = RawMaterialWorkflow().extractor
+    request = RawMaterialRequest(output_path=locations.project / "RAW MATERIAL")
+    stages.auditor.audit.return_value = (None, RawMaterialResult(substations_count=1))
+
+    def process(environment, request, package, warnings, camera_config=None):
+        warnings.append("Failed to extract testsheet data from a photo caption")
+        return 0, 0, 0
+
+    def action(environment) -> object:
+        with (
+            patch.object(stages.extractor, "discover_packages", return_value=[_package(testsheet)]),
+            patch.object(stages.extractor, "load_pe_alignment_data", return_value=set()),
+            patch.object(stages, "_process_package", side_effect=process),
+        ):
+            return stages.execute(environment, request)
+
+    run_project_action(action, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "completed"
 
 
 def test_raw_material_with_some_testsheets_unreadable_keeps_them_as_warnings(locations, capsys) -> None:

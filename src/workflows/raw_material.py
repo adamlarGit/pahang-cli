@@ -160,9 +160,6 @@ class RawMaterialPreflightGuard:
             raise RuntimeError(f"TOTAL PE.xlsx pre-check failed while reading: {e}")
 
 
-_TESTSHEET_READ_FAILED = "Failed to extract testsheet data from"
-
-
 class RawMaterialExtractor:
     """Pure I/O reading stage for Raw Material workflow."""
 
@@ -173,6 +170,7 @@ class RawMaterialExtractor:
     ) -> None:
         self.repository = repository or SubstationTestsheetRepository()
         self.extractor = extractor or TestsheetExtractor()
+        self.unreadable_testsheets: set[Path] = set()
 
     def discover_packages(
         self, environment: ProjectEnvironment, request: RawMaterialRequest
@@ -270,7 +268,8 @@ class RawMaterialExtractor:
             try:
                 data = self.extractor.extract_testsheet_data(pkg.testsheet_path)
             except Exception as ex:
-                warn_msg = f"{_TESTSHEET_READ_FAILED} {pkg.testsheet_path}: {ex}"
+                warn_msg = f"Failed to extract testsheet data from {pkg.testsheet_path}: {ex}"
+                self.unreadable_testsheets.add(pkg.testsheet_path)
                 current_run().record_warning(warn_msg, ex)
                 warnings.append(warn_msg)
         return data
@@ -922,6 +921,7 @@ class RawMaterialWorkflow:
         self.preflight_guard.validate(environment, request)
 
         total_pe_path = environment.storage.get_total_pe_path()
+        self.extractor.unreadable_testsheets.clear()
         packages = self.extractor.discover_packages(environment, request)
         current_run().record_inputs(package.testsheet_path for package in packages)
 
@@ -946,9 +946,12 @@ class RawMaterialWorkflow:
             total_dg_copied += dg_copied
             total_us_tev_extracted += us_tev_extracted
 
-        unreadable = sum(warning.startswith(_TESTSHEET_READ_FAILED) for warning in warnings)
-        if packages and unreadable >= len(packages):
-            current_run().record_failure(f"All {len(packages)} testsheet(s) failed to read.")
+        if packages and len(self.extractor.unreadable_testsheets) >= len(packages):
+            message = f"All {len(packages)} testsheet(s) failed to read."
+            if total_ir_copied or total_dg_copied or total_us_tev_extracted:
+                current_run().record_error(message)
+            else:
+                current_run().record_failure(message)
 
         self._record_output_folder(environment)
         _, result = self.auditor.audit(
