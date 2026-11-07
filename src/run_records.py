@@ -57,7 +57,11 @@ _UTILITY_PROJECT_KEY = "utility"
 _UNKNOWN = "unknown"
 _GIT_TIMEOUT_SECONDS = 5
 _PROGRESS_LINE = re.compile(r"\s*\[(PROGRESS|\d+/\d+)\]")
-_OWN_LOGGER_NAMES = ("root", "config", "__main__")
+_OWN_LOGGER = "src"
+_MODULE_LEVEL_LOGGING_CODE = {
+    function.__code__
+    for function in (logging.debug, logging.info, logging.warning, logging.error, logging.critical, logging.log)
+}
 _MAX_DESCRIBE_DEPTH = 12
 # What a result reports having done. All zero, alongside errors, means the whole job failed.
 _RESULT_SUCCESS_FIELDS = (
@@ -282,43 +286,59 @@ class Run:
 
 
 class _LoggerCapture(logging.Handler):
-    """Sends logger output into the Run Record, leaving what reaches the console as it was.
+    """Sends this program's logger output into the Run Record, leaving the console as it was.
 
-    Capturing INFO and DEBUG means lowering the root logger's level, and the CLI's entry
-    point configures no logging, so a root handler would also silence logging's
-    last-resort output and stop logging.warning() from configuring itself. So for the
-    length of a Run this is the root logger's only handler, and it hands each record on
-    exactly as logging would have done before the Run.
+    Levels are lowered only for what is captured: the ``src`` logger, and calls made directly
+    on the root logger such as ``logging.info()``. The root level never changes, so other
+    libraries' loggers behave as they did, whatever handlers they have.
+
+    The entry point configures no logging, so a plain root handler would silence logging's
+    last-resort output and stop ``logging.warning()`` from configuring itself. So for the
+    length of a Run this is the root logger's only handler, and it hands each record on to
+    the root's real handlers only if it would have reached them before the Run. A handler
+    added to the root during a Run joins them. Only a handler attached to a ``src`` logger
+    during a Run would see lowered levels; nothing in this program attaches one.
     """
 
     def __init__(self, run: Run) -> None:
         super().__init__()
         self._run = run
         self._console_handlers: list[logging.Handler] = []
-        self._root_level = logging.WARNING
+        self._src_level = logging.NOTSET
 
     def start(self) -> None:
         root = logging.getLogger()
-        self._root_level = root.level
+        src = logging.getLogger(_OWN_LOGGER)
+        self._src_level = src.level
         self._console_handlers = list(root.handlers)
         root.handlers[:] = [self]
-        root.setLevel(logging.DEBUG)
+        src.setLevel(logging.DEBUG)
+        # Shadows the method on this one object. Other loggers look up the root's level
+        # themselves, so this lets through direct root calls and nothing else.
+        root.isEnabledFor = lambda level: root.manager.disable < level
 
     def stop(self) -> None:
         root = logging.getLogger()
+        vars(root).pop("isEnabledFor", None)
         added_during_run = [h for h in root.handlers if h is not self and h not in self._console_handlers]
         root.handlers[:] = [*self._console_handlers, *added_during_run]
-        root.setLevel(self._root_level)
+        logging.getLogger(_OWN_LOGGER).setLevel(self._src_level)
         self.close()
 
     def emit(self, record: logging.LogRecord) -> None:
-        was_enabled = self._was_enabled_before_run(record)
-        if was_enabled or record.name in _OWN_LOGGER_NAMES or record.name.startswith("src."):
-            self._record(record)
-        if record.name == "root" and not self._console_handlers:
+        self._gate_handlers_added_during_run()
+        self._record(record)
+        if not self._console_handlers and _called_through_logging_module():
             _ignoring_failure(self._configure_like_module_level_logging)
-        if was_enabled:
+        if self._was_enabled_before_run(record):
             self._hand_on(record)
+
+    def _gate_handlers_added_during_run(self) -> None:
+        root = logging.getLogger()
+        added = [h for h in root.handlers if h is not self]
+        if added:
+            self._console_handlers.extend(h for h in added if h not in self._console_handlers)
+            root.handlers[:] = [self]
 
     def _record(self, record: logging.LogRecord) -> None:
         try:
@@ -330,19 +350,23 @@ class _LoggerCapture(logging.Handler):
             pass
 
     def _was_enabled_before_run(self, record: logging.LogRecord) -> bool:
-        logger: logging.Logger = logging.getLogger(record.name)
-        while not logger.level and logger.parent is not None:
+        logger: logging.Logger | None = logging.getLogger(record.name)
+        while logger is not None:
+            level = self._src_level if logger.name == _OWN_LOGGER else logger.level
+            if level:
+                return record.levelno >= level
             logger = logger.parent
-        level = self._root_level if logger.parent is None else logger.level
-        return record.levelno >= level
+        return True
 
     def _configure_like_module_level_logging(self) -> None:
         """logging.info() and friends call basicConfig() when the root has no handlers."""
         root = logging.getLogger()
         root.handlers[:] = []
-        logging.basicConfig()
-        self._console_handlers = list(root.handlers)
-        root.handlers[:] = [self]
+        try:
+            logging.basicConfig()
+            self._console_handlers = list(root.handlers)
+        finally:
+            root.handlers[:] = [self]
 
     def _hand_on(self, record: logging.LogRecord) -> None:
         if self._console_handlers:
@@ -362,6 +386,16 @@ class _LoggerCapture(logging.Handler):
                 return True
             logger = logger.parent if logger.propagate else None
         return False
+
+
+def _called_through_logging_module() -> bool:
+    """Tell logging.warning(), which configures an empty root, from root.warning(), which doesn't."""
+    frame = sys._getframe(1)
+    while frame is not None and frame.f_globals.get("__name__") in (__name__, "logging"):
+        if frame.f_code in _MODULE_LEVEL_LOGGING_CODE:
+            return True
+        frame = frame.f_back
+    return False
 
 
 class _ConsoleCapture:

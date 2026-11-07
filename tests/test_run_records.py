@@ -1567,3 +1567,90 @@ def test_consolidate_unreadable_xls_has_a_traceback(locations, tmp_path, capsys)
     run_project_action(action, locations.environment)
 
     assert_problem_recorded(locations.project_logs, "completed_with_errors", "html parser broke", capsys)
+
+
+class _ListHandler(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__()
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+
+
+def test_library_handler_sees_what_it_saw_before_the_run(locations) -> None:
+    library = logging.getLogger("library_with_handler")
+    handler = _ListHandler()
+    library.addHandler(handler)
+
+    def noisy() -> None:
+        library.debug("library debug")
+        library.info("library info")
+        library.warning("library warning")
+
+    try:
+        _run_action("Fake", noisy)
+        without_run = list(handler.messages)
+        handler.messages.clear()
+        _run_recorded_action("Fake", noisy, locations.environment)
+    finally:
+        library.removeHandler(handler)
+
+    assert handler.messages == without_run == ["library warning"]
+
+
+def test_handler_added_to_root_during_a_run_sees_only_what_it_would_have_seen(locations) -> None:
+    handler = _ListHandler()
+
+    def action() -> None:
+        logging.root.addHandler(handler)
+        logging.getLogger("src.fake").debug("src debug")
+        logging.getLogger("src.fake").info("src info")
+        logging.debug("direct debug")
+        logging.getLogger("src.fake").warning("src warning")
+        logging.warning("direct warning")
+
+    try:
+        _run_recorded_action("Fake", action, locations.environment)
+        assert handler in logging.root.handlers
+    finally:
+        logging.root.removeHandler(handler)
+
+    assert handler.messages == ["src warning", "direct warning"]
+
+
+def test_root_level_is_not_changed_during_a_run(locations) -> None:
+    seen: list[object] = []
+    level_before = logging.root.level
+
+    def action() -> None:
+        seen.append(logging.root.level)
+        seen.append(logging.getLogger("thirdparty.lib").isEnabledFor(logging.DEBUG))
+
+    _run_recorded_action("Fake", action, locations.environment)
+
+    assert seen == [level_before, level_before <= logging.DEBUG]
+    assert "isEnabledFor" not in vars(logging.root)
+    assert logging.getLogger("src").level == logging.NOTSET
+
+
+def test_root_logger_method_on_unconfigured_root_prints_as_it_does_without_a_run(
+    locations, monkeypatch, capsys
+) -> None:
+    monkeypatch.setattr(logging.root, "handlers", [])
+
+    def action() -> None:
+        logging.getLogger().warning("rootmethod")
+        logging.getLogger().debug("hidden")
+
+    _run_action("Fake", action)
+    without_run = capsys.readouterr().err
+    assert logging.root.handlers == []
+
+    _run_recorded_action("Fake", action, locations.environment)
+    with_run = capsys.readouterr().err
+
+    assert with_run == without_run == "rootmethod\n"
+    assert logging.root.handlers == []
+    logged = entries_of(read_entries(locations.project_logs), "log")
+    assert [entry["message"] for entry in logged] == ["rootmethod", "hidden"]
