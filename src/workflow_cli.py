@@ -6,7 +6,7 @@ import logging
 import sys
 from typing import Callable, Sequence
 
-from src import cli_menu
+from src import cli_menu, run_records
 from src.cli_session import CliSession
 from src.project.management import select_active_project_wizard
 from src.project_workflow_actions import (
@@ -75,6 +75,14 @@ def _run_action(action_label: str, callback: Callable[[], object]) -> None:
         print(f"Action failed: {exc}")
 
 
+def _run_recorded_action(action_label: str, callback: Callable[[], object], environment: object = None) -> None:
+    """Run one action as _run_action does, saving a Run Record of it."""
+    with run_records.open_run(action_label, environment) as run:
+        _run_action(action_label, lambda: run.call(callback))
+        if run.failed and run.path:
+            print(f"Run Record: {run.path}")
+
+
 def _run_project_workflow_menu(
     session: CliSession,
     project_actions: Sequence[ProjectWorkflowAction],
@@ -95,7 +103,7 @@ def _run_project_workflow_menu(
         if selection is None:
             return
         if isinstance(selection, ProjectWorkflowAction):
-            _run_action(selection.label, lambda: selection.run(environment))
+            _run_recorded_action(selection.label, lambda: selection.run(environment), environment)
         elif selection is cli_menu.SessionCommand.CHANGE_ACTIVE_PROJECT:
             select_active_project_wizard(session)
         elif selection is cli_menu.SessionCommand.BACK:
@@ -111,7 +119,7 @@ def _run_utility_actions_menu(
         if selection is None:
             return
         if isinstance(selection, UtilityAction):
-            _run_action(selection.label, selection.run)
+            _run_recorded_action(selection.label, selection.run)
         elif selection is cli_menu.SessionCommand.BACK:
             return
 
