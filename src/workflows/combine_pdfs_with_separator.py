@@ -99,7 +99,6 @@ def run_combine_pdfs_with_separator(environment: object | None = None) -> Combin
 
     env = environment or get_or_create_utility_environment()
     if env is None:
-        current_run().record_failure("No project environment available.")
         print("No project environment available.")
         return None
 

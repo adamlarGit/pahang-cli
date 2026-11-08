@@ -76,6 +76,7 @@ def run_remove_desktop_ini(environment: 'ProjectEnvironment | None' = None) -> i
     
     target_path = prompt_directory_path("Enter target folder path to scan", default=default_path, must_exist=True)
     if not target_path:
+        current_run().mark_cancelled()
         return 0
 
     current_run().record_request({"workflow": "Remove desktop.ini", "target_path": target_path})

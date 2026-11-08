@@ -151,8 +151,10 @@ class QuickReportWorkflow:
                 with current_run().step(
                     f"Compose Quick Report: {station_name}",
                     item=(getattr(p.package, "date_str", ""), station_name),
-                ):
+                ) as step:
                     out_p = self._composer.load(p)
+                    if out_p and not self._report_is_written(out_p):
+                        step.fail(self._unwritten_report_error(out_p))
                 if out_p:
                     generated_paths.append(out_p)
             except Exception as e:
@@ -306,9 +308,9 @@ class QuickReportWorkflow:
                 items.append(item)
             except Exception as e:
                 # SubstationIsolatedBatchResiliencePolicy
-                current_run().record_error(
-                    f"Failed to process {station_name}: {e}", e, item=getattr(pkg, "testsheet_path", None)
-                )
+                item = (getattr(pkg, "date_str", ""), station_name)
+                with current_run().step(f"Plan Quick Report: {station_name}", item=item) as step:
+                    step.fail(f"Failed to process {station_name}: {e}", e)
                 errors.append(f"Failed to process {station_name}: {e}")
                 logger.exception(f"Failed to process {station_name}")
 
@@ -482,6 +484,14 @@ class QuickReportWorkflow:
 
         return tuple(missing)
 
+    @staticmethod
+    def _report_is_written(path: Path) -> bool:
+        return path.exists() and path.stat().st_size > 0
+
+    @staticmethod
+    def _unwritten_report_error(path: Path) -> str:
+        return f"Generated report at {path} is missing or 0 bytes."
+
     def _audit_and_build_result(
         self,
         generated_paths: list[Path],
@@ -491,10 +501,10 @@ class QuickReportWorkflow:
         """Verify written report files and construct QuickReportResult telemetry."""
         verified_paths: list[Path] = []
         for path in generated_paths:
-            if path.exists() and path.stat().st_size > 0:
+            if self._report_is_written(path):
                 verified_paths.append(path)
             else:
-                errors.append(f"Generated report at {path} is missing or 0 bytes.")
+                errors.append(self._unwritten_report_error(path))
 
         if errors and not verified_paths:
             current_run().mark_failed()

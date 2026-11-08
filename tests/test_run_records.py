@@ -4014,25 +4014,6 @@ def test_counts_are_unknown_not_zero_when_the_action_reports_none(locations) -> 
     assert entries[-1]["counts"] == {"completed": "unknown", "failed": "unknown", "skipped": "unknown"}
 
 
-def test_real_action_cancelled_at_its_first_prompt_finishes_as_cancelled(locations, capsys) -> None:
-    action = PopulateTotalPeAction("Populate TOTAL PE")
-    session = CliSession(
-        persistence_file=Path(locations.environment.base_path) / ".active_project.json",
-        active_project=locations.environment,
-    )
-
-    with (
-        patch("src.cli_menu.select_project_workflow_action", side_effect=[action, None]),
-        patch("src.cli_selectors.select_one", return_value="__cancel__"),
-    ):
-        _run_project_workflow_menu(session, [action])
-
-    entries = read_entries(locations.project_logs)
-    assert entries[-1]["status"] == "cancelled"
-    assert not entries_of(entries, "error")
-    assert "Run Record:" not in capsys.readouterr().out
-
-
 def test_finish_counts_each_named_item_once_at_its_worst_outcome(locations) -> None:
     def action(environment) -> None:
         run = current_run()
@@ -4150,6 +4131,21 @@ def _whatsapp_prompts():
     ]
 
 
+def _testsheet_prompts(station, month, dates):
+    return [
+        patch("src.cli_selectors.select_or_create_testsheet_station", return_value=station),
+        patch("src.cli_selectors.select_or_create_testsheet_month", return_value=month),
+        patch("src.cli_selectors.prompt_target_inspection_dates", return_value=dates),
+    ]
+
+
+def _no_functional_locations():
+    return [
+        patch("src.cli_selectors.select_one", return_value="manual"),
+        patch("builtins.input", return_value=""),
+    ]
+
+
 def _no_folder_prompts():
     return [
         patch("src.cli_selectors.select_pahang_date_folder", return_value=None),
@@ -4161,6 +4157,10 @@ def _no_folder_prompts():
     "make_action, make_prompts",
     [
         pytest.param(lambda: PopulateTotalPeAction("a"), _select_one_cancels, id="populate_total_pe"),
+        pytest.param(lambda: GenerateTestsheetFolderAction("a"), lambda: _testsheet_prompts(None, None, None), id="testsheet_station"),
+        pytest.param(lambda: GenerateTestsheetFolderAction("a"), lambda: _testsheet_prompts("S", None, None), id="testsheet_month"),
+        pytest.param(lambda: GenerateTestsheetFolderAction("a"), lambda: _testsheet_prompts("S", "M", None), id="testsheet_dates"),
+        pytest.param(lambda: QuickReportAction("a"), _no_functional_locations, id="quick_report_blank_fl"),
         pytest.param(lambda: UpdateQr02CbaAction("a"), _select_one_cancels, id="update_qr02"),
         pytest.param(lambda: QuickReportAction("a"), _select_one_cancels, id="quick_report"),
         pytest.param(lambda: PostProcessingPipelineAction("a"), _select_one_cancels, id="pipeline"),
@@ -4235,6 +4235,24 @@ def _combine_separator_prompts():
             lambda: [patch("builtins.input", return_value="q")],
             id="replace_signatures",
         ),
+        pytest.param(
+            "Replace signature images in testsheets",
+            lambda: [
+                patch("builtins.input", return_value=str(REPO_ROOT)),
+                patch("src.cli_selectors.select_one", return_value="__cancel__"),
+            ],
+            id="replace_signatures_mode",
+        ),
+        pytest.param(
+            "Remove desktop.ini files (recursive)",
+            lambda: [patch("src.cli_selectors.prompt_directory_path", return_value=None)],
+            id="remove_desktop_ini",
+        ),
+        pytest.param(
+            "Generate US 16-bit audio & embed sounds into PDFs",
+            lambda: [patch("src.workflows.us_audio.select_one", side_effect=["both", "__cancel__"])],
+            id="us_audio_date_mode",
+        ),
     ],
 )
 def test_utility_actions_cancelled_by_returning_finish_as_cancelled(
@@ -4284,3 +4302,76 @@ def test_quick_report_counts_its_substations_from_item_steps(locations, tmp_path
         ["07-11-2026", "A"],
         ["07-11-2026", "B"],
     ]
+
+
+def test_quick_report_planning_failure_counts_as_a_failed_item(locations, capsys) -> None:
+    package = SimpleNamespace(
+        data=object(), substation_name="PE ONE", testsheet_path=locations.project / "a.xlsx", date_str="07-11-2026"
+    )
+    workflow = QuickReportWorkflow()
+
+    def action(environment) -> object:
+        with (
+            patch.object(workflow, "_extractor") as extractor,
+            patch.object(QuickReportWorkflow, "_resolve_substation_display_name", return_value="PE ONE"),
+        ):
+            extractor.extract.return_value = [package]
+            extractor.extract_defects.side_effect = RuntimeError("defect sheet broke")
+            return workflow.inspect(Path("07-11-2026"), environment)
+
+    with patch.object(QuickReportWorkflow, "_resolve_target", return_value=(["07-11-2026"], [])):
+        run_project_action(action, locations.environment)
+
+    entries = assert_problem_recorded(locations.project_logs, "partial_failure", "defect sheet broke", capsys)
+    assert entries[-1]["counts"] == {"completed": 0, "failed": 1, "skipped": 0}
+
+
+def test_quick_report_zero_byte_output_counts_as_failed_and_is_recorded_once(locations, tmp_path) -> None:
+    good = tmp_path / "good.docx"
+    good.write_bytes(b"report")
+    empty = tmp_path / "empty.docx"
+    empty.write_bytes(b"")
+    plans = [
+        SimpleNamespace(package=SimpleNamespace(date_str="07-11-2026", testsheet_path=tmp_path / "1.xlsx", name="A")),
+        SimpleNamespace(package=SimpleNamespace(date_str="07-11-2026", testsheet_path=tmp_path / "2.xlsx", name="B")),
+    ]
+    inspection = QuickReportInspection(targets=(), missing_templates=(), warnings=(), errors=())
+    workflow = QuickReportWorkflow(compiler=MagicMock())
+
+    def action(environment) -> object:
+        with (
+            patch.object(workflow, "_composer") as composer,
+            patch.object(workflow, "_plan", return_value=(inspection, plans)),
+            patch.object(QuickReportWorkflow, "_resolve_substation_display_name", side_effect=lambda p: p.name),
+        ):
+            composer.load.side_effect = [good, empty]
+            return workflow.generate("07-11-2026", environment)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "partial_failure"
+    assert entries[-1]["counts"] == {"completed": 1, "failed": 1, "skipped": 0}
+    assert [entry["message"] for entry in entries_of(entries, "error")] == [
+        f"Generated report at {empty} is missing or 0 bytes."
+    ]
+
+
+@pytest.mark.parametrize("field", ["processed_count", "converted_count"])
+def test_processed_and_converted_counts_are_reported_as_completed(locations, field) -> None:
+    run_project_action(lambda environment: SimpleNamespace(**{field: 4}), locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["counts"]["completed"] == 4
+
+
+def test_operation_cancelled_inside_an_item_step_is_not_a_failed_item(locations) -> None:
+    def action(environment) -> None:
+        with current_run().step("Compose", item=("2026-01-02", "A")):
+            raise OperationCancelled("Operation cancelled.")
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "cancelled"
+    assert entries_of(entries, "step_finish")[0]["status"] == "cancelled"
+    assert entries[-1]["counts"] == {"completed": "unknown", "failed": "unknown", "skipped": "unknown"}

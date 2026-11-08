@@ -13,8 +13,7 @@ Interface::
     report_cancelled("Processing cancelled.")            # the operator cancelled by returning
 
 A Run Record is one JSON Lines file, flushed line by line, so a Word hang or a crash
-still leaves everything up to that point. A record with no ``run_finish`` entry was
-interrupted, crashed or hung.
+still leaves everything up to that point.
 
 Every line is one JSON object with a ``type`` and a ``time``. The types are ``run_start``,
 ``environment`` (app, git, Python, Word and Excel versions), ``request``, ``request_update``,
@@ -25,14 +24,15 @@ folder: ``folder``, ``recorded``, ``left_out``, ``left_out_is_a_minimum``), ``in
 ``cancelled``, ``result``,
 ``output`` and ``run_finish``. Its ``status`` is ``completed``, ``partial_failure``
 (some items failed), ``failed`` (the whole job failed) or ``cancelled`` (the operator cancelled,
-either by raising ``OperationCancelled`` or by ``mark_cancelled()`` when the action returns).
+either by raising ``OperationCancelled`` or through ``report_cancelled()`` or ``mark_cancelled()``
+when the action returns).
 Precedence: ``failed`` beats ``cancelled``, which beats ``partial_failure``, which beats ``completed``.
 So completed work, a failed item and then a cancel finish as ``cancelled``, with the failure still in
 ``counts`` and the record path still shown.
 
 ``run_finish`` also has ``counts``: ``completed``, ``failed`` and ``skipped``, each the reported
-number or ``"unknown"``. Unknown is never recorded as 0. A returned result's ``succeeded_count`` and
-``failed_count`` are used when it has them. Otherwise a count is tallied from the steps that named an
+number or ``"unknown"``. Unknown is never recorded as 0. A returned result's ``succeeded_count``,
+``processed_count``, ``converted_count`` and ``failed_count`` are used when it has them. Otherwise a count is tallied from the steps that named an
 ``item``, each item counted once at its worst outcome (failed, then skipped, then completed). With
 neither, the count is unknown.
 
@@ -123,6 +123,10 @@ class OperationCancelled(ValueError):
 _STATUS_RANK = {"completed": 0, "partial_failure": 1, "cancelled": 2, "failed": 3}
 # One item can pass through several steps. It counts once, at the worst of them.
 _ITEM_OUTCOME_RANK = {"completed": 0, "skipped": 1, "failed": 2}
+_RESULT_COUNT_FIELDS = (
+    ("completed", ("succeeded_count", "processed_count", "converted_count")),
+    ("failed", ("failed_count",)),
+)
 
 
 class _StepOutcome:
@@ -134,11 +138,11 @@ class _StepOutcome:
         self.status = "completed"
         self.details: dict[str, Any] = {}
 
-    def fail(self, message: Any) -> None:
+    def fail(self, message: Any, exc: BaseException | None = None) -> None:
         """The step failed, and this item's error is recorded too, so the Run finishes as partial failure."""
         self.status = "failed"
         self.details = {"error": _text_of(message)}
-        self._run.record_error(message, item=self._item)
+        self._run.record_error(message, exc, item=self._item)
 
     def skip(self, reason: Any) -> None:
         """The step did not run, for a reason. This doesn't change the Run's status."""
@@ -302,7 +306,8 @@ class Run:
 
     def mark_cancelled(self) -> None:
         """Say the operator cancelled by returning. Work done and errors recorded still count."""
-        self._raise_status("cancelled")
+        if self._is_recording():
+            self._raise_status("cancelled")
 
     @contextmanager
     def step(self, name: str, item: Any = None) -> Iterator["_StepOutcome"]:
@@ -317,15 +322,17 @@ class Run:
         try:
             yield outcome
         except BaseException as exc:
+            status = "cancelled" if isinstance(exc, OperationCancelled) else "failed"
             self._write(
                 "step_finish",
                 name=name,
-                status="failed",
+                status=status,
                 error=_text_of(exc),
                 duration_seconds=round(time.perf_counter() - started, 3),
                 **item_fields,
             )
-            self._note_item_outcome(item_fields, "failed")
+            if status == "failed":
+                self._note_item_outcome(item_fields, status)
             raise
         self._write(
             "step_finish",
@@ -350,7 +357,7 @@ class Run:
             for capture in self._captures:
                 _ignoring_failure(capture.stop)
         # Anything escaping here is an interruption such as Ctrl+C, so the record is
-        # left with no finish entry, which is what marks it as interrupted.
+        # left with no finish entry, which is what marks it as incomplete.
         if exc_type is None:
             self._write(
                 "run_finish",
@@ -365,8 +372,11 @@ class Run:
         for capture in self._captures:
             _ignoring_failure(capture.start)
 
+    def _is_recording(self) -> bool:
+        return self._file is not None or self.path is not None
+
     def _mark_problem(self, status: str) -> None:
-        if self._file is None and self.path is None:
+        if not self._is_recording():
             return
         self.failed = True
         self._raise_status(status)
@@ -376,7 +386,7 @@ class Run:
             self._status = status
 
     def _note_item_outcome(self, item_fields: dict[str, Any], status: str) -> None:
-        if not item_fields:
+        if not item_fields or not self._is_recording():
             return
         key = _text_of(item_fields["item"])
         earlier = self._item_outcomes.get(key, "completed")
@@ -390,10 +400,11 @@ class Run:
         }
 
     def _record_result_counts(self, result: Any) -> None:
-        for name, field in (("completed", "succeeded_count"), ("failed", "failed_count")):
-            value = getattr(result, field, None)
-            if isinstance(value, int) and not isinstance(value, bool):
-                self._reported_counts[name] = value
+        for name, fields in _RESULT_COUNT_FIELDS:
+            values = (getattr(result, field, None) for field in fields)
+            reported = next((v for v in values if isinstance(v, int) and not isinstance(v, bool)), None)
+            if reported is not None:
+                self._reported_counts[name] = reported
 
     def _write_error(self, message: Any, exc: BaseException | None, item: Any = None) -> None:
         """Write one error, unless this exception or this item's message is already recorded.

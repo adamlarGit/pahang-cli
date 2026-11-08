@@ -149,7 +149,6 @@ def _load_whatsapp_runner() -> Callable[[], object]:
         print("\n[Generate WhatsApp report]")
         env = get_or_create_utility_environment()
         if not env:
-            current_run().record_failure("No project environment available.")
             print("No project environment available.")
             return None
             

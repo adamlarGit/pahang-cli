@@ -85,12 +85,15 @@ class GenerateTestsheetFolderAction(ProjectWorkflowAction):
     def execute(self, environment: ProjectEnvironment) -> object:
         station = cli_selectors.select_or_create_testsheet_station(environment)
         if station is None:
+            current_run().mark_cancelled()
             return None
         month = cli_selectors.select_or_create_testsheet_month(environment, station)
         if month is None:
+            current_run().mark_cancelled()
             return None
         dates = cli_selectors.prompt_target_inspection_dates()
         if dates is None:
+            current_run().mark_cancelled()
             return None
         request = GenerateTestsheetFolderRequest(
             station=station,
