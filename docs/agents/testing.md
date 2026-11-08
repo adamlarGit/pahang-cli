@@ -1,22 +1,36 @@
 # Running tests
 
-**Fast Run**, the default during development. It skips tests marked `word` or `live_data`:
+**Fast Run**, the default during development. It skips tests marked `word` or `live_data` and runs in parallel. Set the worker count with `-n` and keep it the same when comparing timings:
 
 ```
-uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 pytest
+uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 pytest -n 4
 ```
 
-**Full Run**, required before merging into the Integration Branch. It runs every test:
+Plain `pytest` selects the same tests serially and doesn't need xdist.
+
+**Full Run**, required before merging into the Integration Branch. It runs the Fast Run tests in parallel, then every `word` or `live_data` test serially. Both phases run even if the first fails:
 
 ```
-uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 pytest --override-ini=addopts=
+uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 python -m scripts.run_full_suite --workers 4
 ```
 
-A Full Run starts real Word and reads live project folders. Close Word and Excel first, because #176 suggests these runs can close an open Word window. It needs `.cli_config.json` and `.active_project.json`; without them, some live-data tests skip.
+A Full Run starts real Word and reads live project folders. Close Word and Excel first, because #176 suggests these runs can close an open Word window. It needs `.cli_config.json` and `.active_project.json`; without them, some live-data tests skip. The merge gate is defined for the one machine that holds the benchmark data.
+
+| Exit code | Result | Meaning |
+| --- | --- | --- |
+| 0 | Passed | Every required check ran. Diagnosed allowances are listed by name and reason. |
+| 1 | Failed | A test or phase failed, pytest crashed or errored, or a protected input changed. |
+| 10 | Incomplete | A required check can't be confirmed: a serial test or test module skipped, a phase collected no tests or didn't finish recording, the serial phase was blocked, or protected inputs couldn't be checked. |
+
+The serial phase is blocked, without starting Office, if Word or Excel is open or another Full Run holds the machine-wide lock. This does not resolve #176.
+
+Every serial test is required by default. A skip makes the run incomplete unless the test has `@pytest.mark.optional("why this check is optional")`.
+
+The runner checks that protected inputs did not change: `tests/benchmarks` by SHA-256, and the project folders in `.cli_config.json` by path, size and modified time. Results are saved per test in the gitignored `.test-results/` folder.
 
 ## Running part of a tier
 
-Add these after `pytest` in the commands above.
+Add these after `pytest` in the Fast Run command. The Full Run runner doesn't accept test selections.
 
 - One tier: `-m word` or `-m live_data`.
 - One marked test: `--override-ini=addopts= tests/test_file.py::test_name`.
@@ -38,6 +52,8 @@ Keep test tools out of dependency groups. Past `start_cli.bat` update failures h
 - `live_data`: the test reads a real project folder, directly or through `.cli_config.json` or the active project.
 
 A test that does both gets both markers.
+
+- `optional(reason)`: a skip of this serial-phase test doesn't make a Full Run incomplete.
 
 A guard in `tests/tier_guard.py` fails a test without the `word` marker that reaches Word or Excel through pywin32: `Dispatch`, `DispatchEx`, `GetActiveObject`, or `GetObject` on an Office file (including CSV files, workbook item monikers, and Office CLSID monikers). CSV activation is guarded conservatively because its registered handler can be Excel. It applies to Fast and Full Runs, and a skip, an xfail or `except Exception` can't hide the failure.
 

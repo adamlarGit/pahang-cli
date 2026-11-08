@@ -42,4 +42,5 @@ xfail_strict = true
 markers = [
     "word: starts real Word or Excel",
     "live_data: reads live project data under a real project base path",
+    "optional(reason): a skip of this serial-phase test does not make a Full Run incomplete",
 ]

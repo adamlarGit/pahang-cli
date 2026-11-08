@@ -25,3 +25,6 @@ test_palette_output/
 
 # Local Claude Code skill junctions (mirror .agents/skills)
 .claude/skills/
+
+# Per-test results from the Full Run runner
+.test-results/
