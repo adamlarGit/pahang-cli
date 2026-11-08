@@ -293,7 +293,7 @@ def test_settings_style_action_is_not_recorded(locations) -> None:
     assert not locations.fallback_logs.exists()
 
 
-def test_interrupted_run_leaves_readable_record_with_no_finish_entry(locations) -> None:
+def test_ctrl_c_finishes_the_record_as_cancelled_and_still_stops_the_program(locations) -> None:
     def interrupted(environment) -> None:
         print("working on substation 1")
         raise KeyboardInterrupt
@@ -303,7 +303,10 @@ def test_interrupted_run_leaves_readable_record_with_no_finish_entry(locations) 
 
     entries = read_entries(locations.project_logs)
     assert entries[0]["type"] == "run_start"
-    assert not entries_of(entries, "run_finish")
+    assert len(entries_of(entries, "cancelled")) == 1
+    assert not entries_of(entries, "error")
+    assert entries[-1]["type"] == "run_finish"
+    assert entries[-1]["status"] == "cancelled"
 
 
 def test_hard_crash_keeps_every_line_written_so_far(tmp_path: Path) -> None:

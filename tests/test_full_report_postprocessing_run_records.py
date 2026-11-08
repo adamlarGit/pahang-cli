@@ -372,6 +372,36 @@ def test_cancelling_after_a_completed_substation_keeps_its_output(records, env, 
     assert "Run Record:" not in capsys.readouterr().out
 
 
+def test_ctrl_c_after_a_completed_substation_is_cancelled_and_keeps_its_output(records, env, capsys) -> None:
+    _reports(env, ["DONE", "STOPPED", "LATER"])
+
+    with pytest.raises(KeyboardInterrupt):
+        _process(env, _Converter(convert_raises={"STOPPED": KeyboardInterrupt()}))
+
+    entries = _entries(records)
+    done, stopped = _stem(1, "DONE"), _stem(2, "STOPPED")
+    assert _finishes(entries, SUBSTATION_STEP)[done]["status"] == "completed"
+    assert _finishes(entries, SUBSTATION_STEP)[stopped]["status"] == "cancelled"
+    assert [Path(e["path"]).name for e in _of_type(entries, "output")] == [f"{done}.pdf"]
+    assert _of_type(entries, "error") == []
+    assert entries[-1]["status"] == "cancelled"
+    assert entries[-1]["counts"] == {"completed": 1, "failed": 0, "skipped": 0}
+    assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_ctrl_c_after_a_failed_substation_still_shows_the_record_path(records, env, capsys) -> None:
+    _reports(env, ["BAD", "STOPPED"])
+    converter = _Converter(convert_raises={"BAD": RuntimeError("broken"), "STOPPED": KeyboardInterrupt()})
+
+    with pytest.raises(KeyboardInterrupt):
+        _process(env, converter)
+
+    entries = _entries(records)
+    assert entries[-1]["status"] == "cancelled"
+    assert entries[-1]["counts"] == {"completed": 0, "failed": 1, "skipped": 0}
+    assert f"Run Record: {next(records.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
 def test_request_and_actual_inputs_are_recorded_without_copies(records, env) -> None:
     _reports(env, ["ONE"])
     stem = _stem(1, "ONE")

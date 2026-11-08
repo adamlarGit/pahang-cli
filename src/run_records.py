@@ -25,8 +25,8 @@ folder: ``folder``, ``recorded``, ``left_out``, ``left_out_is_a_minimum``), ``in
 ``cancelled``, ``result``,
 ``output`` and ``run_finish``. Its ``status`` is ``completed``, ``partial_failure``
 (some items failed), ``failed`` (the whole job failed) or ``cancelled`` (the operator cancelled,
-either by raising ``OperationCancelled`` or through ``report_cancelled()`` or ``mark_cancelled()``
-when the action returns).
+either by raising ``OperationCancelled``, by pressing Ctrl+C, or through ``report_cancelled()`` or
+``mark_cancelled()`` when the action returns). Ctrl+C still stops the program after the record is finished.
 Precedence: ``failed`` beats ``cancelled``, which beats ``partial_failure``, which beats ``completed``.
 So completed work, a failed item and then a cancel finish as ``cancelled``, with the failure still in
 ``counts`` and the record path still shown.
@@ -137,6 +137,9 @@ class OperationCancelled(ValueError):
     """The operator cancelled a prompt. Reaches the action layer, but isn't a failure."""
 
 
+_CANCELLATIONS = (OperationCancelled, KeyboardInterrupt)
+
+
 # A status can only move up this order: a cancel keeps a partial failure, and a failed job stays failed.
 _STATUS_RANK = {"completed": 0, "partial_failure": 1, "cancelled": 2, "failed": 3}
 # One item can pass through several steps. It counts once, at the worst of them.
@@ -199,9 +202,9 @@ class Run:
         """Run the action, record its outcome, and re-raise its failure unchanged."""
         try:
             result = action()
-        except OperationCancelled as exc:
+        except _CANCELLATIONS as exc:
             self.mark_cancelled()
-            self._write("cancelled", message=_text_of(exc))
+            self._write("cancelled", message=_text_of(exc) or "Ctrl+C")
             raise
         except Exception as exc:
             self.record_failure(exc, exc)
@@ -348,7 +351,7 @@ class Run:
         try:
             yield outcome
         except BaseException as exc:
-            status = "cancelled" if isinstance(exc, OperationCancelled) else "failed"
+            status = "cancelled" if isinstance(exc, _CANCELLATIONS) else "failed"
             self._write(
                 "step_finish",
                 name=name,
@@ -384,9 +387,11 @@ class Run:
             _current = None
             for capture in self._captures:
                 _ignoring_failure(capture.stop)
-        # Anything escaping here is an interruption such as Ctrl+C, so the record is
-        # left with no finish entry, which is what marks it as incomplete.
-        if exc_type is None:
+        # Ctrl+C is the operator cancelling. Anything else escaping here is an interruption,
+        # so the record is left with no finish entry, which is what marks it as incomplete.
+        if exc_type is not None and issubclass(exc_type, KeyboardInterrupt):
+            self.mark_cancelled()
+        if exc_type is None or issubclass(exc_type, KeyboardInterrupt):
             self._write(
                 "run_finish",
                 status=self._status,

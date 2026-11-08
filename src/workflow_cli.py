@@ -79,9 +79,12 @@ def _run_action(action_label: str, callback: Callable[[], object]) -> None:
 def _run_recorded_action(action_label: str, callback: Callable[[], object], environment: object = None) -> None:
     """Run one action as _run_action does, saving a Run Record of it."""
     with run_records.open_run(action_label, environment) as run:
-        _run_action(action_label, lambda: run.call(callback))
-        if run.failed and run.path:
-            print(f"Run Record: {run.path}")
+        try:
+            _run_action(action_label, lambda: run.call(callback))
+        finally:
+            # In a finally so a Ctrl+C after a failed item still shows where the record is.
+            if run.failed and run.path:
+                print(f"Run Record: {run.path}")
 
 
 def _select_project(session: CliSession) -> object:

@@ -8,7 +8,7 @@ Records are saved in `<project base path>/logs/`. Utilities without an active, r
 
 After a failed or partially failed action, the console prints `Run Record: <path>`. Send that one file to the developer. Successful records remain in the same folder without adding a console message. Records contain bounded request values, local file paths, diagnostic messages, and tracebacks; they contain no copies or hashes of input files. A record is diagnostic evidence of what was asked for and which files were seen. It doesn't guarantee the run can be reproduced, because input files can change after it.
 
-Files are named `<local timestamp>-<action>-<unique suffix>.jsonl`. Each UTF-8 line is a separate JSON object, written and flushed immediately. Read a record with a text editor. A missing `run_finish` means the action was interrupted, crashed, or hung; the preceding lines remain usable. A process interruption may leave a Step without its finish entry.
+Files are named `<local timestamp>-<action>-<unique suffix>.jsonl`. Each UTF-8 line is a separate JSON object, written and flushed immediately. Read a record with a text editor. A missing `run_finish` means the action crashed, hung, or the process was killed; the preceding lines remain usable. A process interruption may leave a Step without its finish entry.
 
 ## Format
 
@@ -31,7 +31,7 @@ Every entry has `type` and an ISO 8601 UTC `time`.
 | `cancelled` | Explicit operator cancellation |
 | `run_finish` | Final status, total duration in seconds, and `counts` of completed, failed and skipped items: tallied from Steps that named an item, with an item cancelled partway and Steps opened with `counted=False` left out, otherwise taken from the result, otherwise `unknown` |
 
-Final statuses are `completed`, `partial_failure` (some batch items failed), `failed` (the whole job failed), or `cancelled` (explicit `OperationCancelled`). Older actions that return normally on cancellation finish as `completed`. Returning an error list alone means partial failure unless the workflow explicitly reports that its whole job failed.
+Final statuses are `completed`, `partial_failure` (some batch items failed), `failed` (the whole job failed), or `cancelled` (explicit `OperationCancelled` or Ctrl+C, which still stops the program after the record is finished). Older actions that return normally on cancellation finish as `completed`. Returning an error list alone means partial failure unless the workflow explicitly reports that its whole job failed.
 
 Requests may appear first as selections and later as complete workflow requests. Apply `request_update.changes` over the earlier request with the same `workflow`. Unchanged values are omitted; keys omitted by a later update retain their earlier values. Identical input and output paths and repeated warning text are recorded once. Each error keeps its own entry, even when two substations fail with identical text. An error isn't repeated when the same exception is recorded again, when the same item fails the same way in a second pass, such as inspect then generate, or when a result returns an error already recorded.
 

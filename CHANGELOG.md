@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Timed Full Report Post-Processing Steps in Run Records (`feat(run-records)`, `src/workflows/full_report_postprocessing.py`, `src/postprocessing/converters.py`)**:
   - Each substation has one enclosing Step with Word restart, PDF conversion, image restoration, merge and sound stages sharing its date-and-substation item; inspection, discovery and testsheet validation are timed too.
   - The workflow now reports a whole-job failure itself, and a report with a missing or empty PDF can't be recorded as success.
+  - Ctrl+C now finishes a Run Record as `cancelled` for every workflow, keeping completed outputs and still stopping the program.
   - Fixes #190.
 - **Timed Full Report Steps in Run Records (`feat(run-records)`, `src/workflows/full_report.py`, `src/full_report/composer.py`, `src/full_report/plan_builder.py`, `src/run_records.py`)**:
   - Each substation has one enclosing Step with Preflight, Plan, Slice, Render and Compile stage Steps sharing its date-and-substation item; inspection and discovery are timed too.
