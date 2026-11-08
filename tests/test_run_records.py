@@ -1088,7 +1088,7 @@ def test_outputs_warnings_and_errors_come_from_the_result(locations, tmp_path, c
     assert [entry["message"] for entry in entries_of(entries, "warning")] == ["photo missing"]
     assert [entry["message"] for entry in entries_of(entries, "error")] == ["PE 3 failed"]
     assert entries_of(entries, "result")[0]["result"]["reports_generated"] == 1
-    assert entries[-1]["status"] == "completed_with_errors"
+    assert entries[-1]["status"] == "partial_failure"
     assert str(next(locations.project_logs.glob("*.jsonl"))) in capsys.readouterr().out
 
 
@@ -1347,7 +1347,7 @@ def assert_problem_recorded(folder: Path, status: str, marker: str, capsys) -> l
     return entries
 
 
-def test_record_error_finishes_as_completed_with_errors_and_shows_the_path(locations, capsys) -> None:
+def test_record_error_finishes_as_partial_failure_and_shows_the_path(locations, capsys) -> None:
     def action(environment) -> None:
         try:
             raise ValueError("substation 3 is bad")
@@ -1356,7 +1356,7 @@ def test_record_error_finishes_as_completed_with_errors_and_shows_the_path(locat
 
     run_project_action(action, locations.environment)
 
-    assert_problem_recorded(locations.project_logs, "completed_with_errors", "substation 3 is bad", capsys)
+    assert_problem_recorded(locations.project_logs, "partial_failure", "substation 3 is bad", capsys)
 
 
 def test_record_failure_is_not_downgraded_by_what_the_action_returns(locations, capsys) -> None:
@@ -1399,7 +1399,7 @@ def test_errors_in_a_result_alone_never_mean_the_whole_job_failed(locations, res
     """Only the workflow knows that. The module doesn't guess from count fields."""
     run_project_action(lambda environment: result, locations.environment)
 
-    assert read_entries(locations.project_logs)[-1]["status"] == "completed_with_errors"
+    assert read_entries(locations.project_logs)[-1]["status"] == "partial_failure"
 
 
 def test_mark_failed_is_not_downgraded_and_writes_no_entry_of_its_own(locations) -> None:
@@ -1518,7 +1518,7 @@ def test_us_tev_batch_with_one_failed_substation_has_errors_and_a_traceback(
     ):
         run_registered_utility("Generate US+TEV survey graphs")
 
-    assert_problem_recorded(locations.fallback_logs, "completed_with_errors", "survey unreadable", capsys)
+    assert_problem_recorded(locations.fallback_logs, "partial_failure", "survey unreadable", capsys)
 
 
 def test_us_audio_failed_substation_has_a_traceback(locations, capsys) -> None:
@@ -1554,7 +1554,7 @@ def test_replace_signatures_on_one_file_failing_is_a_failed_run(locations, utili
     assert_problem_recorded(locations.fallback_logs, "failed", "bad workbook", capsys)
 
 
-@pytest.mark.parametrize("good_files, status", [(1, "completed_with_errors"), (0, "failed")])
+@pytest.mark.parametrize("good_files, status", [(1, "partial_failure"), (0, "failed")])
 def test_replace_signatures_batch_status(locations, utility_env, tmp_path, capsys, good_files, status) -> None:
     folder = tmp_path / "batch"
     folder.mkdir()
@@ -1606,7 +1606,7 @@ def test_desktop_ini_with_some_removed_has_errors(locations, utility_env, tmp_pa
     ):
         run_registered_utility("Remove desktop.ini files (recursive)")
 
-    assert_problem_recorded(locations.fallback_logs, "completed_with_errors", "locked", capsys)
+    assert_problem_recorded(locations.fallback_logs, "partial_failure", "locked", capsys)
 
 
 def _quick_report_prompts():
@@ -1796,7 +1796,7 @@ def test_full_report_inspection_failure_has_a_traceback(locations, capsys) -> No
 
     run_project_action(action, locations.environment)
 
-    assert_problem_recorded(locations.project_logs, "completed_with_errors", "inspection broke", capsys)
+    assert_problem_recorded(locations.project_logs, "partial_failure", "inspection broke", capsys)
 
 
 def test_quick_report_discovery_failure_has_a_traceback(locations, capsys) -> None:
@@ -1809,7 +1809,7 @@ def test_quick_report_discovery_failure_has_a_traceback(locations, capsys) -> No
 
     run_project_action(action, locations.environment)
 
-    assert_problem_recorded(locations.project_logs, "completed_with_errors", "testsheet scan broke", capsys)
+    assert_problem_recorded(locations.project_logs, "partial_failure", "testsheet scan broke", capsys)
 
 
 def test_quick_report_failed_substation_has_a_traceback(locations, capsys) -> None:
@@ -1828,7 +1828,7 @@ def test_quick_report_failed_substation_has_a_traceback(locations, capsys) -> No
     with patch.object(QuickReportWorkflow, "_resolve_target", return_value=(["07-11-2026"], [])):
         run_project_action(action, locations.environment)
 
-    assert_problem_recorded(locations.project_logs, "completed_with_errors", "defect sheet broke", capsys)
+    assert_problem_recorded(locations.project_logs, "partial_failure", "defect sheet broke", capsys)
 
 
 def test_consolidate_unreadable_xls_has_a_traceback(locations, tmp_path, capsys) -> None:
@@ -1841,7 +1841,7 @@ def test_consolidate_unreadable_xls_has_a_traceback(locations, tmp_path, capsys)
 
     run_project_action(action, locations.environment)
 
-    assert_problem_recorded(locations.project_logs, "completed_with_errors", "html parser broke", capsys)
+    assert_problem_recorded(locations.project_logs, "partial_failure", "html parser broke", capsys)
 
 
 class _ListHandler(logging.Handler):
@@ -2598,7 +2598,7 @@ def test_error_and_warning_with_the_same_text_both_count(locations) -> None:
     run_project_action(lambda environment: result, locations.environment)
 
     entries = read_entries(locations.project_logs)
-    assert entries[-1]["status"] == "completed_with_errors"
+    assert entries[-1]["status"] == "partial_failure"
     assert [entry["message"] for entry in entries_of(entries, "error")] == ["same text"]
 
 
@@ -2687,7 +2687,7 @@ def test_quick_report_with_some_substations_failed_has_errors(locations, tmp_pat
 
     _run_quick_report_plans(locations, [report, RuntimeError("two")])
 
-    assert read_entries(locations.project_logs)[-1]["status"] == "completed_with_errors"
+    assert read_entries(locations.project_logs)[-1]["status"] == "partial_failure"
 
 
 def _run_full_report_batch(locations, outcomes: list[bool]) -> None:
@@ -2712,14 +2712,14 @@ def _run_full_report_batch(locations, outcomes: list[bool]) -> None:
     run_project_action(action, locations.environment)
 
 
-@pytest.mark.parametrize("outcomes, status", [([False, False], "failed"), ([True, False], "completed_with_errors")])
+@pytest.mark.parametrize("outcomes, status", [([False, False], "failed"), ([True, False], "partial_failure")])
 def test_full_report_batch_status(locations, outcomes, status) -> None:
     _run_full_report_batch(locations, outcomes)
 
     assert read_entries(locations.project_logs)[-1]["status"] == status
 
 
-@pytest.mark.parametrize("succeeded, status", [(0, "failed"), (1, "completed_with_errors")])
+@pytest.mark.parametrize("succeeded, status", [(0, "failed"), (1, "partial_failure")])
 def test_postprocessing_batch_status(locations, succeeded, status) -> None:
     target = SimpleNamespace(
         is_ready=True,
@@ -2759,7 +2759,7 @@ def test_pipeline_result_with_some_failed_records_no_repr_of_the_failure(locatio
     run_project_action(lambda environment: summary, locations.environment)
 
     entries = read_entries(locations.project_logs)
-    assert entries[-1]["status"] == "completed_with_errors"
+    assert entries[-1]["status"] == "partial_failure"
     assert not [e for e in entries_of(entries, "error") if "PostProcessingFailure" in e["message"]]
 
 
@@ -2777,7 +2777,7 @@ def test_us_tev_with_one_no_data_skip_and_one_failure_has_errors(locations, util
         run_registered_utility("Generate US+TEV survey graphs")
 
     entries = read_entries(locations.fallback_logs)
-    assert entries[-1]["status"] == "completed_with_errors"
+    assert entries[-1]["status"] == "partial_failure"
     assert not entries_of(entries, "output")
 
 
@@ -2823,7 +2823,7 @@ def test_us_audio_with_some_substations_failed_has_errors(locations) -> None:
 
     run_project_action(action, locations.environment)
 
-    assert read_entries(locations.project_logs)[-1]["status"] == "completed_with_errors"
+    assert read_entries(locations.project_logs)[-1]["status"] == "partial_failure"
 
 
 def _testsheet_stages(result: GenerateTestsheetFolderResult) -> object:
@@ -2836,7 +2836,7 @@ def _testsheet_stages(result: GenerateTestsheetFolderResult) -> object:
 
 @pytest.mark.parametrize(
     "created, status",
-    [((), "failed"), ((Path("made"),), "completed_with_errors")],
+    [((), "failed"), ((Path("made"),), "partial_failure")],
 )
 def test_testsheet_folder_status(locations, created, status) -> None:
     result = GenerateTestsheetFolderResult(
@@ -2890,7 +2890,7 @@ def test_raw_material_with_every_testsheet_unreadable_but_photos_copied_has_erro
     _run_raw_material_with_reads(locations, [RuntimeError("bad sheet one")], copied=(4, 0, 0))
 
     entries = read_entries(locations.project_logs)
-    assert entries[-1]["status"] == "completed_with_errors"
+    assert entries[-1]["status"] == "partial_failure"
     assert "1 testsheet(s)" in entries_of(entries, "error")[0]["message"]
     assert "bad sheet one" in entries_of(entries, "warning")[0]["traceback"]
     assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
@@ -2958,7 +2958,7 @@ def test_msms_workflow_status_says_whether_anything_succeeded(
 
     run_project_action(lambda environment: stages.execute(environment, request_object), locations.environment)
 
-    expected = "failed" if outcome == "nothing" else "completed_with_errors"
+    expected = "failed" if outcome == "nothing" else "partial_failure"
     assert read_entries(locations.project_logs)[-1]["status"] == expected
 
 

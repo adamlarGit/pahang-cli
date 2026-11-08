@@ -21,7 +21,7 @@ folder: ``folder``, ``recorded``, ``left_out``, ``left_out_is_a_minimum``), ``in
 (``folder``), ``step_start``, ``step_finish``, ``log``, ``progress``,
 ``console``, ``warning`` and ``error`` (each with ``traceback`` when there was an exception),
 ``cancelled``, ``result``,
-``output`` and ``run_finish``. Its ``status`` is ``completed``, ``completed_with_errors``
+``output`` and ``run_finish``. Its ``status`` is ``completed``, ``partial_failure``
 (some items failed), ``failed`` (the whole job failed) or ``cancelled`` (the operator cancelled
 by way of ``OperationCancelled``; a cancel that just returns is recorded as ``completed``).
 
@@ -233,13 +233,13 @@ class Run:
     def record_error(self, message: Any, exc: BaseException | None = None, *, item: Any = None) -> None:
         """Record that one item failed while the action carried on.
 
-        The Run finishes as ``completed_with_errors`` and the console shows the record's path.
+        The Run finishes as ``partial_failure`` and the console shows the record's path.
 
         Two different items can fail with identical text, so each call keeps its own entry.
         ``item`` names what failed, for work done twice in a Run: the same text for the same
         item adds nothing, such as when a report is planned by both inspect and generate.
         """
-        self._mark_problem("completed_with_errors")
+        self._mark_problem("partial_failure")
         self._write_error(message, exc, item)
 
     def record_failure(self, message: Any, exc: BaseException | None = None) -> None:
@@ -384,7 +384,7 @@ class Run:
             or _as_list(getattr(result, "failed_packages", None))
             or (isinstance(failed_count, int) and failed_count > 0)
         ):
-            self._mark_problem("completed_with_errors")
+            self._mark_problem("partial_failure")
 
     def _record_input(self, path: Any) -> None:
         if not isinstance(path, (str, os.PathLike)) or str(path) in self._inputs_seen:
