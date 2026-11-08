@@ -8,6 +8,7 @@ from typing import Any
 import openpyxl
 import pytest
 
+from tests.live_msms_sandbox import assert_work_orders_match_live, clear_work_orders, read_work_orders
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
@@ -831,9 +832,11 @@ def test_propagate_wo_workflow_33kv_thunder_cycle4_e2e_100_percent(tmp_path: Pat
     src_33kv = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\PYTHON")
     env, msms_file, pe_file = _setup_test_env(tmp_path, voltage_type="33kV")
 
-    if (src_33kv / "DATA MSMS.xlsx").exists() and (src_33kv / "TOTAL PE.xlsx").exists():
+    live_available = (src_33kv / "DATA MSMS.xlsx").exists() and (src_33kv / "TOTAL PE.xlsx").exists()
+    if live_available:
         shutil.copy2(src_33kv / "DATA MSMS.xlsx", msms_file)
         shutil.copy2(src_33kv / "TOTAL PE.xlsx", pe_file)
+        clear_work_orders(pe_file)
     else:
         # Standalone fixture replicating the 33kV Thunder Cycle 4 structure
         _create_sample_data_msms(
@@ -904,6 +907,15 @@ def test_propagate_wo_workflow_33kv_thunder_cycle4_e2e_100_percent(tmp_path: Pat
     logs: list[str] = []
     wf = PropagateWoWorkflow()
     result = wf.execute(env, PropagateWoRequest(progress_sink=logs.append))
+
+    if live_available:
+        written = assert_work_orders_match_live(pe_file, src_33kv / "TOTAL PE.xlsx")
+        assert written > 0
+        assert result.matched_count == written
+        assert result.updated_count == written
+        assert result.already_populated_count == 0
+        assert result.unmatched_count == len(read_work_orders(pe_file)) - written
+        return
 
     # Acceptance Criteria Verification
     assert result.matched_count == 25, f"Expected 25 matches, got {result.matched_count}"

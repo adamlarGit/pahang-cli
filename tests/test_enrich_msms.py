@@ -3,6 +3,7 @@ from pathlib import Path
 import openpyxl
 import pytest
 
+from tests.live_msms_sandbox import assert_enrichment_matches_live, clear_enrichment
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.storage import LocalWorkspaceStorage
@@ -811,12 +812,15 @@ def test_enrich_msms_workflow_thunder_cycle_4_regression(tmp_path: Path):
 
     shutil.copyfile(data_msms_src, dest_msms)
     shutil.copyfile(total_pe_src, dest_pe)
+    clear_enrichment(dest_msms)
 
     workflow = EnrichMsmsWorkflow()
     result = workflow.execute(env, EnrichMsmsRequest())
 
-    assert result.matched_count == 25
+    expected_rows = assert_enrichment_matches_live(dest_msms, data_msms_src)
+    assert expected_rows > 0
+    assert result.matched_count == expected_rows
     assert result.unmatched_count == 0
-    assert result.updated_cells_count == 100
+    assert result.updated_cells_count == expected_rows * 4
 
 
