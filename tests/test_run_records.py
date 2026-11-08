@@ -503,6 +503,26 @@ def test_write_failure_mid_run_does_not_stop_the_action(locations, monkeypatch) 
     assert [entry["type"] for entry in entries] == ["run_start", "environment"]
 
 
+@pytest.mark.parametrize("good_writes", [1000, 2], ids=["healthy_file", "writes_already_failed"])
+def test_errors_only_in_the_result_show_the_path_even_after_writes_fail(
+    locations, monkeypatch, capsys, good_writes
+) -> None:
+    real_open = open
+
+    def open_failing_later(*args, **kwargs):
+        return _FileThatFailsAfter(real_open(*args, **kwargs), good_writes=good_writes)
+
+    monkeypatch.setattr("src.run_records.open", open_failing_later, raising=False)
+
+    def action(environment) -> SimpleNamespace:
+        current_run().record_warning("the write that finds the disk full")
+        return SimpleNamespace(errors=["one station failed"])
+
+    run_project_action(action, locations.environment)
+
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
 def test_failure_while_capturing_versions_does_not_stop_the_action(locations, monkeypatch) -> None:
     def broken(*args, **kwargs):
         raise OSError("not available")
@@ -3807,6 +3827,40 @@ def test_unreadable_subfolder_gets_a_note_and_the_rest_are_recorded(locations) -
     assert entries[-1]["status"] == "completed"
     assert {entry["path"] for entry in entries_of(entries, "input")} == {str(readable)}
     assert [entry["folder"] for entry in entries_of(entries, "input_unreadable")] == [str(denied)]
+
+
+@pytest.mark.parametrize("still_listable", [True, False], ids=["still_listable", "denied"])
+def test_subfolder_that_fails_lstat_is_not_silently_dropped(locations, still_listable) -> None:
+    """Stubs os.lstat and os.scandir: a real denied folder would need its permissions changed."""
+    survey = locations.project / "survey"
+    readable = _file(survey / "open" / "reading.dat")
+    denied = survey / "denied"
+    inside = _file(denied / "inside.dat")
+    real_lstat = os.lstat
+    real_scandir = os.scandir
+
+    def lstat(path, **kwargs):
+        if str(path) == str(denied):
+            raise PermissionError(13, "Access is denied", str(denied))
+        return real_lstat(path, **kwargs)
+
+    def scandir(path):
+        if not still_listable and str(path) == str(denied):
+            raise PermissionError(13, "Access is denied", str(denied))
+        return real_scandir(path)
+
+    def action(environment) -> None:
+        with patch("os.lstat", lstat), patch("os.scandir", scandir):
+            current_run().record_input_folder(survey, recursive=True)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "completed"
+    recorded = {entry["path"] for entry in entries_of(entries, "input")}
+    noted = [entry["folder"] for entry in entries_of(entries, "input_unreadable")]
+    assert recorded == ({str(readable), str(inside)} if still_listable else {str(readable)})
+    assert noted == ([] if still_listable else [str(denied)])
 
 
 def test_missing_folder_is_not_noted_as_unreadable(locations, tmp_path) -> None:

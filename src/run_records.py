@@ -358,28 +358,33 @@ class Run:
 
     def _record_result(self, result: Any) -> None:
         """Take outputs, warnings and errors from what the action returned, if it says."""
-        if self._file is None or result is None:
+        if result is None:
             return
-        try:
-            self._write("result", result=_describe_safely(result))
-            for field in _RESULT_OUTPUT_FIELDS:
-                self.record_outputs(_as_list(getattr(result, field, None)))
-            for warning in _as_list(getattr(result, "warnings", None)):
-                self.record_warning(warning)
-            # The workflow says when its whole job failed, through mark_failed() or record_failure().
-            errors = _as_list(getattr(result, "errors", None))
-            for error in errors:
-                self._record_result_error(error)
-            failed_count = getattr(result, "failed_count", 0)
-            # Whoever filled failed_packages has recorded those failures, with tracebacks.
-            if (
-                errors
-                or _as_list(getattr(result, "failed_packages", None))
-                or (isinstance(failed_count, int) and failed_count > 0)
-            ):
-                self._mark_problem("completed_with_errors")
-        except Exception:
-            pass
+        _ignoring_failure(lambda: self._write_result(result))
+        # Decided apart from the writing, so the console still shows the path if the file has failed.
+        _ignoring_failure(lambda: self._mark_problem_in_result(result))
+
+    def _write_result(self, result: Any) -> None:
+        if self._file is None:
+            return
+        self._write("result", result=_describe_safely(result))
+        for field in _RESULT_OUTPUT_FIELDS:
+            self.record_outputs(_as_list(getattr(result, field, None)))
+        for warning in _as_list(getattr(result, "warnings", None)):
+            self.record_warning(warning)
+        for error in _as_list(getattr(result, "errors", None)):
+            self._record_result_error(error)
+
+    def _mark_problem_in_result(self, result: Any) -> None:
+        # The workflow says when its whole job failed, through mark_failed() or record_failure().
+        failed_count = getattr(result, "failed_count", 0)
+        # Whoever filled failed_packages has recorded those failures, with tracebacks.
+        if (
+            _as_list(getattr(result, "errors", None))
+            or _as_list(getattr(result, "failed_packages", None))
+            or (isinstance(failed_count, int) and failed_count > 0)
+        ):
+            self._mark_problem("completed_with_errors")
 
     def _record_input(self, path: Any) -> None:
         if not isinstance(path, (str, os.PathLike)) or str(path) in self._inputs_seen:
@@ -688,7 +693,8 @@ def _is_link(path: str) -> bool:
     try:
         info = os.lstat(path)
     except OSError:
-        return True
+        # Let os.walk try it, so a folder that really can't be read gets a note.
+        return False
     junction_tag = getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", None)
     return stat.S_ISLNK(info.st_mode) or (
         junction_tag is not None and getattr(info, "st_reparse_tag", None) == junction_tag
