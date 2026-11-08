@@ -430,10 +430,13 @@ class FullReportPostProcessingTelemetry:
         """Operator summary line for this report, or None when no part was converted."""
         if not self.part_outcomes:
             return None
+        # Unmatched and ambiguous images are never replaced: Word's own copy stays, so neither count is a defect.
         return (
-            f"[IMG] {self.stem}: restored {self.images_restored} images across {len(self.part_outcomes)} parts, "
-            f"{self.images_unmatched} unmatched, {self.images_ambiguous} ambiguous, "
-            f"{self.fallback_count} fallbacks"
+            f"[IMG] {self.stem}: {self.images_restored} images upgraded to original quality "
+            f"across {len(self.part_outcomes)} parts; kept as Word rendered: "
+            f"{self.images_unmatched} with no original found, "
+            f"{self.images_ambiguous} with look-alike originals; "
+            f"{self.fallback_count} parts kept unrestored"
         )
 
     @property

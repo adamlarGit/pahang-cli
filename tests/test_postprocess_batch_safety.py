@@ -152,7 +152,8 @@ def test_restoration_counts_are_attached_and_summarised_per_report(tmp_path: Pat
     talapia = by_stem["005. TALAPIA (IR+VI)"]
     assert (talapia.images_restored, talapia.images_unmatched, talapia.fallback_count) == (10, 2, 1)
     assert talapia.restoration_banner == (
-        "[IMG] 005. TALAPIA (IR+VI): restored 10 images across 2 parts, 2 unmatched, 0 ambiguous, 1 fallbacks"
+        "[IMG] 005. TALAPIA (IR+VI): 10 images upgraded to original quality across 2 parts; "
+        "kept as Word rendered: 2 with no original found, 0 with look-alike originals; 1 parts kept unrestored"
     )
     cheroh = by_stem["006. CHEROH (IR+VI)"]
     assert (cheroh.images_restored, cheroh.images_ambiguous, cheroh.fallback_count) == (5, 1, 0)
@@ -334,6 +335,7 @@ def test_cli_summary_prints_restoration_banner_and_fallback_row(tmp_path: Path, 
     out = capsys.readouterr().out
 
     assert "SOURCE IMAGE RESTORATION" in out
-    assert "[IMG] 005. TALAPIA (IR+VI): restored 10 images across 2 parts, 2 unmatched" in out
+    assert "[IMG] 005. TALAPIA (IR+VI): 10 images upgraded to original quality across 2 parts" in out
+    assert "2 with no original found" in out
     assert "[WARN] 005. TALAPIA (IR+VI): 1 part(s) kept their native (unrestored) PDF" in out
     assert "006. CHEROH" in out  # second report also summarised

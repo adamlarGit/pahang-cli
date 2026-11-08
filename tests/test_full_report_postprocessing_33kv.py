@@ -1064,9 +1064,10 @@ class TestRestorationAndBatchSafety33kV:
         apmm = by_stem[self.STEMS[0]]
         assert (apmm.images_restored, apmm.images_unmatched, apmm.fallback_count) == (412, 36, 1)
         assert apmm.restoration_banner.startswith(
-            "[IMG] 01. PPU APMM 3311kV: restored 412 images across 4 parts, 36 unmatched"
+            "[IMG] 01. PPU APMM 3311kV: 412 images upgraded to original quality across 4 parts; "
+            "kept as Word rendered: 36 with no original found"
         )
-        assert apmm.restoration_banner.endswith("1 fallbacks")
+        assert apmm.restoration_banner.endswith("1 parts kept unrestored")
         assert by_stem[self.STEMS[1]].fallback_count == 0
         # the failing part did not stop the substation: it still produced its deliverable (4 parts + 2 testsheet pages)
         assert len(PdfReader(str(folder / f"{self.STEMS[0]}.pdf")).pages) == 6
