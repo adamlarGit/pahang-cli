@@ -24,6 +24,7 @@ A composite facade (`src/project/environment.py`) combining `ProjectMetadata` an
 
 ### Run Record
 The saved account of one workflow execution: what was asked for, which inputs and software version were involved, how long each Step took, and what it produced, warned about or failed on. It holds enough to identify what happened without copying any input files. Distinct from operator-facing progress messages, which report a run while it happens. _Avoid_: telemetry (already means pre-flight inspection data), log (when you mean one whole execution).
+- **Statuses**: Strictly one of `completed`, `partial_failure`, `failed`, or `cancelled` in the finish event. The absence of a finish event denotes an incomplete record with unknown cause.
 
 ### Step
 One named, timed stage inside a Run Record, such as slicing a Quick Report or exporting a PDF. Steps are recorded only where the detail helps with diagnosis, so a simple workflow may have few of them.
@@ -315,6 +316,10 @@ _Avoid_: mismatch (no image is ever swapped for a non-matching one)
 
 ### ThermogramSourcePreservationPolicy
 The Full Report thermogram-fidelity requirement. PDF conversion must retain the source pixel dimensions of every sampled thermogram without downsampling; lossless PDF stream encoding is permitted because it does not discard image information. A target output resolution such as `300 DPI` is an implementation setting, not evidence that this policy is met.
+
+### IR Image Insertion
+Loading a radiometric thermal photograph into a report's existing FLIR IR viewer so it remains editable and its linked measurement readings reflect that photograph, as with a manual image drop. A visible image alone does not satisfy this operation.
+_Avoid_: image replacement (ambiguous with Source Image Restoration), injection
 
 ### FlirActiveXIsolationPolicy
 The architectural rule governing Quick Report compilation in `src/quick_report/composer.py`. Mandates that multi-part documents containing FLIR Tools+ ActiveX controls (`CIRViewer`) merge through Microsoft Word COM Automation (`Documents.Add()`, read-only part opening, clipboard copy, page break, and paste). Prohibits pure Python OpenXML concatenation (`docxcompose`, `python-docx`) to prevent control identifier collisions and binary compound file corruption.
