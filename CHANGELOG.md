@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Run Record Retention (`feat(run-records)`, `src/run_records.py`)**:
+  - Each Run start removes inactive Run Records older than 90 days from its record folder, then the oldest towards a 200 MB target. Records open in any CLI process are protected, and other files are never touched.
 - **Truthful Run Record Availability (`feat(run-records)`, `src/run_records.py`, `src/workflow_cli.py`)**:
   - The console now warns once when no Run Record could be kept, or when saving failed partway and the record is incomplete. It names a path only if the file still exists.
   - Startup and menu failures outside an action get their own record in the per-user folder. A cancellation does not.

@@ -58,6 +58,10 @@ Records live in ``<project base path>/logs/``. Runs with no real project folder 
 ``PAHANG_CLI_RUN_RECORD_DIR`` sends every record to that folder instead, with no fallback.
 The test suite relies on this, and it works the same way in production.
 
+Each Run start also removes inactive records from the folder its record landed in: those older
+than ``_MAX_RECORD_AGE_DAYS``, then the oldest towards ``_RECORD_SIZE_TARGET_BYTES``. A record
+open in any process can't be deleted on Windows, which is the only thing protecting it.
+
 Nothing here may stop a workflow: a problem saving a Run Record is swallowed, and the
 Run carries on recording nothing. ``report_availability()`` then gives the one console line
 about it: diagnostics are unavailable, or the record at this path is incomplete. It names a
@@ -134,6 +138,15 @@ _RESULT_OUTPUT_FIELDS = (
     "ingested_files",
     "files_moved",
 )
+
+# Retention limits, applied each time a Run starts.
+_MAX_RECORD_AGE_DAYS = 90
+_SECONDS_PER_DAY = 24 * 60 * 60
+_RECORD_SIZE_TARGET_BYTES = 200 * 1024 * 1024
+# Only what _record_name() produces is ever considered for removal.
+_RECORD_NAME = re.compile(r"\d{8}-\d{6}-[a-z0-9-]{1,40}-[0-9a-f]{6}\.jsonl")
+# How _write() begins the first line of every record.
+_RECORD_FIRST_BYTES = b'{"type": "run_start"'
 
 _current: "Run | None" = None
 
@@ -823,6 +836,7 @@ def _start_run(label: str, project_key: str | None, base_path: str | None) -> Ru
         run = Run(record_file, path)
         run._write("run_start", label=label, project_key=project_key, base_path=base_path)
         run._write("environment", **_capture_versions())
+        _ignoring_failure(lambda: _remove_old_records(path.parent))
         return run
     except Exception:
         # A file that was created stays visible as incomplete. Without one, no record exists.
@@ -830,6 +844,72 @@ def _start_run(label: str, project_key: str | None, base_path: str | None) -> Ru
         run._creation_failed = run.path is None
         run._close()
         return run
+
+
+def _remove_old_records(folder: Path) -> None:
+    """Remove inactive records past the age limit, then the oldest towards the size target.
+
+    A record still open in any process can't be deleted on Windows, so the delete attempt
+    is what protects it, and it keeps counting towards the target. A missing ``run_finish``
+    plays no part. The target isn't a ceiling: what can't be removed is looked at again by
+    the next Run.
+    """
+    oldest_allowed = time.time() - _MAX_RECORD_AGE_DAYS * _SECONDS_PER_DAY
+    with os.scandir(folder) as entries:
+        records = sorted(filter(None, map(_stored_record, entries)))
+    total_size = sum(record.size for record in records)
+    for record in records:
+        if record.modified >= oldest_allowed and total_size <= _RECORD_SIZE_TARGET_BYTES:
+            break
+        if _try_remove(record.path):
+            total_size -= record.size
+
+
+class _StoredRecord(NamedTuple):
+    """Ordered oldest first."""
+
+    modified: float
+    path: str
+    size: int
+
+
+def _stored_record(entry: os.DirEntry[str]) -> _StoredRecord | None:
+    """Describe a directory entry if it is a Run Record, or return None."""
+    try:
+        if not _RECORD_NAME.fullmatch(entry.name) or not entry.is_file(follow_symlinks=False):
+            return None
+        # DirEntry.stat() can report an open file's size and time as they were before it was opened.
+        info = os.stat(entry.path, follow_symlinks=False)
+    except OSError:
+        return None
+    return _StoredRecord(info.st_mtime, entry.path, info.st_size) if _starts_like_a_record(entry.path) else None
+
+
+def _starts_like_a_record(path: str) -> bool:
+    """An empty file is a Run that died before its first line.
+
+    A file locked against reading has a record's name and is treated as one: it stays
+    counted, and the delete attempt that follows is refused for the same lock.
+    """
+    try:
+        with open(path, "rb") as candidate:
+            return candidate.read(len(_RECORD_FIRST_BYTES)) in (b"", _RECORD_FIRST_BYTES)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
+def _try_remove(path: str) -> bool:
+    """Delete a record and say whether it is gone. False means it is open or undeletable."""
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        # Another CLI's cleanup got there first.
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def _ignoring_failure(action: Callable[[], None]) -> None:

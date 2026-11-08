@@ -8,7 +8,17 @@ Records are saved in `<project base path>/logs/`. Utilities without an active, r
 
 After a failed or partially failed action, the console prints `Run Record: <path>`. Send that one file to the developer. Successful records remain in the same folder without adding a console message. Records contain bounded request values, local file paths, diagnostic messages, and tracebacks; they contain no copies or hashes of input files. A record is diagnostic evidence of what was asked for and which files were seen. It doesn't guarantee the run can be reproduced, because input files can change after it.
 
-Files are named `<local timestamp>-<action>-<unique suffix>.jsonl`. Each UTF-8 line is a separate JSON object, written and flushed immediately. Read a record with a text editor. A missing `run_finish` means the action crashed, hung, or the process was killed; the preceding lines remain usable. A process interruption may leave a Step without its finish entry.
+Files are named `<local timestamp>-<action>-<unique suffix>.jsonl`. Each UTF-8 line is a separate JSON object, written and flushed immediately. Read a record with a text editor. A missing `run_finish` means the record is incomplete, with the cause unknown: the action may have crashed or hung, the process may have been killed, or it may still be running. The preceding lines remain usable. A process interruption may leave a Step without its finish entry.
+
+## Retention
+
+Each Run start cleans the folder its own record landed in. Records last written more than 90 days ago are removed, then the oldest remaining ones until the folder's records total 200 MB or less. Change `_MAX_RECORD_AGE_DAYS` or `_RECORD_SIZE_TARGET_BYTES` in `src/run_records.py` to adjust these. There is no manual way to clear records yet.
+
+Only files with a Run Record's name whose first entry is `run_start` (or that are empty) can be removed. Other files in the folder are never touched and don't count towards the 200 MB.
+
+A record still open in any CLI process is protected by its open Windows file handle, because deleting it fails. That holds on local disks and normal Windows shares; cloud-synced virtual drives are unsupported. A missing `run_finish` plays no part, so an incomplete record whose process has exited follows the same limits as any other.
+
+200 MB is a target, not a ceiling. Open records and files that can't be deleted stay and still count, and the next Run looks at them again. Cleanup never stops a workflow and prints nothing.
 
 ## Format
 
