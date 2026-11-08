@@ -22,6 +22,11 @@ from unittest.mock import patch
 import openpyxl
 import pytest
 
+from tests.live_msms_sandbox import (
+    assert_enrichment_matches_live,
+    assert_work_orders_match_live,
+    restore_unprocessed_python,
+)
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
 from src.project.repository import JsonFileProjectRepository
@@ -609,6 +614,7 @@ def test_dry_run_thunder_cycle_4_benchmark_replica(tmp_path: Path) -> None:
 
     # Copy PYTHON directory containing DATA MSMS.xlsx, TOTAL PE.xlsx, and MSMS/
     shutil.copytree(live_base / "PYTHON", sandbox_path / "PYTHON")
+    restore_unprocessed_python(sandbox_path / "PYTHON")
 
     # Copy a representative date of TESTSHEET (07-10-2026 Gebeng with 4 substations)
     testsheet_src = live_base / "TESTSHEET" / "GEBENG" / "01. OCTOBER" / "07-10-2026"
@@ -644,17 +650,18 @@ def test_dry_run_thunder_cycle_4_benchmark_replica(tmp_path: Path) -> None:
 
     # Step 2: Enrich MSMS
     res_enrich = service.run_enrich_msms(sandbox_env)
-    assert res_enrich.matched_count == 25
-    assert res_enrich.updated_cells_count == 100
-    # W1616869 from 56212856.xls (PMU JERANTUT) is an off-cycle export not in Cycle 4 TOTAL PE
-    assert res_enrich.unmatched_count in (0, 1)
-    if res_enrich.unmatched_count == 1:
-        assert res_enrich.unmatched_wos == ("W1616869",)
+    expected_work_orders = assert_enrichment_matches_live(
+        sandbox_storage.get_data_msms_path(), live_base / "PYTHON" / "DATA MSMS.xlsx"
+    )
+    assert expected_work_orders > 0
+    assert res_enrich.matched_count == expected_work_orders
+    assert res_enrich.updated_cells_count == expected_work_orders * 4
+    assert res_enrich.unmatched_count == 0
 
     # Verify DATA MSMS.xlsx has SAP FLs in Col E
     wb_msms = openpyxl.load_workbook(sandbox_storage.get_data_msms_path())
     ws_msms = wb_msms.active
-    col_e_fls = [ws_msms.cell(r, 5).value for r in range(2, 27)]
+    col_e_fls = [ws_msms.cell(r, 5).value for r in range(2, expected_work_orders + 2)]
     wb_msms.close()
     assert all(fl and "/" in str(fl) for fl in col_e_fls)
     assert "CGBG/PPU/G00001" in col_e_fls
@@ -662,15 +669,19 @@ def test_dry_run_thunder_cycle_4_benchmark_replica(tmp_path: Path) -> None:
 
     # Step 3: Propagate Work Orders
     res_prop = service.run_propagate_wo(sandbox_env)
-    assert res_prop.matched_count == 25
-    assert res_prop.updated_count == 25
+    written_work_orders = assert_work_orders_match_live(
+        sandbox_storage.get_total_pe_path(), live_base / "PYTHON" / "TOTAL PE.xlsx"
+    )
+    assert written_work_orders > 0
+    assert res_prop.matched_count == written_work_orders
+    assert res_prop.updated_count == written_work_orders
 
-    # Verify TOTAL PE.xlsx Column F contains valid Work Orders for the 25 matched substations
+    # Verify TOTAL PE.xlsx Column F contains valid Work Orders for the matched substations
     wb_pe = openpyxl.load_workbook(sandbox_storage.get_total_pe_path())
     ws_pe = wb_pe["DataCycle1"]
     pe_wos = [ws_pe.cell(r, 6).value for r in range(2, ws_pe.max_row + 1) if ws_pe.cell(r, 6).value is not None]
     wb_pe.close()
-    assert len(pe_wos) == 25
+    assert len(pe_wos) == written_work_orders
     assert all(str(wo).startswith("W") for wo in pe_wos)
 
     # Step 4: Populate Data MSMS for 07-10-2026_001.csv
@@ -799,6 +810,7 @@ def test_msms_33kv_cli_execution_dry_run_active_project(tmp_path: Path, capsys: 
 
     # Copy PYTHON directory
     shutil.copytree(live_base / "PYTHON", sandbox_path / "PYTHON")
+    restore_unprocessed_python(sandbox_path / "PYTHON")
 
     # Copy a representative date of TESTSHEET (07-10-2026 Gebeng)
     testsheet_src = live_base / "TESTSHEET" / "GEBENG" / "01. OCTOBER" / "07-10-2026"
