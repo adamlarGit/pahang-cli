@@ -1,15 +1,19 @@
-"""Run the Full Run: parallel Fast Run tests, then word and live_data tests serially."""
+"""Run and record a Full Run (parallel Fast Run tests, then word and live_data tests serially) or a Fast Run."""
 from __future__ import annotations
 
 import argparse
 import csv
 import hashlib
+import importlib.metadata
 import json
 import msvcrt
 import os
+import platform
+import re
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from collections import Counter
 from collections.abc import Callable, Iterator
@@ -20,6 +24,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 PASSED, FAILED, INCOMPLETE = 0, 1, 10
 PYTEST_NO_TESTS_COLLECTED = 5
+GROUPED_RUNS_KEPT = 200
+_UNKNOWN = "unknown"
+# Untracked files of these types can change what a run executes; notes and documents cannot.
+_EXECUTION_INPUT_SUFFIXES = {
+    ".bat", ".cfg", ".cmd", ".ini", ".json", ".lock", ".ps1", ".py", ".pyd", ".pyi", ".toml", ".yaml", ".yml",
+}
 _OFFICE_PROCESSES = {"winword.exe", "excel.exe"}
 _DEFAULT_LOCK_FILE = Path(tempfile.gettempdir()) / "pahang-cli-full-run.lock"
 _RESULT_NAMES = {PASSED: "PASSED", FAILED: "FAILED", INCOMPLETE: "INCOMPLETE"}
@@ -44,10 +54,76 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--workers", default="4", help="xdist worker count for the Fast Run phase")
     parser.add_argument("--results-dir", type=Path, default=REPO / ".test-results")
     parser.add_argument("--lock-file", type=Path, default=_DEFAULT_LOCK_FILE)
+    parser.add_argument("--fast-only", action="store_true", help="record a Fast Run, without the serial phase")
     return parser.parse_args(argv)
 
 
-def _run_phase(args: argparse.Namespace, name: str, run_id: str, results: Path, selection: list[str]) -> int:
+def _git(root: Path, *arguments: str) -> str | None:
+    try:
+        done = subprocess.run(
+            ["git", *arguments], cwd=root, capture_output=True, text=True, encoding="utf-8", timeout=60
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def _tool_version(name: str) -> str:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return _UNKNOWN
+
+
+def _run_start(args: argparse.Namespace, run_id: str, kind: str) -> dict:
+    """What identifies this run's code and environment, written before any test runs."""
+    status = _git(args.root, "status", "--porcelain", "--untracked-files=no")
+    untracked_output = _git(args.root, "ls-files", "--others", "--exclude-standard", "-z")
+    untracked = [path for path in (untracked_output or "").split("\0") if path]
+    lock = args.root / "uv.lock"
+    return {
+        "event": "run_start",
+        "run_id": run_id,
+        "phase": "",
+        "started_at": time.time(),
+        "kind": kind,
+        "git_sha": (_git(args.root, "rev-parse", "HEAD") or _UNKNOWN).strip(),
+        # None means the state is unknown, which the report treats like a dirty worktree.
+        "tracked_dirty": None if status is None else bool(status.strip()),
+        "untracked_count": len(untracked),
+        "untracked_execution_inputs": sorted(p for p in untracked if Path(p).suffix.lower() in _EXECUTION_INPUT_SUFFIXES),
+        "identity": {
+            "machine": platform.node(),
+            "platform": platform.platform(),
+            "cpu_count": os.cpu_count(),
+            "python": platform.python_version(),
+            "pytest": _tool_version("pytest"),
+            "xdist": _tool_version("pytest-xdist"),
+            "uv_lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest() if lock.is_file() else _UNKNOWN,
+            "workers": args.workers,
+        },
+    }
+
+
+def _append_event(results: Path, event: dict) -> None:
+    with results.open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(event) + "\n")
+
+
+def _prune_history(folder: Path) -> None:
+    """Keep the newest grouped runs. Each run is one file, however many phases it had."""
+    runs = [path for path in folder.glob("*.jsonl") if re.fullmatch(r"[0-9a-f]{32}", path.stem)]
+    runs.sort(key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
+    for path in runs[GROUPED_RUNS_KEPT:]:
+        try:
+            path.unlink()
+        except OSError as error:
+            print(f"could not remove old test history {path}: {error}")
+
+
+def _run_phase(
+    args: argparse.Namespace, name: str, run_id: str, git_sha: str, results: Path, selection: list[str]
+) -> int:
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [str(REPO), os.environ.get("PYTHONPATH")])))
     # Inherited options could silently narrow what a merge-gate run selects.
     env.pop("PYTEST_ADDOPTS", None)
@@ -57,6 +133,7 @@ def _run_phase(args: argparse.Namespace, name: str, run_id: str, results: Path, 
         f"--results-file={results}",
         f"--grouped-run-id={run_id}",
         f"--run-phase={name}",
+        f"--git-sha={git_sha}",
         *selection,
     ]
     return subprocess.run(command, cwd=args.root, env=env).returncode
@@ -169,7 +246,10 @@ def _read_results(results: Path, findings: Findings) -> tuple[list[dict], list[d
         except ValueError:
             findings.incomplete.append("results file has an unreadable line")
             continue
-        (records if "test_id" in entry else phase_ends).append(entry)
+        if "test_id" in entry:
+            records.append(entry)
+        elif entry.get("event") == "phase_end":
+            phase_ends.append(entry)
     return records, phase_ends
 
 
@@ -198,14 +278,16 @@ def _judge_records(records: list[dict], findings: Findings) -> None:
         if times > 1:
             findings.incomplete.append(f"{test_id} ran {times} times")
     for record in records:
+        if record["outcome"] == "interrupted":
+            findings.incomplete.append(f"test did not finish: {record['test_id']}")
         if record["phase"] == "serial" and record["outcome"] == "skipped" and "optional_reason" not in record:
             findings.incomplete.append(f"required check skipped: {record['test_id']}: {record['reason']}")
 
 
-def _print_summary(run_id: str, records: list[dict], findings: Findings, code: int) -> None:
+def _print_summary(title: str, run_id: str, records: list[dict], findings: Findings, code: int) -> None:
     counts = Counter(record["outcome"] for record in records)
     executed = sum(counts[outcome] for outcome in ("passed", "failed", "xfailed", "xpassed"))
-    print(f"\n=== Full Run {run_id} ===")
+    print(f"\n=== {title} {run_id} ===")
     print(
         f"executed={executed} passed={counts['passed']} failed={counts['failed']} "
         f"skipped={counts['skipped']} xfailed={counts['xfailed']} xpassed={counts['xpassed']}"
@@ -225,32 +307,62 @@ def _print_summary(run_id: str, records: list[dict], findings: Findings, code: i
     print(f"RESULT: {_RESULT_NAMES[code]}", flush=True)
 
 
-def main(argv: list[str] | None = None, *, list_processes: Callable[[], list[str]] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    *,
+    list_processes: Callable[[], list[str]] | None = None,
+    clock: Callable[[], float] | None = None,
+) -> int:
+    clock = clock or time.perf_counter
+    run_began = clock()
     args = _parse_args(argv)
     args.results_dir.mkdir(parents=True, exist_ok=True)
     run_id = uuid.uuid4().hex
     results = args.results_dir / f"{run_id}.jsonl"
     findings = Findings()
+    start = _run_start(args, run_id, "fast" if args.fast_only else "full")
+    _append_event(results, start)
+    phase_wall_seconds: dict[str, float] = {}
+
+    def run_phase(name: str, selection: list[str]) -> None:
+        began = clock()
+        code = _run_phase(args, name, run_id, start["git_sha"], results, selection)
+        # Measured directly: summed test durations are not elapsed time under xdist.
+        phase_wall_seconds[name] = clock() - began
+        _judge_phase(name, code, findings)
 
     protected = ProtectedInputs(args.root, findings)
-    phases_run = ["fast"]
     before = protected.fingerprint(findings)
 
-    _judge_phase("fast", _run_phase(args, "fast", run_id, results, ["-n", args.workers]), findings)
-    with full_run_lock(args.lock_file) as acquired:
-        blockers = _serial_blockers(acquired, list_processes or _list_windows_processes)
-        if blockers:
-            findings.incomplete.extend(f"serial phase not run: {blocker}" for blocker in blockers)
-        else:
-            phases_run.append("serial")
-            _judge_phase("serial", _run_phase(args, "serial", run_id, results, ["-m", "word or live_data"]), findings)
+    run_phase("fast", ["-n", args.workers])
+    if not args.fast_only:
+        with full_run_lock(args.lock_file) as acquired:
+            blockers = _serial_blockers(acquired, list_processes or _list_windows_processes)
+            if blockers:
+                findings.incomplete.extend(f"serial phase not run: {blocker}" for blocker in blockers)
+            else:
+                run_phase("serial", ["-m", "word or live_data"])
 
     _judge_protected(before, protected.fingerprint(findings), findings)
     records, phase_ends = _read_results(results, findings)
-    _judge_reconciliation(phases_run, records, phase_ends, findings)
+    _judge_reconciliation(list(phase_wall_seconds), records, phase_ends, findings)
     _judge_records(records, findings)
     code = findings.exit_code()
-    _print_summary(run_id, records, findings, code)
+    _print_summary("Fast Run" if args.fast_only else "Full Run", run_id, records, findings, code)
+    selected = sorted(record["test_id"] for record in records if not record.get("collection"))
+    _append_event(results, {
+        "event": "run_end",
+        "run_id": run_id,
+        "phase": "",
+        "result": _RESULT_NAMES[code],
+        "failed": findings.failed,
+        "incomplete": findings.incomplete,
+        "wall_seconds": clock() - run_began,
+        "phase_wall_seconds": phase_wall_seconds,
+        "selected_count": len(selected),
+        "selected_tests_sha256": hashlib.sha256("\n".join(selected).encode("utf-8")).hexdigest(),
+    })
+    _prune_history(args.results_dir)
     return code
 
 

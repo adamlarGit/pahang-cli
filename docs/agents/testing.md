@@ -28,6 +28,35 @@ Every serial test is required by default. A skip makes the run incomplete unless
 
 The runner checks that protected inputs did not change: `tests/benchmarks` by SHA-256, and the project folders in `.cli_config.json` by path, size and modified time. Results are saved per test in the gitignored `.test-results/` folder.
 
+## Timing history
+
+Bare `pytest` records nothing, so partial runs can't enter the history. To record a Fast Run:
+
+```
+uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 python -m scripts.run_full_suite --fast-only --workers 4
+```
+
+Then report the newest run, or pick one with `--kind fast`, `--kind full` or `--run-id <id>`:
+
+```
+uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 python -m scripts.timing_report
+```
+
+The history is the gitignored `.test-results/` folder, one file per grouped run. Both phases of a Full Run share one file and one run ID and count as one run. The runner keeps the newest 200 runs.
+
+Each file has `run_start` metadata, per-test records, and `run_end` with the result and wall times. Total and per-phase wall times are measured elapsed time; summed test durations are not, because xdist runs tests at once. A test's time is setup + call + teardown.
+
+**Baseline runs** finished with result Passed, on known code and packages, with no staged or unstaged tracked changes and no untracked code or config files (such as `.py`, `.toml` or `.json`). Untracked notes are counted but don't disqualify a run. A run with tracked changes is compared and labelled but never becomes a baseline. A Failed, Incomplete or unfinished run stays visible with its outcomes and isn't compared.
+
+**Comparable runs** are the same kind (Fast or Full) with the same machine, platform, CPU count, Python, pytest and xdist versions, `uv.lock` hash and worker count.
+
+- **Total time** also needs the same selected tests and the same tests executed; otherwise it is labelled not compared.
+- **A single test** is compared with earlier comparable runs where it had the same ID, tier and outcome. Only `passed` and `xfailed` tests are timed, so a skip or failure can't look like a speed-up. If the rest of the suite differed, the report warns that shared fixtures and worker contention may affect the timing.
+
+A regression needs at least 3 earlier samples (the newest 10 are used), and must exceed the median by more than the observed range and by more than 0.5 s and 30% for a test, or 5 s and 10% for the total. The report shows median, range and sample count, and counts earlier runs it left out by reason.
+
+Strict unexpected passes are recorded as `xpassed` with `strict: true`, and still fail the run. A test cut off before teardown is recorded as `interrupted` and makes the run incomplete.
+
 ## Running part of a tier
 
 Add these after `pytest` in the Fast Run command. The Full Run runner doesn't accept test selections.
