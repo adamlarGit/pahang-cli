@@ -1,5 +1,7 @@
 """Pure-function tests for the ADR 0009 acceptance harness (no Word, no project data)."""
 
+import hashlib
+import subprocess
 import sys
 from pathlib import Path
 
@@ -26,6 +28,27 @@ def test_git_state_reports_head_and_dirtiness() -> None:
     assert len(state["head"]) == 40
     assert isinstance(state["dirty"], bool)
     assert len(state["diff_head_sha256"]) == 64
+
+
+def test_git_state_hashes_a_diff_containing_non_ascii_text(tmp_path: Path) -> None:
+    def git(*arguments: str) -> bytes:
+        return subprocess.run(
+            ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@example.com", *arguments],
+            capture_output=True,
+            check=True,
+        ).stdout
+
+    notes = tmp_path / "notes.md"
+    git("init")
+    notes.write_bytes(b"before\n")
+    git("add", "notes.md")
+    git("commit", "-m", "start")
+    notes.write_bytes("after \U0001F3D7️\n".encode("utf-8"))
+
+    state = gate._git_state(tmp_path)
+
+    assert state["dirty"] is True
+    assert state["diff_head_sha256"] == hashlib.sha256(git("diff", "HEAD")).hexdigest()
 
 
 def test_own_memory_readings_are_positive() -> None:

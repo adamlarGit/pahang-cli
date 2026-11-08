@@ -158,7 +158,9 @@ def _sha(path: Path) -> str:
 
 def _git_state(repo: Path) -> dict:
     def git(*a: str) -> str:
-        return subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True).stdout
+        return subprocess.run(
+            ["git", "-C", str(repo), *a], capture_output=True, text=True, encoding="utf-8", errors="replace"
+        ).stdout
 
     return {
         "head": git("rev-parse", "HEAD").strip(),
