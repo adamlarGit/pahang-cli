@@ -49,6 +49,12 @@ It is a safety net for the routes this repo uses, not a sandbox:
 - **Not covered:** `shell=True`, `os.system`, `os.spawn*`, `os.exec*`, `win32api.ShellExecute`, `win32process.CreateProcess`, and child programs or scripts. A search found none of these starting Office in `src`, `tests` or `scripts` today. A test that starts Office these ways still needs the `word` marker.
 - **False positives:** `os.startfile` on a folder named like Office (such as `excel` or `Winword`) is blocked, and `GetObject` treats any name starting `word.` or `excel.` as Office.
 
+## Expected failures
+
+`xfail_strict` is on, so an `xfail` marker on a test that passes fails the run and gets reviewed.
+
+Don't use a plain `xfail` marker for a change in live data, because it excuses every failure in the test. After diagnosing the change, call `xfail_while_data_condition` from `tests/live_data_allowance.py` immediately before the affected assertion, with a `detected` value that inspects the data. Give the condition, evidence and removal condition.
+
 ## Client folders
 
 Tests may read live project folders, and must write only to `tmp_path`. Live-data tests that call a workflow need a temporary output location or a temporary copy of their inputs, because workflows write under the project base path by default.

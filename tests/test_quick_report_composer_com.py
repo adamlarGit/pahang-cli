@@ -874,9 +874,6 @@ def test_compile_preserves_pristine_document_state_for_activex_isolation(tmp_pat
 
 
 @pytest.mark.word
-@pytest.mark.xfail(
-    reason="Ticket #112 Saved=False reverted by Ticket #125 to restore FLIR ActiveX OLE isolation per ADR 0002"
-)
 @pytest.mark.parametrize("part_count", [1, 2])
 def test_compile_integration_word_com_session_preserves_proxy_lifecycle(tmp_path: Path, part_count: int):
     """Integration regression asserting single-part and multi-part compilation succeed within a shared COM session."""
@@ -914,9 +911,6 @@ def test_compile_integration_word_com_session_preserves_proxy_lifecycle(tmp_path
 
 @pytest.mark.word
 @pytest.mark.live_data
-@pytest.mark.xfail(
-    reason="Ticket #112 Saved=False reverted by Ticket #125 to restore FLIR ActiveX OLE isolation per ADR 0002"
-)
 def test_quick_report_workflow_33kv_substations_compilation_regression(tmp_path: Path):
     """Verify Quick Report batch workflow succeeds for 33kV substations without RPC_E_DISCONNECTED (Ticket #112)."""
     dataset_33kv = Path(r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER")

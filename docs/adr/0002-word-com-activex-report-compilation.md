@@ -104,6 +104,16 @@ Deliverables in `FULL REPORT/JERANTUT/01. OCTOBER/22-10-2026/`:
 | **Control Identifiers** | Unique incremental | Collapsed / Linked |
 | **Thermal Image Crosstalk** | None (100% isolated) | Crosstalk observed |
 
+### Update: Stream Size Follows the Template (2026-11-08, #179)
+
+The 307,200-byte figure above describes the templates used for the 2026-10-17 Gebeng generation. It is not a universal size. The Gebeng deliverables were regenerated on 2026-10-29 and their panel streams are now 306,176 bytes with `TAG_R8_FLD` present.
+
+- The `swg-panel` templates hold 306,176, 307,200 or 308,224-byte streams, each with `TAG_R8_FLD`.
+- The current compiler preserved the source template's size in 7-page compiles of the 306,176 and 307,200 templates, with unique control names.
+- No live 33kV stream is 303,104 bytes.
+
+The corruption signature remains a lost `TAG_R8_FLD` and a stream shrunk by the stripped header. This check covered package structure only: image isolation was not exercised in FLIR Tools+.
+
 ## Consequences
 
 - **Positive**:

@@ -339,9 +339,9 @@ def test_e2e_benchmark_flir_activex_and_layout_invariants():
     - Page breaks wdPageBreak = 7 present.
     """
     benchmarks = [
-        REAL_DATASET_ROOT / "FULL REPORT" / "RAUB" / "01. AUGUST" / "01. WEEK 32" / "005. TALAPIA (IR+VI).docx",
-        REAL_DATASET_ROOT / "FULL REPORT" / "KUANTAN" / "04. WEEK 35" / "179. CENDERAWASIH NO.1 (IR+VI).docx",
-        REAL_DATASET_ROOT / "FULL REPORT" / "KUANTAN" / "04. WEEK 35" / "144. TELEKOM TANAH PUTIH (TEV+VI).docx",
+        REAL_DATASET_ROOT / "FULL REPORT" / "RAUB" / "01. AUGUST" / "04-08-2026" / "005. TALAPIA (IR+VI).docx",
+        REAL_DATASET_ROOT / "FULL REPORT" / "KUANTAN" / "01. AUGUST" / "28-08-2026" / "179. CENDERAWASIH NO.1 (IR+VI).docx",
+        REAL_DATASET_ROOT / "FULL REPORT" / "KUANTAN" / "01. AUGUST" / "24-08-2026" / "144. TELEKOM TANAH PUTIH (TEV+VI).docx",
     ]
 
     for docx_p in benchmarks:
@@ -377,7 +377,7 @@ def test_e2e_benchmark_postprocessing_pdf_export_and_merge(
     - Runs Word COM conversion and merges testsheet PDF into final deliverable
     - Output PDF exists, has non-zero bytes, and is a valid PDF
     """
-    docx_source = REAL_DATASET_ROOT / "FULL REPORT" / "RAUB" / "01. AUGUST" / "01. WEEK 32" / "005. TALAPIA (IR+VI).docx"
+    docx_source = REAL_DATASET_ROOT / "FULL REPORT" / "RAUB" / "01. AUGUST" / "04-08-2026" / "005. TALAPIA (IR+VI).docx"
     assert docx_source.is_file(), f"Missing benchmark docx: {docx_source}"
 
     # Verify testsheet PDF resolution

@@ -745,7 +745,10 @@ def test_ticket_125_activex_cirviewer_isolation_kuala_tahan_and_merting() -> Non
     import pytest
 
     # 1. Verify Gebeng benchmark deliverables (Pristine Documents.Add() without Saved=False)
-    # Confirm 307,200 bytes, unique control identifiers, and TAG_R8_FLD=True across multi-page panel parts
+    # Confirm unique control identifiers and an intact FLIR stream across multi-page panel parts.
+    # Stream size follows the source swg-panel template, so any of its known sizes is valid. This
+    # excludes the 303,104-byte corruption signature. See the 2026-11-08 update in ADR 0002.
+    swg_panel_stream_bytes = {306176, 307200, 308224}
     gebeng_dir = Path(
         r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\FULL REPORT\GEBENG\01. OCTOBER\08-10-2026"
     )
@@ -773,8 +776,8 @@ def test_ticket_125_activex_cirviewer_isolation_kuala_tahan_and_merting() -> Non
                     assert bin_files, f"Expected activeX bin streams in {docx_file.name}"
                     for bf in bin_files:
                         bdata = z.read(bf)
-                        assert len(bdata) == 307200, (
-                            f"Expected 307,200 bytes in Gebeng {docx_file.name}:{bf}, got {len(bdata)}"
+                        assert len(bdata) in swg_panel_stream_bytes, (
+                            f"Unknown FLIR stream size in Gebeng {docx_file.name}:{bf}: {len(bdata)} bytes"
                         )
                         assert b"TAG_R8_FLD" in bdata, (
                             f"Missing FLIR TAG_R8_FLD header in Gebeng {docx_file.name}:{bf}"

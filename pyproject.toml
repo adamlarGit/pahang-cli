@@ -38,6 +38,7 @@ testpaths = ["tests"]
 norecursedirs = ["scratch"]
 addopts = "-m 'not word and not live_data'"
 strict_markers = true
+xfail_strict = true
 markers = [
     "word: starts real Word or Excel",
     "live_data: reads live project data under a real project base path",
