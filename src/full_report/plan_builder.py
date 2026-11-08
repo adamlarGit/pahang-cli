@@ -61,6 +61,7 @@ from src.full_report.slicer import (
 )
 from src.quick_report.defects import CbmDefectRecord, ViDefectRecord
 from src.quick_report.utils import sanitize_filename
+from src.run_records import current_run
 from src.testsheet.models import PowerTransformerSpec, SubstationEquipmentPackage
 
 logger = logging.getLogger(__name__)
@@ -961,26 +962,27 @@ class FullReportPlanBuilder:
                 temp_target = Path(".temp") / "full_report" / f"{sub_num_val:03d}_{clean_sub_name}_{clean_date}" / "sliced"
             slicer_instance = self.slicer or WordComDocumentSlicer()
             has_vi_eval = bool(vi_list) if has_vi_defects is None else has_vi_defects
-            resolved_sliced = slicer_instance.slice_sections(
-                source_path=qr_p,
-                target_dir=temp_target,
-                station=st_name,
-                has_vi_summary=has_vi_eval,
-                has_vi_defects=has_vi_eval,
-                expected_vi_defect_count=len(vi_list),
-            )
-            if hasattr(slicer_instance, "slice_cbm_defects") and not resolved_sliced.cbm_defect_pages:
-                sliced_cbm = slicer_instance.slice_cbm_defects(qr_p, temp_target, station=st_name)
-                if sliced_cbm:
-                    resolved_sliced = SlicedSections(
-                        station=resolved_sliced.station,
-                        front_page=resolved_sliced.front_page,
-                        condition_pages=resolved_sliced.condition_pages,
-                        sticker_page=resolved_sliced.sticker_page,
-                        vi_summary=resolved_sliced.vi_summary,
-                        vi_defect_pages=resolved_sliced.vi_defect_pages,
-                        cbm_defect_pages=tuple(sliced_cbm),
-                    )
+            with current_run().step("Slice Quick Report", item=(d_str, st_name)):
+                resolved_sliced = slicer_instance.slice_sections(
+                    source_path=qr_p,
+                    target_dir=temp_target,
+                    station=st_name,
+                    has_vi_summary=has_vi_eval,
+                    has_vi_defects=has_vi_eval,
+                    expected_vi_defect_count=len(vi_list),
+                )
+                if hasattr(slicer_instance, "slice_cbm_defects") and not resolved_sliced.cbm_defect_pages:
+                    sliced_cbm = slicer_instance.slice_cbm_defects(qr_p, temp_target, station=st_name)
+                    if sliced_cbm:
+                        resolved_sliced = SlicedSections(
+                            station=resolved_sliced.station,
+                            front_page=resolved_sliced.front_page,
+                            condition_pages=resolved_sliced.condition_pages,
+                            sticker_page=resolved_sliced.sticker_page,
+                            vi_summary=resolved_sliced.vi_summary,
+                            vi_defect_pages=resolved_sliced.vi_defect_pages,
+                            cbm_defect_pages=tuple(sliced_cbm),
+                        )
 
         # Determine visual defect presence (D39)
         if has_vi_defects is not None:

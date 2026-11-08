@@ -29,6 +29,7 @@ from src.quick_report.compiler import (
     DocumentCompiler,
     WordComDocumentCompiler,
 )
+from src.run_records import current_run
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +131,9 @@ class FullReportComposer:
             keep_temp=keep_temp,
         ) as active_temp_dir:
             # Single-pass rendering: produce all indexed intermediate docx files
-            all_rendered_parts = self._render_parts(plan, active_temp_dir)
+            item = (plan.date_str, plan.station)
+            with current_run().step("Render Full Report parts", item=item):
+                all_rendered_parts = self._render_parts(plan, active_temp_dir)
 
             chunks = plan.chunks
             is_multipart = plan.is_multipart
@@ -153,9 +156,10 @@ class FullReportComposer:
                     offset += chunk_count
 
                     chunk.destination_path.parent.mkdir(parents=True, exist_ok=True)
-                    compiled_path = self.compiler.compile(
-                        chunk_rendered, chunk.destination_path
-                    )
+                    with current_run().step("Compile Full Report", item=item):
+                        compiled_path = self.compiler.compile(
+                            chunk_rendered, chunk.destination_path
+                        )
                     chunk_paths.append(compiled_path)
 
                 primary_output = chunk_paths[0] if chunk_paths else dest_path
@@ -171,7 +175,8 @@ class FullReportComposer:
                 )
             else:
                 # Single document compilation (existing behavior)
-                compiled_path = self.compiler.compile(all_rendered_parts, dest_path)
+                with current_run().step("Compile Full Report", item=item):
+                    compiled_path = self.compiler.compile(all_rendered_parts, dest_path)
                 return FullReportCompilationResult(
                     station=plan.station,
                     output_path=compiled_path,

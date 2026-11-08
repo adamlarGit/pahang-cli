@@ -4254,7 +4254,7 @@ def test_finish_counts_each_named_item_once_at_its_worst_outcome(locations) -> N
     assert read_entries(locations.project_logs)[-1]["counts"] == {"completed": 1, "failed": 2, "skipped": 1}
 
 
-def test_counts_a_result_reports_replace_the_step_tally_only_for_those_counts(locations) -> None:
+def test_counts_come_from_the_step_tally_when_steps_named_items(locations) -> None:
     def action(environment):
         with current_run().step("Compose", item=("2026-01-02", "A")) as step:
             step.skip("no defects")
@@ -4262,7 +4262,34 @@ def test_counts_a_result_reports_replace_the_step_tally_only_for_those_counts(lo
 
     run_project_action(action, locations.environment)
 
-    assert read_entries(locations.project_logs)[-1]["counts"] == {"completed": 9, "failed": 1, "skipped": 1}
+    assert read_entries(locations.project_logs)[-1]["counts"] == {"completed": 0, "failed": 0, "skipped": 1}
+
+
+def test_counts_a_result_reports_are_used_when_no_item_steps_ran(locations) -> None:
+    def action(environment):
+        with current_run().step("Workflow without an item"):
+            pass
+        return SimpleNamespace(succeeded_count=9, failed_count=1)
+
+    run_project_action(action, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["counts"] == {"completed": 9, "failed": 1, "skipped": "unknown"}
+
+
+def test_an_item_cancelled_partway_is_not_counted_as_completed(locations) -> None:
+    def action(environment) -> None:
+        run = current_run()
+        with run.step("Whole item", item=("2026-01-02", "A")):
+            with run.step("First stage", item=("2026-01-02", "A")):
+                pass
+            with run.step("Second stage", item=("2026-01-02", "A")):
+                raise OperationCancelled("stopped")
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "cancelled"
+    assert entries[-1]["counts"] == {"completed": "unknown", "failed": "unknown", "skipped": "unknown"}
 
 
 def test_cancel_after_completed_work_keeps_outputs_and_counts_and_is_not_an_error(locations, tmp_path, capsys) -> None:

@@ -64,7 +64,7 @@ from src.quick_report.utils import (
     sanitize_filename,
 )
 from src.core.topology import SwitchgearArchetype, VoltageClass
-from src.run_records import current_run
+from src.run_records import OperationCancelled, current_run
 from src.testsheet.models import (
     PowerTransformerSpec,
     SubstationEquipmentPackage,
@@ -309,6 +309,20 @@ class FullReportWorkflow:
         progress_sink: ProgressSink | None = None,
     ) -> FullReportInspection:
         """Dry-run discovery and pre-flight validation without disk writes or COM calls."""
+        with current_run().step("Inspect Full Report targets") as step:
+            inspection = self._inspect(target, environment, station=station, progress_sink=progress_sink)
+            if inspection.errors:
+                step.fail_already_recorded(inspection.errors[0])
+        return inspection
+
+    def _inspect(
+        self,
+        target: ReportTarget,
+        environment: ProjectEnvironment,
+        *,
+        station: str | Sequence[str] | None = None,
+        progress_sink: ProgressSink | None = None,
+    ) -> FullReportInspection:
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
@@ -335,6 +349,10 @@ class FullReportWorkflow:
             try:
                 telem = self._inspect_single_package(pkg, environment)
                 telemetries.append(telem)
+                if telem.errors:
+                    current_run().record_warning(
+                        f"{telem.date_str} {st_name} is not ready: {'; '.join(telem.errors)}"
+                    )
             except Exception as exc:
                 err_msg = f"Failed to inspect {st_name}: {exc}"
                 current_run().record_error(err_msg, exc)
@@ -407,7 +425,10 @@ class FullReportWorkflow:
         if progress_sink:
             progress_sink("Discovering target packages for Full Report...")
 
-        packages, warnings, errors = self._discover_packages(target, environment, station=station)
+        with current_run().step("Discover Full Report packages") as discovery:
+            packages, warnings, errors = self._discover_packages(target, environment, station=station)
+            if errors:
+                discovery.fail_already_recorded(errors[0])
         current_run().record_inputs(package.testsheet_path for package in packages)
         if not packages:
             if errors:
@@ -486,35 +507,44 @@ class FullReportWorkflow:
             # Ticket #65: Recycle Word COM process per substation across batch report workflows
             for pkg_idx, pkg in enumerate(packages):
                 session_cm = self._establish_batch_session(None)
-                with session_cm as session:
-                    word_app = getattr(session, "word_app", None)
-                    orig_word_app = getattr(self._compiler, "_word_app", None)
-                    orig_slicer_word_app = getattr(self._slicer, "_word_app", None)
-                    if word_app is not None:
-                        try:
-                            word_app.ScreenUpdating = False
-                            word_app.DisplayAlerts = 0
-                        except Exception:
-                            pass
-                        if hasattr(self._compiler, "_word_app"):
-                            self._compiler._word_app = word_app
-                        if hasattr(self._slicer, "_word_app"):
-                            self._slicer._word_app = word_app
+                session_started = False
+                try:
+                    with session_cm as session:
+                        session_started = True
+                        word_app = getattr(session, "word_app", None)
+                        orig_word_app = getattr(self._compiler, "_word_app", None)
+                        orig_slicer_word_app = getattr(self._slicer, "_word_app", None)
+                        if word_app is not None:
+                            try:
+                                word_app.ScreenUpdating = False
+                                word_app.DisplayAlerts = 0
+                            except Exception:
+                                pass
+                            if hasattr(self._compiler, "_word_app"):
+                                self._compiler._word_app = word_app
+                            if hasattr(self._slicer, "_word_app"):
+                                self._slicer._word_app = word_app
 
-                    try:
-                        self._execute_substation(
-                            pkg_idx=pkg_idx,
-                            pkg=pkg,
-                            word_app=word_app,
-                            ctx=ctx,
-                        )
-                    finally:
-                        if hasattr(self._compiler, "_word_app"):
-                            self._compiler._word_app = orig_word_app
-                        if hasattr(self._slicer, "_word_app"):
-                            self._slicer._word_app = orig_slicer_word_app
-                        word_app = None
-                        gc.collect()
+                        try:
+                            self._execute_substation(
+                                pkg_idx=pkg_idx,
+                                pkg=pkg,
+                                word_app=word_app,
+                                ctx=ctx,
+                            )
+                        finally:
+                            if hasattr(self._compiler, "_word_app"):
+                                self._compiler._word_app = orig_word_app
+                            if hasattr(self._slicer, "_word_app"):
+                                self._slicer._word_app = orig_slicer_word_app
+                            word_app = None
+                            gc.collect()
+                except Exception as exc:
+                    if not session_started:
+                        st_name = self._resolve_substation_display_name(pkg)
+                        with current_run().step("Start Word session", item=(self._report_date(pkg), st_name)) as start:
+                            start.fail(f"Word session failed to start for {st_name}: {exc}", exc)
+                    raise
 
         final_station_results = tuple(r for r in ordered_results if r is not None)
         succeeded_stations = sum(1 for r in final_station_results if r.is_success)
@@ -574,13 +604,36 @@ class FullReportWorkflow:
             else:
                 ctx.progress_sink(f"[{pkg_idx + 1}/{ctx.total_packages}] Generating Full Report for {st_name}...")
 
+        item = (self._report_date(pkg), st_name)
+        with current_run().step("Full Report substation", item=item) as substation:
+            self._generate_substation(pkg_idx, pkg, st_name, item, word_app, ctx, substation)
+
+    @staticmethod
+    def _report_date(pkg: Any) -> str:
+        data = getattr(pkg, "data", None)
+        return getattr(pkg, "date_str", "") or getattr(data, "date", "") or "01-01-2026"
+
+    def _generate_substation(
+        self,
+        pkg_idx: int,
+        pkg: Any,
+        st_name: str,
+        item: tuple[str, str],
+        word_app: Any,
+        ctx: _SubstationExecutionContext,
+        substation: Any,
+    ) -> None:
         # 1. Pre-flight validation
-        qr_path = self._resolve_quick_report_path(ctx.environment, pkg)
-        current_run().record_inputs([qr_path])
-        val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
+        with current_run().step("Preflight Quick Report", item=item) as preflight:
+            qr_path = self._resolve_quick_report_path(ctx.environment, pkg)
+            current_run().record_inputs([qr_path])
+            val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
+            if not val_res.is_valid:
+                err_msg = f"Pre-flight validation failed for {st_name}: {val_res.error_message}"
+                preflight.fail(err_msg)
         if not val_res.is_valid:
             # SubstationIsolatedBatchResiliencePolicy: record upfront validation failure
-            err_msg = f"Pre-flight validation failed for {st_name}: {val_res.error_message}"
+            substation.fail(err_msg)
             ctx.errors.append(err_msg)
             ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
                 station=st_name,
@@ -594,7 +647,7 @@ class FullReportWorkflow:
 
         # 2. Workspace allocation
         sub_num = pkg.substation_number or (pkg.data.pe_number if getattr(pkg, "data", None) else 0) or 0
-        date_str = pkg.date_str or (pkg.data.date if getattr(pkg, "data", None) else "") or "01-01-2026"
+        date_str = item[0]
         clean_name = sanitize_filename(st_name)
         clean_date = sanitize_filename(date_str).replace(" ", "_")
         substation_key = f"{sub_num:03d}_{clean_name}_{clean_date}"
@@ -609,7 +662,7 @@ class FullReportWorkflow:
 
         try:
             # 3. Slicing & Plan building
-            with current_run().step(f"Build Full Report plan: {st_name}"):
+            with current_run().step("Build Full Report plan", item=item):
                 plan = self._build_station_plan(
                     pkg,
                     ctx.environment,
@@ -622,17 +675,17 @@ class FullReportWorkflow:
             rendered_dir = station_temp_dir / "rendered"
             rendered_dir.mkdir(parents=True, exist_ok=True)
 
-            with current_run().step(f"Compose Full Report: {st_name}"):
-                comp_res = self._composer.compose(
-                    plan,
-                    keep_temp=ctx.keep_temp,
-                    temp_dir=rendered_dir,
-                    base_dir=ctx.environment.base_path,
-                )
+            comp_res = self._composer.compose(
+                plan,
+                keep_temp=ctx.keep_temp,
+                temp_dir=rendered_dir,
+                base_dir=ctx.environment.base_path,
+            )
 
             out_path = comp_res.output_path
             if not out_path or not out_path.exists() or out_path.stat().st_size == 0:
                 err_msg = f"Generated report for {st_name} is missing or 0 bytes."
+                substation.fail(err_msg)
                 ctx.errors.append(err_msg)
                 ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
                     station=st_name,
@@ -672,6 +725,7 @@ class FullReportWorkflow:
                         f"Post-compilation attribution sanity check failed for {st_name}: "
                         f"{'; '.join(attr_failures)}. Deliverables quarantined."
                     )
+                    substation.fail(err_msg)
                     ctx.errors.append(err_msg)
                     ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
                         station=st_name,
@@ -683,6 +737,7 @@ class FullReportWorkflow:
                     )
                 else:
                     ctx.generated_paths.extend(paths_to_verify)
+                    current_run().record_outputs(paths_to_verify)
                     ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
                         station=st_name,
                         substation_number=pkg.substation_number,
@@ -693,10 +748,12 @@ class FullReportWorkflow:
                         chunk_paths=comp_res.chunk_paths,
                         is_multipart=comp_res.is_multipart,
                     )
+        except OperationCancelled:
+            raise
         except Exception as exc:
             # SubstationIsolatedBatchResiliencePolicy
             err_msg = f"Failed to compile Full Report for {st_name}: {exc}"
-            current_run().record_error(err_msg, exc)
+            substation.fail(err_msg, exc)
             ctx.errors.append(err_msg)
             logger.exception(err_msg)
             ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(

@@ -10,6 +10,7 @@ Interface::
     current_run().record_inputs(paths)
     with current_run().step("Export PDF", item=(date, substation)) as step:
         step.fail("message") / step.skip("reason")     # without raising
+        step.fail_already_recorded("message")          # no second error entry
     report_cancelled("Processing cancelled.")            # the operator cancelled by returning
 
 A Run Record is one JSON Lines file, flushed line by line, so a Word hang or a crash
@@ -31,13 +32,16 @@ So completed work, a failed item and then a cancel finish as ``cancelled``, with
 ``counts`` and the record path still shown.
 
 ``run_finish`` also has ``counts``: ``completed``, ``failed`` and ``skipped``, each the reported
-number or ``"unknown"``. Unknown is never recorded as 0. A returned result's ``succeeded_count``,
-``processed_count``, ``converted_count`` and ``failed_count`` are used when it has them. Otherwise a count is tallied from the steps that named an
-``item``, each item counted once at its worst outcome (failed, then skipped, then completed). With
-neither, the count is unknown.
+number or ``"unknown"``. Unknown is never recorded as 0. When steps named an ``item``, the counts
+are tallied from them, each item counted once at its worst outcome (failed, then skipped, then
+completed). An item cancelled partway isn't counted. When no step named an item, a returned result's
+``succeeded_count``, ``processed_count``, ``converted_count`` and ``failed_count`` are used if it has
+them. With neither, the count is unknown.
 
-A step that finishes without raising is ``completed`` unless it calls ``fail()`` or ``skip()``. A
-``skip`` gives a ``reason``. Each step can carry an ``item`` identity, such as a date and a substation.
+A step that finishes without raising is ``completed`` unless it calls ``fail()``,
+``fail_already_recorded()`` or ``skip()``. A ``skip`` gives a ``reason``. Each step can carry an
+``item`` identity, such as a date and a substation. Steps can nest, so an enclosing step's duration
+includes its stages' and the two must not be added together.
 
 A record with no ``run_finish`` entry is incomplete, with the cause unknown. It does not by itself show
 a crash, a hang or a process that is still running.
@@ -156,6 +160,11 @@ class _StepOutcome:
         self.status = "failed"
         self.details = {"error": _text_of(message)}
         self._run.record_error(message, exc, item=self._item)
+
+    def fail_already_recorded(self, message: Any) -> None:
+        """The step failed because of an error already recorded, so no second error entry is written."""
+        self.status = "failed"
+        self.details = {"error": _text_of(message)}
 
     def skip(self, reason: Any) -> None:
         """The step did not run, for a reason. This doesn't change the Run's status."""
@@ -346,6 +355,8 @@ class Run:
             )
             if status == "failed":
                 self._note_item_outcome(item_fields, status)
+            else:
+                self._forget_item(item_fields)
             raise
         self._write(
             "step_finish",
@@ -405,12 +416,17 @@ class Run:
         earlier = self._item_outcomes.get(key, "completed")
         self._item_outcomes[key] = max(earlier, status, key=_ITEM_OUTCOME_RANK.__getitem__)
 
+    def _forget_item(self, item_fields: dict[str, Any]) -> None:
+        """An item cancelled partway didn't finish, whatever its earlier stages did."""
+        if item_fields:
+            self._item_outcomes.pop(_text_of(item_fields["item"]), None)
+
     def _finish_counts(self) -> dict[str, int | str]:
+        names = ("completed", "failed", "skipped")
         tallied = list(self._item_outcomes.values())
-        return {
-            name: self._reported_counts.get(name, tallied.count(name) if tallied else _UNKNOWN)
-            for name in ("completed", "failed", "skipped")
-        }
+        if tallied:
+            return {name: tallied.count(name) for name in names}
+        return {name: self._reported_counts.get(name, _UNKNOWN) for name in names}
 
     def _record_result_counts(self, result: Any) -> None:
         for name, fields in _RESULT_COUNT_FIELDS:

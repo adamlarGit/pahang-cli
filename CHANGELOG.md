@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Timed Full Report Steps in Run Records (`feat(run-records)`, `src/workflows/full_report.py`, `src/full_report/composer.py`, `src/full_report/plan_builder.py`, `src/run_records.py`)**:
+  - Each substation has one enclosing Step with Preflight, Plan, Slice, Render and Compile stage Steps sharing its date-and-substation item; inspection and discovery are timed too.
+  - Finish counts come from item Steps when any ran, and a result's numbers are used only otherwise.
+  - Fixes #185.
+
 ### Fixed
 - **US+TEV Survey Graphs Skip Placeholder Measurements (`fix(us-tev-graphs)`, `src/workflows/us_tev_graphs.py`, `src/quick_report/prpd.py`, `tests/test_us_tev_graph_workflow.py`)**:
   - Measurements created without a reading (no `ultrasonic_phase_plot.js` / `eventData.js`) are now skipped before rendering, so Option C no longer launches headless Chrome three times per placeholder and logs a misleading "render exhausted retries" warning; each skip logs `<label>: no <TECH> data recorded (skipped)`.
