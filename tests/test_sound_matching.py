@@ -887,8 +887,20 @@ def test_chamber_component_keywords_front_and_rear_mappings():
     assert CHAMBER_COMPONENT_KEYWORDS["BUSBAR"] == ("BUSBAR", "UPPER_BUSBARS", "LOWER_BUSBARS")
     assert CHAMBER_COMPONENT_KEYWORDS["BREAKER"] == ("CIRCUIT_BREAKER", "BREAKER")
     assert CHAMBER_COMPONENT_KEYWORDS["CABLE"] == ("CABLE_BOX", "CABLES", "CABLE")
-    assert CHAMBER_COMPONENT_KEYWORDS["PT"] == ("VT_CHAMBER", "VOLTAGE_TRANSFORMER", "VT", "PT")
-    assert CHAMBER_COMPONENT_KEYWORDS["VT"] == ("VT_CHAMBER", "VOLTAGE_TRANSFORMER", "VT", "PT")
+    pt_vt_keywords = (
+        "VT_CHAMBER",
+        "VT CHAMBER",
+        "PT_CHAMBER",
+        "PT CHAMBER",
+        "VOLTAGE_TRANSFORMER",
+        "VOLTAGE TRANSFORMER",
+        "POTENTIAL_TRANSFORMER",
+        "POTENTIAL TRANSFORMER",
+        "VT",
+        "PT",
+    )
+    assert CHAMBER_COMPONENT_KEYWORDS["PT"] == pt_vt_keywords
+    assert CHAMBER_COMPONENT_KEYWORDS["VT"] == pt_vt_keywords
     assert CHAMBER_COMPONENT_KEYWORDS["FUSE"] == ("FUSE", "CABLE_BOX", "CABLES", "CABLE")
 
 

@@ -2209,7 +2209,7 @@ def test_tx_render_context_with_and_without_testsheet():
         pe_info=pe_info,
     )
 
-    assert ctx["tx"]["number"] == "TX 1"
+    assert ctx["tx"]["number"] == "TX1"
     assert ctx["tx"]["location"] == "HV - SIDE"
     assert ctx["tx"]["area"] == "HV Bushing/ Corona sound"
     assert ctx["tx"]["manufacturer"] == "Tamini"
@@ -2225,7 +2225,7 @@ def test_tx_render_context_with_and_without_testsheet():
 
     # Without testsheet
     ctx_empty = _build_family_render_context(spec, rec, overview=False, item_key="TX 1", pe_info={})
-    assert ctx_empty["tx"]["number"] == "TX 1"
+    assert ctx_empty["tx"]["number"] == "TX1"
     assert ctx_empty["tx"]["location"] == "HV - SIDE"
     assert ctx_empty["tx"]["manufacturer"] == "-"
     assert ctx_empty["tx"]["model"] == "-"

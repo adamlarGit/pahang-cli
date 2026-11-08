@@ -615,11 +615,11 @@ def test_inspect_previews_expose_defect_counts_and_stem(tmp_path: Path):
     assert "/" not in target.substation_name
     assert '"' not in target.substation_name
     assert "?" not in target.substation_name
-    assert target.substation_name == "PE TEST  DIRTY NAME"
+    assert target.substation_name == "PE TEST DIRTY NAME"
 
     assert target.functional_location == "CCHL/PCE/J00059"
     assert target.defect_suffix == " (IR+US+VI)"
-    assert target.stem == "005. PE TEST  DIRTY NAME (IR+US+VI)"
+    assert target.stem == "005. PE TEST DIRTY NAME (IR+US+VI)"
     assert target.cbm_defect_count == 2
     assert target.vi_defect_count == 1
     assert target.condition_pair_count > 0
