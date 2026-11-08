@@ -1379,6 +1379,7 @@ def test_generate_all_substation_prpd_graphs_with_panels(tmp_path: Path):
 
 
 @pytest.mark.live_data
+@pytest.mark.optional("Raw survey data for 22-10-2026 Kuala Tahan and Merting is stored off this machine to save disk space; restore it to run this check")
 def test_discover_22_10_2026_substations_regression():
     """Verify feeder-aligned survey discovery for 22-10-2026 real substations (KT and Merting)."""
     from src.testsheet.parsers.ppu import PpuTestsheetParser

@@ -761,6 +761,11 @@ def test_ticket_125_activex_cirviewer_isolation_kuala_tahan_and_merting() -> Non
     # Stream size follows the source swg-panel template, so any of its known sizes is valid. This
     # excludes the 303,104-byte corruption signature. See the 2026-11-08 update in ADR 0002.
     swg_panel_stream_bytes = {306176, 307200, 308224}
+    # The operator edited the thermal image on each page of this file and saw no crosstalk (#196),
+    # so this one repeated name is accepted. Any other duplicate still fails.
+    operator_verified_duplicates = {
+        "05. SSU KPC GEBENG 33kV - Part 06 - Panel 5 (33kV - BUS TIE RHS).docx": {"CIRViewer1211111131211"},
+    }
     gebeng_dir = Path(
         r"C:\Users\ADAM\Documents\PO 42394550 - PAHANG - 33kV - THUNDER\FULL REPORT\GEBENG\01. OCTOBER\08-10-2026"
     )
@@ -780,9 +785,10 @@ def test_ticket_125_activex_cirviewer_isolation_kuala_tahan_and_merting() -> Non
                     doc_xml = z.read("word/document.xml").decode("utf-8", errors="ignore")
                     ctrl_names = re.findall(r'<w:control[^>]*w:name="([^"]+)"[^>]*>', doc_xml)
                     if ctrl_names:
-                        duplicates = [name for name in ctrl_names if ctrl_names.count(name) > 1]
+                        duplicates = {name for name in ctrl_names if ctrl_names.count(name) > 1}
+                        duplicates -= operator_verified_duplicates.get(docx_file.name, set())
                         assert not duplicates, (
-                            f"ActiveX crosstalk in Gebeng benchmark {docx_file.name}: {set(duplicates)}"
+                            f"ActiveX crosstalk in Gebeng benchmark {docx_file.name}: {duplicates}"
                         )
                     bin_files = [n for n in z.namelist() if n.startswith("word/activeX/activeX") and n.endswith(".bin")]
                     assert bin_files, f"Expected activeX bin streams in {docx_file.name}"
@@ -804,7 +810,7 @@ def test_ticket_125_activex_cirviewer_isolation_kuala_tahan_and_merting() -> Non
 
     substations = [
         ("33. MINI PPU KUALA TAHAN 3311kV (VI)", 7),
-        ("34. MINI PPU MERTING 3311kV (VI)", 7),
+        ("34. MINI PPU MERTING 3311kV", 7),
     ]
 
     for prefix, expected_parts in substations:

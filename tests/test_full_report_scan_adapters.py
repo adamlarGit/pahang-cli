@@ -1592,6 +1592,7 @@ def test_transformer_scan_adapter_dynamic_prpd_resolution_ptx_ltx(
 
 
 @pytest.mark.live_data
+@pytest.mark.optional("Raw survey data for 22-10-2026 Kuala Tahan and Merting is stored off this machine to save disk space; restore it to run this check")
 def test_33kv_mini_ppu_part07_tx_scanning_pages_prpd(
     mock_substation_info: dict[str, str],
     tmp_path: Path,
@@ -1709,6 +1710,7 @@ def test_switchgear_scan_adapter_compartment_specific_ultrasound_from_catalog(tm
 
 
 @pytest.mark.live_data
+@pytest.mark.optional("Raw survey data for 22-10-2026 Kuala Tahan and Merting is stored off this machine to save disk space; restore it to run this check")
 def test_switchgear_scan_adapter_33kv_kuala_tahan_and_merting_end_to_end(tmp_path: Path):
     """End-to-end test verifying compartment-specific ultrasound graphs on 22-10-2026 substations."""
     from src.quick_report.prpd import generate_all_substation_prpd_graphs
