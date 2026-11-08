@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from src.run_records import current_run
+
 
 @dataclass(frozen=True)
 class UtilityAction:
@@ -161,6 +163,7 @@ def _load_whatsapp_runner() -> Callable[[], object]:
             service = WorkflowService()
             return service.run_whatsapp(env, request)
         except Exception as e:
+            current_run().record_failure(f"Failed to generate WhatsApp report: {e}", e)
             print(f"Failed to generate WhatsApp report: {e}")
 
     return _run
@@ -177,6 +180,7 @@ def _load_msms_runner() -> Callable[[], object]:
             service = WorkflowService()
             return service.run_propagate_wo(env)
         except Exception as e:
+            current_run().record_failure(f"Failed to run WO propagation: {e}", e)
             print(f"Failed to run WO propagation: {e}")
             import traceback
             traceback.print_exc()

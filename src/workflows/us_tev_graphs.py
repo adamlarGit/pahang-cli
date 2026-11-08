@@ -34,6 +34,7 @@ from src.quick_report.prpd import (
     resolve_survey_container_dir,
 )
 from src.project.models import PrpdMode
+from src.run_records import current_run
 from src.testsheet.models import SubstationTestsheetPackage
 
 logger = logging.getLogger(__name__)
@@ -232,12 +233,18 @@ class UsTevGraphWorkflow:
                 skipped = len(result.skipped_no_data)
                 summary.total_graphs += count
                 summary.total_skipped_no_data += skipped
+                if count:
+                    current_run().record_outputs([output_dir])
                 if on_progress:
                     on_progress(idx, total, item_label, count, skipped, output_dir)
             except Exception as exc:
                 err_msg = f"Failed generating graphs for {item_label}: {exc}"
+                current_run().record_error(err_msg, exc)
                 logger.error(err_msg, exc_info=True)
                 summary.errors.append(err_msg)
+
+        if total and len(summary.errors) >= total:
+            current_run().mark_failed()
 
         summary.elapsed_time = time.time() - start_time
         return summary
@@ -351,10 +358,23 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
     prpd_config = environment.get_prpd_config()
     render_mode = getattr(prpd_config, "mode", "option_c")
 
+    current_run().record_request(
+        {
+            "workflow": "US+TEV Survey Graphs",
+            "dates": folder_dates,
+            "mode": render_mode,
+            "substations": [_format_package_label(candidate.package) for candidate in selected_candidates],
+        }
+    )
+    for candidate in selected_candidates:
+        current_run().record_input_folder(candidate.survey_dir, recursive=True)
+    current_run().record_inputs(candidate.package.testsheet_path for candidate in selected_candidates)
+
     workflow = UsTevGraphWorkflow(mode=render_mode)
     try:
         workflow.check_browser_prerequisite()
     except BrowserPrerequisiteError as exc:
+        current_run().record_failure(f"Browser Prerequisite Error: {exc}", exc)
         print(f"\n[ERROR] Browser Prerequisite Error: {exc}")
         return None
 

@@ -14,6 +14,7 @@ import config
 from src.core.normalizers import format_date_cbm, normalize_date_str, normalize_for_report
 from src.project.environment import ProjectEnvironment
 from src.project.storage import get_next_file_number
+from src.run_records import current_run
 from src.whatsapp.models import WhatsAppReportResources
 from src.workflows.models import ProgressSink, WhatsAppReportRequest, WhatsAppReportResult
 
@@ -682,6 +683,7 @@ class WhatsAppReportWorkflow:
             request.progress_sink("Extracting raw PE report files and data...")
 
         raw_data = self.extractor.extract(env, request)
+        current_run().record_inputs(raw_data.substation_docx_files)
 
         if request.progress_sink:
             request.progress_sink("Filtering substation targets...")

@@ -14,6 +14,7 @@ from src.postprocessing.converters import (
 )
 from src.project.environment import ProjectEnvironment
 from src.quick_report.prpd import discover_ultratev_survey_dir
+from src.run_records import current_run
 from src.testsheet.models import SubstationPackage
 from src.testsheet.repository import LocalTestsheetPackageRepository
 from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
@@ -103,6 +104,8 @@ class PostProcessingPipelineWorkflow:
                 warnings=("No matching substation packages found for target criteria.",),
             )
 
+        current_run().record_inputs(package.testsheet_xlsx for package in target_packages)
+        current_run().record_inputs(package.quick_report_docx for package in target_packages)
         sink(f"Queued {len(target_packages)} substation package(s) for processing.")
 
         # Stage 2: Pre-Flight Validation & Renaming Sync
@@ -279,6 +282,8 @@ class PostProcessingPipelineWorkflow:
                                 raw_dir = env.storage.get_substation_raw_data_dir(
                                     station, month, date_str, pkg.substation_number
                                 )
+                        if raw_dir is not None:
+                            current_run().record_input_folder(raw_dir, recursive=True)
 
                         survey_root = discover_ultratev_survey_dir(raw_dir)
                         if survey_root is not None and survey_root.exists():
@@ -296,11 +301,14 @@ class PostProcessingPipelineWorkflow:
                     sink(f"Completed deliverable -> {quick_report_pdf.name}")
 
                 except Exception as exc:
+                    current_run().record_error(f"{pkg.station_name}: {exc}", exc)
                     logger.error("Failed post-processing for substation %s: %s", pkg.station_name, exc)
                     failed_packages.append(PostProcessingFailure(package=pkg, error=str(exc)))
                     sink(f"Failed post-processing for {pkg.station_name}: {exc}")
 
         duration = time.time() - start_time
+        if failed_packages and not processed_packages:
+            current_run().mark_failed()
 
         # Stage 5: Summary Result
         return PostProcessingSummary(

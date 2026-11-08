@@ -18,6 +18,7 @@ from src.core.normalizers import (
 )
 from src.master.qr02 import enrich_packages_with_cba_33kv
 from src.quick_report.defects import MasterQr03DefectRepository
+from src.run_records import current_run
 from src.quick_report.utils import (
     normalize_functional_location_input,
 )
@@ -139,6 +140,7 @@ class QuickReportExtractor:
                 pass
 
         if total_pe_path is not None and isinstance(total_pe_path, (str, Path)) and Path(total_pe_path).is_file():
+            current_run().record_inputs([total_pe_path])
             t1_pkgs, t1_fls = self._discover_via_total_pe(
                 Path(total_pe_path), environment.get_testsheet_dir(), target_fls
             )

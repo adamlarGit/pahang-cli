@@ -51,6 +51,7 @@ from src.quick_report.prpd import (
     discover_ultratev_survey_dir,
     resolve_survey_container_dir,
 )
+from src.run_records import current_run
 from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 
 logger = logging.getLogger(__name__)
@@ -411,6 +412,7 @@ class UsAudioWorkflow:
             if candidate.survey_dir and Path(candidate.survey_dir).is_dir():
                 out_dir = candidate.resolve_sounds_output_dir()
                 wav_paths = export_substation_16bit_wavs(candidate.survey_dir, out_dir)
+                current_run().record_outputs([out_dir])
                 wavs_exported += len(wav_paths)
             else:
                 logger.info(
@@ -427,6 +429,7 @@ class UsAudioWorkflow:
                         survey_root=candidate.survey_dir,
                         package=candidate.package,
                     )
+                    current_run().record_outputs([pdf_target])
                     sounds_embedded += embedded
 
         return wavs_exported, sounds_embedded
@@ -463,6 +466,7 @@ class UsAudioWorkflow:
                 summary.total_sounds_embedded += sounds
             except Exception as exc:
                 err_msg = f"{name}: {exc}"
+                current_run().record_error(err_msg, exc)
                 logger.error(
                     "[ERROR] Failed processing US audio for %s: %s",
                     name,
@@ -470,6 +474,9 @@ class UsAudioWorkflow:
                     exc_info=True,
                 )
                 summary.errors.append(err_msg)
+
+        if candidates and len(summary.errors) >= len(candidates):
+            current_run().mark_failed()
 
         summary.elapsed_time = time.perf_counter() - start_time
         return summary
@@ -720,6 +727,26 @@ def run_generate_us_audio_action(environment: Any) -> UsAudioWorkflowSummary | N
     if not selected_candidates:
         print("No substations selected. Operation cancelled.")
         return None
+
+    current_run().record_request(
+        {
+            "workflow": "US Audio",
+            "dates": folder_dates,
+            "mode": effective_mode,
+            "substations": [candidate.display_name for candidate in selected_candidates],
+        }
+    )
+    for candidate in selected_candidates:
+        if candidate.survey_dir is not None:
+            current_run().record_input_folder(candidate.survey_dir, recursive=True)
+        current_run().record_inputs(
+            [
+                candidate.survey_dir,
+                candidate.full_report_pdf,
+                candidate.quick_report_pdf,
+                getattr(candidate.package, "testsheet_path", None),
+            ]
+        )
 
     workflow = UsAudioWorkflow(mode=effective_mode)
     print(

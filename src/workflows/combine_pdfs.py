@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.postprocessing.converters import ComDocumentConverter, DocumentConverter
+from src.run_records import current_run
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ def combine_primary_secondary_pdfs(
 
         tracker.emit(idx, f"Merging PDF: {filename}")
         converter.merge_pdfs(primary_path, secondary_path, primary_path)
+        current_run().record_outputs([primary_path])
 
         logging.info(f"Successfully merged and replaced: {filename}")
         merged_count += 1
@@ -76,12 +78,18 @@ def run_combine_pdfs() -> CombinePdfsSummary:
     """Interactive entrypoint for combining PDFs from primary and secondary folders."""
     primary_folder = input("Enter primary folder directory: ").strip().strip('"')
     secondary_folder = input("Enter secondary folder directory: ").strip().strip('"')
+    current_run().record_request(
+        {"workflow": "Combine PDFs", "primary_folder": primary_folder, "secondary_folder": secondary_folder}
+    )
+    current_run().record_input_folder(primary_folder, (".pdf",))
+    current_run().record_input_folder(secondary_folder, (".pdf",))
 
     try:
         summary = combine_primary_secondary_pdfs(primary_folder, secondary_folder)
         print(f"Successfully merged {summary.merged_count} PDF file(s).")
         return summary
     except (ValueError, FileNotFoundError) as err:
+        current_run().record_failure(f"Combine PDFs aborted: {err}", err)
         print(f"\n [X] HARD STOP: {err}\n")
         logging.error("Combine PDFs aborted: %s", err)
         return CombinePdfsSummary(

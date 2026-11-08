@@ -10,6 +10,8 @@ import numpy as np
 from pdf2image import convert_from_path
 from PyPDF2 import PdfReader, PdfWriter
 
+from src.run_records import current_run
+
 
 @dataclass(frozen=True)
 class PdfExtractSummary:
@@ -49,6 +51,7 @@ def extract_pdf_sections_and_clean(pdf_path: str | Path) -> PdfExtractSummary:
                 output_pdf = output_dir / f"{extracted_count}_Extracted.pdf"
                 with open(output_pdf, "wb") as f:
                     writer.write(f)
+                current_run().record_outputs([output_pdf])
                 print(f"Saved: {output_pdf}")
                 writer = PdfWriter()
                 extracted_count += 1
@@ -59,6 +62,7 @@ def extract_pdf_sections_and_clean(pdf_path: str | Path) -> PdfExtractSummary:
         output_pdf = output_dir / f"{extracted_count}_Extracted.pdf"
         with open(output_pdf, "wb") as f:
             writer.write(f)
+        current_run().record_outputs([output_pdf])
         print(f"Saved: {output_pdf}")
 
     # Remove black pages from original PDF
@@ -90,6 +94,8 @@ def extract_pdf_sections_and_clean(pdf_path: str | Path) -> PdfExtractSummary:
 def run_pdf_extract() -> PdfExtractSummary:
     """Interactive entrypoint for PDF section extraction by black pages."""
     pdf_path = input("Enter the full path to the PDF file: ").strip().strip('"')
+    current_run().record_request({"workflow": "Extract PE Pages", "pdf_path": pdf_path})
+    current_run().record_inputs([pdf_path])
     if not os.path.exists(pdf_path):
         raise FileNotFoundError("Error: File not found. Please check the path and try again.")
 

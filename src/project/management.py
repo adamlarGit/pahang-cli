@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Callable
 
 from src import cli_selectors
 from src.cli_session import CliSession
@@ -222,8 +223,9 @@ def select_active_project_wizard(
     session: CliSession,
     allow_cancel: bool = True,
     repository: ProjectRepository | None = None,
+    on_activation_failure: Callable[[Exception], None] | None = None,
 ) -> ProjectEnvironment | None:
-    """Select and activate a project for the current CLI session."""
+    """Select and activate a project, optionally reporting recoverable activation failures."""
     if repository is None:
         repository = JsonFileProjectRepository()
 
@@ -249,6 +251,8 @@ def select_active_project_wizard(
             environment = create_project_environment(project_key, repository=repository)
         except Exception as exc:
             print(f"Project activation failed: {exc}")
+            if on_activation_failure is not None:
+                on_activation_failure(exc)
             last_project_key = project_key
             continue
 

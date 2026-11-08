@@ -29,6 +29,7 @@ from src.core.normalizers import (
 )
 from src.project.environment import ProjectEnvironment
 from src.quick_report.defects import MasterQr03DefectRepository, ViDefectRecord
+from src.run_records import current_run
 from src.testsheet.feeder_thermal import (
     FEEDER_CHANNEL_COLUMNS,
     extract_board_average_temperature,
@@ -1136,6 +1137,8 @@ class PopulateDataMsmsWorkflow:
         self.transformer.defect_repo = defect_repo
 
         extracted = self.extractor.extract(environment, req)
+        current_run().record_inputs(package.testsheet_path for package in extracted.packages)
+        current_run().record_inputs(extracted.csv_files)
 
         if req.progress_sink:
             req.progress_sink(
@@ -1169,6 +1172,7 @@ class PopulateDataMsmsWorkflow:
 
         completed_dir = environment.storage.get_msms_completed_dir() if req.move_to_completed else None
         files_moved = self.loader.load(transformations, completed_dir=completed_dir)
+        current_run().record_outputs(target_csvs)
 
         result = self.auditor.audit(transformations, files_moved=files_moved)
 

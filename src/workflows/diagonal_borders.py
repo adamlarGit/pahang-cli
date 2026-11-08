@@ -13,6 +13,7 @@ from openpyxl.utils import range_boundaries
 
 from src.postprocessing.converters import classify_sheet_layout
 from src.project.storage import repair_openpyxl_zip
+from src.run_records import current_run
 
 # Define diagonal border style
 diagonal = Side(style="thin")
@@ -297,6 +298,7 @@ def process_workbook(file_path: str | Path) -> str:
 
     wb.close()
     repair_openpyxl_zip(path, new_file_path)
+    current_run().record_outputs([new_file_path])
     return str(new_file_path)
 
 
@@ -329,6 +331,8 @@ def process_diagonal_target(target_path: str | Path) -> DiagonalSummary:
 def run_diagonal() -> DiagonalSummary:
     """Interactive entrypoint for applying diagonal borders to blank testsheet cells."""
     target_folder = input("Enter the path to the target folder or Excel file: ").strip().strip('"')
+    current_run().record_request({"workflow": "Diagonal Borders", "target_path": target_folder})
+    current_run().record_input_folder(target_folder, (".xlsx",))
     summary = process_diagonal_target(target_folder)
     print(f"Completed diagonal border processing for {summary.processed_count} file(s).")
     return summary

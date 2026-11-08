@@ -19,6 +19,7 @@ import openpyxl
 
 from src.core.normalizers import normalize_fl_erms
 from src.project.environment import ProjectEnvironment
+from src.run_records import current_run
 from src.workflows.models import (
     EnrichMsmsRequest,
     EnrichMsmsResult,
@@ -611,6 +612,7 @@ class EnrichMsmsWorkflow:
             req.progress_sink(f"Applying {len(plan.updates)} row updates ({plan.updated_cells_count} cells)...")
 
         self.loader.load(plan)
+        current_run().record_outputs([data_msms_path])
 
         result = self.auditor.audit(plan)
 

@@ -23,6 +23,7 @@ from src.core.normalizers import (
 from src.project.environment import ProjectEnvironment
 from src.project.models import CameraConfig
 from src.project.storage import extract_numerical_prefix, parse_substation_stem
+from src.run_records import current_run
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import PhotoRange, SubstationTestsheetPackage, TestsheetData
 from src.testsheet.repository import SubstationTestsheetRepository
@@ -169,6 +170,7 @@ class RawMaterialExtractor:
     ) -> None:
         self.repository = repository or SubstationTestsheetRepository()
         self.extractor = extractor or TestsheetExtractor()
+        self.unreadable_testsheets: set[Path] = set()
 
     def discover_packages(
         self, environment: ProjectEnvironment, request: RawMaterialRequest
@@ -266,7 +268,10 @@ class RawMaterialExtractor:
             try:
                 data = self.extractor.extract_testsheet_data(pkg.testsheet_path)
             except Exception as ex:
-                warnings.append(f"Failed to extract testsheet data from {pkg.testsheet_path}: {ex}")
+                warn_msg = f"Failed to extract testsheet data from {pkg.testsheet_path}: {ex}"
+                self.unreadable_testsheets.add(pkg.testsheet_path)
+                current_run().record_warning(warn_msg, ex)
+                warnings.append(warn_msg)
         return data
 
     def _scan_photos(self, unsorted_dir: Path) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
@@ -916,7 +921,9 @@ class RawMaterialWorkflow:
         self.preflight_guard.validate(environment, request)
 
         total_pe_path = environment.storage.get_total_pe_path()
+        self.extractor.unreadable_testsheets.clear()
         packages = self.extractor.discover_packages(environment, request)
+        current_run().record_inputs(package.testsheet_path for package in packages)
 
         existing_tuples = self.extractor.load_pe_alignment_data(total_pe_path)
         self.filter_stage.verify_pe_alignment(packages, existing_tuples)
@@ -939,6 +946,14 @@ class RawMaterialWorkflow:
             total_dg_copied += dg_copied
             total_us_tev_extracted += us_tev_extracted
 
+        if packages and len(self.extractor.unreadable_testsheets) >= len(packages):
+            message = f"All {len(packages)} testsheet(s) failed to read."
+            if total_ir_copied or total_dg_copied or total_us_tev_extracted:
+                current_run().record_error(message)
+            else:
+                current_run().record_failure(message)
+
+        self._record_output_folder(environment)
         _, result = self.auditor.audit(
             substations_count,
             total_ir_copied,
@@ -948,6 +963,13 @@ class RawMaterialWorkflow:
             errors,
         )
         return result
+
+    @staticmethod
+    def _record_output_folder(environment: ProjectEnvironment) -> None:
+        try:
+            current_run().record_outputs([environment.storage.get_raw_material_dir()])
+        except Exception:
+            pass
 
     def _process_package(
         self,
@@ -1001,6 +1023,10 @@ class RawMaterialWorkflow:
             voltage_type=voltage_type,
             station_name=substation_name,
         )
+
+        current_run().record_inputs(path for path, _ in (*filtered_ir, *filtered_dg))
+        for archive in matched_us_tevs:
+            current_run().record_input_folder(archive, recursive=True)
 
         plan = self.transformer.build_plan(
             environment=environment,

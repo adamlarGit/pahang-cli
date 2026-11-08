@@ -16,6 +16,7 @@ from src.quick_report.cbm_defect_planner import CbmDefectPlanner
 from src.quick_report.models import QuickReportStationPlan
 from src.quick_report.substation_condition import build_substation_condition_pairs
 from src.quick_report.utils import sanitize_filename
+from src.run_records import current_run
 
 if TYPE_CHECKING:
     from src.project.environment import ProjectEnvironment
@@ -62,6 +63,8 @@ class QuickReportTransformer:
                 date_str=pkg.date_str,
                 substation_number=pkg.substation_number,
             )
+        if raw_data_dir is not None:
+            current_run().record_input_folder(raw_data_dir, recursive=True)
 
         prpd_mode = "option_c"
         if hasattr(environment, "get_prpd_config"):

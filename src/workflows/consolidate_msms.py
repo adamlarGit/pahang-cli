@@ -19,6 +19,7 @@ import pandas as pd
 
 from src.core.normalizers import normalize_fl_erms
 from src.project.environment import ProjectEnvironment
+from src.run_records import current_run
 from src.workflows.models import (
     ConsolidateMsmsRequest,
     ConsolidateMsmsResult,
@@ -99,9 +100,11 @@ class ConsolidateMsmsExtractor:
         try:
             tables = pd.read_html(str(xls_path), flavor="lxml")
         except ValueError as e:
+            current_run().record_error(f"Failed to read HTML table in '{xls_path.name}': {e}", e)
             logger.warning(f"No tables found in '{xls_path.name}': {e}")
             return [], f"Failed to read HTML table in '{xls_path.name}': {e}"
         except Exception as e:
+            current_run().record_error(f"Failed to read HTML table in '{xls_path.name}': {e}", e)
             return [], f"Failed to read HTML table in '{xls_path.name}': {e}"
 
         if not tables or tables[0].empty:
@@ -354,6 +357,7 @@ class ConsolidateMsmsWorkflow:
         data_msms_path = environment.storage.get_data_msms_path()
         completed_dir = environment.storage.get_python_msms_completed_dir()
         xls_files = environment.storage.list_msms_xls_files()
+        current_run().record_inputs(xls_files)
 
         existing_wos = self.extractor.get_existing_wos(data_msms_path)
 
@@ -391,8 +395,11 @@ class ConsolidateMsmsWorkflow:
             req.progress_sink(f"Appending {len(plan.rows_to_append)} rows to {data_msms_path.name}...")
 
         self.loader.load(plan)
+        current_run().record_outputs([data_msms_path])
 
         result = self.auditor.audit(plan)
+        if result.errors and not result.files_processed:
+            current_run().mark_failed()
 
         if req.progress_sink:
             req.progress_sink(

@@ -14,6 +14,7 @@ from typing import Sequence
 
 from src.core.normalizers import format_month_folder, normalize_date_str
 from src.project.environment import ProjectEnvironment
+from src.run_records import current_run
 from src.workflows.models import (
     DateFolderPlan,
     GenerateTestsheetFolderPlan,
@@ -306,6 +307,8 @@ class GenerateTestsheetFolderStructureWorkflow:
         result = self.auditor.audit(
             plan, created_dirs, existing_dirs, warnings=warnings
         )
+        if result.errors and not result.created_directories:
+            current_run().mark_failed()
 
         if request.progress_sink:
             request.progress_sink(

@@ -43,6 +43,7 @@ from src.project.storage import (
 )
 from src.quick_report.extractor import DAILY_DATE_FOLDER_PATTERN
 from src.quick_report.prpd import discover_ultratev_survey_dir
+from src.run_records import current_run
 from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
 
 if TYPE_CHECKING:
@@ -606,10 +607,21 @@ class FullReportPostProcessingWorkflow:
 
         start_time = time.time()
 
+        current_run().record_request(
+            {
+                "workflow": "Full Report Post-Processing",
+                "target": target,
+                "station": station,
+                "fail_fast": fail_fast,
+                "output_dir": output_dir,
+            }
+        )
+
         if progress_sink:
             progress_sink("Discovering Full Report documents for post-processing...")
 
         docx_files, warnings, errors = self._discover_docx_files(target, environment, station=station)
+        current_run().record_inputs(docx_files)
         if not docx_files:
             if not errors:
                 errors.append(f"No Full Report documents found for target: {target}")
@@ -791,6 +803,7 @@ class FullReportPostProcessingWorkflow:
             stem = group.stem
 
         ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment, stem=stem)
+        current_run().record_inputs([ts_pdf])
         validate_processed_testsheet_pdf(ts_pdf, stem=stem, raise_on_error=True)
         assert ts_pdf is not None
 
@@ -903,6 +916,8 @@ class FullReportPostProcessingWorkflow:
                     raw_dir = environment.storage.get_substation_raw_data_dir(
                         station, month, date_str, pe_num
                     )
+                if raw_dir is not None:
+                    current_run().record_input_folder(raw_dir, recursive=True)
 
                 survey_root = discover_ultratev_survey_dir(raw_dir)
                 if survey_root is not None and survey_root.exists():
@@ -1082,6 +1097,7 @@ class FullReportPostProcessingWorkflow:
         clean_sub_name = re.sub(r"\s*\([^()]*\)$", "", clean_sub_name).strip()
 
         ts_pdf = resolve_processed_testsheet_pdf_path(doc_p, environment, stem=stem)
+        current_run().record_inputs([ts_pdf])
         val_res = validate_processed_testsheet_pdf(ts_pdf, stem=stem, raise_on_error=False)
 
         if output_dir:

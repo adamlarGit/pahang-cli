@@ -23,6 +23,7 @@ from src.quick_report.utils import (
     normalize_functional_location_input,
     sanitize_filename,
 )
+from src.run_records import current_run
 from src.testsheet.models import SubstationTestsheetPackage
 from src.workflows.models import (
     QuickReportInspection,
@@ -83,6 +84,15 @@ class QuickReportWorkflow:
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
+        current_run().record_request(
+            {
+                "workflow": "Quick Report",
+                "target": target,
+                "station": station,
+                "condition_template": condition_template,
+            }
+        )
+
         # Fail fast if an explicit Path target was given but missing
         if isinstance(target, Path):
             if not self._target_path_exists(target, environment):
@@ -108,14 +118,19 @@ class QuickReportWorkflow:
 
         if not plans:
             errors = inspection.errors
-            if not errors and not inspection.targets:
+            if errors:
+                current_run().mark_failed()
+            elif not inspection.targets:
                 errors = (f"No testsheet packages found for target: {target}",)
+                current_run().record_failure(errors[0])
             return QuickReportResult(
                 reports_generated=0,
                 generated_paths=(),
                 warnings=inspection.warnings,
                 errors=errors,
             )
+
+        current_run().record_inputs(plan.package.testsheet_path for plan in plans)
 
         if progress_sink:
             progress_sink(f"Found {len(plans)} packages to process.")
@@ -133,11 +148,15 @@ class QuickReportWorkflow:
                 else:
                     progress_sink(f"[{idx}/{len(plans)}] Generating quick report for {station_name}...")
             try:
-                out_p = self._composer.load(p)
+                with current_run().step(f"Compose Quick Report: {station_name}"):
+                    out_p = self._composer.load(p)
                 if out_p:
                     generated_paths.append(out_p)
             except Exception as e:
                 # SubstationIsolatedBatchResiliencePolicy
+                current_run().record_error(
+                    f"Failed to process {station_name}: {e}", e, item=getattr(p.package, "testsheet_path", None)
+                )
                 errors.append(f"Failed to process {station_name}: {e}")
                 logger.exception(f"Failed to process {station_name}")
 
@@ -196,6 +215,7 @@ class QuickReportWorkflow:
 
         folders, fls = self._resolve_target(target, environment)
         cond_tpl = self._resolve_condition_template(environment, condition_template)
+        current_run().record_inputs([cond_tpl])
         missing_templates = self._validate_templates(environment, cond_tpl)
 
         warnings: list[str] = []
@@ -232,6 +252,7 @@ class QuickReportWorkflow:
                     and normalize_functional_location_input(pkg.data.fl_erms) in target_fls
                 ]
         except Exception as exc:
+            current_run().record_error(f"Package discovery failed: {exc}", exc, item="discovery")
             errors.append(f"Package discovery failed: {exc}")
             inspection = QuickReportInspection(
                 targets=(),
@@ -282,6 +303,9 @@ class QuickReportWorkflow:
                 items.append(item)
             except Exception as e:
                 # SubstationIsolatedBatchResiliencePolicy
+                current_run().record_error(
+                    f"Failed to process {station_name}: {e}", e, item=getattr(pkg, "testsheet_path", None)
+                )
                 errors.append(f"Failed to process {station_name}: {e}")
                 logger.exception(f"Failed to process {station_name}")
 
@@ -468,6 +492,9 @@ class QuickReportWorkflow:
                 verified_paths.append(path)
             else:
                 errors.append(f"Generated report at {path} is missing or 0 bytes.")
+
+        if errors and not verified_paths:
+            current_run().mark_failed()
 
         return QuickReportResult(
             reports_generated=len(verified_paths),

@@ -11,6 +11,7 @@ import openpyxl
 from src.core.normalizers import normalize_date_str, normalize_fl_erms
 from src.master.total_pe import LocalExcelTotalPeRepository, TotalPeRepository
 from src.project.environment import ProjectEnvironment
+from src.run_records import current_run
 from src.workflows.models import (
     PropagateWoRequest,
     PropagateWoResult,
@@ -701,6 +702,7 @@ class PropagateWoWorkflow:
             )
 
         updated_count = self.loader.load(plan)
+        current_run().record_outputs([total_pe_path])
 
         if req.progress_sink:
             req.progress_sink("Auditing TOTAL PE workbook integrity...")

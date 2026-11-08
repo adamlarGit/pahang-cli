@@ -13,6 +13,7 @@ import openpyxl
 from src.master.qr02 import LocalExcelQr02Repository, Qr02Repository
 from src.project.environment import ProjectEnvironment
 from src.project.storage import WorkspaceStorage
+from src.run_records import current_run
 from src.testsheet.extractor import TestsheetExtractor
 from src.testsheet.models import SubstationTestsheetPackage, TestsheetData
 from src.testsheet.parsers.common import normalize_fl_erms
@@ -200,6 +201,7 @@ class UpdateQr02CbaExtractor:
             )
         except Exception as exc:
             warn_msg = f"Failed to extract testsheet data from {pkg.testsheet_path}: {exc}"
+            current_run().record_warning(warn_msg, exc)
             warnings.append(warn_msg)
             return None
 
@@ -409,7 +411,17 @@ class UpdateQr02CbaLoader:
         """Load records for a single station plan using repository transaction."""
         repo = self._create_repository(environment, station_plan.station, year, repository_factory)
         with repo.transaction() as tx:
-            return tx.upsert_qr02_cba_records(station_plan.records)
+            records_updated = tx.upsert_qr02_cba_records(station_plan.records)
+        self._record_output_workbook(environment, station_plan.station, year)
+        return records_updated
+
+    @staticmethod
+    def _record_output_workbook(environment: ProjectEnvironment, station: str, year: str) -> None:
+        try:
+            voltage = getattr(environment, "voltage_type", "11kV")
+            current_run().record_outputs([environment.storage.get_engr_cba_path(station, year, voltage_type=voltage)])
+        except Exception:
+            pass
 
     def _create_repository(
         self,
@@ -494,6 +506,7 @@ class UpdateQr02CbaWorkflow:
 
         # 3. Filter (Filter targets)
         filtered_packages = self.filter_stage.filter(all_packages, request, history)
+        current_run().record_inputs(package.testsheet_path for package in filtered_packages)
 
         if request.progress_sink:
             request.progress_sink(
@@ -526,6 +539,8 @@ class UpdateQr02CbaWorkflow:
 
         # 2. Extractor (Read data records)
         records_map, extraction_warnings = self.extractor.extract_records(filtered_packages)
+        if extraction_warnings and not records_map:
+            current_run().record_failure(f"All {len(filtered_packages)} testsheet(s) failed to read.")
         if request.progress_sink:
             for warn_msg in extraction_warnings:
                 request.progress_sink(warn_msg)

@@ -6,6 +6,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.run_records import current_run
+
 
 @dataclass(frozen=True)
 class RenameFlirSummary:
@@ -56,6 +58,15 @@ def run_rename_flir() -> RenameFlirSummary:
     input_folder = input("Enter the input folder path: ").strip().strip('"')
     output_folder = input("Enter the output folder path: ").strip().strip('"')
     start_str = input("Enter the starting number [1]: ").strip()
+    current_run().record_request(
+        {
+            "workflow": "Rename FLIR",
+            "input_folder": input_folder,
+            "output_folder": output_folder,
+            "starting_number": start_str,
+        }
+    )
+    current_run().record_input_folder(input_folder)
     starting_number = int(start_str) if start_str else 1
 
     summary = copy_and_rename_flir_files(input_folder, output_folder, starting_number)

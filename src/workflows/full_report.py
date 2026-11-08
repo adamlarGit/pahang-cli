@@ -64,6 +64,7 @@ from src.quick_report.utils import (
     sanitize_filename,
 )
 from src.core.topology import SwitchgearArchetype, VoltageClass
+from src.run_records import current_run
 from src.testsheet.models import (
     PowerTransformerSpec,
     SubstationEquipmentPackage,
@@ -336,6 +337,7 @@ class FullReportWorkflow:
                 telemetries.append(telem)
             except Exception as exc:
                 err_msg = f"Failed to inspect {st_name}: {exc}"
+                current_run().record_error(err_msg, exc)
                 errors.append(err_msg)
                 logger.exception(err_msg)
                 telemetries.append(
@@ -389,15 +391,30 @@ class FullReportWorkflow:
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
+        current_run().record_request(
+            {
+                "workflow": "Full Report",
+                "target": target,
+                "station": station,
+                "keep_temp": keep_temp,
+                "temp_dir": temp_dir,
+                "output_dir": output_dir,
+            }
+        )
+
         self._validate_target_existence(target, environment)
 
         if progress_sink:
             progress_sink("Discovering target packages for Full Report...")
 
         packages, warnings, errors = self._discover_packages(target, environment, station=station)
+        current_run().record_inputs(package.testsheet_path for package in packages)
         if not packages:
-            if not errors:
+            if errors:
+                current_run().mark_failed()
+            else:
                 errors.append(f"No testsheet packages found for target: {target}")
+                current_run().record_failure(errors[0])
             return FullReportBatchResult(
                 total_stations=0,
                 succeeded_count=0,
@@ -502,6 +519,8 @@ class FullReportWorkflow:
         final_station_results = tuple(r for r in ordered_results if r is not None)
         succeeded_stations = sum(1 for r in final_station_results if r.is_success)
         failed_stations = len(packages) - succeeded_stations
+        if not succeeded_stations:
+            current_run().mark_failed()
 
         if progress_sink:
             progress_sink(
@@ -557,6 +576,7 @@ class FullReportWorkflow:
 
         # 1. Pre-flight validation
         qr_path = self._resolve_quick_report_path(ctx.environment, pkg)
+        current_run().record_inputs([qr_path])
         val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
         if not val_res.is_valid:
             # SubstationIsolatedBatchResiliencePolicy: record upfront validation failure
@@ -589,24 +609,26 @@ class FullReportWorkflow:
 
         try:
             # 3. Slicing & Plan building
-            plan = self._build_station_plan(
-                pkg,
-                ctx.environment,
-                quick_report_path=qr_path,
-                output_dir=ctx.output_dir,
-                station_temp_dir=station_temp_dir,
-            )
+            with current_run().step(f"Build Full Report plan: {st_name}"):
+                plan = self._build_station_plan(
+                    pkg,
+                    ctx.environment,
+                    quick_report_path=qr_path,
+                    output_dir=ctx.output_dir,
+                    station_temp_dir=station_temp_dir,
+                )
 
             # 4. Rendering & Compilation
             rendered_dir = station_temp_dir / "rendered"
             rendered_dir.mkdir(parents=True, exist_ok=True)
 
-            comp_res = self._composer.compose(
-                plan,
-                keep_temp=ctx.keep_temp,
-                temp_dir=rendered_dir,
-                base_dir=ctx.environment.base_path,
-            )
+            with current_run().step(f"Compose Full Report: {st_name}"):
+                comp_res = self._composer.compose(
+                    plan,
+                    keep_temp=ctx.keep_temp,
+                    temp_dir=rendered_dir,
+                    base_dir=ctx.environment.base_path,
+                )
 
             out_path = comp_res.output_path
             if not out_path or not out_path.exists() or out_path.stat().st_size == 0:
@@ -674,6 +696,7 @@ class FullReportWorkflow:
         except Exception as exc:
             # SubstationIsolatedBatchResiliencePolicy
             err_msg = f"Failed to compile Full Report for {st_name}: {exc}"
+            current_run().record_error(err_msg, exc)
             ctx.errors.append(err_msg)
             logger.exception(err_msg)
             ctx.ordered_results[pkg_idx] = FullReportStationExecutionResult(
@@ -751,6 +774,7 @@ class FullReportWorkflow:
         date_str = pkg.date_str or "01-01-2026"
 
         qr_path = self._resolve_quick_report_path(environment, pkg)
+        current_run().record_inputs([qr_path])
         val_res = validate_finalized_quick_report(qr_path, raise_on_error=False)
 
         cbm_defects, vi_defects = self._extract_defects_safe(pkg, environment)
@@ -889,6 +913,9 @@ class FullReportWorkflow:
             cand = Path(pkg.raw_data_dir)
             if cand.exists():
                 raw_dir = cand
+
+        if raw_dir is not None:
+            current_run().record_input_folder(raw_dir, recursive=True)
 
         eq_pkg = self._resolve_equipment_package(pkg)
         panels = []
@@ -1261,6 +1288,7 @@ class FullReportWorkflow:
                     and normalize_functional_location_input(pkg.data.fl_erms) in target_fls
                 ]
         except Exception as exc:
+            current_run().record_error(f"Package discovery failed: {exc}", exc, item="discovery")
             errors.append(f"Package discovery failed: {exc}")
             return [], warnings, errors
 

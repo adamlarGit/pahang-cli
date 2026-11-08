@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from src.run_records import current_run
+
 
 def remove_desktop_ini_files(target_directory: str | Path) -> int:
     """Recursively remove all desktop.ini files from target_directory."""
@@ -32,6 +34,7 @@ def remove_desktop_ini_files(target_directory: str | Path) -> int:
             logging.warning("PowerShell script execution encountered issue, falling back to Python removal: %s", exc)
 
     removed_count = 0
+    failed_count = 0
     for root, _, files in os.walk(target_path):
         for file in files:
             if file.lower() == "desktop.ini":
@@ -42,7 +45,12 @@ def remove_desktop_ini_files(target_directory: str | Path) -> int:
                     removed_count += 1
                     print(f"  ✓ Removed: {full_path}")
                 except Exception as exc:
+                    failed_count += 1
+                    current_run().record_error(f"Failed to remove {full_path}: {exc}", exc)
                     print(f"  ❌ Failed to remove {full_path}: {exc}")
+
+    if failed_count and not removed_count:
+        current_run().mark_failed()
 
     if removed_count > 0:
         print(f"\n✓ Successfully removed {removed_count} 'desktop.ini' file(s).")
@@ -69,5 +77,8 @@ def run_remove_desktop_ini(environment: 'ProjectEnvironment | None' = None) -> i
     target_path = prompt_directory_path("Enter target folder path to scan", default=default_path, must_exist=True)
     if not target_path:
         return 0
+
+    current_run().record_request({"workflow": "Remove desktop.ini", "target_path": target_path})
+    current_run().record_inputs([target_path])
 
     return remove_desktop_ini_files(target_path)
