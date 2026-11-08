@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterator, Sequence
 from src.core.normalizers import format_month_folder
 from src.postprocessing.batch_guard import FolderLock, keep_awake, sweep_stale_temps
 from src.postprocessing.converters import (
+    MULTIPART_DOCX_PATTERN,
     BatchComSession,
     ComDocumentConverter,
     DocumentConverter,
@@ -34,6 +35,7 @@ from src.postprocessing.converters import (
     PartConversionOutcome,
     batch_com_session,
     configure_uniform_printer,
+    full_report_item,
     safe_unlink_with_retry,
 )
 from src.project.storage import (
@@ -43,7 +45,7 @@ from src.project.storage import (
 )
 from src.quick_report.extractor import DAILY_DATE_FOLDER_PATTERN
 from src.quick_report.prpd import discover_ultratev_survey_dir
-from src.run_records import current_run
+from src.run_records import OperationCancelled, current_run
 from src.workflows.us_audio import embed_survey_ultrasound_into_pdf
 
 if TYPE_CHECKING:
@@ -59,12 +61,7 @@ PostProcessingTarget = (
 )
 ProgressSink = Callable[[str], None]
 
-MULTIPART_DOCX_PATTERN = re.compile(
-    r"^(?P<stem>.+)\s+-\s+Part\s+(?P<part>\d+)(?:\s+-\s+.*)?$",
-    re.IGNORECASE,
-)
-
-
+SUBSTATION_STEP = "Full Report post-processing substation"
 SUPERSEDED_DIR_NAME = "_superseded"
 WARN_ICON = "\u26a0\ufe0f "
 EMPTY_DATE_HINT = "no Full Report documents — run Generate Full Reports first"
@@ -555,6 +552,22 @@ class FullReportPostProcessingWorkflow:
         if environment is None:
             raise ValueError("ProjectEnvironment cannot be None.")
 
+        with current_run().step("Inspect Full Report documents") as step:
+            inspection = self._inspect(target, environment, station=station, progress_sink=progress_sink)
+            for error in inspection.errors:
+                current_run().record_error(error)
+            if inspection.errors:
+                step.fail_already_recorded(inspection.errors[0])
+        return inspection
+
+    def _inspect(
+        self,
+        target: PostProcessingTarget,
+        environment: ProjectEnvironment,
+        *,
+        station: str | Sequence[str] | None = None,
+        progress_sink: ProgressSink | None = None,
+    ) -> FullReportPostProcessingInspection:
         if progress_sink:
             progress_sink("Discovering Full Report documents for post-processing inspection...")
 
@@ -577,6 +590,8 @@ class FullReportPostProcessingWorkflow:
                 )
             telem = self._inspect_single_report(group, environment)
             telemetries.append(telem)
+            if telem.errors:
+                current_run().record_warning(f"{telem.date_str} {telem.stem} is not ready: {'; '.join(telem.errors)}")
 
         return FullReportPostProcessingInspection(
             targets=tuple(telemetries),
@@ -623,11 +638,17 @@ class FullReportPostProcessingWorkflow:
         if progress_sink:
             progress_sink("Discovering Full Report documents for post-processing...")
 
-        docx_files, warnings, errors = self._discover_docx_files(target, environment, station=station)
+        with current_run().step("Discover Full Report documents") as discovery:
+            docx_files, warnings, errors = self._discover_docx_files(target, environment, station=station)
+            if errors:
+                discovery.fail_already_recorded(errors[0])
         current_run().record_inputs(docx_files)
         if not docx_files:
-            if not errors:
+            if errors:
+                current_run().mark_failed()
+            else:
                 errors.append(f"No Full Report documents found for target: {target}")
+                current_run().record_failure(errors[0])
             return FullReportPostProcessingResult(
                 total_reports=0,
                 succeeded_count=0,
@@ -645,14 +666,24 @@ class FullReportPostProcessingWorkflow:
         telemetries: list[FullReportPostProcessingTelemetry] = []
         valid_targets: list[FullReportPostProcessingTelemetry] = []
 
+        # Every report is validated before the first conversion, so fail-fast converts nothing. That
+        # puts this stage ahead of the substation Step, which a rejected report then finishes as failed.
         for group in target_groups:
-            telem = self._inspect_single_report(group, environment, output_dir=output_dir)
+            item = full_report_item(group.primary_docx_path)
+            with current_run().step("Validate testsheet PDF", item=item, counted=False) as validation:
+                telem = self._inspect_single_report(group, environment, output_dir=output_dir)
+                err_msg = None
+                if not telem.is_ready:
+                    err_msg = telem.errors[0] if telem.errors else f"Validation failed for {group.stem}"
+                    # The error entry is written once, by the substation Step just below.
+                    validation.fail_already_recorded(err_msg)
             telemetries.append(telem)
 
-            if not telem.is_ready:
-                err_msg = telem.errors[0] if telem.errors else f"Validation failed for {group.stem}"
-                if fail_fast:
-                    raise TestsheetPdfNotFoundError(err_msg)
+            if err_msg is not None:
+                with current_run().step(SUBSTATION_STEP, item=item) as substation:
+                    if fail_fast:
+                        raise TestsheetPdfNotFoundError(err_msg)
+                    substation.fail(err_msg)
                 errors.append(err_msg)
                 continue
 
@@ -671,9 +702,11 @@ class FullReportPostProcessingWorkflow:
                     folder.mkdir(parents=True, exist_ok=True)
                     lock = FolderLock.acquire(folder)
                     if lock is None:
-                        errors.append(
-                            f"Skipped {folder}: another post-processing run holds {folder / '.postprocess.lock'}"
-                        )
+                        err_msg = f"Skipped {folder}: another post-processing run holds {folder / '.postprocess.lock'}"
+                        errors.append(err_msg)
+                        # The result counts these reports as failed, so their Steps do too.
+                        with current_run().step(SUBSTATION_STEP, item=full_report_item(telem.docx_path)) as substation:
+                            substation.fail(err_msg)
                         continue
                     held_locks[folder] = lock
                     swept = sweep_stale_temps(folder)
@@ -689,59 +722,70 @@ class FullReportPostProcessingWorkflow:
                 word_app = getattr(session, "word_app", None)
                 try:
                     if word_app is not None:
-                        configure_uniform_printer(word_app)
+                        with current_run().step("Configure Word printer"):
+                            configure_uniform_printer(word_app)
 
                     for idx, telem in enumerate(valid_targets, start=1):
-                        if idx > 1 and session is not None and hasattr(session, "restart_word"):
-                            # Recycle Word at every substation boundary (Q112 amends Q84).
+                        item = full_report_item(telem.docx_path)
+                        with current_run().step(SUBSTATION_STEP, item=item) as substation:
+                            if idx > 1 and session is not None and hasattr(session, "restart_word"):
+                                # Recycle Word at every substation boundary (Q112 amends Q84).
+                                with current_run().step("Restart Word", item=item):
+                                    try:
+                                        if session.restart_word():
+                                            word_app = getattr(session, "word_app", None)
+                                    except Exception as exc:
+                                        warnings.append(f"Could not recycle Word before {telem.stem}: {exc}")
+                                        word_app = getattr(session, "word_app", None)
+                            stem = telem.stem
+                            out_pdf = telem.target_pdf_path
+                            ts_pdf = telem.testsheet_pdf_path
+                            assert ts_pdf is not None
+
+                            if progress_sink:
+                                progress_sink(
+                                    f"[{idx}/{len(valid_targets)}] {_date_tag(telem.docx_path.parent.name)}"
+                                    f"Converting and merging Full Report for {stem}..."
+                                )
                             try:
-                                if session.restart_word():
-                                    word_app = getattr(session, "word_app", None)
-                            except Exception as exc:
-                                warnings.append(f"Could not recycle Word before {telem.stem}: {exc}")
-                                word_app = getattr(session, "word_app", None)
-                        stem = telem.stem
-                        out_pdf = telem.target_pdf_path
-                        ts_pdf = telem.testsheet_pdf_path
-                        assert ts_pdf is not None
+                                target_group = PostProcessingTargetGroup(
+                                    stem=telem.stem,
+                                    docx_paths=telem.part_docx_paths if telem.is_multipart else (telem.docx_path,),
+                                    is_multipart=telem.is_multipart,
+                                )
+                                outcomes = self._compile_deliverable(
+                                    group=target_group,
+                                    testsheet_pdf_path=ts_pdf,
+                                    output_pdf_path=out_pdf,
+                                    environment=environment,
+                                    word_app=word_app,
+                                    session=session,
+                                )
+                                final_telemetries[telem.docx_path] = replace(telem, part_outcomes=outcomes)
+                                for outcome in outcomes:
+                                    if outcome.warning:
+                                        warnings.append(outcome.warning)
+                                        current_run().record_warning(outcome.warning)
 
-                        if progress_sink:
-                            progress_sink(
-                                f"[{idx}/{len(valid_targets)}] {_date_tag(telem.docx_path.parent.name)}"
-                                f"Converting and merging Full Report for {stem}..."
-                            )
-                        try:
-                            target_group = PostProcessingTargetGroup(
-                                stem=telem.stem,
-                                docx_paths=telem.part_docx_paths if telem.is_multipart else (telem.docx_path,),
-                                is_multipart=telem.is_multipart,
-                            )
-                            outcomes = self._compile_deliverable(
-                                group=target_group,
-                                testsheet_pdf_path=ts_pdf,
-                                output_pdf_path=out_pdf,
-                                environment=environment,
-                                word_app=word_app,
-                                session=session,
-                            )
-                            final_telemetries[telem.docx_path] = replace(telem, part_outcomes=outcomes)
-                            for outcome in outcomes:
-                                if outcome.warning:
-                                    warnings.append(outcome.warning)
-
-                            if out_pdf.exists() and out_pdf.stat().st_size > 0:
-                                deliverables.append(out_pdf)
-                                if progress_sink:
-                                    progress_sink(f"Deliverable generated -> {out_pdf.name}")
-                            else:
-                                err_msg = f"Merged deliverable for {stem} is missing or 0 bytes."
-                                errors.append(err_msg)
-                        except Exception as exc:
-                            err_msg = f"Failed to post-process {stem}: {exc}"
-                            errors.append(err_msg)
-                            logger.exception(err_msg)
-                            if fail_fast:
+                                if out_pdf.exists() and out_pdf.stat().st_size > 0:
+                                    deliverables.append(out_pdf)
+                                    # Now, not from the result, so a later cancel can't lose it.
+                                    current_run().record_outputs([out_pdf])
+                                    if progress_sink:
+                                        progress_sink(f"Deliverable generated -> {out_pdf.name}")
+                                else:
+                                    err_msg = f"Merged deliverable for {stem} is missing or 0 bytes."
+                                    errors.append(err_msg)
+                                    substation.fail(err_msg)
+                            except OperationCancelled:
                                 raise
+                            except Exception as exc:
+                                err_msg = f"Failed to post-process {stem}: {exc}"
+                                errors.append(err_msg)
+                                substation.fail(err_msg, exc)
+                                logger.exception(err_msg)
+                                if fail_fast:
+                                    raise
                 finally:
                     word_app = None
                     import gc
@@ -753,6 +797,8 @@ class FullReportPostProcessingWorkflow:
 
         telemetries = [final_telemetries.get(t.docx_path, t) for t in telemetries]
         duration = time.time() - start_time
+        if not deliverables:
+            current_run().mark_failed()
 
         if progress_sink:
             progress_sink(
@@ -858,6 +904,7 @@ class FullReportPostProcessingWorkflow:
         ts_pdf = testsheet_pdf_path
         out_pdf.parent.mkdir(parents=True, exist_ok=True)
         outcomes: list[PartConversionOutcome] = []
+        item = full_report_item(group.primary_docx_path)
 
         def _record_outcome() -> None:
             outcome = getattr(self._converter, "last_conversion", None)
@@ -872,16 +919,19 @@ class FullReportPostProcessingWorkflow:
                 for p_idx, part_docx in enumerate(group.docx_paths, start=1):
                     temp_part_pdf = out_pdf.parent / f".tmp_conv_{stem}_part_{p_idx:02d}.pdf"
                     temp_part_pdfs.append(temp_part_pdf)
-                    self._converter.convert_docx_to_pdf(
-                        part_docx, temp_part_pdf, word_app=word_app, session=session
-                    )
+                    with current_run().step("Convert Full Report to PDF", item=item):
+                        self._converter.convert_docx_to_pdf(
+                            part_docx, temp_part_pdf, word_app=word_app, session=session
+                        )
                     _record_outcome()
 
                 # 2. Sequential batch PDF merge into consolidated full report PDF
-                self._converter.merge_pdfs_batch(temp_part_pdfs, temp_master_pdf)
+                with current_run().step("Merge Full Report parts", item=item):
+                    self._converter.merge_pdfs_batch(temp_part_pdfs, temp_master_pdf)
 
                 # 3. Append signed testsheet PDF from processed_testsheet/pdf/<STEM>.pdf to master PDF
-                self._converter.merge_pdfs(temp_master_pdf, ts_pdf, out_pdf)
+                with current_run().step("Merge testsheet PDF", item=item):
+                    self._converter.merge_pdfs(temp_master_pdf, ts_pdf, out_pdf)
             finally:
                 # 4. Clean up all temporary part PDFs and intermediate master PDF
                 for temp_p in temp_part_pdfs:
@@ -892,45 +942,49 @@ class FullReportPostProcessingWorkflow:
             docx_path = group.primary_docx_path
             temp_conv_pdf = out_pdf.parent / f".tmp_conv_{out_pdf.name}"
             try:
-                self._converter.convert_docx_to_pdf(
-                    docx_path, temp_conv_pdf, word_app=word_app, session=session
-                )
+                with current_run().step("Convert Full Report to PDF", item=item):
+                    self._converter.convert_docx_to_pdf(
+                        docx_path, temp_conv_pdf, word_app=word_app, session=session
+                    )
                 _record_outcome()
-                self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
+                with current_run().step("Merge testsheet PDF", item=item):
+                    self._converter.merge_pdfs(temp_conv_pdf, ts_pdf, out_pdf)
             finally:
                 safe_unlink_with_retry(temp_conv_pdf)
 
         # Unified Exit Point: Sound embedding hook (IdempotentSoundEmbeddingPolicy & UsTevAudioResiliencePolicy)
         if environment is not None and out_pdf.exists():
-            try:
-                doc_p = group.primary_docx_path.resolve()
-                date_str = doc_p.parent.name
-                month = doc_p.parent.parent.name
-                station = doc_p.parent.parent.parent.name
-
-                pe_num = None
+            # The try is inside the Step, so a sound problem keeps its PDF and the substation completes.
+            with current_run().step("Embed survey ultrasound", item=item):
                 try:
-                    pe_num = extract_numerical_prefix(group.stem)
-                except ValueError:
-                    pass
+                    doc_p = group.primary_docx_path.resolve()
+                    date_str = doc_p.parent.name
+                    month = doc_p.parent.parent.name
+                    station = doc_p.parent.parent.parent.name
 
-                raw_dir = None
-                if pe_num is not None and hasattr(environment, "storage") and hasattr(environment.storage, "get_substation_raw_data_dir"):
-                    raw_dir = environment.storage.get_substation_raw_data_dir(
-                        station, month, date_str, pe_num
-                    )
-                if raw_dir is not None:
-                    current_run().record_input_folder(raw_dir, recursive=True)
+                    pe_num = None
+                    try:
+                        pe_num = extract_numerical_prefix(group.stem)
+                    except ValueError:
+                        pass
 
-                survey_root = discover_ultratev_survey_dir(raw_dir)
-                if survey_root is not None and survey_root.exists():
-                    ts_pkg = self._resolve_testsheet_data_for_group(group, environment, testsheet_pdf_path=ts_pdf)
-                    count = embed_survey_ultrasound_into_pdf(out_pdf, survey_root=survey_root, package=ts_pkg)
-                    logger.info("[FULL REPORT] Embedded %d ultrasound sounds into %s", count, out_pdf.name)
-                else:
-                    logger.info("[FULL REPORT] No US+TEV raw data found for %s; skipping sound embedding", stem)
-            except Exception as exc:
-                logger.warning("[WARN] Sound embedding failed for %s: %s; keeping original PDF", out_pdf.name, exc)
+                    raw_dir = None
+                    if pe_num is not None and hasattr(environment, "storage") and hasattr(environment.storage, "get_substation_raw_data_dir"):
+                        raw_dir = environment.storage.get_substation_raw_data_dir(
+                            station, month, date_str, pe_num
+                        )
+                    if raw_dir is not None:
+                        current_run().record_input_folder(raw_dir, recursive=True)
+
+                    survey_root = discover_ultratev_survey_dir(raw_dir)
+                    if survey_root is not None and survey_root.exists():
+                        ts_pkg = self._resolve_testsheet_data_for_group(group, environment, testsheet_pdf_path=ts_pdf)
+                        count = embed_survey_ultrasound_into_pdf(out_pdf, survey_root=survey_root, package=ts_pkg)
+                        logger.info("[FULL REPORT] Embedded %d ultrasound sounds into %s", count, out_pdf.name)
+                    else:
+                        logger.info("[FULL REPORT] No US+TEV raw data found for %s; skipping sound embedding", stem)
+                except Exception as exc:
+                    logger.warning("[WARN] Sound embedding failed for %s: %s; keeping original PDF", out_pdf.name, exc)
 
         return tuple(outcomes)
 

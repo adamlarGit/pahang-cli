@@ -21,6 +21,8 @@ except ImportError:
 
 from PyPDF2 import PdfWriter
 
+from src.run_records import current_run
+
 if TYPE_CHECKING:
     from .image_restoration import RestorationReport
 
@@ -523,6 +525,17 @@ class PartConversionOutcome:
 
 _OPEN_RETRY_DELAYS: tuple[float, ...] = (0.2, 0.5, 1.0)
 
+MULTIPART_DOCX_PATTERN = re.compile(
+    r"^(?P<stem>.+)\s+-\s+Part\s+(?P<part>\d+)(?:\s+-\s+.*)?$",
+    re.IGNORECASE,
+)
+
+
+def full_report_item(docx_path: Path) -> tuple[str, str]:
+    """The Run Record identity of a Full Report: its date folder and its stem, the same for every Part."""
+    match = MULTIPART_DOCX_PATTERN.match(docx_path.stem)
+    return docx_path.parent.name, match.group("stem").strip() if match else docx_path.stem
+
 
 def _sha256_of_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -650,13 +663,16 @@ def convert_docx_native_restored(
             _publish(native_tmp, pdf_path)
             return PartConversionOutcome(docx_path, None, True, warning)
 
-        try:
-            report = restore(snapshot, native_tmp, restore_tmp)
-        except Exception as exc:
-            warning = f"image restoration failed for {docx_path.name} ({exc}); kept native PDF"
-            logging.warning(warning)
-            _publish(native_tmp, pdf_path)
-            return PartConversionOutcome(docx_path, None, True, warning)
+        # A restoration failure still delivers the native PDF, so it is a warning and not a failed Step.
+        # Not counted: the DOCX-to-PDF utility reports its own numbers, and a batch counts substation Steps.
+        with current_run().step("Restore source images", item=full_report_item(docx_path), counted=False):
+            try:
+                report = restore(snapshot, native_tmp, restore_tmp)
+            except Exception as exc:
+                warning = f"image restoration failed for {docx_path.name} ({exc}); kept native PDF"
+                logging.warning(warning)
+                _publish(native_tmp, pdf_path)
+                return PartConversionOutcome(docx_path, None, True, warning)
         snapshot = b""
         try:
             _publish(restore_tmp, pdf_path)

@@ -34,7 +34,8 @@ So completed work, a failed item and then a cancel finish as ``cancelled``, with
 ``run_finish`` also has ``counts``: ``completed``, ``failed`` and ``skipped``, each the reported
 number or ``"unknown"``. Unknown is never recorded as 0. When steps named an ``item``, the counts
 are tallied from them, each item counted once at its worst outcome (failed, then skipped, then
-completed). An item cancelled partway isn't counted. When no step named an item, a returned result's
+completed). An item cancelled partway isn't counted, and neither is a step opened with
+``counted=False``. When no step named an item, a returned result's
 ``succeeded_count``, ``processed_count``, ``converted_count`` and ``failed_count`` are used if it has
 them. With neither, the count is unknown.
 
@@ -162,7 +163,7 @@ class _StepOutcome:
         self._run.record_error(message, exc, item=self._item)
 
     def fail_already_recorded(self, message: Any) -> None:
-        """The step failed because of an error already recorded, so no second error entry is written."""
+        """The step failed because of an error recorded elsewhere, so this step writes no error entry."""
         self.status = "failed"
         self.details = {"error": _text_of(message)}
 
@@ -332,13 +333,16 @@ class Run:
             self._raise_status("cancelled")
 
     @contextmanager
-    def step(self, name: str, item: Any = None) -> Iterator["_StepOutcome"]:
+    def step(self, name: str, item: Any = None, *, counted: bool = True) -> Iterator["_StepOutcome"]:
         """Record one named, timed stage. A failure inside it passes straight through.
 
-        ``item`` names what the step worked on, such as a date and a substation.
+        ``item`` names what the step worked on, such as a date and a substation. A stage run
+        for the whole batch before the work starts passes ``counted=False``, so an item that
+        only passed it isn't counted as done.
         """
         started = time.perf_counter()
         item_fields = {} if item is None else {"item": _describe_safely(item)}
+        tally_fields = item_fields if counted else {}
         self._write("step_start", name=name, **item_fields)
         outcome = _StepOutcome(self, item)
         try:
@@ -354,9 +358,9 @@ class Run:
                 **item_fields,
             )
             if status == "failed":
-                self._note_item_outcome(item_fields, status)
+                self._note_item_outcome(tally_fields, status)
             else:
-                self._forget_item(item_fields)
+                self._forget_item(tally_fields)
             raise
         self._write(
             "step_finish",
@@ -365,7 +369,7 @@ class Run:
             duration_seconds=round(time.perf_counter() - started, 3),
             **{**outcome.details, **item_fields},
         )
-        self._note_item_outcome(item_fields, outcome.status)
+        self._note_item_outcome(tally_fields, outcome.status)
 
     def __enter__(self) -> "Run":
         global _current
