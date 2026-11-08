@@ -16,7 +16,7 @@ A Run Record is one JSON Lines file, flushed line by line, so a Word hang or a c
 still leaves everything up to that point.
 
 Every line is one JSON object with a ``type`` and a ``time``. The types are ``run_start``,
-``environment`` (app, git, Python, Word and Excel versions), ``request``, ``request_update``,
+``environment`` (app, git SHA and worktree state, Python, Word and Excel versions), ``request``, ``request_update``,
 ``input`` (path, size, modified; ``modified`` is null if unknown), ``input_truncated`` (a capped
 folder: ``folder``, ``recorded``, ``left_out``, ``left_out_is_a_minimum``), ``input_unreadable``
 (``folder``), ``step_start``, ``step_finish``, ``log``, ``progress``,
@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import itertools
 import json
 import logging
 import math
@@ -93,6 +94,18 @@ _MODULE_LEVEL_LOGGING_CODE = {
     for function in (logging.debug, logging.info, logging.warning, logging.error, logging.critical, logging.log)
 }
 _MAX_DESCRIBE_DEPTH = 12
+# Limits on one described request or result, so a stray large value can't flood a record.
+_MAX_ITEMS_PER_COLLECTION = 200
+_MAX_TEXT_LENGTH = 4096
+_TEXT_NOTE_RESERVE = 48
+_MAX_PAYLOAD_BYTES = 256 * 1024
+# A rough allowance for JSON punctuation. It also stops heavily shared references early.
+_BYTES_PER_VALUE = 8
+# json.dumps raises on integers with thousands of digits.
+_MAX_INTEGER_BITS = 64
+_UNDESCRIBABLE = "<could not be described>"
+_REDACTED = "<redacted>"
+_SENSITIVE_NAME = re.compile(r"password|passwd|secret|token|api[_-]?key|credential|authorization", re.IGNORECASE)
 _RECORDED_MARK = "_pahang_cli_recorded_by_run"
 # Input entries kept per folder, so a huge raw-data folder can't flood a record.
 _MAX_INPUTS_PER_FOLDER = 200
@@ -836,46 +849,134 @@ def _input_paths_in(request: Any) -> list[Any]:
         return []
 
 
+class _PayloadTooLarge(Exception):
+    """A description went over ``_MAX_PAYLOAD_BYTES``."""
+
+
+class _Budget:
+    """Bytes left for one description, spent as it is built so a huge value is abandoned early."""
+
+    def __init__(self) -> None:
+        self._remaining = _MAX_PAYLOAD_BYTES
+
+    def spend(self, size: int) -> None:
+        self._remaining -= size
+        if self._remaining < 0:
+            raise _PayloadTooLarge
+
+    def spend_text(self, text: str) -> str:
+        self.spend(len(json.dumps(text, ensure_ascii=False).encode("utf-8", "backslashreplace")))
+        return text
+
+
 def _describe_safely(value: Any) -> Any:
     try:
-        return _describe(value, 0, set())
+        return _describe(value, 0, set(), _Budget())
+    except _PayloadTooLarge:
+        return _too_large_marker(value)
     except Exception:
-        return "<could not be described>"
+        return _UNDESCRIBABLE
 
 
-def _describe(value: Any, depth: int, enclosing: set[int]) -> Any:
+def _too_large_marker(value: Any) -> dict[str, str]:
+    """Stands in for a whole oversized value, keeping what identifies it."""
+    marker = {"__omitted__": f"<larger than {_MAX_PAYLOAD_BYTES // 1024} KB>"}
+    try:
+        if dataclasses.is_dataclass(value) and not isinstance(value, type):
+            marker["__type__"] = type(value).__name__
+        elif isinstance(value, Mapping) and isinstance(value.get("workflow"), str):
+            marker["workflow"] = _bounded_text(value["workflow"])
+    except Exception:
+        pass
+    return marker
+
+
+def _describe(value: Any, depth: int, enclosing: set[int], budget: _Budget) -> Any:
     """Turn a value into something JSON can hold, describing whatever it can't."""
+    budget.spend(_BYTES_PER_VALUE)
     if isinstance(value, enum.Enum):
-        return value.name
-    if value is None or isinstance(value, (bool, int, str)):
+        return budget.spend_text(value.name)
+    if isinstance(value, int) and value.bit_length() > _MAX_INTEGER_BITS:
+        return budget.spend_text(_label_of(value))
+    if value is None or isinstance(value, (bool, int)):
         return value
+    if isinstance(value, str):
+        return budget.spend_text(_bounded_text(value))
     if isinstance(value, float):
         return value if math.isfinite(value) else str(value)
     if isinstance(value, os.PathLike):
-        return str(value)
+        return budget.spend_text(_bounded_text(str(value)))
     if isinstance(value, (date, datetime)):
-        return value.isoformat()
+        return budget.spend_text(value.isoformat())
     if depth >= _MAX_DESCRIBE_DEPTH or id(value) in enclosing:
-        return _label_of(value)
+        return budget.spend_text(_label_of(value))
 
     inner = enclosing | {id(value)}
+    if isinstance(value, tuple) and hasattr(value, "_fields"):
+        value = dict(zip(value._fields, value))
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         described = {"__type__": type(value).__name__}
         for field in dataclasses.fields(value):
-            described[field.name] = _describe_field(value, field.name, depth, inner)
+            budget.spend_text(field.name)
+            described[field.name] = _describe_field(value, field.name, depth, inner, budget)
         return described
     if isinstance(value, Mapping):
-        return {_text_of(key): _describe(item, depth + 1, inner) for key, item in value.items()}
+        described = {}
+        for key, item in itertools.islice(value.items(), _MAX_ITEMS_PER_COLLECTION):
+            text = budget.spend_text(_bounded_text(_text_of(key)))
+            described[text] = _describe_named(text, item, depth, inner, budget)
+        if len(value) > _MAX_ITEMS_PER_COLLECTION:
+            described["__left_out__"] = _left_out_note(len(value))
+        return described
     if isinstance(value, (list, tuple, set, frozenset)):
-        return [_describe(item, depth + 1, inner) for item in value]
-    return _label_of(value)
+        described = [
+            _describe_part(item, depth, inner, budget)
+            for item in itertools.islice(value, _MAX_ITEMS_PER_COLLECTION)
+        ]
+        if len(value) > _MAX_ITEMS_PER_COLLECTION:
+            described.append(_left_out_note(len(value)))
+        return described
+    return budget.spend_text(_label_of(value))
 
 
-def _describe_field(owner: Any, name: str, depth: int, enclosing: set[int]) -> Any:
+def _describe_field(owner: Any, name: str, depth: int, enclosing: set[int], budget: _Budget) -> Any:
     try:
-        return _describe(getattr(owner, name), depth + 1, enclosing)
+        field_value = getattr(owner, name)
     except Exception:
-        return "<could not be described>"
+        return _UNDESCRIBABLE
+    return _describe_named(name, field_value, depth, enclosing, budget)
+
+
+def _describe_named(name: str, value: Any, depth: int, enclosing: set[int], budget: _Budget) -> Any:
+    """Describe a named member, redacting it if its name looks sensitive. A path is never a credential."""
+    if _is_sensitive(name) and not isinstance(value, os.PathLike):
+        return _REDACTED
+    return _describe_part(value, depth, enclosing, budget)
+
+
+def _describe_part(value: Any, depth: int, enclosing: set[int], budget: _Budget) -> Any:
+    """Describe one member of a container, so that a member that fails costs only itself."""
+    try:
+        return _describe(value, depth + 1, enclosing, budget)
+    except _PayloadTooLarge:
+        raise
+    except Exception:
+        return _UNDESCRIBABLE
+
+
+def _is_sensitive(name: str) -> bool:
+    return _SENSITIVE_NAME.search(name) is not None
+
+
+def _bounded_text(text: str) -> str:
+    if len(text) <= _MAX_TEXT_LENGTH:
+        return text
+    kept = _MAX_TEXT_LENGTH - _TEXT_NOTE_RESERVE
+    return f"{text[:kept]}...<{len(text) - kept} more characters left out>"
+
+
+def _left_out_note(total: int) -> str:
+    return f"<{total - _MAX_ITEMS_PER_COLLECTION} more items left out>"
 
 
 def _label_of(value: Any) -> str:
@@ -962,6 +1063,7 @@ def _capture_versions() -> dict[str, str]:
     return {
         "app_version": __version__,
         "git_sha": _read_or_unknown(_git_sha),
+        "git_worktree": _read_or_unknown(_git_worktree_state),
         "python": _read_or_unknown(platform.python_version),
         "word": _read_or_unknown(lambda: _office_version("WINWORD.EXE")),
         "excel": _read_or_unknown(lambda: _office_version("EXCEL.EXE")),
@@ -976,8 +1078,16 @@ def _read_or_unknown(read: Callable[[], str]) -> str:
 
 
 def _git_sha() -> str:
+    return _git_output("rev-parse", "HEAD").strip()
+
+
+def _git_worktree_state() -> str:
+    return "dirty" if _git_output("--no-optional-locks", "status", "--porcelain").strip() else "clean"
+
+
+def _git_output(*arguments: str) -> str:
     completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+        ["git", *arguments],
         cwd=Path(__file__).resolve().parent.parent,
         stdin=subprocess.DEVNULL,
         capture_output=True,
@@ -985,7 +1095,7 @@ def _git_sha() -> str:
         timeout=_GIT_TIMEOUT_SECONDS,
         check=True,
     )
-    return completed.stdout.strip()
+    return completed.stdout
 
 
 def _office_version(executable: str) -> str:

@@ -18,9 +18,10 @@ import uuid
 import weakref
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from typing import NamedTuple
 from unittest.mock import MagicMock, patch
 
 import openpyxl
@@ -539,6 +540,40 @@ def test_failure_while_capturing_versions_does_not_stop_the_action(locations, mo
     versions = entries_of(read_entries(locations.project_logs), "environment")[0]
     for field in ("git_sha", "python", "word", "excel"):
         assert versions[field] == "unknown"
+
+
+def _fake_git(status_output: str):
+    def run(command, **kwargs):
+        stdout = status_output if "status" in command else "abc123\n"
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    return run
+
+
+@pytest.mark.parametrize(
+    ("status_output", "expected"),
+    [("", "clean"), (" M src/run_records.py\n?? notes.txt\n", "dirty")],
+    ids=["clean", "dirty"],
+)
+def test_record_says_whether_the_worktree_had_local_changes(locations, monkeypatch, status_output, expected) -> None:
+    monkeypatch.setattr("subprocess.run", _fake_git(status_output))
+
+    run_project_action(lambda environment: None, locations.environment)
+
+    assert entries_of(read_entries(locations.project_logs), "environment")[0]["git_worktree"] == expected
+
+
+def test_worktree_state_is_unknown_when_git_is_unavailable(locations, monkeypatch) -> None:
+    def broken(*args, **kwargs):
+        raise OSError("git is not installed")
+
+    monkeypatch.setattr("subprocess.run", broken)
+    calls: list[str] = []
+
+    run_project_action(lambda environment: calls.append("ran"), locations.environment)
+
+    assert calls == ["ran"]
+    assert entries_of(read_entries(locations.project_logs), "environment")[0]["git_worktree"] == "unknown"
 
 
 def test_tests_cannot_write_run_records_into_a_real_project_folder(tmp_path) -> None:
@@ -1060,6 +1095,187 @@ def test_request_that_cannot_be_described_does_not_stop_the_action(locations) ->
     assert len(recorded) == 4
     assert recorded[1]["fine"] == "kept"
     assert entries[-1]["status"] == "completed"
+
+
+def _recorded_request(locations, request) -> object:
+    run_project_action(lambda environment: current_run().record_request(request), locations.environment)
+    return entries_of(read_entries(locations.project_logs), "request")[0]["request"]
+
+
+def test_long_list_is_capped_with_a_note_of_what_was_left_out(locations) -> None:
+    recorded = _recorded_request(locations, {"substations": [f"S{n}" for n in range(205)]})
+
+    assert recorded["substations"][:200] == [f"S{n}" for n in range(200)]
+    assert recorded["substations"][200:] == ["<5 more items left out>"]
+
+
+def test_list_at_the_limit_is_kept_whole(locations) -> None:
+    substations = [f"S{n}" for n in range(200)]
+
+    assert _recorded_request(locations, {"substations": substations})["substations"] == substations
+
+
+def test_large_mapping_is_capped_with_a_note_of_what_was_left_out(locations) -> None:
+    recorded = _recorded_request(locations, {"pairs": {f"K{n}": n for n in range(203)}})
+
+    assert len(recorded["pairs"]) == 201
+    assert recorded["pairs"]["K199"] == 199
+    assert "K200" not in recorded["pairs"]
+    assert recorded["pairs"]["__left_out__"] == "<3 more items left out>"
+
+
+def test_long_text_is_cut_with_a_note_of_how_much_was_left_out(locations) -> None:
+    recorded = _recorded_request(locations, {"note": "x" * 5000})
+
+    assert len(recorded["note"]) <= 4096
+    assert recorded["note"].startswith("x" * 4000)
+    assert recorded["note"].endswith("more characters left out>")
+
+
+def test_text_at_the_limit_is_kept_whole(locations) -> None:
+    assert _recorded_request(locations, {"note": "x" * 4096})["note"] == "x" * 4096
+
+
+@pytest.mark.parametrize(
+    "key", ["password", "DB_Password", "passwd", "client_secret", "access_token", "api_key", "apiKey", "credentials", "Authorization"]
+)
+def test_values_under_sensitive_keys_are_redacted(locations, key) -> None:
+    recorded = _recorded_request(locations, {"workflow": "Fake", "nested": [{key: "hunter2"}]})
+
+    assert recorded["nested"] == [{key: "<redacted>"}]
+    assert "hunter2" not in next(locations.project_logs.glob("*.jsonl")).read_text(encoding="utf-8")
+
+
+def test_sensitive_dataclass_fields_and_result_values_are_redacted(locations) -> None:
+    @dataclass
+    class Result:
+        site: str
+        api_token: str
+
+    run_project_action(lambda environment: Result("KUANTAN", "hunter2"), locations.environment)
+
+    result = entries_of(read_entries(locations.project_logs), "result")[0]["result"]
+    assert result["site"] == "KUANTAN"
+    assert result["api_token"] == "<redacted>"
+
+
+def test_request_over_the_size_limit_is_replaced_by_a_marker_that_keeps_its_workflow(locations) -> None:
+    recorded = _recorded_request(locations, {"workflow": "Fake", "notes": ["x" * 4000] * 100})
+
+    assert recorded["workflow"] == "Fake"
+    assert "notes" not in recorded
+    assert "256 KB" in recorded["__omitted__"]
+
+
+def test_request_under_the_size_limit_is_kept_whole(locations) -> None:
+    notes = ["x" * 4000] * 60
+
+    assert _recorded_request(locations, {"workflow": "Fake", "notes": notes})["notes"] == notes
+
+
+def test_size_limit_counts_the_bytes_written_not_the_characters(locations) -> None:
+    recorded = _recorded_request(locations, {"paths": ["\\" * 4000] * 40})
+
+    assert "__omitted__" in recorded
+
+
+def test_size_limit_counts_values_that_are_not_text(locations) -> None:
+    moments = [datetime(2026, 11, 9, 1, 2, 3, 456789, timezone.utc)] * 200
+    recorded = _recorded_request(locations, {"workflow": "Fake", "batches": [moments] * 50})
+
+    assert "__omitted__" in recorded
+
+
+def test_nesting_past_the_depth_limit_is_described_by_type(locations) -> None:
+    nested: list[object] = ["leaf"]
+    for _ in range(20):
+        nested = [nested]
+
+    recorded = _recorded_request(locations, {"nested": nested})
+
+    levels = 0
+    value = recorded["nested"]
+    while isinstance(value, list):
+        value = value[0]
+        levels += 1
+    assert value == "<object builtins.list>"
+    assert levels == 11
+
+
+def test_path_under_a_sensitive_name_is_kept(locations, tmp_path) -> None:
+    path = tmp_path / "credentials.json"
+
+    assert _recorded_request(locations, {"token_path": path})["token_path"] == str(path)
+
+
+def test_text_containing_a_sensitive_word_under_an_ordinary_key_is_kept(locations) -> None:
+    assert _recorded_request(locations, {"folder": r"C:\token\x"})["folder"] == r"C:\token\x"
+
+
+def test_sensitive_named_tuple_fields_are_redacted(locations) -> None:
+    class Login(NamedTuple):
+        user: str
+        password: str
+
+    recorded = _recorded_request(locations, {"login": Login("adam", "hunter2")})
+
+    assert recorded["login"] == {"user": "adam", "password": "<redacted>"}
+
+
+def test_oversized_result_is_replaced_by_a_marker(locations) -> None:
+    @dataclass
+    class Result:
+        notes: list
+
+    run_project_action(lambda environment: Result(["x" * 4000] * 100), locations.environment)
+
+    result = entries_of(read_entries(locations.project_logs), "result")[0]["result"]
+    assert result["__type__"] == "Result"
+    assert "notes" not in result
+
+
+def test_shared_references_cannot_make_a_description_explode(locations) -> None:
+    shared: list[object] = ["leaf"]
+    for _ in range(11):
+        shared = [shared] * 200
+    calls: list[str] = []
+
+    def action(environment) -> None:
+        current_run().record_request({"workflow": "Fake", "shared": shared})
+        calls.append("ran")
+
+    run_project_action(action, locations.environment)
+
+    assert calls == ["ran"]
+    assert "__omitted__" in entries_of(read_entries(locations.project_logs), "request")[0]["request"]
+
+
+def test_later_request_after_an_oversized_one_is_still_recorded_as_an_update(locations) -> None:
+    def action(environment) -> None:
+        current_run().record_request({"workflow": "Fake", "notes": ["x" * 4000] * 100})
+        current_run().record_request({"workflow": "Fake", "station": "KUANTAN"})
+
+    run_project_action(action, locations.environment)
+
+    update = entries_of(read_entries(locations.project_logs), "request_update")[0]
+    assert update["workflow"] == "Fake"
+    assert update["changes"]["station"] == "KUANTAN"
+
+
+def test_one_value_failing_part_way_keeps_the_rest_of_the_request(locations) -> None:
+    class FailsWhenListed(list):
+        def __iter__(self):
+            raise RuntimeError("cannot be listed")
+
+    recorded = _recorded_request(locations, {"fine": "kept", "broken": FailsWhenListed([1])})
+
+    assert recorded == {"fine": "kept", "broken": "<could not be described>"}
+
+
+def test_integer_too_large_for_json_is_described_by_type(locations) -> None:
+    recorded = _recorded_request(locations, {"fine": "kept", "huge": 10**5000})
+
+    assert recorded == {"fine": "kept", "huge": "<object builtins.int>"}
 
 
 def test_result_that_cannot_be_described_does_not_stop_the_action(locations, capsys) -> None:

@@ -6,7 +6,7 @@ Every project workflow and utility action started from the interactive CLI saves
 
 Records are saved in `<project base path>/logs/`. Utilities without an active, real project, transient utility environments, and failures before project selection use `%LOCALAPPDATA%\pahang-cli\logs\`. A project folder that has disappeared is never recreated just to save a record. If project logging is unwritable, the per-user location is tried. If neither is writable, the workflow continues.
 
-After a failed or partially failed action, the console prints `Run Record: <path>`. Send that one file to the developer. Successful records remain in the same folder without adding a console message. Records contain full request values, local file paths, diagnostic messages, and tracebacks; they contain no copies or hashes of input files.
+After a failed or partially failed action, the console prints `Run Record: <path>`. Send that one file to the developer. Successful records remain in the same folder without adding a console message. Records contain bounded request values, local file paths, diagnostic messages, and tracebacks; they contain no copies or hashes of input files. A record is diagnostic evidence of what was asked for and which files were seen. It doesn't guarantee the run can be reproduced, because input files can change after it.
 
 Files are named `<local timestamp>-<action>-<unique suffix>.jsonl`. Each UTF-8 line is a separate JSON object, written and flushed immediately. Read a record with a text editor. A missing `run_finish` means the action was interrupted, crashed, or hung; the preceding lines remain usable. A process interruption may leave a Step without its finish entry.
 
@@ -17,8 +17,8 @@ Every entry has `type` and an ISO 8601 UTC `time`.
 | Type | Contents |
 | --- | --- |
 | `run_start` | Action label, project key, and base path when a real project exists |
-| `environment` | App version, git SHA, Python, Word and Excel versions; unreadable versions are `unknown` |
-| `request` | Full request, including selected dates, substations and options; objects such as converters and sinks are described by type |
+| `environment` | App version, git SHA, `git_worktree` (`clean` or `dirty`), Python, Word and Excel versions; unreadable values are `unknown` |
+| `request` | Request, including selected dates, substations and options, within the limits below; objects such as converters and sinks are described by type |
 | `request_update` | `workflow` identifying an earlier request and `changes` to apply in order |
 | `input` | Path, existence, size in bytes, and modified time in UTC; missing paths have null size/time, and an unreadable time is null |
 | `input_truncated` | `folder`, `recorded`, `left_out` and `left_out_is_a_minimum`, when a folder held more files than the per-folder limit or its walk stopped early |
@@ -34,6 +34,8 @@ Every entry has `type` and an ISO 8601 UTC `time`.
 Final statuses are `completed`, `partial_failure` (some batch items failed), `failed` (the whole job failed), or `cancelled` (explicit `OperationCancelled`). Older actions that return normally on cancellation finish as `completed`. Returning an error list alone means partial failure unless the workflow explicitly reports that its whole job failed.
 
 Requests may appear first as selections and later as complete workflow requests. Apply `request_update.changes` over the earlier request with the same `workflow`. Unchanged values are omitted; keys omitted by a later update retain their earlier values. Identical input and output paths and repeated warning text are recorded once. Each error keeps its own entry, even when two substations fail with identical text. An error isn't repeated when the same exception is recorded again, when the same item fails the same way in a second pass, such as inspect then generate, or when a result returns an error already recorded.
+
+Requests, results and step items are bounded. Nesting stops at 12 levels. A list or mapping keeps 200 items, followed by a note of how many were left out (`__left_out__` in a mapping). Text is cut to 4,096 characters with a similar note. A value over 256 KB is replaced whole by `__omitted__`, keeping its `workflow` or `__type__`. A later `request_update` for that workflow still applies, and `__omitted__` stays in the rebuilt request. A value under a key or field whose name contains `password`, `passwd`, `secret`, `token`, `api_key` (also `api-key` or `apikey`), `credential` or `authorization` is recorded as `<redacted>`, unless the value is a path object. This filter goes by name, so it can't catch a credential inside other text. Log, console and traceback entries aren't filtered. A value that can't be serialised is recorded by its type or as `<could not be described>`. Change these limits with the `_MAX_` constants in `src/run_records.py`.
 
 Steps measure work, never time spent waiting on prompts. Workflows run through `WorkflowService` have one `Workflow: <name>` Step. Report generation times per-substation composition and Full Report plan building. Other actions may have no Steps.
 
