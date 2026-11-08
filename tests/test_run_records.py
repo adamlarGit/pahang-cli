@@ -3920,3 +3920,113 @@ def test_hostile_message_never_raises(locations, record_name) -> None:
 
     assert calls == ["ran"]
     assert read_entries(locations.project_logs)[-1]["type"] == "run_finish"
+
+
+def test_step_can_be_marked_failed_without_an_exception_and_names_its_item(locations, capsys) -> None:
+    def action(environment) -> None:
+        with current_run().step("Compose Full Report", item=("2026-01-02", "Substation A")) as step:
+            step.fail("testsheet missing")
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    finished = entries_of(entries, "step_finish")
+    assert finished[0]["status"] == "failed"
+    assert finished[0]["item"] == ["2026-01-02", "Substation A"]
+    assert entries[-1]["status"] == "partial_failure"
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_step_can_be_skipped_without_changing_the_status(locations) -> None:
+    def action(environment) -> None:
+        with current_run().step("Compose Full Report", item=("2026-01-03", "Substation B")) as step:
+            step.skip("no defects")
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    finished = entries_of(entries, "step_finish")
+    assert (finished[0]["status"], finished[0]["reason"]) == ("skipped", "no defects")
+    assert finished[0]["item"] == ["2026-01-03", "Substation B"]
+    assert entries[-1]["status"] == "completed"
+
+
+def test_cancel_after_completed_work_with_a_failed_item_is_cancelled_and_keeps_the_failure(locations, capsys) -> None:
+    def action(environment) -> None:
+        current_run().record_error("substation 2 is bad", item="Substation 2")
+        current_run().mark_cancelled()
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "cancelled"
+    assert [entry["message"] for entry in entries_of(entries, "error")] == ["substation 2 is bad"]
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_cancel_by_returning_alone_is_cancelled_and_not_an_error(locations, capsys) -> None:
+    def action(environment) -> None:
+        current_run().mark_cancelled()
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "cancelled"
+    assert not entries_of(entries, "error")
+    assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_cancel_does_not_hide_a_whole_job_failure(locations, capsys) -> None:
+    def action(environment) -> None:
+        current_run().record_failure("whole job broke")
+        current_run().mark_cancelled()
+
+    run_project_action(action, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["status"] == "failed"
+
+
+def test_batch_with_nine_successes_and_one_failure_records_counts_and_partial_failure(locations, tmp_path, capsys) -> None:
+    from src.workflows.full_report import FullReportBatchResult
+
+    output = tmp_path / "report.docx"
+    result = FullReportBatchResult(
+        total_stations=10,
+        succeeded_count=9,
+        failed_count=1,
+        generated_paths=(output,),
+        errors=("Substation 7 failed",),
+    )
+
+    run_project_action(lambda environment: result, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "partial_failure"
+    assert entries[-1]["counts"] == {"completed": 9, "failed": 1, "skipped": "unknown"}
+    assert [entry["path"] for entry in entries_of(entries, "output")] == [str(output)]
+
+
+def test_counts_are_unknown_not_zero_when_the_action_reports_none(locations) -> None:
+    run_project_action(lambda environment: None, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["counts"] == {"completed": "unknown", "failed": "unknown", "skipped": "unknown"}
+
+
+def test_real_action_cancelled_at_its_first_prompt_finishes_as_cancelled(locations, capsys) -> None:
+    action = PopulateTotalPeAction("Populate TOTAL PE")
+    session = CliSession(
+        persistence_file=Path(locations.environment.base_path) / ".active_project.json",
+        active_project=locations.environment,
+    )
+
+    with (
+        patch("src.cli_menu.select_project_workflow_action", side_effect=[action, None]),
+        patch("src.cli_selectors.select_one", return_value="__cancel__"),
+    ):
+        _run_project_workflow_menu(session, [action])
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "cancelled"
+    assert not entries_of(entries, "error")
+    assert "Run Record:" not in capsys.readouterr().out

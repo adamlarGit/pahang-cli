@@ -8,7 +8,9 @@ Interface::
 
     current_run().record_request(request)    # from anywhere, without new parameters
     current_run().record_inputs(paths)
-    with current_run().step("Export PDF"): ...
+    with current_run().step("Export PDF", item=(date, substation)) as step:
+        step.fail("message") / step.skip("reason")     # without raising
+    current_run().mark_cancelled()                       # the operator cancelled by returning
 
 A Run Record is one JSON Lines file, flushed line by line, so a Word hang or a crash
 still leaves everything up to that point. A record with no ``run_finish`` entry was
@@ -22,8 +24,21 @@ folder: ``folder``, ``recorded``, ``left_out``, ``left_out_is_a_minimum``), ``in
 ``console``, ``warning`` and ``error`` (each with ``traceback`` when there was an exception),
 ``cancelled``, ``result``,
 ``output`` and ``run_finish``. Its ``status`` is ``completed``, ``partial_failure``
-(some items failed), ``failed`` (the whole job failed) or ``cancelled`` (the operator cancelled
-by way of ``OperationCancelled``; a cancel that just returns is recorded as ``completed``).
+(some items failed), ``failed`` (the whole job failed) or ``cancelled`` (the operator cancelled,
+either by raising ``OperationCancelled`` or by ``mark_cancelled()`` when the action returns).
+Precedence: ``failed`` beats ``cancelled``, which beats ``partial_failure``, which beats ``completed``.
+So completed work, a failed item and then a cancel finish as ``cancelled``, with the failure still in
+``counts`` and the record path still shown.
+
+``run_finish`` also has ``counts``: ``completed``, ``failed`` and ``skipped``, each the reported
+number or ``"unknown"``. Unknown is never recorded as 0. Counts come from ``record_counts()`` or from a
+returned result's ``succeeded_count`` and ``failed_count``.
+
+A step that finishes without raising is ``completed`` unless it calls ``fail()`` or ``skip()``. A
+``skip`` gives a ``reason``. Each step can carry an ``item`` identity, such as a date and a substation.
+
+A record with no ``run_finish`` entry is incomplete, with the cause unknown. It does not by itself show
+a crash, a hang or a process that is still running.
 
 A ``request_update`` has ``workflow``, naming an earlier ``request`` with that ``workflow`` value,
 and ``changes``, the fields that differ from it. To rebuild the final request, apply each
@@ -102,6 +117,31 @@ class OperationCancelled(ValueError):
     """The operator cancelled a prompt. Reaches the action layer, but isn't a failure."""
 
 
+# A status can only move up this order: a cancel keeps a partial failure, and a failed job stays failed.
+_STATUS_RANK = {"completed": 0, "partial_failure": 1, "cancelled": 2, "failed": 3}
+
+
+class _StepOutcome:
+    """Lets a step finish as failed or skipped without raising. Given to the ``with`` block as ``as``."""
+
+    def __init__(self, run: "Run", item: Any) -> None:
+        self._run = run
+        self._item = item
+        self.status = "completed"
+        self.fields: dict[str, Any] = {}
+
+    def fail(self, message: Any) -> None:
+        """The step failed, and this item's error is recorded too, so the Run finishes as partial failure."""
+        self.status = "failed"
+        self.fields = {"error": _text_of(message)}
+        self._run.record_error(message, item=self._item)
+
+    def skip(self, reason: Any) -> None:
+        """The step did not run, for a reason. This doesn't change the Run's status."""
+        self.status = "skipped"
+        self.fields = {"reason": _text_of(reason)}
+
+
 class Run:
     """One open Run Record. Every method is safe to call and never raises."""
 
@@ -111,6 +151,7 @@ class Run:
         self.path = path
         self.failed = False
         self._status = "completed"
+        self._counts: dict[str, int | None] = {"completed": None, "failed": None, "skipped": None}
         self._lock = threading.RLock()
         self._captures: list[Any] = []
         self._errors_written: dict[str, int] = {}
@@ -127,7 +168,7 @@ class Run:
         try:
             result = action()
         except OperationCancelled as exc:
-            self._status = "cancelled"
+            self._mark_problem("cancelled")
             self._write("cancelled", message=_text_of(exc))
             raise
         except Exception as exc:
@@ -254,13 +295,28 @@ class Run:
         """Say that the errors already recorded add up to the whole job failing."""
         self._mark_problem("failed")
 
+    def mark_cancelled(self) -> None:
+        """Say the operator cancelled by returning. Work done and errors recorded still count."""
+        self._mark_problem("cancelled")
+
+    def record_counts(self, *, completed: int | None = None, failed: int | None = None, skipped: int | None = None) -> None:
+        """Set the item counts for the finish entry. A count not given stays as it was, unknown if never set."""
+        for key, value in (("completed", completed), ("failed", failed), ("skipped", skipped)):
+            if value is not None:
+                self._counts[key] = value
+
     @contextmanager
-    def step(self, name: str) -> Iterator[None]:
-        """Record one named, timed stage. A failure inside it passes straight through."""
+    def step(self, name: str, item: Any = None) -> Iterator["_StepOutcome"]:
+        """Record one named, timed stage. A failure inside it passes straight through.
+
+        ``item`` names what the step worked on, such as a date and a substation.
+        """
         started = time.perf_counter()
-        self._write("step_start", name=name)
+        item_fields = {} if item is None else {"item": _describe_safely(item)}
+        self._write("step_start", name=name, **item_fields)
+        outcome = _StepOutcome(self, item)
         try:
-            yield
+            yield outcome
         except BaseException as exc:
             self._write(
                 "step_finish",
@@ -268,13 +324,16 @@ class Run:
                 status="failed",
                 error=_text_of(exc),
                 duration_seconds=round(time.perf_counter() - started, 3),
+                **item_fields,
             )
             raise
         self._write(
             "step_finish",
             name=name,
-            status="completed",
+            status=outcome.status,
             duration_seconds=round(time.perf_counter() - started, 3),
+            **outcome.fields,
+            **item_fields,
         )
 
     def __enter__(self) -> "Run":
@@ -296,6 +355,7 @@ class Run:
             self._write(
                 "run_finish",
                 status=self._status,
+                counts={key: _UNKNOWN if value is None else value for key, value in self._counts.items()},
                 duration_seconds=round(time.perf_counter() - self._started, 3),
             )
         self._close()
@@ -308,9 +368,17 @@ class Run:
     def _mark_problem(self, status: str) -> None:
         if self._file is None and self.path is None:
             return
-        self.failed = True
-        if self._status != "failed":
+        if status != "cancelled":
+            self.failed = True
+        if _STATUS_RANK[status] > _STATUS_RANK[self._status]:
             self._status = status
+
+    def _record_result_counts(self, result: Any) -> None:
+        def count(name: str) -> int | None:
+            value = getattr(result, name, None)
+            return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+        self.record_counts(completed=count("succeeded_count"), failed=count("failed_count"))
 
     def _write_error(self, message: Any, exc: BaseException | None, item: Any = None) -> None:
         """Write one error, unless this exception or this item's message is already recorded.
@@ -360,6 +428,7 @@ class Run:
         """Take outputs, warnings and errors from what the action returned, if it says."""
         if result is None:
             return
+        _ignoring_failure(lambda: self._record_result_counts(result))
         _ignoring_failure(lambda: self._write_result(result))
         # Decided apart from the writing, so the console still shows the path if the file has failed.
         _ignoring_failure(lambda: self._mark_problem_in_result(result))
