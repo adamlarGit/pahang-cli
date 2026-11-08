@@ -34,7 +34,7 @@ from src.quick_report.prpd import (
     resolve_survey_container_dir,
 )
 from src.project.models import PrpdMode
-from src.run_records import current_run
+from src.run_records import current_run, report_cancelled
 from src.testsheet.models import SubstationTestsheetPackage
 
 logger = logging.getLogger(__name__)
@@ -332,7 +332,7 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
     while True:
         mode_str = select_one("Generate US+TEV Survey Graphs - Select Date Mode", options)
         if mode_str in ("__cancel__", None):
-            print("Operation cancelled.")
+            report_cancelled("Operation cancelled.")
             return None
 
         if mode_str == "browse_dates":
@@ -352,7 +352,7 @@ def run_generate_us_tev_graphs_action(environment: Any) -> UsTevWorkflowSummary 
 
     selected_candidates = select_us_tev_substations_interactive(candidates)
     if not selected_candidates:
-        print("No substations selected. Operation cancelled.")
+        report_cancelled("No substations selected. Operation cancelled.")
         return None
 
     prpd_config = environment.get_prpd_config()

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from src.run_records import current_run
+from src.run_records import current_run, report_cancelled
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ def _load_raw_material_runner() -> Callable[[], object]:
             )
 
         if target_dir is None:
-            print("Operation cancelled.")
+            report_cancelled("Operation cancelled.")
             return None
 
         request = RawMaterialRequest(
@@ -149,6 +149,7 @@ def _load_whatsapp_runner() -> Callable[[], object]:
         print("\n[Generate WhatsApp report]")
         env = get_or_create_utility_environment()
         if not env:
+            current_run().record_failure("No project environment available.")
             print("No project environment available.")
             return None
             
@@ -156,7 +157,7 @@ def _load_whatsapp_runner() -> Callable[[], object]:
             resources = env.get_whatsapp_report_resources()
             report_dir = _select_whatsapp_report_batch(resources.quick_report_dir)
             if report_dir is None:
-                print("Operation cancelled.")
+                report_cancelled("Operation cancelled.")
                 return None
                 
             request = WhatsAppReportRequest(report_dir=report_dir)

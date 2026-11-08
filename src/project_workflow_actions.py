@@ -32,7 +32,7 @@ from src.workflows.full_report_postprocessing import (
     FullReportPostProcessingWorkflow,
 )
 from src.project.storage import resolve_full_report_dir
-from src.run_records import current_run
+from src.run_records import current_run, report_cancelled
 from src.workflows.quick_report import QuickReportWorkflow
 from src.workflows.service import WorkflowService
 
@@ -122,15 +122,13 @@ class PopulateTotalPeAction(ProjectWorkflowAction):
         ]
         mode_str = cli_selectors.select_one("Populate TOTAL PE - Processing Mode", options)
         if mode_str in ("__cancel__", None):
-            current_run().mark_cancelled()
-            print("Processing cancelled.")
+            report_cancelled("Processing cancelled.")
             return None
 
         if mode_str == "select":
             selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
             if selected_path is None:
-                current_run().mark_cancelled()
-                print("Processing cancelled.")
+                report_cancelled("Processing cancelled.")
                 return None
             request = PopulateTotalPeRequest(
                 mode=PopulateMode.SPECIFIC_FOLDERS,
@@ -166,8 +164,7 @@ class RawMaterialAction(ProjectWorkflowAction):
                 must_exist=False,
             )
         if selected_path is None:
-            current_run().mark_cancelled()
-            print("Operation cancelled.")
+            report_cancelled("Operation cancelled.")
             return None
 
         request = RawMaterialRequest(
@@ -201,15 +198,13 @@ class UpdateQr02CbaAction(ProjectWorkflowAction):
         ]
         mode_str = cli_selectors.select_one("QR02 CBA - Processing Mode", options)
         if mode_str in ("__cancel__", None):
-            current_run().mark_cancelled()
-            print("Processing cancelled.")
+            report_cancelled("Processing cancelled.")
             return None
 
         if mode_str == "select":
             selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
             if selected_path is None:
-                current_run().mark_cancelled()
-                print("Processing cancelled.")
+                report_cancelled("Processing cancelled.")
                 return None
             request = UpdateQr02CbaRequest(
                 mode=PopulateMode.SPECIFIC_FOLDERS,
@@ -253,8 +248,7 @@ class QuickReportAction(ProjectWorkflowAction):
         ]
         mode_str = cli_selectors.select_one("Quick Report - Selection Mode", options)
         if mode_str in ("__cancel__", None):
-            current_run().mark_cancelled()
-            print("Processing cancelled.")
+            report_cancelled("Processing cancelled.")
             return None
 
         workflow = QuickReportWorkflow()
@@ -264,7 +258,7 @@ class QuickReportAction(ProjectWorkflowAction):
             input_locs = input("Functional Locations: ").strip()
             fl_numbers = [loc.strip() for loc in input_locs.split(",") if loc.strip()]
             if not fl_numbers:
-                print("No functional locations provided.")
+                report_cancelled("No functional locations provided.")
                 return None
             result = workflow.generate(
                 fl_numbers,
@@ -280,8 +274,7 @@ class QuickReportAction(ProjectWorkflowAction):
                 selected_targets = cli_selectors.prompt_target_inspection_dates_with_ranges(environment)
 
             if not selected_targets:
-                current_run().mark_cancelled()
-                print("Processing cancelled.")
+                report_cancelled("Processing cancelled.")
                 return None
 
             current_run().record_request({"workflow": "Quick Report", "target": selected_targets})
@@ -309,8 +302,7 @@ class QuickReportAction(ProjectWorkflowAction):
                 ]
                 chosen_stations = cli_selectors.select_multiple("Select stations to process", station_options)
                 if chosen_stations is None or len(chosen_stations) == 0:
-                    current_run().mark_cancelled()
-                    print("Processing cancelled.")
+                    report_cancelled("Processing cancelled.")
                     return None
                 result = workflow.generate(
                     selected_targets,
@@ -388,8 +380,7 @@ class PostProcessingPipelineAction(ProjectWorkflowAction):
         ]
         scope_choice = cli_selectors.select_one("Post-Processing Pipeline - Scope Selection", scope_options)
         if scope_choice in ("__cancel__", None):
-            current_run().mark_cancelled()
-            print("Processing cancelled.")
+            report_cancelled("Processing cancelled.")
             return None
 
         target_dates: tuple[str, ...] = ()
@@ -400,8 +391,7 @@ class PostProcessingPipelineAction(ProjectWorkflowAction):
             mode = PostProcessingMode.BY_DATE
             selected_date_folder = cli_selectors.select_pahang_date_folder(environment=environment)
             if selected_date_folder is None:
-                current_run().mark_cancelled()
-                print("Processing cancelled.")
+                report_cancelled("Processing cancelled.")
                 return None
             target_dates = (selected_date_folder.name,)
         else:
@@ -419,24 +409,21 @@ class PostProcessingPipelineAction(ProjectWorkflowAction):
                 ]
                 selected_fls = cli_selectors.select_multiple("Select substations to process", options)
                 if not selected_fls:
-                    current_run().mark_cancelled()
-                    print("Processing cancelled.")
+                    report_cancelled("Processing cancelled.")
                     return None
                 target_fls = tuple(selected_fls)
             else:
                 print("Enter comma-separated Functional Locations or Station Names:")
                 raw = input("Substations: ").strip()
                 if not raw:
-                    current_run().mark_cancelled()
-                    print("Processing cancelled.")
+                    report_cancelled("Processing cancelled.")
                     return None
                 target_fls = tuple(p.strip() for p in raw.split(",") if p.strip())
 
         # 2. Digital Signatures Selection
         apply_signatures_prompt = cli_selectors.confirm("Apply digital signatures?", default=True)
         if apply_signatures_prompt is None:
-            current_run().mark_cancelled()
-            print("Processing cancelled.")
+            report_cancelled("Processing cancelled.")
             return None
 
         vendor_sign_path: Path | None = None
@@ -451,8 +438,7 @@ class PostProcessingPipelineAction(ProjectWorkflowAction):
                 sign_dir,
             )
             if vendor_key in ("__cancel__", None):
-                current_run().mark_cancelled()
-                print("Processing cancelled.")
+                report_cancelled("Processing cancelled.")
                 return None
 
             tnb_default = vendor_key if vendor_key not in ("__none__", "__custom__") else None
@@ -462,8 +448,7 @@ class PostProcessingPipelineAction(ProjectWorkflowAction):
                 default_folder=tnb_default,
             )
             if tnb_key in ("__cancel__", None):
-                current_run().mark_cancelled()
-                print("Processing cancelled.")
+                report_cancelled("Processing cancelled.")
                 return None
 
             vendor_sign_path = vendor_path
@@ -473,8 +458,7 @@ class PostProcessingPipelineAction(ProjectWorkflowAction):
         if mode == PostProcessingMode.BY_DATE:
             generate_whatsapp_prompt = cli_selectors.confirm("Generate WhatsApp daily report?", default=True)
             if generate_whatsapp_prompt is None:
-                current_run().mark_cancelled()
-                print("Processing cancelled.")
+                report_cancelled("Processing cancelled.")
                 return None
             generate_whatsapp = generate_whatsapp_prompt
         else:
@@ -602,8 +586,7 @@ class WhatsAppReportAction(ProjectWorkflowAction):
         resources = environment.get_whatsapp_report_resources()
         report_dir = _select_whatsapp_report_batch(resources.quick_report_dir)
         if report_dir is None:
-            current_run().mark_cancelled()
-            print("Operation cancelled.")
+            report_cancelled("Operation cancelled.")
             return None
 
         request = WhatsAppReportRequest(
@@ -687,8 +670,7 @@ class PopulateDataMsmsAction(ProjectWorkflowAction):
         ]
         mode_str = cli_selectors.select_one("Populate Data MSMS - Processing Mode", options)
         if mode_str in ("__cancel__", None):
-            current_run().mark_cancelled()
-            print("Processing cancelled.")
+            report_cancelled("Processing cancelled.")
             return None
 
         overwrite = False
@@ -696,8 +678,7 @@ class PopulateDataMsmsAction(ProjectWorkflowAction):
         if mode_str == "select":
             selected_path = cli_selectors.select_pahang_date_folder(environment=environment)
             if selected_path is None:
-                current_run().mark_cancelled()
-                print("Processing cancelled.")
+                report_cancelled("Processing cancelled.")
                 return None
             target_folder_names = (selected_path.name, str(selected_path))
             pop_mode = PopulateMode.SPECIFIC_FOLDERS
@@ -828,8 +809,7 @@ def _prompt_full_report_selection(
     ]
     mode_str = cli_selectors.select_one(title, options)
     if mode_str in ("__cancel__", None):
-        current_run().mark_cancelled()
-        print("Processing cancelled.")
+        report_cancelled("Processing cancelled.")
         return None
 
     if mode_str == "manual":
@@ -837,7 +817,7 @@ def _prompt_full_report_selection(
         input_locs = input("Functional Locations: ").strip()
         fl_numbers = [loc.strip() for loc in input_locs.split(",") if loc.strip()]
         if not fl_numbers:
-            print("No functional locations provided.")
+            report_cancelled("No functional locations provided.")
             return None
         return fl_numbers
 
@@ -846,8 +826,7 @@ def _prompt_full_report_selection(
     else:
         selected_paths = cli_selectors.prompt_target_inspection_dates_with_ranges(environment)
     if not selected_paths:
-        current_run().mark_cancelled()
-        print("Processing cancelled.")
+        report_cancelled("Processing cancelled.")
         return None
     return selected_paths
 
@@ -920,14 +899,12 @@ def generate_full_reports_action(
         is_checked=lambda item: getattr(item, "is_ready", True),
     )
     if not chosen_targets:
-        current_run().mark_cancelled()
-        print("Processing cancelled.")
+        report_cancelled("Processing cancelled.")
         return None
 
     confirm_proceed = cli_selectors.confirm("Proceed with Full Report generation?", default=True)
     if confirm_proceed is not True:
-        current_run().mark_cancelled()
-        print("Generation cancelled.")
+        report_cancelled("Generation cancelled.")
         return None
 
     chosen_station_names: list[str] = []
@@ -1146,8 +1123,7 @@ def postprocess_full_reports_action(
         is_checked=lambda item: getattr(item, "is_ready", True),
     )
     if not chosen_targets:
-        current_run().mark_cancelled()
-        print("Processing cancelled.")
+        report_cancelled("Processing cancelled.")
         return None
 
     confirm_proceed = cli_selectors.confirm(
@@ -1155,8 +1131,7 @@ def postprocess_full_reports_action(
         default=True,
     )
     if confirm_proceed is not True:
-        current_run().mark_cancelled()
-        print("Post-processing cancelled.")
+        report_cancelled("Post-processing cancelled.")
         return None
 
     target_docs: list[Path] = []

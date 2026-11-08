@@ -51,7 +51,7 @@ from src.quick_report.prpd import (
     discover_ultratev_survey_dir,
     resolve_survey_container_dir,
 )
-from src.run_records import current_run
+from src.run_records import current_run, report_cancelled
 from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 
 logger = logging.getLogger(__name__)
@@ -663,7 +663,7 @@ def run_generate_us_audio_action(environment: Any) -> UsAudioWorkflowSummary | N
         mode_options,
     )
     if selected_mode in ("__cancel__", None):
-        print("Operation cancelled.")
+        report_cancelled("Operation cancelled.")
         return None
 
     date_mode_options = [
@@ -678,7 +678,7 @@ def run_generate_us_audio_action(environment: Any) -> UsAudioWorkflowSummary | N
             date_mode_options,
         )
         if date_mode in ("__cancel__", None):
-            print("Operation cancelled.")
+            report_cancelled("Operation cancelled.")
             return None
 
         if date_mode == "browse_dates":
@@ -719,13 +719,13 @@ def run_generate_us_audio_action(environment: Any) -> UsAudioWorkflowSummary | N
             ]
             fallback_choice = select_one("Select Action", fallback_options)
             if fallback_choice != "export_wav":
-                print("Operation cancelled. Please compile reports first.")
+                report_cancelled("Operation cancelled. Please compile reports first.")
                 return None
             effective_mode = "export_wav"
 
     selected_candidates = select_us_audio_substations_interactive(candidates)
     if not selected_candidates:
-        print("No substations selected. Operation cancelled.")
+        report_cancelled("No substations selected. Operation cancelled.")
         return None
 
     current_run().record_request(

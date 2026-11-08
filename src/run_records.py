@@ -10,7 +10,7 @@ Interface::
     current_run().record_inputs(paths)
     with current_run().step("Export PDF", item=(date, substation)) as step:
         step.fail("message") / step.skip("reason")     # without raising
-    current_run().mark_cancelled()                       # the operator cancelled by returning
+    report_cancelled("Processing cancelled.")            # the operator cancelled by returning
 
 A Run Record is one JSON Lines file, flushed line by line, so a Word hang or a crash
 still leaves everything up to that point. A record with no ``run_finish`` entry was
@@ -31,8 +31,10 @@ So completed work, a failed item and then a cancel finish as ``cancelled``, with
 ``counts`` and the record path still shown.
 
 ``run_finish`` also has ``counts``: ``completed``, ``failed`` and ``skipped``, each the reported
-number or ``"unknown"``. Unknown is never recorded as 0. Counts come from ``record_counts()`` or from a
-returned result's ``succeeded_count`` and ``failed_count``.
+number or ``"unknown"``. Unknown is never recorded as 0. A returned result's ``succeeded_count`` and
+``failed_count`` are used when it has them. Otherwise a count is tallied from the steps that named an
+``item``, each item counted once at its worst outcome (failed, then skipped, then completed). With
+neither, the count is unknown.
 
 A step that finishes without raising is ``completed`` unless it calls ``fail()`` or ``skip()``. A
 ``skip`` gives a ``reason``. Each step can carry an ``item`` identity, such as a date and a substation.
@@ -119,6 +121,8 @@ class OperationCancelled(ValueError):
 
 # A status can only move up this order: a cancel keeps a partial failure, and a failed job stays failed.
 _STATUS_RANK = {"completed": 0, "partial_failure": 1, "cancelled": 2, "failed": 3}
+# One item can pass through several steps. It counts once, at the worst of them.
+_ITEM_OUTCOME_RANK = {"completed": 0, "skipped": 1, "failed": 2}
 
 
 class _StepOutcome:
@@ -128,18 +132,18 @@ class _StepOutcome:
         self._run = run
         self._item = item
         self.status = "completed"
-        self.fields: dict[str, Any] = {}
+        self.details: dict[str, Any] = {}
 
     def fail(self, message: Any) -> None:
         """The step failed, and this item's error is recorded too, so the Run finishes as partial failure."""
         self.status = "failed"
-        self.fields = {"error": _text_of(message)}
+        self.details = {"error": _text_of(message)}
         self._run.record_error(message, item=self._item)
 
     def skip(self, reason: Any) -> None:
         """The step did not run, for a reason. This doesn't change the Run's status."""
         self.status = "skipped"
-        self.fields = {"reason": _text_of(reason)}
+        self.details = {"reason": _text_of(reason)}
 
 
 class Run:
@@ -151,7 +155,8 @@ class Run:
         self.path = path
         self.failed = False
         self._status = "completed"
-        self._counts: dict[str, int | None] = {"completed": None, "failed": None, "skipped": None}
+        self._reported_counts: dict[str, int] = {}
+        self._item_outcomes: dict[str, str] = {}
         self._lock = threading.RLock()
         self._captures: list[Any] = []
         self._errors_written: dict[str, int] = {}
@@ -168,7 +173,7 @@ class Run:
         try:
             result = action()
         except OperationCancelled as exc:
-            self._mark_problem("cancelled")
+            self.mark_cancelled()
             self._write("cancelled", message=_text_of(exc))
             raise
         except Exception as exc:
@@ -297,13 +302,7 @@ class Run:
 
     def mark_cancelled(self) -> None:
         """Say the operator cancelled by returning. Work done and errors recorded still count."""
-        self._mark_problem("cancelled")
-
-    def record_counts(self, *, completed: int | None = None, failed: int | None = None, skipped: int | None = None) -> None:
-        """Set the item counts for the finish entry. A count not given stays as it was, unknown if never set."""
-        for key, value in (("completed", completed), ("failed", failed), ("skipped", skipped)):
-            if value is not None:
-                self._counts[key] = value
+        self._raise_status("cancelled")
 
     @contextmanager
     def step(self, name: str, item: Any = None) -> Iterator["_StepOutcome"]:
@@ -326,15 +325,16 @@ class Run:
                 duration_seconds=round(time.perf_counter() - started, 3),
                 **item_fields,
             )
+            self._note_item_outcome(item_fields, "failed")
             raise
         self._write(
             "step_finish",
             name=name,
             status=outcome.status,
             duration_seconds=round(time.perf_counter() - started, 3),
-            **outcome.fields,
-            **item_fields,
+            **{**outcome.details, **item_fields},
         )
+        self._note_item_outcome(item_fields, outcome.status)
 
     def __enter__(self) -> "Run":
         global _current
@@ -355,7 +355,7 @@ class Run:
             self._write(
                 "run_finish",
                 status=self._status,
-                counts={key: _UNKNOWN if value is None else value for key, value in self._counts.items()},
+                counts=self._finish_counts(),
                 duration_seconds=round(time.perf_counter() - self._started, 3),
             )
         self._close()
@@ -368,17 +368,32 @@ class Run:
     def _mark_problem(self, status: str) -> None:
         if self._file is None and self.path is None:
             return
-        if status != "cancelled":
-            self.failed = True
+        self.failed = True
+        self._raise_status(status)
+
+    def _raise_status(self, status: str) -> None:
         if _STATUS_RANK[status] > _STATUS_RANK[self._status]:
             self._status = status
 
-    def _record_result_counts(self, result: Any) -> None:
-        def count(name: str) -> int | None:
-            value = getattr(result, name, None)
-            return value if isinstance(value, int) and not isinstance(value, bool) else None
+    def _note_item_outcome(self, item_fields: dict[str, Any], status: str) -> None:
+        if not item_fields:
+            return
+        key = _text_of(item_fields["item"])
+        earlier = self._item_outcomes.get(key, "completed")
+        self._item_outcomes[key] = max(earlier, status, key=_ITEM_OUTCOME_RANK.__getitem__)
 
-        self.record_counts(completed=count("succeeded_count"), failed=count("failed_count"))
+    def _finish_counts(self) -> dict[str, int | str]:
+        tallied = list(self._item_outcomes.values())
+        return {
+            name: self._reported_counts.get(name, tallied.count(name) if tallied else _UNKNOWN)
+            for name in ("completed", "failed", "skipped")
+        }
+
+    def _record_result_counts(self, result: Any) -> None:
+        for name, field in (("completed", "succeeded_count"), ("failed", "failed_count")):
+            value = getattr(result, field, None)
+            if isinstance(value, int) and not isinstance(value, bool):
+                self._reported_counts[name] = value
 
     def _write_error(self, message: Any, exc: BaseException | None, item: Any = None) -> None:
         """Write one error, unless this exception or this item's message is already recorded.
@@ -682,6 +697,12 @@ def _prompt_is_running() -> bool:
 def current_run() -> Run:
     """Return the open Run, or a Run that records nothing when none is open."""
     return _current if _current is not None else _NO_RUN
+
+
+def report_cancelled(message: str) -> None:
+    """Tell the operator the action was cancelled, for a caller about to return, and mark the Run cancelled."""
+    current_run().mark_cancelled()
+    print(message)
 
 
 def open_run(label: str, environment: Any = None) -> Run:

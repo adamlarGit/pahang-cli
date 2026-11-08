@@ -51,6 +51,7 @@ from src.project_workflow_actions import (
     IngestMsmsCsvAction,
     PopulateDataMsmsAction,
     PopulateTotalPeAction,
+    PostProcessingPipelineAction,
     ProjectWorkflowAction,
     PropagateWoAction,
     QuickReportAction,
@@ -58,7 +59,7 @@ from src.project_workflow_actions import (
     UpdateQr02CbaAction,
     WhatsAppReportAction,
 )
-from src.run_records import RECORD_DIR_OVERRIDE_VARIABLE, current_run, open_run
+from src.run_records import RECORD_DIR_OVERRIDE_VARIABLE, OperationCancelled, current_run, open_run
 from src.testsheet.models import SubstationPackage, SubstationTestsheetPackage
 from src.utility_actions import UtilityAction, get_utility_actions
 from src.workflows.combine_pdfs_with_separator import CombinePdfsWithSeparatorSummary
@@ -4030,3 +4031,256 @@ def test_real_action_cancelled_at_its_first_prompt_finishes_as_cancelled(locatio
     assert entries[-1]["status"] == "cancelled"
     assert not entries_of(entries, "error")
     assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_finish_counts_each_named_item_once_at_its_worst_outcome(locations) -> None:
+    def action(environment) -> None:
+        run = current_run()
+        with run.step("Plan", item=("2026-01-02", "A")):
+            pass
+        with run.step("Compose", item=("2026-01-02", "A")) as step:
+            step.fail("compose broke")
+        with run.step("Compose", item=("2026-01-03", "A")):
+            pass
+        with run.step("Compose", item=("2026-01-02", "B")) as step:
+            step.skip("no defects")
+        try:
+            with run.step("Compose", item=("2026-01-02", "C")):
+                raise ValueError("bad testsheet")
+        except ValueError:
+            pass
+        with run.step("Workflow without an item"):
+            pass
+
+    run_project_action(action, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["counts"] == {"completed": 1, "failed": 2, "skipped": 1}
+
+
+def test_counts_a_result_reports_replace_the_step_tally_only_for_those_counts(locations) -> None:
+    def action(environment):
+        with current_run().step("Compose", item=("2026-01-02", "A")) as step:
+            step.skip("no defects")
+        return SimpleNamespace(succeeded_count=9, failed_count=1)
+
+    run_project_action(action, locations.environment)
+
+    assert read_entries(locations.project_logs)[-1]["counts"] == {"completed": 9, "failed": 1, "skipped": 1}
+
+
+def test_cancel_after_completed_work_keeps_outputs_and_counts_and_is_not_an_error(locations, tmp_path, capsys) -> None:
+    output = tmp_path / "done.docx"
+
+    def action(environment) -> None:
+        with current_run().step("Compose", item=("2026-01-02", "A")):
+            current_run().record_outputs([output])
+        current_run().mark_cancelled()
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "cancelled"
+    assert entries[-1]["counts"] == {"completed": 1, "failed": 0, "skipped": 0}
+    assert [entry["path"] for entry in entries_of(entries, "output")] == [str(output)]
+    assert not entries_of(entries, "error")
+    assert "Run Record:" not in capsys.readouterr().out
+
+
+def test_operation_cancelled_after_a_whole_job_failure_stays_failed(locations, capsys) -> None:
+    def action(environment) -> None:
+        current_run().record_failure("whole job broke")
+        raise OperationCancelled("Operation cancelled.")
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "failed"
+    assert len(entries_of(entries, "cancelled")) == 1
+    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_finish_entry_survives_a_step_detail_named_like_the_item(locations) -> None:
+    def action(environment) -> None:
+        with current_run().step("Compose", item="A") as step:
+            step.details["item"] = "clashing"
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries_of(entries, "step_finish")[0]["item"] == "A"
+
+
+def _select_one_cancels():
+    return [patch("src.cli_selectors.select_one", return_value="__cancel__")]
+
+
+def _full_report_workflow():
+    workflow = MagicMock()
+    workflow.inspect.return_value = FullReportInspection(targets=(MagicMock(),), warnings=(), errors=())
+    return workflow
+
+
+def _postprocessing_workflow():
+    workflow = MagicMock()
+    workflow.inspect.return_value = FullReportPostProcessingInspection(targets=(MagicMock(),), warnings=(), errors=())
+    workflow.locate_full_reports_for_fls.return_value = ([Path("report.docx")], [])
+    return workflow
+
+
+def _fl_prompt():
+    return patch("src.project_workflow_actions._prompt_full_report_selection", return_value=["FL1"])
+
+
+def _chosen(targets):
+    return patch("src.cli_selectors.select_substations_interactive", return_value=targets)
+
+
+def _no_postprocessing_telemetry():
+    return patch("src.project_workflow_actions._print_full_report_postprocessing_dry_run_telemetry")
+
+
+def _declined():
+    return patch("src.cli_selectors.confirm", return_value=False)
+
+
+def _whatsapp_prompts():
+    return [
+        patch.object(ProjectEnvironment, "get_whatsapp_report_resources", return_value=MagicMock()),
+        patch("src.project_workflow_actions._select_whatsapp_report_batch", return_value=None),
+    ]
+
+
+def _no_folder_prompts():
+    return [
+        patch("src.cli_selectors.select_pahang_date_folder", return_value=None),
+        patch("src.cli_selectors.prompt_directory_path", return_value=None),
+    ]
+
+
+@pytest.mark.parametrize(
+    "make_action, make_prompts",
+    [
+        pytest.param(lambda: PopulateTotalPeAction("a"), _select_one_cancels, id="populate_total_pe"),
+        pytest.param(lambda: UpdateQr02CbaAction("a"), _select_one_cancels, id="update_qr02"),
+        pytest.param(lambda: QuickReportAction("a"), _select_one_cancels, id="quick_report"),
+        pytest.param(lambda: PostProcessingPipelineAction("a"), _select_one_cancels, id="pipeline"),
+        pytest.param(lambda: PopulateDataMsmsAction("a"), _select_one_cancels, id="populate_data_msms"),
+        pytest.param(lambda: RawMaterialAction("a"), _no_folder_prompts, id="raw_material"),
+        pytest.param(lambda: WhatsAppReportAction("a"), _whatsapp_prompts, id="whatsapp"),
+        pytest.param(lambda: FullReportAction("a", workflow=MagicMock()), _select_one_cancels, id="full_report_mode"),
+        pytest.param(
+            lambda: FullReportAction("a", workflow=_full_report_workflow()),
+            lambda: [_fl_prompt(), _chosen([])],
+            id="full_report_none_chosen",
+        ),
+        pytest.param(
+            lambda: FullReportAction("a", workflow=_full_report_workflow()),
+            lambda: [_fl_prompt(), _chosen(["PE1"]), _declined()],
+            id="full_report_declined",
+        ),
+        pytest.param(
+            lambda: FullReportPostProcessingAction("a", workflow=_postprocessing_workflow()),
+            lambda: [_fl_prompt(), _no_postprocessing_telemetry(), _chosen([])],
+            id="postprocess_none_chosen",
+        ),
+        pytest.param(
+            lambda: FullReportPostProcessingAction("a", workflow=_postprocessing_workflow()),
+            lambda: [_fl_prompt(), _no_postprocessing_telemetry(), _chosen(["PE1"]), _declined()],
+            id="postprocess_declined",
+        ),
+    ],
+)
+def test_project_actions_cancelled_by_returning_finish_as_cancelled(locations, capsys, make_action, make_prompts) -> None:
+    prompts = make_prompts()
+    for prompt in prompts:
+        prompt.start()
+    try:
+        _run_project_action_object(make_action(), locations)
+    finally:
+        for prompt in prompts:
+            prompt.stop()
+
+    entries = read_entries(locations.project_logs)
+    console = capsys.readouterr().out
+    assert entries[-1]["status"] == "cancelled", console
+    assert not entries_of(entries, "error")
+    assert "Run Record:" not in console
+
+
+def _combine_separator_prompts():
+    return [
+        patch.object(ProjectEnvironment, "get_template", return_value=Path("separator.pdf")),
+        patch("src.cli_selectors.select_testsheet_subfolder", return_value=None),
+    ]
+
+
+@pytest.mark.parametrize(
+    "label, make_prompts",
+    [
+        pytest.param("Create raw material folders", _no_folder_prompts, id="raw_material"),
+        pytest.param("Generate WhatsApp report (from Quick Reports)", _whatsapp_prompts, id="whatsapp"),
+        pytest.param("Combine PDFs with separator sheet", _combine_separator_prompts, id="combine_with_separator"),
+        pytest.param(
+            "Generate US 16-bit audio & embed sounds into PDFs",
+            lambda: [patch("src.workflows.us_audio.select_one", return_value="__cancel__")],
+            id="us_audio",
+        ),
+        pytest.param(
+            "Generate US+TEV survey graphs",
+            lambda: [patch("src.workflows.us_tev_graphs.select_one", return_value="__cancel__")],
+            id="us_tev",
+        ),
+        pytest.param(
+            "Replace signature images in testsheets",
+            lambda: [patch("builtins.input", return_value="q")],
+            id="replace_signatures",
+        ),
+    ],
+)
+def test_utility_actions_cancelled_by_returning_finish_as_cancelled(
+    locations, utility_env, capsys, label, make_prompts
+) -> None:
+    prompts = make_prompts()
+    for prompt in prompts:
+        prompt.start()
+    try:
+        run_registered_utility(label)
+    finally:
+        for prompt in prompts:
+            prompt.stop()
+
+    entries = read_entries(locations.fallback_logs)
+    console = capsys.readouterr().out
+    assert entries[-1]["status"] == "cancelled", console
+    assert not entries_of(entries, "error")
+    assert "Run Record:" not in console
+
+
+def test_quick_report_counts_its_substations_from_item_steps(locations, tmp_path) -> None:
+    written = tmp_path / "PE1.docx"
+    written.write_bytes(b"report")
+    plans = [
+        SimpleNamespace(package=SimpleNamespace(date_str="07-11-2026", testsheet_path=tmp_path / "1.xlsx", name="A")),
+        SimpleNamespace(package=SimpleNamespace(date_str="07-11-2026", testsheet_path=tmp_path / "2.xlsx", name="B")),
+    ]
+    inspection = QuickReportInspection(targets=(), missing_templates=(), warnings=(), errors=())
+    workflow = QuickReportWorkflow(compiler=MagicMock())
+
+    def action(environment) -> object:
+        with (
+            patch.object(workflow, "_composer") as composer,
+            patch.object(workflow, "_plan", return_value=(inspection, plans)),
+            patch.object(QuickReportWorkflow, "_resolve_substation_display_name", side_effect=lambda p: p.name),
+        ):
+            composer.load.side_effect = [written, RuntimeError("compose broke")]
+            return workflow.generate("07-11-2026", environment)
+
+    run_project_action(action, locations.environment)
+
+    entries = read_entries(locations.project_logs)
+    assert entries[-1]["status"] == "partial_failure"
+    assert entries[-1]["counts"] == {"completed": 1, "failed": 1, "skipped": 0}
+    assert [entry["item"] for entry in entries_of(entries, "step_finish") if "item" in entry] == [
+        ["07-11-2026", "A"],
+        ["07-11-2026", "B"],
+    ]

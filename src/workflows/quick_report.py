@@ -148,7 +148,10 @@ class QuickReportWorkflow:
                 else:
                     progress_sink(f"[{idx}/{len(plans)}] Generating quick report for {station_name}...")
             try:
-                with current_run().step(f"Compose Quick Report: {station_name}"):
+                with current_run().step(
+                    f"Compose Quick Report: {station_name}",
+                    item=(getattr(p.package, "date_str", ""), station_name),
+                ):
                     out_p = self._composer.load(p)
                 if out_p:
                     generated_paths.append(out_p)

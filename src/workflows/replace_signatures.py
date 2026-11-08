@@ -19,7 +19,7 @@ from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
 from src import cli_selectors
 from src.postprocessing.converters import classify_sheet_layout
 from src.project.storage import repair_openpyxl_zip
-from src.run_records import current_run
+from src.run_records import current_run, report_cancelled
 
 
 @dataclass(frozen=True)
@@ -376,7 +376,7 @@ def run_replace_images(env: ProjectEnvironment | None = None) -> ReplaceImagesSu
     while True:
         target_str = input("Enter path to Excel file (.xlsx) or folder containing .xlsx files (or 'q' to cancel): ").strip().strip('"')
         if not target_str or target_str.lower() == "q":
-            print("Cancelled.")
+            report_cancelled("Cancelled.")
             return ReplaceImagesSummary(target=Path("."), photo1=Path("."), photo2=None, mode="cancelled", processed_count=0, failed_count=0)
         candidate = Path(target_str).expanduser().resolve()
         if candidate.exists() and (candidate.is_file() or candidate.is_dir()):
@@ -391,7 +391,7 @@ def run_replace_images(env: ProjectEnvironment | None = None) -> ReplaceImagesSu
     ]
     mode = cli_selectors.select_one("Select replacement mode:", mode_options, default_value="placeholder")
     if mode in ("__cancel__", None):
-        print("Cancelled.")
+        report_cancelled("Cancelled.")
         return ReplaceImagesSummary(target=target, photo1=Path("."), photo2=None, mode="cancelled", processed_count=0, failed_count=0)
 
     # Select signature for img1 (Tested by / {{signvendor}})
@@ -400,7 +400,7 @@ def run_replace_images(env: ProjectEnvironment | None = None) -> ReplaceImagesSu
         sign_dir,
     )
     if folder1 in ("__cancel__", None):
-        print("Cancelled signature selection for img1.")
+        report_cancelled("Cancelled signature selection for img1.")
         return ReplaceImagesSummary(target=target, photo1=Path("."), photo2=None, mode=mode, processed_count=0, failed_count=0)
 
     # Select signature for img2 (TNB Supervisor / {{signtnb}})
@@ -410,7 +410,7 @@ def run_replace_images(env: ProjectEnvironment | None = None) -> ReplaceImagesSu
         default_folder=folder1 if folder1 != "__none__" else None,
     )
     if folder2 in ("__cancel__", None):
-        print("Cancelled signature selection for img2.")
+        report_cancelled("Cancelled signature selection for img2.")
         return ReplaceImagesSummary(target=target, photo1=photo1_path or Path("."), photo2=None, mode=mode, processed_count=0, failed_count=0)
 
     current_run().record_request(

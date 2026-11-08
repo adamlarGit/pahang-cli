@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PyPDF2 import PdfMerger
 
-from src.run_records import current_run
+from src.run_records import current_run, report_cancelled
 from src.workflows.progress import ProgressSink, QuantityProgressTracker
 
 
@@ -99,6 +99,7 @@ def run_combine_pdfs_with_separator(environment: object | None = None) -> Combin
 
     env = environment or get_or_create_utility_environment()
     if env is None:
+        current_run().record_failure("No project environment available.")
         print("No project environment available.")
         return None
 
@@ -116,7 +117,7 @@ def run_combine_pdfs_with_separator(environment: object | None = None) -> Combin
     )
 
     if target_dir is None:
-        print("Operation cancelled.")
+        report_cancelled("Operation cancelled.")
         return None
 
     current_run().record_request(
