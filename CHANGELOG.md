@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Truthful Run Record Availability (`feat(run-records)`, `src/run_records.py`, `src/workflow_cli.py`)**:
+  - The console now warns once when no Run Record could be kept, or when saving failed partway and the record is incomplete. It names a path only if the file still exists.
+  - Startup and menu failures outside an action get their own record in the per-user folder. A cancellation does not.
 - **Timed Full Report Post-Processing Steps in Run Records (`feat(run-records)`, `src/workflows/full_report_postprocessing.py`, `src/postprocessing/converters.py`)**:
   - Each substation has one enclosing Step with Word restart, PDF conversion, image restoration, merge and sound stages sharing its date-and-substation item; inspection, discovery and testsheet validation are timed too.
   - The workflow now reports a whole-job failure itself, and a report with a missing or empty PDF can't be recorded as success.

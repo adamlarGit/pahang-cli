@@ -36,6 +36,7 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output.vt100 import Vt100_Output
 
 from src import __version__
+from src.cli_menu import TopLevelSelection
 from src.cli_session import CliSession
 from src.project.environment import ProjectEnvironment
 from src.project.models import ProjectMetadata
@@ -131,6 +132,7 @@ from src.workflow_cli import (
     _run_recorded_action,
     _run_utility_actions_menu,
     _select_project,
+    run_cli,
 )
 
 
@@ -412,6 +414,64 @@ def test_failure_while_selecting_a_project_is_saved_in_fallback(locations, capsy
     assert str(next(locations.fallback_logs.glob("*.jsonl"))) in capsys.readouterr().out
 
 
+def test_selection_failure_with_no_storage_warns_and_keeps_the_original_error(
+    locations, tmp_path, monkeypatch, capsys
+) -> None:
+    _block_every_location(locations, monkeypatch, tmp_path)
+    session = CliSession(persistence_file=locations.project / ".active_project.json")
+
+    with (
+        patch("src.workflow_cli.select_active_project_wizard", side_effect=RuntimeError("catalog unreadable")),
+        pytest.raises(RuntimeError, match="catalog unreadable"),
+    ):
+        _run_project_workflow_menu(session, [])
+
+    console = capsys.readouterr().out
+    assert console.count(DIAGNOSTICS_UNAVAILABLE) == 1
+    assert ".jsonl" not in console
+
+
+def test_startup_failure_gets_its_own_record_and_still_raises(locations, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "argv", ["pahang-cli"])
+
+    with (
+        patch("src.workflow_cli.get_project_workflow_actions", side_effect=RuntimeError("catalog broken")),
+        pytest.raises(RuntimeError, match="catalog broken"),
+    ):
+        run_cli(CliSession(persistence_file=locations.project / ".active_project.json"))
+
+    entries = read_entries(locations.fallback_logs)
+    assert "catalog broken" in entries_of(entries, "error")[0]["traceback"]
+    assert f"Run Record: {next(locations.fallback_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_selection_failure_reaching_the_top_level_is_saved_once(locations, monkeypatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["pahang-cli"])
+
+    with (
+        patch("src.cli_menu.select_top_level_destination", return_value=TopLevelSelection.PROJECT_WORKFLOW),
+        patch("src.workflow_cli.select_active_project_wizard", side_effect=RuntimeError("catalog unreadable")),
+        pytest.raises(RuntimeError, match="catalog unreadable"),
+    ):
+        run_cli(CliSession(persistence_file=locations.project / ".active_project.json"))
+
+    assert entries_of(read_entries(locations.fallback_logs), "error")
+
+
+def test_early_cancellation_is_not_saved_as_a_failure(locations, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "argv", ["pahang-cli"])
+
+    with (
+        patch("src.cli_menu.select_top_level_destination", return_value=TopLevelSelection.PROJECT_WORKFLOW),
+        patch("src.workflow_cli.select_active_project_wizard", side_effect=OperationCancelled("cancelled")),
+        pytest.raises(OperationCancelled),
+    ):
+        run_cli(CliSession(persistence_file=locations.project / ".active_project.json"))
+
+    assert not locations.fallback_logs.exists()
+    assert "Warning:" not in capsys.readouterr().out
+
+
 def test_selecting_a_project_normally_saves_nothing(locations) -> None:
     session = CliSession(persistence_file=locations.project / ".active_project.json")
 
@@ -472,6 +532,17 @@ def test_failed_action_with_unwritable_log_locations_still_reports_its_failure(
     assert "Run Record:" not in console
 
 
+DIAGNOSTICS_UNAVAILABLE = "Warning: diagnostics are unavailable; no log was kept."
+
+
+def test_no_record_anywhere_warns_once_and_names_no_path(locations, tmp_path, monkeypatch, capsys) -> None:
+    _block_every_location(locations, monkeypatch, tmp_path)
+
+    run_project_action(lambda environment: None, locations.environment)
+
+    assert capsys.readouterr().out.count(DIAGNOSTICS_UNAVAILABLE) == 1
+
+
 class _FileThatFailsAfter:
     """A record file that stops accepting writes, as on a full disk or a lost drive."""
 
@@ -508,10 +579,10 @@ def test_write_failure_mid_run_does_not_stop_the_action(locations, monkeypatch) 
     assert [entry["type"] for entry in entries] == ["run_start", "environment"]
 
 
-@pytest.mark.parametrize("good_writes", [1000, 2], ids=["healthy_file", "writes_already_failed"])
-def test_errors_only_in_the_result_show_the_path_even_after_writes_fail(
-    locations, monkeypatch, capsys, good_writes
-) -> None:
+INCOMPLETE_RECORD = "Warning: saving failed partway, so this Run Record is incomplete: "
+
+
+def _fail_writes_after(monkeypatch: pytest.MonkeyPatch, good_writes: int) -> None:
     real_open = open
 
     def open_failing_later(*args, **kwargs):
@@ -519,13 +590,112 @@ def test_errors_only_in_the_result_show_the_path_even_after_writes_fail(
 
     monkeypatch.setattr("src.run_records.open", open_failing_later, raising=False)
 
+
+def test_write_failure_warns_once_and_names_the_incomplete_record(locations, monkeypatch, capsys) -> None:
+    _fail_writes_after(monkeypatch, good_writes=2)
+
+    def noisy(environment) -> None:
+        for number in range(5):
+            current_run().record_warning(f"warning {number}")
+
+    run_project_action(noisy, locations.environment)
+
+    console = capsys.readouterr().out
+    assert console.count(INCOMPLETE_RECORD) == 1
+    assert f"{INCOMPLETE_RECORD}{next(locations.project_logs.glob('*.jsonl'))}" in console
+
+
+def test_action_failure_after_write_failure_is_still_reported(locations, monkeypatch, capsys) -> None:
+    _fail_writes_after(monkeypatch, good_writes=2)
+
+    def failing(environment) -> None:
+        raise RuntimeError("real problem")
+
+    run_project_action(failing, locations.environment)
+
+    console = capsys.readouterr().out
+    assert "Action failed: real problem" in console
+    assert console.count(INCOMPLETE_RECORD) == 1
+    assert "Run Record: " not in console
+
+
+def test_failure_writing_the_finish_entry_is_reported(locations, monkeypatch, capsys) -> None:
+    real_open = open
+
+    class RefusesFinish(_FileThatFailsAfter):
+        def write(self, text: str) -> int:
+            if '"run_finish"' in text:
+                raise OSError(28, "No space left on device")
+            return self._real_file.write(text)
+
+    monkeypatch.setattr(
+        "src.run_records.open",
+        lambda *args, **kwargs: RefusesFinish(real_open(*args, **kwargs), good_writes=0),
+        raising=False,
+    )
+
+    run_project_action(lambda environment: None, locations.environment)
+
+    assert capsys.readouterr().out.count(INCOMPLETE_RECORD) == 1
+
+
+def test_entry_that_cannot_be_serialised_marks_the_record_incomplete(locations, monkeypatch, capsys) -> None:
+    real_dumps = json.dumps
+
+    def refusing_finish(value, *args, **kwargs):
+        if isinstance(value, dict) and value.get("type") == "run_finish":
+            raise ValueError("cannot serialise")
+        return real_dumps(value, *args, **kwargs)
+
+    monkeypatch.setattr("src.run_records.json.dumps", refusing_finish)
+
+    run_project_action(lambda environment: None, locations.environment)
+
+    assert capsys.readouterr().out.count(INCOMPLETE_RECORD) == 1
+
+
+def test_failed_action_with_blocked_project_logs_shows_the_fallback_path(locations, capsys) -> None:
+    locations.project_logs.write_text("a file where the folder should be", encoding="utf-8")
+
+    def failing(environment) -> None:
+        raise RuntimeError("real problem")
+
+    run_project_action(failing, locations.environment)
+
+    assert f"Run Record: {next(locations.fallback_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+
+
+def test_incomplete_record_that_no_longer_exists_is_not_announced(locations, monkeypatch, capsys) -> None:
+    _fail_writes_after(monkeypatch, good_writes=2)
+
+    def delete_the_record(environment) -> None:
+        current_run().record_warning("the write that finds the disk full")
+        next(locations.project_logs.glob("*.jsonl")).unlink()
+
+    run_project_action(delete_the_record, locations.environment)
+
+    console = capsys.readouterr().out
+    assert console.count(DIAGNOSTICS_UNAVAILABLE) == 1
+    assert ".jsonl" not in console
+
+
+@pytest.mark.parametrize(
+    ("good_writes", "announcement"),
+    [(1000, "Run Record: "), (2, INCOMPLETE_RECORD)],
+    ids=["healthy_file", "writes_already_failed"],
+)
+def test_errors_only_in_the_result_show_the_path_even_after_writes_fail(
+    locations, monkeypatch, capsys, good_writes, announcement
+) -> None:
+    _fail_writes_after(monkeypatch, good_writes)
+
     def action(environment) -> SimpleNamespace:
         current_run().record_warning("the write that finds the disk full")
         return SimpleNamespace(errors=["one station failed"])
 
     run_project_action(action, locations.environment)
 
-    assert f"Run Record: {next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
+    assert f"{announcement}{next(locations.project_logs.glob('*.jsonl'))}" in capsys.readouterr().out
 
 
 def test_failure_while_capturing_versions_does_not_stop_the_action(locations, monkeypatch) -> None:

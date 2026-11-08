@@ -40,6 +40,15 @@ def run_cli(session: CliSession | None = None) -> None:
     if any(arg in sys.argv for arg in ("-v", "--version")):
         return
 
+    try:
+        _run_menus(session)
+    except Exception as exc:
+        run_records.save_failure("Startup or Menu Failure", exc)
+        raise
+
+
+def _run_menus(session: CliSession | None) -> None:
+    """Build the session, then run the top-level menu until the operator exits."""
     cli_session = session or CliSession()
     project_actions = get_project_workflow_actions()
     utility_actions = get_utility_actions()
@@ -78,13 +87,14 @@ def _run_action(action_label: str, callback: Callable[[], object]) -> None:
 
 def _run_recorded_action(action_label: str, callback: Callable[[], object], environment: object = None) -> None:
     """Run one action as _run_action does, saving a Run Record of it."""
-    with run_records.open_run(action_label, environment) as run:
-        try:
+    run = run_records.open_run(action_label, environment)
+    try:
+        with run:
             _run_action(action_label, lambda: run.call(callback))
-        finally:
-            # In a finally so a Ctrl+C after a failed item still shows where the record is.
-            if run.failed and run.path:
-                print(f"Run Record: {run.path}")
+    finally:
+        # After the record closes, so a failed final write counts. In a finally so a Ctrl+C
+        # after a failed item still shows where the record is.
+        run.report_availability()
 
 
 def _select_project(session: CliSession) -> object:
@@ -97,9 +107,7 @@ def _select_project(session: CliSession) -> object:
 
 
 def _record_selection_failure(exc: Exception) -> None:
-    record_path = run_records.save_failure("Select Active Project", exc)
-    if record_path:
-        print(f"Run Record: {record_path}")
+    run_records.save_failure("Select Active Project", exc)
 
 
 def _run_project_workflow_menu(

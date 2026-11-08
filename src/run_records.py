@@ -2,9 +2,10 @@
 
 Interface::
 
-    with open_run("Generate Full Reports", environment) as run:
+    run = open_run("Generate Full Reports", environment)
+    with run:
         run.call(action)                     # records outcome, re-raises its failure
-        if run.failed and run.path: ...      # the file an operator can send
+    run.report_availability()                # the file an operator can send, or why there is none
 
     current_run().record_request(request)    # from anywhere, without new parameters
     current_run().record_inputs(paths)
@@ -58,7 +59,9 @@ Records live in ``<project base path>/logs/``. Runs with no real project folder 
 The test suite relies on this, and it works the same way in production.
 
 Nothing here may stop a workflow: a problem saving a Run Record is swallowed, and the
-Run carries on recording nothing. ``current_run()`` always returns a usable Run, which
+Run carries on recording nothing. ``report_availability()`` then gives the one console line
+about it: diagnostics are unavailable, or the record at this path is incomplete. It names a
+path only if the file still exists. ``current_run()`` always returns a usable Run, which
 records nothing when no Run is open, so callers never check for one.
 """
 
@@ -91,6 +94,7 @@ RECORD_DIR_OVERRIDE_VARIABLE = "PAHANG_CLI_RUN_RECORD_DIR"
 
 _UTILITY_PROJECT_KEY = "utility"
 _UNKNOWN = "unknown"
+_DIAGNOSTICS_UNAVAILABLE = "Warning: diagnostics are unavailable; no log was kept."
 _GIT_TIMEOUT_SECONDS = 5
 _PROGRESS_LINE = re.compile(r"\s*\[(PROGRESS|\d+/\d+)\]")
 _OWN_LOGGER = "src"
@@ -112,6 +116,7 @@ _UNDESCRIBABLE = "<could not be described>"
 _REDACTED = "<redacted>"
 _SENSITIVE_NAME = re.compile(r"password|passwd|secret|token|api[_-]?key|credential|authorization", re.IGNORECASE)
 _RECORDED_MARK = "_pahang_cli_recorded_by_run"
+_SAVED_MARK = "_pahang_cli_saved_outside_action"
 # Input entries kept per folder, so a huge raw-data folder can't flood a record.
 _MAX_INPUTS_PER_FOLDER = 200
 # Directory entries looked at per folder, so a huge tree can't stall a report.
@@ -179,11 +184,13 @@ class _StepOutcome:
 class Run:
     """One open Run Record. Every method is safe to call and never raises."""
 
-    def __init__(self, record_file: Any = None, path: Path | None = None) -> None:
+    def __init__(self, record_file: Any = None, path: Path | None = None, *, creation_failed: bool = False) -> None:
         self._file = record_file
         self._started = time.perf_counter()
         self.path = path
         self.failed = False
+        self._creation_failed = creation_failed
+        self._write_failed = False
         self._status = "completed"
         self._reported_counts: dict[str, int] = {}
         self._item_outcomes: dict[str, str] = {}
@@ -400,6 +407,24 @@ class Run:
             )
         self._close()
 
+    def report_availability(self) -> None:
+        """Tell the operator what diagnostics exist. Call once, after the ``with`` block has closed."""
+        try:
+            notice = self._availability_notice()
+            if notice is not None:
+                print(notice)
+        except Exception:
+            pass
+
+    def _availability_notice(self) -> str | None:
+        if not (self._creation_failed or self._write_failed or self.failed):
+            return None
+        if self.path is None or not self.path.is_file():
+            return _DIAGNOSTICS_UNAVAILABLE
+        if self._write_failed:
+            return f"Warning: saving failed partway, so this Run Record is incomplete: {self.path}"
+        return f"Run Record: {self.path}"
+
     def _start_captures(self) -> None:
         self._captures = [_LoggerCapture(self), _ConsoleCapture(self)]
         for capture in self._captures:
@@ -542,12 +567,14 @@ class Run:
                 entry = {"type": entry_type, "time": datetime.now(timezone.utc).isoformat(), **fields}
                 line = json.dumps(entry, ensure_ascii=False) + "\n"
             except Exception:
+                self._write_failed = True
                 return
             try:
                 self._file.write(line)
                 self._file.flush()
             except Exception:
                 # Stop here rather than risk a half-written line in the middle of the file.
+                self._write_failed = True
                 self._close()
 
     def _close(self) -> None:
@@ -766,24 +793,43 @@ def open_run(label: str, environment: Any = None) -> Run:
     return _start_run(label, project_key, base_path)
 
 
-def save_failure(label: str, exc: BaseException) -> Path | None:
-    """Save a failure from before any project is selected, in the per-user folder."""
+def save_failure(label: str, exc: BaseException) -> None:
+    """Save a failure from outside any action in the per-user folder, and say what was saved.
+
+    A cancellation isn't a failure, and an exception already saved here isn't saved again as
+    it travels further up the menus.
+    """
+    if isinstance(exc, _CANCELLATIONS) or _was_saved(exc):
+        return
     with _start_run(label, None, None) as run:
         run.record_failure(exc, exc)
-    return run.path
+    run.report_availability()
+    _ignoring_failure(lambda: setattr(exc, _SAVED_MARK, True))
+
+
+def _was_saved(exc: BaseException) -> bool:
+    try:
+        return getattr(exc, _SAVED_MARK, False) is True
+    except Exception:
+        return False
 
 
 def _start_run(label: str, project_key: str | None, base_path: str | None) -> Run:
     run = Run()
     try:
         record_file, path = _create_record_file(label, base_path)
+        if record_file is None:
+            return Run(creation_failed=True)
         run = Run(record_file, path)
         run._write("run_start", label=label, project_key=project_key, base_path=base_path)
         run._write("environment", **_capture_versions())
         return run
     except Exception:
+        # A file that was created stays visible as incomplete. Without one, no record exists.
+        run._write_failed = run.path is not None
+        run._creation_failed = run.path is None
         run._close()
-        return Run()
+        return run
 
 
 def _ignoring_failure(action: Callable[[], None]) -> None:
