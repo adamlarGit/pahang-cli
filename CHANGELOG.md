@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Quick Report Templates Store `EXECUTIVE SUMMARY` (`fix(templates)`, `templates/QUICK REPORT/CBM DEFECT IR SUMMARY.docx`, `templates/QUICK REPORT/CBM DEFECT IR+US+TEV SUMMARY.docx`)**:
+  - Both CBM summary templates now store the heading in capitals instead of relying on an all-caps style, and a Fast Run test guards the casing. Existing projects need the corrected templates in their own `templates` folder. Fixes #201.
 - **Executive Summary Heading Found by the Slicer (`fix(slicer)`, `src/full_report/slicer.py`)**:
   - The CBM defect scan now finds the `EXECUTIVE SUMMARY` heading and skips every page its summary table covers. Output of the checked reports does not change, because their VI summary already shares that page. Fixes #199.
 - **Swallowed Word-Path Errors in Run Records (`fix(diagnostics)`, `src/full_report/slicer.py`, `src/quick_report/compiler.py`, `src/postprocessing/converters.py`)**:
