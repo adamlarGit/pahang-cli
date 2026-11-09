@@ -22,6 +22,14 @@ A Full Run starts real Word and reads live project folders. Close Word and Excel
 | 1 | Failed | A test or phase failed, pytest crashed or errored, or a protected input changed. |
 | 10 | Incomplete | A required check can't be confirmed: a serial test or test module skipped, a phase collected no tests or didn't finish recording, the serial phase was blocked, or protected inputs couldn't be checked. |
 
+To report the commits since the newest passed Full Run, which agents do after each ticket:
+
+```
+uv run --frozen python -m scripts.full_run_status
+```
+
+It flags 10 or more commits, and says `no Full Run recorded` if this checkout has no passed Full Run. The owner still decides when a Full Run happens.
+
 The serial phase is blocked, without starting Office, if Word or Excel is open or another Full Run holds the machine-wide lock. This does not resolve #176.
 
 Every serial test is required by default. A skip makes the run incomplete unless the test has `@pytest.mark.optional("why this check is optional")`.
