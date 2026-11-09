@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Swallowed Word-Path Errors in Run Records (`fix(diagnostics)`, `src/full_report/slicer.py`, `src/quick_report/compiler.py`, `src/postprocessing/converters.py`)**:
+  - Errors the slicer, compiler and converters handle and carry past are now in the Run Record, with what failed and a traceback. The console, fallbacks and generated output do not change. Fixes #191.
 - **Faster Quick Report Slicing (`perf(slicer)`, `src/full_report/slicer.py`)**:
   - The slicer no longer walks a document paragraph by paragraph when the heading it wants isn't there. Which sections get sliced does not change.
   - The remaining uses of that walk, and failures of Word's Find, are now logged. Fixes #181.

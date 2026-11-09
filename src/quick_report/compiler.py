@@ -39,7 +39,7 @@ def clear_windows_clipboard() -> None:
 
 def _clear_clipboard() -> None:
     """Internal implementation of Windows clipboard zeroing."""
-    for _ in range(3):
+    for attempt in range(1, 4):
         try:
             if hasattr(ctypes, "windll") and hasattr(ctypes.windll, "user32"):
                 if ctypes.windll.user32.OpenClipboard(None):
@@ -47,7 +47,7 @@ def _clear_clipboard() -> None:
                     ctypes.windll.user32.CloseClipboard()
                     return
         except Exception:
-            pass
+            logger.debug("Could not clear the clipboard on attempt %d/3", attempt, exc_info=True)
         time.sleep(0.01)
 
 
@@ -88,6 +88,7 @@ def _paste_with_retry(rng: Any, max_attempts: int = 5, delay: float = 0.15) -> N
                     rng.PasteAndFormat(16)  # 16 = wdFormatOriginalFormatting
                     return
                 except (AttributeError, TypeError):
+                    logger.debug("PasteAndFormat failed; falling back to plain Paste", exc_info=True)
                     rng.Paste()
                     return
             else:
@@ -97,6 +98,7 @@ def _paste_with_retry(rng: Any, max_attempts: int = 5, delay: float = 0.15) -> N
             if attempt == max_attempts:
                 logger.debug("rng paste failed after %d attempts: %s", max_attempts, exc)
                 raise
+            logger.debug("Paste failed on attempt %d/%d; retrying", attempt, max_attempts, exc_info=True)
             time.sleep(delay)
 
 
@@ -168,7 +170,7 @@ def _terminate_word_process(pid: int | None, timeout_ms: int = 500) -> None:
             check=False,
         )
     except Exception:
-        pass
+        logger.debug("Could not confirm or end Word process %s", pid, exc_info=True)
 
 
 @runtime_checkable
@@ -242,6 +244,7 @@ class WordComDocumentCompiler:
                 if hwnd:
                     _, word_pid = win32process.GetWindowThreadProcessId(hwnd)
             except Exception:
+                logger.debug("Could not find the compiler's Word process id", exc_info=True)
                 word_pid = None
 
             dispatched_word.Visible = False
@@ -261,12 +264,13 @@ class WordComDocumentCompiler:
                     if was_enabled:
                         faulthandler.disable()
                 except Exception:
+                    logger.debug("Could not pause faulthandler before quitting the compiler's Word", exc_info=True)
                     was_enabled = False
                 try:
                     try:
                         word_to_quit.Quit()
                     except Exception:
-                        pass
+                        logger.debug("Could not quit the compiler's Word session", exc_info=True)
                     del word_to_quit
                     gc.collect()
                 finally:
@@ -274,14 +278,14 @@ class WordComDocumentCompiler:
                         try:
                             faulthandler.enable()
                         except Exception:
-                            pass
+                            logger.debug("Could not re-enable faulthandler after quitting the compiler's Word", exc_info=True)
 
             if co_initialized:
                 try:
                     time.sleep(0.2)
                     pythoncom.CoUninitialize()
                 except Exception:
-                    pass
+                    logger.debug("Could not uninitialize COM after the compiler's Word session", exc_info=True)
 
             if word_pid is not None:
                 _terminate_word_process(word_pid)
@@ -357,7 +361,7 @@ class WordComDocumentCompiler:
                         try:
                             part_doc.Close(False)
                         except Exception:
-                            pass
+                            logger.debug("Could not close compilation part %s", part_path, exc_info=True)
                         part_doc = None
 
             main_doc.SaveAs2(str(output_path))

@@ -365,6 +365,7 @@ def _replace_front_page_title(doc: Any) -> None:
             )
         )
     except (TypeError, Exception):
+        logger.debug("Front page title Find & Replace failed with positional arguments; retrying by keyword", exc_info=True)
         try:
             success = bool(
                 find.Execute(
@@ -402,6 +403,7 @@ def _slice_range_to_doc(
             else:
                 break
         except Exception:
+            logger.debug("Could not read the slice end at %d for %s; keeping that end", end_pos, output_path, exc_info=True)
             break
 
     new_doc = word_app.Documents.Add()
@@ -417,7 +419,7 @@ def _slice_range_to_doc(
             if hasattr(source_doc, "CompatibilityMode") and hasattr(new_doc, "SetCompatibilityMode"):
                 new_doc.SetCompatibilityMode(source_doc.CompatibilityMode)
         except Exception:
-            pass
+            logger.debug("Could not mirror page setup into slice %s", output_path, exc_info=True)
 
         # Atomic copy-paste handshake with pre-copy zeroing and range expansion assertion (Seam 3)
         for attempt in range(1, max_copy_paste_attempts + 1):
@@ -464,7 +466,7 @@ def _slice_range_to_doc(
                 if last_p and getattr(last_p.Range, "Text", "") in ("\r", "\n", "\r\n", "\x0c"):
                     last_p.Range.Delete()
         except (TypeError, ValueError, Exception):
-            pass
+            logger.debug("Could not trim the last empty paragraph of slice %s", output_path, exc_info=True)
 
         if is_front_page:
             _replace_front_page_title(new_doc)
@@ -478,7 +480,7 @@ def _slice_range_to_doc(
         try:
             new_doc.Close(False)
         except Exception:
-            pass
+            logger.debug("Could not close the document for slice %s", output_path, exc_info=True)
 
 
 def _summary_table(source_doc: Any, p_heading: ParagraphBoundary, end_pos: int) -> Any | None:
@@ -495,7 +497,7 @@ def _summary_table(source_doc: Any, p_heading: ParagraphBoundary, end_pos: int) 
             if first_cell.upper().startswith("NO"):
                 return tbl
     except Exception:
-        pass
+        logger.debug("Could not read the summary table under heading %r", p_heading.text, exc_info=True)
     return None
 
 
@@ -509,7 +511,7 @@ def _summary_table_last_page(source_doc: Any, p_heading: ParagraphBoundary, end_
             last_row_end = source_doc.Range(tbl_end - 1, tbl_end - 1)
             last_page = max(last_page, int(last_row_end.Information(WD_ACTIVE_END_PAGE_NUMBER)))
         except Exception:
-            pass
+            logger.debug("Could not read the last page of the summary table under heading %r", p_heading.text, exc_info=True)
     return last_page
 
 
@@ -527,6 +529,7 @@ def _count_vi_summary_source_rows(
                 count += 1
         return count
     except Exception:
+        logger.debug("Could not count the rows of the summary table under heading %r", p_visum.text, exc_info=True)
         return None
 
 
@@ -542,7 +545,7 @@ def _resolve_vi_summary_end(source_doc: Any, p_visum: ParagraphBoundary, cond_st
         if next_page.Start > p_visum.start:
             return min(next_page.Start, cond_start)
     except Exception:
-        pass
+        logger.debug("Could not go to page %d to end the VI summary slice", last_page + 1, exc_info=True)
     return cond_start
 
 
@@ -647,6 +650,7 @@ def _slice_cbm_defects_from_doc(
                 else:
                     p_end = cond_start if cond_start else source_doc.Content.End
             except Exception:
+                logger.debug("Could not find the bounds of candidate CBM defect page %d for %s", p_num, station, exc_info=True)
                 continue
 
             if p_start >= p_end:
@@ -682,7 +686,7 @@ def _slice_cbm_defects_from_doc(
                     try:
                         temp_slice_path.unlink(missing_ok=True)
                     except Exception:
-                        pass
+                        logger.debug("Could not remove rejected CBM slice %s", temp_slice_path, exc_info=True)
                     continue
                 candidate_slices.append((temp_slice_path, meta))
             except Exception as e:
@@ -690,7 +694,7 @@ def _slice_cbm_defects_from_doc(
                 try:
                     temp_slice_path.unlink(missing_ok=True)
                 except Exception:
-                    pass
+                    logger.debug("Could not remove non-defect CBM slice %s", temp_slice_path, exc_info=True)
 
         if not candidate_slices:
             return ()
@@ -747,7 +751,7 @@ def _slice_cbm_defects_from_doc(
                 try:
                     tf.unlink(missing_ok=True)
                 except Exception:
-                    pass
+                    logger.debug("Could not remove temporary CBM slice %s", tf, exc_info=True)
 
 
 class WordComDocumentSlicer:
@@ -797,6 +801,7 @@ class WordComDocumentSlicer:
                 if hwnd:
                     _, word_pid = win32process.GetWindowThreadProcessId(hwnd)
             except Exception:
+                logger.debug("Could not find the slicer's Word process id", exc_info=True)
                 word_pid = None
 
             dispatched_word.Visible = False
@@ -816,12 +821,13 @@ class WordComDocumentSlicer:
                     if was_enabled:
                         faulthandler.disable()
                 except Exception:
+                    logger.debug("Could not pause faulthandler before quitting the slicer's Word", exc_info=True)
                     was_enabled = False
                 try:
                     try:
                         word_to_quit.Quit()
                     except Exception:
-                        pass
+                        logger.debug("Could not quit the slicer's Word session", exc_info=True)
                     del word_to_quit
                     gc.collect()
                 finally:
@@ -829,14 +835,14 @@ class WordComDocumentSlicer:
                         try:
                             faulthandler.enable()
                         except Exception:
-                            pass
+                            logger.debug("Could not re-enable faulthandler after quitting the slicer's Word", exc_info=True)
 
             if co_initialized:
                 try:
                     time.sleep(0.2)
                     pythoncom.CoUninitialize()
                 except Exception:
-                    pass
+                    logger.debug("Could not uninitialize COM after the slicer's Word session", exc_info=True)
 
             if word_pid is not None:
                 _terminate_word_process(word_pid)
@@ -882,6 +888,7 @@ class WordComDocumentSlicer:
                 else:
                     p2_start = source_doc.Content.End
             except Exception:
+                logger.debug("Could not find page 2 of %s; treating the whole document as page 1", source_path, exc_info=True)
                 p2_start = source_doc.Content.End
 
             # 2. Substation condition boundary ("SUBSTATION CONDITION") per D16
@@ -1033,7 +1040,7 @@ class WordComDocumentSlicer:
                 try:
                     source_doc.Close(False)
                 except Exception:
-                    pass
+                    logger.debug("Could not close Quick Report source %s", source_path, exc_info=True)
 
     def slice_cbm_defects(
         self,
@@ -1081,7 +1088,7 @@ class WordComDocumentSlicer:
                 try:
                     source_doc.Close(False)
                 except Exception:
-                    pass
+                    logger.debug("Could not close Quick Report source %s", source_path, exc_info=True)
 
 
 def get_temp_parts_dir(station: str, base_dir: Path | None = None) -> Path:

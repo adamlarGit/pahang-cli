@@ -26,6 +26,9 @@ from src.run_records import current_run
 if TYPE_CHECKING:
     from .image_restoration import RestorationReport
 
+# A named logger: logging.debug() on an unconfigured root runs basicConfig, which changes how later warnings print.
+logger = logging.getLogger(__name__)
+
 
 def calculate_exponential_delays(max_attempts: int, total_wait: float) -> list[float]:
     """Calculate geometric backoff delays distributed across total_wait seconds."""
@@ -60,6 +63,7 @@ def safe_unlink_with_retry(
             return True
         except (OSError, PermissionError) as exc:
             if attempt < max_attempts - 1:
+                logger.debug("Could not remove %s on attempt %d/%d; retrying", p, attempt + 1, max_attempts, exc_info=True)
                 delay = delays[attempt]
                 time.sleep(delay)
             else:
@@ -93,6 +97,7 @@ def safe_replace_with_retry(
             return True
         except (OSError, PermissionError) as exc:
             if attempt < max_attempts - 1:
+                logger.debug("Could not replace %s on attempt %d/%d; retrying", dst_p, attempt + 1, max_attempts, exc_info=True)
                 delay = delays[attempt]
                 time.sleep(delay)
             else:
@@ -358,6 +363,7 @@ def _quit_word(word: object) -> None:
         if was_enabled:
             faulthandler.disable()
     except Exception:
+        logger.debug("Could not pause faulthandler before quitting Word", exc_info=True)
         was_enabled = False
     try:
         try:
@@ -369,7 +375,7 @@ def _quit_word(word: object) -> None:
             try:
                 faulthandler.enable()
             except Exception:
-                pass
+                logger.debug("Could not re-enable faulthandler after quitting Word", exc_info=True)
 
 
 class BatchComSession:
@@ -571,6 +577,7 @@ def _pdf_export_problem(pdf_path: Path, retry_delays: Sequence[float]) -> str | 
             finally:
                 doc.close()
         except Exception as exc:
+            logger.debug("Could not open exported PDF %s", pdf_path, exc_info=True)
             problem = f"export does not open ({exc})"
             continue
         if pages <= 0:
@@ -594,6 +601,7 @@ def _export_validated(
             export(docx_path, native_tmp)
             found = _pdf_export_problem(native_tmp, retry_delays)
         except Exception as exc:
+            logger.debug("Word export raised for %s on attempt %d/2", docx_path.name, attempt + 1, exc_info=True)
             found = f"export raised {type(exc).__name__}: {exc}"
         if found is None:
             return
@@ -877,7 +885,7 @@ class ComDocumentConverter(DocumentConverter):
                             logging.info("Skipping unpopulated extra template sheet: %s", ws.Name)
                             continue
                     except Exception:
-                        pass
+                        logger.debug("Could not check whether sheet %s of %s is empty; keeping it", s_lower, xlsx_path, exc_info=True)
                 filtered_sheets.append(ws)
             selected_sheets = filtered_sheets
 
@@ -904,7 +912,7 @@ class ComDocumentConverter(DocumentConverter):
                             try:
                                 temp_pdf.unlink()
                             except Exception:
-                                pass
+                                logger.debug("Could not remove temporary sheet PDF %s", temp_pdf, exc_info=True)
             selected_sheets = None
             ws_map = None
 
@@ -913,19 +921,19 @@ class ComDocumentConverter(DocumentConverter):
                 try:
                     wb.Close(SaveChanges=False)
                 except Exception:
-                    pass
+                    logger.debug("Could not close workbook %s", xlsx_path, exc_info=True)
                 wb = None
             if owns_excel and excel_app is not None:
                 try:
                     excel_app.Quit()
                 except Exception:
-                    pass
+                    logger.debug("Could not quit Excel after converting %s", xlsx_path, exc_info=True)
                 excel_app = None
             if co_initialized:
                 try:
                     pythoncom.CoUninitialize()
                 except Exception:
-                    pass
+                    logger.debug("Could not uninitialize COM after converting %s", xlsx_path, exc_info=True)
 
         if not pdf_path.exists():
             raise RuntimeError(f"COM export failed: {pdf_path} not found after export.")
@@ -974,7 +982,7 @@ class ComDocumentConverter(DocumentConverter):
                     try:
                         doc.Close(SaveChanges=False)
                     except Exception:
-                        pass
+                        logger.debug("Could not close Word document %s", docx, exc_info=True)
 
         def recycle() -> None:
             if session is not None:
@@ -1006,7 +1014,7 @@ class ComDocumentConverter(DocumentConverter):
                     time.sleep(0.2)
                     pythoncom.CoUninitialize()
                 except Exception:
-                    pass
+                    logger.debug("Could not uninitialize COM after converting %s", docx_path, exc_info=True)
 
         if not pdf_path.exists():
             raise RuntimeError(f"COM export failed: {pdf_path} not found after export.")
@@ -1050,7 +1058,7 @@ class ComDocumentConverter(DocumentConverter):
             try:
                 temp_out.unlink(missing_ok=True)
             except Exception:
-                pass
+                logger.debug("Could not remove temporary merge output %s", temp_out, exc_info=True)
             raise
         finally:
             out_doc.close()
