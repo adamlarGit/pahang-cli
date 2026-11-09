@@ -29,5 +29,5 @@ The default test run during development. It excludes tests that need real Word o
 _Avoid_: unit tests (it also includes integration tests that use fakes), smoke test
 
 **Full Run**:
-Every test, including those using real Word, real Excel and live data. Required before merging into the Integration Branch.
+Every test, including those using real Word, real Excel and live data. Required before merging the Integration Branch into `main`. Otherwise run when the owner asks.
 _Avoid_: full test (without saying which run), regression run

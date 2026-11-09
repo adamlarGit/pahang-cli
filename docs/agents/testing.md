@@ -8,7 +8,7 @@ uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 pytest -n 8
 
 Plain `pytest` selects the same tests serially and doesn't need xdist.
 
-**Full Run**, required before merging into the Integration Branch. It runs the Fast Run tests in parallel, then every `word` or `live_data` test serially. Both phases run even if the first fails:
+**Full Run**, required before merging the Integration Branch into `main`, on the exact commit being merged. Otherwise it runs only when the owner asks. It runs the Fast Run tests in parallel, then every `word` or `live_data` test serially. Both phases run even if the first fails:
 
 ```
 uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 python -m scripts.run_full_suite --workers 8
