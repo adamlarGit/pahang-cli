@@ -216,6 +216,31 @@ class FakeDocumentSlicer:
         return ()
 
 
+def _paragraph_walk_can_match(doc: Any, text: str, start_pos: int | None) -> bool:
+    """False only when no paragraph the walk would visit can contain text.
+
+    One Range.Text read replaces a walk costing several COM calls per paragraph. It reads to
+    the document end, not end_pos, because the walk accepts a paragraph that starts inside the
+    bounds and ends past them. If the text can't be read as a string, the walk still runs.
+    """
+    try:
+        rng = doc.Range(start_pos, int(doc.Content.End)) if start_pos else doc.Content
+        range_text = rng.Text
+    except Exception as exc:
+        logger.warning("Could not read range text while searching for %r: %s", text, exc)
+        return True
+    return not isinstance(range_text, str) or text in range_text
+
+
+def _paragraph_page_number(para_rng: Any, text: str) -> int:
+    """Page holding para_rng; page 1 if Word can't say."""
+    try:
+        return int(para_rng.Information(WD_ACTIVE_END_PAGE_NUMBER))
+    except Exception as exc:
+        logger.warning("Could not read the page number of the paragraph matching %r: %s", text, exc)
+        return 1
+
+
 def _find_paragraph(
     doc: Any,
     text: str,
@@ -252,7 +277,8 @@ def _find_paragraph(
                     WD_REPLACE_NONE,
                 )
             )
-        except (TypeError, Exception):
+        except Exception as exc:
+            logger.warning("Word Find failed for %r with positional arguments, retrying by keyword: %s", text, exc)
             found = bool(find.Execute(FindText=text, Forward=True, Wrap=WD_FIND_STOP))
 
         if found:
@@ -263,20 +289,26 @@ def _find_paragraph(
                 if not must_not_contain or must_not_contain not in para_text:
                     p_start = int(para_rng.Start)
                     p_end = int(para_rng.End)
-                    try:
-                        p_page = int(para_rng.Information(WD_ACTIVE_END_PAGE_NUMBER))
-                    except Exception:
-                        p_page = 1
+                    p_page = _paragraph_page_number(para_rng, text)
                     return ParagraphBoundary(
                         start=p_start,
                         end=p_end,
                         text=para_text,
                         page_number=p_page,
                     )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Word Find failed for %r: %s", text, exc)
 
-    # 2. Resilient fallback searching doc.Paragraphs (supports mocks and non-standard run layouts)
+    if not _paragraph_walk_can_match(doc, text, start_pos):
+        return None
+
+    # 2. Slow fallback: the exact text is in the range but Find's first hit was rejected or Find failed.
+    logger.warning(
+        "Word Find gave no usable match for %r in range [%s, %s]; falling back to a paragraph walk",
+        text,
+        start_pos,
+        end_pos,
+    )
     try:
         paras = getattr(doc, "Paragraphs", None)
         if paras is not None:
@@ -295,18 +327,15 @@ def _find_paragraph(
                 if text in p_text:
                     if not must_not_contain or must_not_contain not in p_text:
                         p_end = getattr(p_rng, "End", p_start)
-                        try:
-                            p_page = int(p_rng.Information(WD_ACTIVE_END_PAGE_NUMBER))
-                        except Exception:
-                            p_page = 1
+                        p_page = _paragraph_page_number(p_rng, text)
                         return ParagraphBoundary(
                             start=int(p_start if p_start is not None else 0),
                             end=int(p_end if p_end is not None else 0),
                             text=p_text,
                             page_number=p_page,
                         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Paragraph walk failed for %r: %s", text, exc)
 
     return None
 

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Faster Quick Report Slicing (`perf(slicer)`, `src/full_report/slicer.py`)**:
+  - The slicer no longer walks a document paragraph by paragraph when the heading it wants isn't there. Which sections get sliced does not change.
+  - The remaining uses of that walk, and failures of Word's Find, are now logged. Fixes #181.
+
 ### Added
 - **Run Record Retention (`feat(run-records)`, `src/run_records.py`)**:
   - Each Run start removes inactive Run Records older than 90 days from its record folder, then the oldest towards a 200 MB target. Records open in any CLI process are protected, and other files are never touched.
