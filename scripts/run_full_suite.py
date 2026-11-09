@@ -51,7 +51,7 @@ class Findings:
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=REPO, help="folder to run pytest in")
-    parser.add_argument("--workers", default="4", help="xdist worker count for the Fast Run phase")
+    parser.add_argument("--workers", default="8", help="xdist worker count for the Fast Run phase")
     parser.add_argument("--results-dir", type=Path, default=REPO / ".test-results")
     parser.add_argument("--lock-file", type=Path, default=_DEFAULT_LOCK_FILE)
     parser.add_argument("--fast-only", action="store_true", help="record a Fast Run, without the serial phase")

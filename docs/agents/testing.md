@@ -3,7 +3,7 @@
 **Fast Run**, the default during development. It skips tests marked `word` or `live_data` and runs in parallel. Set the worker count with `-n` and keep it the same when comparing timings:
 
 ```
-uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 pytest -n 4
+uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 pytest -n 8
 ```
 
 Plain `pytest` selects the same tests serially and doesn't need xdist.
@@ -11,7 +11,7 @@ Plain `pytest` selects the same tests serially and doesn't need xdist.
 **Full Run**, required before merging into the Integration Branch. It runs the Fast Run tests in parallel, then every `word` or `live_data` test serially. Both phases run even if the first fails:
 
 ```
-uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 python -m scripts.run_full_suite --workers 4
+uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 python -m scripts.run_full_suite --workers 8
 ```
 
 A Full Run starts real Word and reads live project folders. Close Word and Excel first, because #176 suggests these runs can close an open Word window. It needs `.cli_config.json` and `.active_project.json`; without them, some live-data tests skip. The merge gate is defined for the one machine that holds the benchmark data.
@@ -33,7 +33,7 @@ The runner checks that protected inputs did not change: `tests/benchmarks` by SH
 Bare `pytest` records nothing, so partial runs can't enter the history. To record a Fast Run:
 
 ```
-uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 python -m scripts.run_full_suite --fast-only --workers 4
+uv run --frozen --with pytest==9.2.0 --with pytest-xdist==3.8.0 python -m scripts.run_full_suite --fast-only --workers 8
 ```
 
 Then report the newest run, or pick one with `--kind fast`, `--kind full` or `--run-id <id>`:
