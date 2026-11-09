@@ -19,6 +19,7 @@ from pathlib import Path
 
 import docx
 import pytest
+from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.text import WD_BREAK
 from docx.shared import Inches
 
@@ -162,3 +163,60 @@ def test_scan_skips_every_page_a_summary_table_covers(tmp_path, word_app, cbm_ro
         src, tmp_path / "out", station=STATION, expected_vi_defect_count=vi_rows
     )
     assert parser.seen == ["Substation"], f"scan offered non-CBM pages to the parser: {parser.seen}"
+
+
+def _add_executive_heading(d, stored_text: str, all_caps_style: bool) -> None:
+    paragraph = d.add_paragraph(stored_text)
+    if all_caps_style:
+        style = d.styles.add_style("SubtitleSVT", WD_STYLE_TYPE.PARAGRAPH)
+        style.font.all_caps = True
+        paragraph.style = style
+
+
+def _build_executive_summary_report(path: Path, stored_text: str, all_caps_style: bool, summary_rows: int) -> None:
+    """Quick Report whose only summary is the executive summary; summary_rows=0 leaves it without a table."""
+    d = docx.Document()
+    d.add_paragraph("QUICK SCANNING REPORT")
+    d.add_table(rows=1, cols=2).rows[0].cells[0].text = "FRONT PAGE"
+    _page_break(d)
+
+    _add_executive_heading(d, stored_text, all_caps_style)
+    if summary_rows:
+        _summary_table(d, ["NO.", "EQUIPMENT", "DEFECT AREA", "SEVERITY"], summary_rows)
+    _page_break(d)
+
+    _cbm_defect_page(d)
+    _page_break(d)
+
+    d.add_paragraph("SUBSTATION CONDITION")
+    d.add_table(rows=1, cols=1).rows[0].cells[0].text = "CONDITION"
+    d.save(path)
+
+
+# Word reports all-caps styled text in upper case, so both forms read as EXECUTIVE SUMMARY (#199).
+HEADING_FORMS = [("EXECUTIVE Summary", True), ("EXECUTIVE SUMMARY", False)]
+HEADING_IDS = ["stored-mixed-case-all-caps-style", "stored-upper-case"]
+
+
+@pytest.mark.parametrize(("stored_text", "all_caps_style"), HEADING_FORMS, ids=HEADING_IDS)
+def test_scan_skips_every_page_of_the_executive_summary(tmp_path, word_app, stored_text, all_caps_style):
+    src = tmp_path / "qr.docx"
+    _build_executive_summary_report(src, stored_text, all_caps_style, summary_rows=OVERFLOW_ROWS)
+    parser = _AcceptEverythingParser()
+    WordComDocumentSlicer(word_app=word_app, header_parser=parser).slice_cbm_defects(
+        src, tmp_path / "out", station=STATION
+    )
+    assert parser.seen == ["Substation"], f"scan offered non-CBM pages to the parser: {parser.seen}"
+
+
+@pytest.mark.parametrize(("stored_text", "all_caps_style"), HEADING_FORMS, ids=HEADING_IDS)
+def test_executive_summary_without_a_table_keeps_the_following_cbm_defect_page(
+    tmp_path, word_app, stored_text, all_caps_style
+):
+    src = tmp_path / "qr.docx"
+    _build_executive_summary_report(src, stored_text, all_caps_style, summary_rows=0)
+    parser = _AcceptEverythingParser()
+    WordComDocumentSlicer(word_app=word_app, header_parser=parser).slice_cbm_defects(
+        src, tmp_path / "out", station=STATION
+    )
+    assert parser.seen == ["Substation"], f"expected only the CBM defect page: {parser.seen}"

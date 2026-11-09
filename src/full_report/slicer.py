@@ -601,10 +601,11 @@ def _slice_cbm_defects_from_doc(
     if cond_page <= 2:
         return ()
 
-    # Discover CBM summary page if present
+    # Discover CBM summary page if present. Upper case on purpose: most reports store
+    # "EXECUTIVE Summary" under an all-caps style, and Word's Range.Text returns it capitalised (#199).
     p_cbmsum = _find_paragraph(
         source_doc,
-        "EXECUTIVE Summary",
+        "EXECUTIVE SUMMARY",
         start_pos=0,
         end_pos=cond_start,
     )

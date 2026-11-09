@@ -507,7 +507,7 @@ def test_word_com_slicer_slices_cbm_defects_with_d37_names(tmp_path: Path):
     p_cbmsum = MagicMock()
     p_cbmsum.Range.Start = 50
     p_cbmsum.Range.End = 80
-    p_cbmsum.Range.Text = "EXECUTIVE Summary\r"
+    p_cbmsum.Range.Text = "EXECUTIVE SUMMARY \r"
     p_cbmsum.Range.Information.return_value = 2
 
     p_cond = MagicMock()

@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Executive Summary Heading Found by the Slicer (`fix(slicer)`, `src/full_report/slicer.py`)**:
+  - The CBM defect scan now finds the `EXECUTIVE SUMMARY` heading and skips every page its summary table covers. Output of the checked reports does not change, because their VI summary already shares that page. Fixes #199.
 - **Swallowed Word-Path Errors in Run Records (`fix(diagnostics)`, `src/full_report/slicer.py`, `src/quick_report/compiler.py`, `src/postprocessing/converters.py`)**:
   - Errors the slicer, compiler and converters handle and carry past are now in the Run Record, with what failed and a traceback. The console, fallbacks and generated output do not change. Fixes #191.
 - **Faster Quick Report Slicing (`perf(slicer)`, `src/full_report/slicer.py`)**:
