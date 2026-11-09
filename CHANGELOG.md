@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Fast Run Defaults to 8 Workers (`perf(tests)`, `scripts/run_full_suite.py`, `docs/agents/testing.md`)**:
+  - The Fast Run median on the reference machine fell from 144.2 s at 4 workers to 108.3 s at 8, with the same tests and outcomes. Runs at 8 workers start a new timing history. Fixes #203.
 - **Guard `VISUAL DEFECT SUMMARY` Casing (`test(templates)`, `tests/test_template_heading_casing.py`)**:
   - A Fast Run test now fails if a template stores this heading in any casing but capitals. It shares the `EXECUTIVE SUMMARY` guard, whose file was renamed. Part of #202.
 - **Templates Use Calibri (Body) (`chore(templates)`, `templates/`)**:
