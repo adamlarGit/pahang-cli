@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Templates Use Calibri (Body) (`chore(templates)`, `templates/`)**:
+  - One-time conversion of Tahoma, Arial Black and Arial Narrow font references to the theme Body font, and of the VI Summary theme Body font from Cambria to Calibri. The `EXECUTIVE SUMMARY` heading style changed from Arial Black to Calibri. The 33kV and 11kV project `templates` folders were converted the same way, outside git. Page counts did not change.
 - **Quick Report Templates Store `EXECUTIVE SUMMARY` (`fix(templates)`, `templates/QUICK REPORT/CBM DEFECT IR SUMMARY.docx`, `templates/QUICK REPORT/CBM DEFECT IR+US+TEV SUMMARY.docx`)**:
   - Both CBM summary templates now store the heading in capitals instead of relying on an all-caps style, and a Fast Run test guards the casing. Existing projects need the corrected templates in their own `templates` folder. Fixes #201.
 - **Executive Summary Heading Found by the Slicer (`fix(slicer)`, `src/full_report/slicer.py`)**:
