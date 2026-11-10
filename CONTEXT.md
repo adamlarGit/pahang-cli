@@ -330,7 +330,11 @@ _Avoid_: image replacement (ambiguous with Source Image Restoration), injection
 The architectural rule governing Quick Report compilation in `src/quick_report/composer.py`. Mandates that multi-part documents containing FLIR Tools+ ActiveX controls (`CIRViewer`) merge through Microsoft Word COM Automation (`Documents.Add()`, read-only part opening, clipboard copy, page break, and paste). Prohibits pure Python OpenXML concatenation (`docxcompose`, `python-docx`) to prevent control identifier collisions and binary compound file corruption.
 
 ### FLIR Crosstalk
-A FLIR IR viewer in a merged document showing another viewer's IR image instead of its own, because the two viewers were joined so that they share an identity or image data. Crosstalk can show up on opening, or only after save, close and reopen. Any way of joining documents that contain FLIR viewers must prove there is no crosstalk.
+A defect where a FLIR IR viewer in a merged document couples with another viewer, manifesting in two distinct failure modes:
+- **Image Crosstalk**: A viewer displays another viewer's radiometric IR image instead of its own, caused when document assembly naively aliases or merges ActiveX relationships so multiple `w:control` instances share the same binary persistence stream (`activeX{N}.bin`).
+- **Measurement Crosstalk**: Adjusting a measurement tool (spot, area, delta-T) on one viewer in Microsoft Word overwrites the displayed temperature values in another viewer's measurement table, caused when multiple viewers originate from the same template and share identical length-prefixed `DOCVARIABLE _Fd...` string bindings persisted inside their binary `TAG_R8_FLD` stream headers.
+
+Crosstalk can show up immediately on opening, or only after an interactive edit, save, close, and reopen. Any method of joining documents that contain FLIR viewers must prove absence of both Image Crosstalk and Measurement Crosstalk.
 _Avoid_: image bleed, control collision (that is the cause, not what the operator sees)
 
 ### ReportTarget
