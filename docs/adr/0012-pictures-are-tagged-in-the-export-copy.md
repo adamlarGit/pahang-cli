@@ -26,9 +26,17 @@ Pixels cannot tell apart panels that differ only in a few table digits. In the #
 
 ## Groups and canvases (#216)
 
-A DrawingML group (`wpg:wgp`) or drawing canvas (`wpc`) has one `wp:docPr`, so it gets one stamp. The stamp names the sources of every picture inside it, and the pixels choose among them. Word is either tagging the group as one Figure, so every image in it carries that stamp, or tagging each child with no stamp, so each image falls back to pixels over all sources. Both outcomes restore. If any picture in the group cannot be traced to a source, the stamp does not narrow at all.
+A DrawingML group (`wpg:wgp`) or drawing canvas (`wpc`) has one `wp:docPr`, so it gets one stamp. The stamp now names the sources of every picture inside it, and the pixels choose among them. If any picture in the group cannot be traced to a source, the stamp does not narrow at all.
 
-What Word actually writes into the PDF structure for a group of two pictures has not been observed yet. The synthetic tests cover the one-Figure case (a group and a canvas). The unstamped case relies on the general pixel fallback and has no group-specific test; a real-Word probe should confirm which one happens.
+**What Word does (observed 2026-11-10, Word 16, `DocStructureTags=True`, a synthetic DOCX with one group of two pictures, one canvas of two pictures and one plain inline picture, run through the export copy):**
+
+- **Group.** Word writes one Figure for the group, with `/Alt` `PSRID:1 (Grouped Object)` (it appends its own text after the stamp). That Figure's marked content draws only the group's outline rectangle. The two pictures inside are drawn as `/Artifact` sections, untagged and with no stamp.
+- **Canvas.** Word drops the canvas's description: no Figure carries the canvas stamp. Each picture inside is its own Figure with `/Alt` null, so no stamp reaches the PDF.
+- **Plain inline picture (control).** One Figure with its own stamp, as before.
+
+So in real Word, pictures inside a group or canvas never carry a stamp. They fall through to pixel matching over all sources (ADR 0009). In the probe all four restored by pixels, each to its own source; none was ambiguous. The stamp change above is harmless but does not fire for these pictures. Identity evidence for them would need another route, such as the neighbour inference below.
+
+**Side effect found.** Word appends ` (Grouped Object)` to a group's `/Alt`. Removing the stamp leaves that text, so a restored PDF has `/Alt (Grouped Object)` on the group's Figure where an unstamped export has none. It carries no stamp and does not affect restoration; it is a cosmetic difference in the tagged structure.
 
 ## Inferring a missing stamp (#218)
 
