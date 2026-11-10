@@ -16,7 +16,7 @@ Adds to: [ADR 0009](./0009-native-export-with-source-image-restoration.md). Does
 
 ## Why
 
-Live controls make Word's open slow. The proof (#210) saw 59-68% less total conversion time on reports with controls.
+Live controls make Word's open slow. The proof (#210) saw 56-65% less total conversion time on reports with controls (#212 proof, 2026-11-10).
 
 ## Accepted downside
 
