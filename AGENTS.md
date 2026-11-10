@@ -12,7 +12,7 @@ GitHub Issues via `gh` CLI (`adamlarGit/pahang-cli`). See `docs/agents/issue-tra
 
 ### Ticket lifecycle
 
-All tickets implemented by agents must be closed locally in `map.md` and remotely via `gh issue close`. See `.agents/rules/ticket-lifecycle.md`.
+When resolving a ticket, follow the GitHub-only closure workflow in `.agents/rules/ticket-lifecycle.md`.
 
 ### Triage labels
 

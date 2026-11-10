@@ -1,35 +1,16 @@
 ---
-description: Enforces mandatory local map synchronization and GitHub issue closure whenever an agent implements, resolves, or verifies a ticket.
+description: GitHub-only completion workflow for implementation and Wayfinder decision tickets.
 ---
 
-# Ticket Lifecycle & Completion Rule
+# Ticket completion
 
-Whenever an agent implements or resolves a ticket from a Wayfinder map or GitHub tracker, the task is **NOT complete** until the following 3-step closure checklist is executed:
+GitHub Issues is the source of truth for tickets and Wayfinder maps. Local `.wayfinder` files are historical; ticket work does not create or synchronize local ticket files or map mirrors.
 
-## Mandatory Ticket Completion Checklist
+When a ticket's acceptance criteria or decision question are satisfied:
 
-### 1. Local Ticket File Sync
-In the ticket markdown file (e.g. `.wayfinder/full-report-map/tickets/<ticket>.md`):
-- Change `<!-- status: open -->` to `<!-- status: closed -->`.
-- Mark all completed acceptance criteria items as `[x]`.
+1. Post a completion or resolution comment with the outcome, relevant evidence, validation results and remaining limitations. Include a commit only if one exists. Use `gh issue comment <number> --body-file <file>` for multiline text.
+2. Close the issue with `gh issue close <number>`.
+3. For a Wayfinder child, re-read the parent map issue and append a linked, one-line gist to its Decisions so far. Preserve concurrent edits; keep the detailed answer in the child's resolution comment. Follow `docs/agents/issue-tracker.md` for tracker operations.
+4. Verify the issue is closed and the parent pointer is present before reporting completion.
 
-### 2. Canonical Map Sync
-In `.wayfinder/full-report-map/map.md`:
-- Mark all acceptance criteria checkboxes for that ticket as `[x]`.
-- Change `- **Status**: Open` to `- **Status**: Closed`.
-- Update the Mermaid diagram node for this ticket to include `- Closed`.
-
-### 3. GitHub Tracker Sync (via `gh` CLI)
-Execute the following GitHub CLI commands:
-1. Post completion comment:
-   ```bash
-   gh issue comment <issue-number> --body "Completed in commit <commit-sha>. Verified with test suite passing."
-   ```
-2. Close the issue:
-   ```bash
-   gh issue close <issue-number>
-   ```
-
-## Invariants
-- An agent must **never** finish a ticket turn without executing all 3 steps.
-- If multiple tickets were completed in a batch, all corresponding ticket files, map entries, and GitHub issues must be updated and closed before concluding.
+Apply these steps to every ticket resolved in the session. An unresolved ticket stays open with its remaining work or blocker recorded on GitHub.
