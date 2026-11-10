@@ -5,7 +5,7 @@ structure and the restoration result. Starts real Word: close Word and Excel fir
 """
 import sys, re, io, time
 from pathlib import Path
-sys.path.insert(0, r"C:\Users\ADAM\Desktop\pahang-cli-33kv")
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 import pythoncom, win32com.client as win32, pymupdf as fitz, zipfile
 from PIL import Image, ImageDraw
 import random
