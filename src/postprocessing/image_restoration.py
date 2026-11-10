@@ -676,11 +676,59 @@ def _id_candidates(ordinals: set[int] | None, ids: dict[int, _PictureId]) -> lis
     return list(union.values())
 
 
-def _strip_stamps(doc, tagged: list[_Tagged], ids: dict[int, _PictureId]) -> None:
-    """Put each element's original description back: stamps are scaffolding, not part of the deliverable."""
-    for t in tagged:
-        original = ids[t.ordinal].original if t.ordinal in ids else ""
-        doc.xref_set_key(t.elem, "Alt", fitz.get_pdf_str(original) if original else "null")
+def _strip_stamps(doc, originals: dict[int, str]) -> int:
+    """Put each description's original text back: stamps are scaffolding, not part of the deliverable.
+
+    Looks at the /Alt of every object, whatever its tagged element type, and replaces each ``PSRID:<n>`` wherever it
+    sits in the text (Word may combine a picture's title with its description). Returns how many were changed.
+    """
+
+    def original(match: re.Match) -> str:
+        return originals.get(int(match.group(1)), "")
+
+    changed = 0
+    for x in range(1, doc.xref_length()):
+        try:
+            kind, alt = doc.xref_get_key(x, "Alt")
+            if kind != "string" or _ID_RE.search(alt) is None:
+                continue
+            text = _ID_RE.sub(original, alt).strip()
+        except Exception:  # a non-dictionary object: no description to clean
+            continue
+        doc.xref_set_key(x, "Alt", fitz.get_pdf_str(text) if text else "null")
+        changed += 1
+    return changed
+
+
+def picture_descriptions(docx_bytes: bytes) -> dict[int, str]:
+    """Each picture drawing's own description in the DOCX, by stamp ordinal (what the stamp replaced in the copy)."""
+    out: dict[int, str] = {}
+    ordinal = 0
+    with zipfile.ZipFile(io.BytesIO(docx_bytes)) as zf:
+        for part in picture_part_names(zf.namelist()):
+            for node in _drawings(ET.fromstring(zf.read(part))):
+                ordinal += 1
+                out[ordinal] = node.get("descr" if node.tag == _DOCPR else "alt", "")
+    return out
+
+
+def strip_picture_stamps(native_pdf: Path, output_pdf: Path, docx_bytes: bytes | None = None) -> int:
+    """Write ``output_pdf`` as ``native_pdf`` with every picture stamp removed; return how many were removed.
+
+    For a PDF that is published without restoration. Descriptions come back from ``docx_bytes`` when it is given and
+    readable, otherwise they are cleared. Writes nothing when the PDF carries no stamp.
+    """
+    originals: dict[int, str] = {}
+    if docx_bytes is not None:
+        try:
+            originals = picture_descriptions(docx_bytes)
+        except Exception as exc:
+            logger.debug("Picture descriptions unreadable; stamps are cleared instead: %s", exc)
+    with fitz.open(native_pdf) as doc:
+        removed = _strip_stamps(doc, originals)
+        if removed:
+            doc.save(output_pdf, garbage=3, deflate=True)
+    return removed
 
 
 def _restore_into(doc, harvest: _Harvest) -> list[RestorationEntry]:
@@ -706,7 +754,7 @@ def _restore_into(doc, harvest: _Harvest) -> list[RestorationEntry]:
         except Exception as exc:
             logger.debug("Image xref %s left as rendered: %s", xref, exc)
             entries.append(RestorationEntry(pno, xref, (0, 0), None, "unmatched"))
-    _strip_stamps(doc, tagged, harvest.ids)
+    _strip_stamps(doc, {n: pid.original for n, pid in harvest.ids.items()})
     return entries
 
 

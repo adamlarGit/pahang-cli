@@ -664,6 +664,23 @@ def _publish(src: Path, dst: Path) -> None:
         raise RuntimeError(f"Could not publish {src.name} to {dst}")
 
 
+def _publish_native(native_tmp: Path, scratch: Path, pdf_path: Path, snapshot: bytes | None) -> None:
+    """Publish the native PDF with its picture stamps removed: no delivered PDF may carry them (ADR 0012).
+
+    `snapshot` supplies the original descriptions; None clears the stamps instead. If stripping itself fails the
+    native PDF is still delivered, because a report without restoration beats no report.
+    """
+    from .image_restoration import strip_picture_stamps
+
+    source = native_tmp
+    try:
+        if strip_picture_stamps(native_tmp, scratch, snapshot):
+            source = scratch
+    except Exception as exc:
+        logging.warning("Could not remove picture stamps from %s: %s", pdf_path.name, exc)
+    _publish(source, pdf_path)
+
+
 def convert_docx_native_restored(
     docx_path: Path,
     pdf_path: Path,
@@ -709,7 +726,7 @@ def convert_docx_native_restored(
         if not stable:
             warning = f"source changed during conversion: {docx_path.name}; kept native PDF"
             logging.warning(warning)
-            _publish(native_tmp, pdf_path)
+            _publish_native(native_tmp, restore_tmp, pdf_path, None)  # the snapshot may not match the exported copy
             return PartConversionOutcome(docx_path, None, True, warning)
 
         # A restoration failure still delivers the native PDF, so it is a warning and not a failed Step.
@@ -720,16 +737,16 @@ def convert_docx_native_restored(
             except Exception as exc:
                 warning = f"image restoration failed for {docx_path.name} ({exc}); kept native PDF"
                 logging.warning(warning)
-                _publish(native_tmp, pdf_path)
+                _publish_native(native_tmp, restore_tmp, pdf_path, snapshot)
                 return PartConversionOutcome(docx_path, None, True, warning)
-        snapshot = b""
         try:
             _publish(restore_tmp, pdf_path)
         except Exception as exc:
             warning = f"could not publish restored PDF for {docx_path.name} ({exc}); kept native PDF"
             logging.warning(warning)
-            _publish(native_tmp, pdf_path)
+            _publish_native(native_tmp, restore_tmp, pdf_path, snapshot)
             return PartConversionOutcome(docx_path, None, True, warning)
+        snapshot = b""
         return PartConversionOutcome(docx_path, report, False, None)
     finally:
         _unlink_quiet(native_tmp)

@@ -781,3 +781,72 @@ def test_original_description_survives_when_a_drawing_has_no_picture():
     doc.save(out)
     ids = ir._harvest(out.getvalue()).ids
     assert ids[1].original == "keep me" and ids[1].sources == ()
+
+
+# ---------------------------------------------------------------- stamps never reach a delivered PDF (#215)
+
+
+def all_alts(path: Path) -> list[str]:
+    with fitz.open(path) as doc:
+        return [
+            doc.xref_get_key(x, "Alt")[1]
+            for x in range(1, doc.xref_length())
+            if doc.xref_get_key(x, "Alt")[0] == "string"
+        ]
+
+
+def docx_with_description(descr: str) -> bytes:
+    data = docx_with_pictures([png_bytes(graph(1))])
+    import zipfile
+
+    src, out = zipfile.ZipFile(io.BytesIO(data)), io.BytesIO()
+    with zipfile.ZipFile(out, "w") as dst:
+        for info in src.infolist():
+            blob = src.read(info.filename)
+            if info.filename == "word/document.xml":
+                blob = blob.replace(b"<wp:docPr ", f'<wp:docPr descr="{descr}" '.encode(), 1)
+            dst.writestr(info, blob)
+    return out.getvalue()
+
+
+def test_strip_picture_stamps_restores_the_original_description(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(graph(1))])
+    tag_figures(native, ["PSRID:1"])
+    removed = ir.strip_picture_stamps(native, out, docx_with_description("Thermogram of busbar"))
+    assert removed == 1 and all_alts(out) == ["Thermogram of busbar"]
+
+
+def test_strip_picture_stamps_clears_when_the_docx_is_unreadable(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(graph(1))])
+    tag_figures(native, ["PSRID:1"])
+    assert ir.strip_picture_stamps(native, out, b"not a docx") == 1
+    assert all_alts(out) == []
+
+
+def test_strip_picture_stamps_finds_a_stamp_on_any_element_type(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(graph(1))])
+    tag_figures(native, ["PSRID:1"])
+    with fitz.open(native) as doc:
+        elem = next(x for x in range(1, doc.xref_length()) if doc.xref_get_key(x, "S")[1] == "/Figure")
+        doc.xref_set_key(elem, "S", "/Span")
+        doc.saveIncr()
+    ir.strip_picture_stamps(native, out, None)
+    assert all_alts(out) == []
+
+
+def test_strip_picture_stamps_keeps_a_title_Word_combined_with_the_stamp(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(graph(1))])
+    tag_figures(native, ["Photo title. PSRID:1"])
+    ir.strip_picture_stamps(native, out, docx_with_description("the original"))
+    assert all_alts(out) == ["Photo title. the original"]
+
+
+def test_strip_picture_stamps_writes_nothing_without_a_stamp(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(graph(1))])
+    assert ir.strip_picture_stamps(native, out, None) == 0
+    assert not out.exists()

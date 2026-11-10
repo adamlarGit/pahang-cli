@@ -427,3 +427,66 @@ def test_no_snapshot_or_hash_when_restoration_is_off(tmp_path: Path, docx: Path,
         docx, out, native_export(2), restore=lambda *a: calls.append(1), restore_images=False, retry_delays=NO_DELAYS
     )
     assert calls == [] and page_count(out) == 2 and outcome.report is None and not outcome.fell_back
+
+
+# ---------------------------------------------------------------- stamps never reach a delivered PDF (#215)
+
+
+def stamped_export(_docx: Path, out: Path) -> None:
+    """A native export as Word writes it from the stamped copy: a tagged figure whose /Alt is the stamp."""
+    doc = fitz.open()
+    doc.new_page()
+    elem = doc.get_new_xref()
+    doc.update_object(elem, "<</Type/StructElem/S/Figure/Alt(PSRID:1)>>")
+    doc.save(str(out))
+    doc.close()
+
+
+def alts(path: Path) -> list[str]:
+    with fitz.open(str(path)) as doc:
+        return [
+            doc.xref_get_key(x, "Alt")[1]
+            for x in range(1, doc.xref_length())
+            if doc.xref_get_key(x, "Alt")[0] == "string"
+        ]
+
+
+def test_stamps_are_removed_when_restoration_fails(tmp_path: Path, docx: Path) -> None:
+    def failing(snapshot, native, out):
+        raise RestorationError("gate")
+
+    out = tmp_path / "out.pdf"
+    outcome = convert_docx_native_restored(docx, out, stamped_export, restore=failing, retry_delays=NO_DELAYS)
+    assert outcome.fell_back and alts(out) == []
+    assert leftovers(tmp_path) == []
+
+
+def test_stamps_are_removed_when_the_source_changed_during_conversion(tmp_path: Path, docx: Path) -> None:
+    calls = []
+
+    def export(_docx: Path, out: Path) -> None:
+        calls.append(1)
+        _docx.write_bytes(f"revision-{len(calls) + 1}".encode())  # changes on the redo too
+        stamped_export(_docx, out)
+
+    out = tmp_path / "out.pdf"
+    outcome = convert_docx_native_restored(docx, out, export, restore=restoring(), retry_delays=NO_DELAYS)
+    assert "source changed" in outcome.warning and alts(out) == []
+
+
+def test_stamps_are_removed_when_the_restored_pdf_cannot_be_published(tmp_path: Path, docx: Path, monkeypatch) -> None:
+    from src.postprocessing import converters
+
+    real = converters._publish
+
+    def refuse_restored(src: Path, dst: Path) -> None:
+        if src.name.startswith(".tmp_restore_") and refuse_restored.first:
+            refuse_restored.first = False
+            raise RuntimeError("locked")
+        real(src, dst)
+
+    refuse_restored.first = True
+    monkeypatch.setattr(converters, "_publish", refuse_restored)
+    out = tmp_path / "out.pdf"
+    outcome = convert_docx_native_restored(docx, out, stamped_export, restore=restoring(), retry_delays=NO_DELAYS)
+    assert "could not publish" in outcome.warning and alts(out) == []
