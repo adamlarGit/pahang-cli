@@ -681,7 +681,7 @@ def _infer_missing_stamps(events: list[tuple[set[int], int | None]], known: set[
         if after - before != 2:  # not exactly one image between the neighbours
             continue
         p, n = events[before][1], events[after][1]
-        if n - p == 2 and n <= body_drawings and p + 1 not in known:
+        if n - p == 2 and p + 1 <= body_drawings and p + 1 not in known and len(events[before + 1][0]) == 1:
             inferred[before + 1] = p + 1
     return inferred
 

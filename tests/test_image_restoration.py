@@ -1110,5 +1110,7 @@ def test_an_inferred_source_that_disagrees_with_the_pixels_keeps_words_copy(path
 def test_inference_stays_inside_the_main_document_and_off_drawings_already_stamped():
     events = [({1}, 1), ({2}, None), ({3}, 3)]
     assert ir._infer_missing_stamps(events, {1, 3}, body_drawings=3) == {1: 2}
-    assert ir._infer_missing_stamps(events, {1, 3}, body_drawings=2) == {}  # drawing 3 is a header or footer
+    assert ir._infer_missing_stamps(events, {1, 3}, body_drawings=3) == {1: 2}
+    assert ir._infer_missing_stamps(events, {1, 3}, body_drawings=1) == {}  # drawing 2 is a header or footer
+    assert ir._infer_missing_stamps([({1}, 1), ({2, 9}, None), ({3}, 3)], {1, 3}, body_drawings=3) == {}  # a form of two images
     assert ir._infer_missing_stamps(events, {1, 2, 3}, body_drawings=3) == {}  # drawing 2 is stamped elsewhere
