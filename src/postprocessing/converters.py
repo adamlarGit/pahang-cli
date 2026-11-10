@@ -545,7 +545,7 @@ def make_disconnected_copy(docx_path: Path, copy_path: Path) -> int:
 
     with zipfile.ZipFile(docx_path) as zin:
         data = zin.read("word/document.xml")
-        if b"w:control" not in data:
+        if b"control" not in data:  # cheap pre-check; any namespace prefix
             return 0
         root = etree.fromstring(data)
         nodes = list(root.iter(_WORD_CONTROL_TAG))
@@ -1015,6 +1015,7 @@ class ComDocumentConverter(DocumentConverter):
                     except Exception as exc:
                         warnings.append(f"could not make a disconnected copy of {docx.name} ({exc}); opened normally")
                         logging.warning(warnings[-1])
+                        _unlink_quiet(copy_path)  # a failed write can leave a partial file
                         copy_path = None
                     if copy_path is not None:
                         try:
