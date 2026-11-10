@@ -1,7 +1,7 @@
 # 11. Full Report Conversion Opens a Copy With FLIR Controls Disconnected
 
 Date: 2026-11-10
-Status: Proposed (experiment branch `experiment/disconnected-word-open`; accepted only after the proof in #212 passes)
+Status: Accepted (2026-11-10, after the #212 proof)
 Adds to: [ADR 0009](./0009-native-export-with-source-image-restoration.md). Does not replace it.
 
 ## Decision
