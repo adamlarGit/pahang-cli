@@ -566,8 +566,36 @@ def _smask_xref(doc, xref: int) -> int:
 
 # Word tags a DrawingML picture as a Figure and a VML picture (FLIR thermogram preview) as an InlineShape
 _TAGGED_PICTURE = ("/Figure", "/InlineShape")
-_MCID_BLOCK = re.compile(r"/MCID\s+(\d+)[^>]*>>\s*BDC((?:(?!EMC).)*)", re.S)
-_DO = re.compile(r"/(\S+?)\s+Do\b")
+# One pass over page content: literal strings (skipped, so text such as "(EMC)" is not an operator), a marked-content
+# start (BDC with an inline /MCID, other BDC, BMC), its end (EMC), and a drawing operator (Do).
+_CONTENT_TOKEN = re.compile(
+    r"(?P<str>\((?:\.|[^\)])*\))"
+    r"|/MCID\s+(?P<mcid>\d+)[^>]*>>\s*BDC\b"
+    r"|(?P<open>\bB(?:DC|MC)\b)"
+    r"|(?P<close>\bEMC\b)"
+    r"|/(?P<name>[^\s/<>\[\]()]+)\s+Do\b",
+    re.S,
+)
+_DO = re.compile(r"/([^\s/<>\[\]()]+)\s+Do\b")
+
+
+def _draws_in_content(content: str):
+    """Yield ``(xobject name, mcid)`` for every Do, mcid being the innermost enclosing marked-content id (or None).
+
+    Marked content nests, so each section is closed by its own EMC; a Do after a nested section still belongs to the
+    enclosing one.
+    """
+    stack: list[int | None] = []
+    for m in _CONTENT_TOKEN.finditer(content):
+        if m.group("mcid") is not None:
+            stack.append(int(m.group("mcid")))
+        elif m.group("open"):
+            stack.append(None)
+        elif m.group("close"):
+            if stack:
+                stack.pop()
+        elif m.group("name") is not None:
+            yield m.group("name"), next((x for x in reversed(stack) if x is not None), None)
 _XOBJECT_REF = re.compile(r"/([^\s/<>\[\]()]+)\s+(\d+)\s+0\s+R")
 
 
@@ -626,8 +654,13 @@ def _images_drawn_by(doc, xref: int, seen: set[int]) -> set[int]:
     if kind in ("dict", "xref"):
         if kind == "xref":
             value = doc.xref_object(_xref_of(value))
-        for _, child in _XOBJECT_REF.findall(value):
-            found |= _images_drawn_by(doc, int(child), seen)
+        children = dict(_XOBJECT_REF.findall(value))
+        try:
+            drawn = set(_DO.findall(doc.xref_stream(xref).decode("latin-1")))
+        except Exception:  # unreadable content: assume it draws everything it lists (over-counts, never under-counts)
+            drawn = set(children)
+        for name in drawn & children.keys():
+            found |= _images_drawn_by(doc, int(children[name]), seen)
     return found
 
 
@@ -654,15 +687,11 @@ def _stamps_by_image(doc, tagged: list[_Tagged]) -> dict[int, set[int]]:
         def images_of(name: str) -> set[int]:
             return _images_drawn_by(doc, names[name], set()) if name in names else set()
 
-        for name in _DO.findall(content):
+        for name, mcid in _draws_in_content(content):
+            ordinal = by_content.get((page.xref, mcid)) if mcid is not None else None
             for image in images_of(name):
                 drawn[image] = drawn.get(image, 0) + 1
-        for mcid, body in _MCID_BLOCK.findall(content):
-            ordinal = by_content.get((page.xref, int(mcid)))
-            if ordinal is None:
-                continue
-            for name in _DO.findall(body):
-                for image in images_of(name):
+                if ordinal is not None:
                     stamps.setdefault(image, set()).add(ordinal)
                     stamped[image] = stamped.get(image, 0) + 1
     return {image: ords for image, ords in stamps.items() if stamped[image] == drawn.get(image, 0)}

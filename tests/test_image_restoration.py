@@ -562,7 +562,7 @@ def test_header_pictures_are_harvested():
 # ---------------------------------------------------------------- picture stamps (#214, ADR 0012)
 
 
-def tag_figures(path: Path, stamps: list[str]) -> Path:
+def tag_figures(path: Path, stamps: list[str], before_image: bytes = b"") -> Path:
     """Tag each page's picture as a figure whose /Alt is the given stamp, the way Word's tagged export does."""
     import re
 
@@ -573,7 +573,7 @@ def tag_figures(path: Path, stamps: list[str]) -> Path:
         for page, stamp in zip(doc, stamps):
             page.clean_contents()
             xref = page.get_contents()[0]
-            content = re.sub(rb"(/\S+ Do)", rb"/P <</MCID 0>> BDC \1 EMC", doc.xref_stream(xref))
+            content = re.sub(rb"(/\S+ Do)", rb"/P <</MCID 0>> BDC " + before_image + rb"\1 EMC", doc.xref_stream(xref))
             doc.update_stream(xref, content)
             elem = doc.get_new_xref()
             doc.update_object(
@@ -921,3 +921,64 @@ def test_group_with_an_untraceable_picture_does_not_narrow():
             zout.writestr(n, b"not an image" if n == media[1] else zin.read(n))
     docx = docx.getvalue()
     assert ir._harvest(docx).ids[1].sources == ()
+
+
+# ---------------------------------------------------------------- exact page-content reading (#217)
+
+
+def test_image_drawn_after_nested_marked_content_is_traced_to_its_stamp(paths):
+    native, out = paths
+    a = graph(21)
+    b = a.copy()
+    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")  # look-alike pair: only the stamp can choose
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b)])
+    native_pdf(native, [png_bytes(b.resize((300, 200), Image.LANCZOS))])
+    tag_figures(native, ["PSRID:2"], before_image=b"/Span <</ActualText (x)>> BDC EMC /Artifact BMC /Artifact BMC EMC EMC ")
+    report = restore_source_images(docx, native, out)
+    assert (report.ambiguous, report.restored) == (0, 1)
+    assert report.entries[0].evidence == "id"
+
+
+def test_text_that_looks_like_marked_content_operators_is_not_read_as_them(paths):
+    native, out = paths
+    a = graph(21)
+    b = a.copy()
+    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b)])
+    native_pdf(native, [png_bytes(b.resize((300, 200), Image.LANCZOS))])
+    tag_figures(native, ["PSRID:2"], before_image=b"(EMC) Tj ")
+    report = restore_source_images(docx, native, out)
+    assert (report.restored, report.entries[0].evidence) == (1, "id")
+
+
+def test_form_is_credited_only_with_the_images_it_draws():
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_image(fitz.Rect(10, 10, 60, 60), stream=png_bytes(graph(3, (100, 100))))
+    page.insert_image(fitz.Rect(70, 10, 120, 60), stream=png_bytes(graph(4, (100, 100))))
+    drawn, idle = [i[0] for i in page.get_images(full=True)]
+    form = doc.get_new_xref()
+    doc.update_object(
+        form,
+        f"<</Type/XObject/Subtype/Form/BBox[0 0 10 10]/Resources<</XObject<</Im0 {drawn} 0 R/Im1 {idle} 0 R>>>>>>",
+    )
+    doc.update_stream(form, b"q /Im0 Do Q")
+    assert ir._images_drawn_by(doc, form, set()) == {drawn}
+
+
+def test_form_nested_in_a_form_is_followed_only_where_drawn():
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_image(fitz.Rect(10, 10, 60, 60), stream=png_bytes(graph(3, (100, 100))))
+    image = page.get_images(full=True)[0][0]
+    inner = doc.get_new_xref()
+    doc.update_object(inner, f"<</Type/XObject/Subtype/Form/BBox[0 0 10 10]/Resources<</XObject<</Im0 {image} 0 R>>>>>>")
+    doc.update_stream(inner, b"q /Im0 Do Q")
+    outer = doc.get_new_xref()
+    doc.update_object(outer, f"<</Type/XObject/Subtype/Form/BBox[0 0 10 10]/Resources<</XObject<</F0 {inner} 0 R>>>>>>")
+    doc.update_stream(outer, b"q /F0 Do Q")
+    unused = doc.get_new_xref()
+    doc.update_object(unused, f"<</Type/XObject/Subtype/Form/BBox[0 0 10 10]/Resources<</XObject<</F0 {inner} 0 R>>>>>>")
+    doc.update_stream(unused, b"q Q")
+    assert ir._images_drawn_by(doc, outer, set()) == {image}
+    assert ir._images_drawn_by(doc, unused, set()) == set()
