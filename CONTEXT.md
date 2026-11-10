@@ -29,6 +29,10 @@ The saved account of one workflow execution: what was asked for, which inputs an
 ### Step
 One named, timed stage inside a Run Record, such as slicing a Quick Report or exporting a PDF. Steps are recorded only where the detail helps with diagnosis, so a simple workflow may have few of them.
 
+### Word-Busy Time
+The seconds in one run spent in Steps that need a running Word, reported per substation. A Step counts in full, including work done outside Word while Word is held open. It is the measure of what an operator gains when work moves off Word. Test-suite time is not Word-Busy Time and is reported separately as Full Run wall time.
+_Avoid_: COM time, Word time
+
 ### PrpdConfig & PrpdMode
 Domain configuration model (`src/project/models.py`) controlling the Phase-Resolved Partial Discharge (PRPD) graph generation strategy across Quick Report CBM defect detail pages.
 - **`PrpdMode`**: Supported generation modes:
