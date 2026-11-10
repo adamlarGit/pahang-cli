@@ -54,6 +54,20 @@ def graph(seed: int, size=(600, 400)) -> Image.Image:
     return im
 
 
+def panel(digits: list[int], size=(600, 400)) -> Image.Image:
+    """A mostly-white table panel (like a US/TEV reading panel) whose only content is a few rows of digit blocks."""
+    im = Image.new("RGB", size, "white")
+    d = ImageDraw.Draw(im)
+    for row in range(8):
+        d.rectangle([20, 20 + row * 40, 560, 24 + row * 40], fill="black")  # rule line
+        for col in range(6):
+            x = 30 + col * 90
+            d.rectangle([x, 30 + row * 40, x + 40, 50 + row * 40], fill="black")
+            if (digits[row] >> col) & 1:  # this reading differs: the block is drawn with a gap in it
+                d.rectangle([x + 10, 34 + row * 40, x + 30, 46 + row * 40], fill="white")
+    return im
+
+
 def png_bytes(im: Image.Image) -> bytes:
     b = io.BytesIO()
     im.save(b, "PNG")
@@ -268,7 +282,7 @@ def test_ambiguous_match_is_skipped(paths):
     native, out = paths
     a = graph(21)
     b = a.copy()
-    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")  # ~0.7% strongly different
+    ImageDraw.Draw(b).rectangle([10, 10, 39, 29], fill="black")  # ~0.7 % of the content pixels strongly different
     native_pdf(native, [png_bytes(a.resize((300, 200), Image.LANCZOS))])
     report = restore_source_images(docx_with_pictures([png_bytes(a), png_bytes(b)]), native, out)
     assert report.ambiguous == 1 and report.restored == 0
@@ -276,13 +290,24 @@ def test_ambiguous_match_is_skipped(paths):
 
 
 def test_clearly_different_look_alike_does_not_block_restoration(paths):
-    # #214: a twin that differs by ~1.4 % is a different picture, not a rival for the exact match
+    # #214, #219: a twin that differs by over 1 % of its content pixels is a different picture, not a rival for the exact match
     native, out = paths
     a = graph(21)
     b = a.copy()
     ImageDraw.Draw(b).rectangle([10, 10, 79, 49], fill="black")
     native_pdf(native, [png_bytes(a.resize((300, 200), Image.LANCZOS))])
     report = restore_source_images(docx_with_pictures([png_bytes(a), png_bytes(b)]), native, out)
+    assert report.ambiguous == 0 and report.restored == 1
+    assert mean_abs_diff(pdf_pixels(out, 0), a) == 0
+
+
+def test_near_twin_panels_are_told_apart_by_their_content_pixels(paths):
+    # #219: the twins differ in 4 digit blocks, under 1 % of the whole image but about a tenth of the content pixels
+    native, out = paths
+    a = panel([0, 0, 0, 0, 0, 0, 0, 0])
+    b = panel([1, 2, 4, 8, 0, 0, 0, 0])
+    native_pdf(native, [png_bytes(a.resize((300, 200), Image.LANCZOS))])
+    report = restore_source_images(docx_with_pictures([png_bytes(b), png_bytes(a)]), native, out)
     assert report.ambiguous == 0 and report.restored == 1
     assert mean_abs_diff(pdf_pixels(out, 0), a) == 0
 
@@ -601,7 +626,7 @@ def test_stamp_resolves_a_look_alike_pair_pixels_cannot(paths):
     native, out = paths
     a = graph(21)
     b = a.copy()
-    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")  # ~0.7 % apart: pixels call it ambiguous
+    ImageDraw.Draw(b).rectangle([10, 10, 39, 29], fill="black")  # ~0.7 % of content apart: pixels call it ambiguous
     docx = docx_with_pictures([png_bytes(a), png_bytes(b)])
     native_pdf(native, [png_bytes(b.resize((300, 200), Image.LANCZOS))])
     tag_figures(native, ["PSRID:2"])  # the second picture in the DOCX
@@ -736,7 +761,7 @@ def test_two_stamps_that_name_look_alike_pictures_stay_ambiguous(paths):
     native, out = paths
     a = graph(21)
     b = a.copy()
-    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")  # ~0.7 % apart
+    ImageDraw.Draw(b).rectangle([10, 10, 39, 29], fill="black")  # ~0.7 % of content apart
     native_pdf_sharing_one_image(native, png_bytes(b.resize((300, 200), Image.LANCZOS)), pages=2)
     tag_figures(native, ["PSRID:1", "PSRID:2"])  # the one stored image is drawn as picture 1 and as picture 2
     report = restore_source_images(docx_with_pictures([png_bytes(a), png_bytes(b)]), native, out)
@@ -930,7 +955,7 @@ def test_image_drawn_after_nested_marked_content_is_traced_to_its_stamp(paths):
     native, out = paths
     a = graph(21)
     b = a.copy()
-    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")  # look-alike pair: only the stamp can choose
+    ImageDraw.Draw(b).rectangle([10, 10, 39, 29], fill="black")  # look-alike pair: only the stamp can choose
     docx = docx_with_pictures([png_bytes(a), png_bytes(b)])
     native_pdf(native, [png_bytes(b.resize((300, 200), Image.LANCZOS))])
     tag_figures(native, ["PSRID:2"], before_image=b"/Span <</ActualText (x)>> BDC EMC /Artifact BMC /Artifact BMC EMC EMC ")
@@ -943,7 +968,7 @@ def test_text_that_looks_like_marked_content_operators_is_not_read_as_them(paths
     native, out = paths
     a = graph(21)
     b = a.copy()
-    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")
+    ImageDraw.Draw(b).rectangle([10, 10, 39, 29], fill="black")
     docx = docx_with_pictures([png_bytes(a), png_bytes(b)])
     native_pdf(native, [png_bytes(b.resize((300, 200), Image.LANCZOS))])
     tag_figures(native, ["PSRID:2"], before_image=b"(EMC) Tj ")
@@ -988,7 +1013,7 @@ def test_marked_content_operators_inside_names_and_escaped_strings_are_ignored(p
     native, out = paths
     a = graph(21)
     b = a.copy()
-    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")
+    ImageDraw.Draw(b).rectangle([10, 10, 39, 29], fill="black")
     docx = docx_with_pictures([png_bytes(a), png_bytes(b)])
     native_pdf(native, [png_bytes(b.resize((300, 200), Image.LANCZOS))])
     tag_figures(native, ["PSRID:2"], before_image=b"/EMC gs (a\) EMC) Tj /P <</MCID 7>> BDC EMC ")
@@ -1038,7 +1063,7 @@ def tagged_pages(path: Path, pages: list[list[tuple[bytes, str | None]]]) -> Pat
 
 def _look_alike(img: Image.Image) -> Image.Image:
     twin = img.copy()
-    ImageDraw.Draw(twin).rectangle([10, 10, 64, 39], fill="black")  # ~0.7 % apart: pixels call the pair ambiguous
+    ImageDraw.Draw(twin).rectangle([10, 10, 39, 29], fill="black")  # ~0.7 % of content apart: pixels call the pair ambiguous
     return twin
 
 

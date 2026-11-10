@@ -42,10 +42,14 @@ THUMB_SIZE = (64, 64)
 STAGE1_MAX_DIFF = 10.0  # mean abs grey diff on the 64 px thumbnail
 STAGE1_KEEP = 6
 STRONG_DIFF = 48  # grey level difference counted as "strongly differing"
-ACCEPT_PCT = 0.5  # true matches measured <= 0.23 %
-# A runner-up could be the true source only if it scores like a true match (<= 0.23 %). One that scores at least
-# IMPOSTOR_PCT, and at least IMPOSTOR_RATIO times worse than the best, is a different picture. Mostly-white tables
-# (US/TEV panels) differ by only ~1.2-1.5 % even when every number differs, so the line sits at 1.0 (#214).
+CONTENT_BELOW = 245  # a pixel darker than this grey level carries content; the rest is white paper
+# Scores are the % of content pixels (non-white in either image) that differ strongly, not of all pixels: US/TEV
+# panels are mostly white, so near-twins differ by only ~1.4 % of all pixels even when every number differs, but
+# by 11-17 % of their content pixels (#219, ADR 0013). Measured on Sentosa, Talapia, 094 and APMM Part 32:
+# true matches <= 0.092 %, genuine look-alikes >= 1.0 %.
+ACCEPT_PCT = 0.5
+# A runner-up could be the true source only if it scores like a true match. One that scores at least IMPOSTOR_PCT,
+# and at least IMPOSTOR_RATIO times worse than the best, is a different picture.
 IMPOSTOR_PCT = 1.0
 IMPOSTOR_RATIO = 5.0
 MORE_PIXELS_RATIO = 1.02
@@ -423,10 +427,15 @@ def _dib_source(label: str, blob: bytes, span: tuple[int, int]) -> _Source | Non
 # --------------------------------------------------------------------------- matching
 
 
-def _strong_pct(a: Image.Image, b: Image.Image) -> float:
-    """% of pixels whose grey difference is >= STRONG_DIFF. Both images must share a size."""
-    hist = ImageOps.grayscale(ImageChops.difference(a, b)).histogram()
-    return 100.0 * sum(hist[STRONG_DIFF:]) / max(1, sum(hist))
+def _content_pct(a: Image.Image, b: Image.Image) -> float:
+    """% of content pixels whose grey difference is >= STRONG_DIFF. Both images must share a size.
+
+    A content pixel is darker than CONTENT_BELOW in either image, so white paper never dilutes the score.
+    """
+    ga, gb = ImageOps.grayscale(a), ImageOps.grayscale(b)
+    strong = sum(ImageChops.difference(ga, gb).histogram()[STRONG_DIFF:])
+    content = sum(ImageChops.darker(ga, gb).histogram()[:CONTENT_BELOW])
+    return 100.0 * strong / max(1, content)
 
 
 def _resized_flat(img: Image.Image, size: tuple[int, int]) -> Image.Image:
@@ -434,7 +443,7 @@ def _resized_flat(img: Image.Image, size: tuple[int, int]) -> Image.Image:
 
 
 def _pct_vs_source(pdf_img: Image.Image, source_pixels: Image.Image) -> float:
-    return _strong_pct(pdf_img, _resized_flat(source_pixels, pdf_img.size))
+    return _content_pct(pdf_img, _resized_flat(source_pixels, pdf_img.size))
 
 
 def _stage2(pdf_img: Image.Image, source: _Source) -> float:
@@ -448,7 +457,7 @@ def _stage2(pdf_img: Image.Image, source: _Source) -> float:
 def _mutual_pct(size: tuple[int, int], a: _Source, b: _Source) -> float:
     pa, pb = a.load(), b.load()
     try:
-        return _strong_pct(_resized_flat(pa, size), _resized_flat(pb, size))
+        return _content_pct(_resized_flat(pa, size), _resized_flat(pb, size))
     finally:
         pa.close()
         pb.close()
