@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 import hashlib
 import logging
@@ -9,10 +10,12 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 import re
+import tempfile
 import time
 from types import TracebackType
 from typing import TYPE_CHECKING, Callable, Sequence
 import uuid
+import zipfile
 
 try:
     import pymupdf as fitz
@@ -529,6 +532,34 @@ class PartConversionOutcome:
     warning: str | None = None
 
 
+_WORD_CONTROL_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}control"
+
+
+def make_disconnected_copy(docx_path: Path, copy_path: Path) -> int:
+    """Write a copy of `docx_path` with its FLIR ActiveX controls (`w:control`) removed; return how many.
+
+    Only `word/document.xml` changes, so the pictures each control carries stay as stored previews. Returns 0
+    and writes nothing when the DOCX has no controls. `docx_path` is only read (ADR 0011).
+    """
+    from lxml import etree
+
+    with zipfile.ZipFile(docx_path) as zin:
+        data = zin.read("word/document.xml")
+        if b"w:control" not in data:
+            return 0
+        root = etree.fromstring(data)
+        nodes = list(root.iter(_WORD_CONTROL_TAG))
+        if not nodes:
+            return 0
+        for node in nodes:
+            node.getparent().remove(node)
+        data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+        with zipfile.ZipFile(copy_path, "w") as out:
+            for info in zin.infolist():
+                out.writestr(info, data if info.filename == "word/document.xml" else zin.read(info.filename))
+    return len(nodes)
+
+
 _OPEN_RETRY_DELAYS: tuple[float, ...] = (0.2, 0.5, 1.0)
 
 MULTIPART_DOCX_PATTERN = re.compile(
@@ -967,15 +998,33 @@ class ComDocumentConverter(DocumentConverter):
             word_app = _start_word()
 
         state: dict[str, object] = {"word": word_app}
+        warnings: list[str] = []
 
         def export(docx: Path, out_pdf: Path) -> None:
             if session is not None and session.word_app is not None:
                 state["word"] = session.word_app
             word = state["word"]
             doc = None
+            copy_path: Path | None = None
             try:
-                # FileName, ConfirmConversions, ReadOnly, AddToRecentFiles: read-only so Word never writes or deletes ~$ files
-                doc = word.Documents.Open(str(docx.resolve()), False, True, False)
+                if restore_images:  # Full Report only; Quick Report keeps the normal open (ADR 0011)
+                    copy_path = Path(tempfile.gettempdir()) / f"fr_{uuid.uuid4().hex[:8]}.docx"
+                    try:
+                        if make_disconnected_copy(docx, copy_path) == 0:
+                            copy_path = None
+                    except Exception as exc:
+                        warnings.append(f"could not make a disconnected copy of {docx.name} ({exc}); opened normally")
+                        logging.warning(warnings[-1])
+                        copy_path = None
+                    if copy_path is not None:
+                        try:
+                            doc = word.Documents.Open(str(copy_path), False, True, False)
+                        except Exception as exc:
+                            warnings.append(f"could not open the disconnected copy of {docx.name} ({exc}); opened normally")
+                            logging.warning(warnings[-1])
+                if doc is None:
+                    # FileName, ConfirmConversions, ReadOnly, AddToRecentFiles: read-only so Word never writes or deletes ~$ files
+                    doc = word.Documents.Open(str(docx.resolve()), False, True, False)
                 self._export_fixed_format(doc, out_pdf)
             finally:
                 if doc is not None:
@@ -983,6 +1032,8 @@ class ComDocumentConverter(DocumentConverter):
                         doc.Close(SaveChanges=False)
                     except Exception:
                         logger.debug("Could not close Word document %s", docx, exc_info=True)
+                if copy_path is not None:
+                    _unlink_quiet(copy_path)
 
         def recycle() -> None:
             if session is not None:
@@ -997,6 +1048,12 @@ class ComDocumentConverter(DocumentConverter):
             self.last_conversion = convert_docx_native_restored(
                 docx_path, pdf_path, export, recycle=recycle, restore_images=restore_images
             )
+            if warnings:
+                outcome = self.last_conversion
+                joined = "; ".join(dict.fromkeys(warnings))
+                if outcome.warning:
+                    joined = f"{outcome.warning}; {joined}"
+                self.last_conversion = dataclasses.replace(outcome, warning=joined)
         finally:
             if owns_word and state["word"] is not None:
                 word_to_quit = state["word"]

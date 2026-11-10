@@ -538,3 +538,117 @@ def test_calculate_exponential_delays() -> None:
     delays = calculate_exponential_delays(5, 5.0)
     assert len(delays) == 4
     assert sum(delays) == pytest.approx(5.0)
+
+
+# --- Disconnected Word open (ADR 0011, ticket #211) ---
+
+_W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+def _write_docx(path: Path, controls: int) -> None:
+    import zipfile
+
+    body = "".join(f'<w:p><w:r><w:object><w:control w:name="c{i}"/></w:object></w:r></w:p>' for i in range(controls))
+    xml = f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="{_W_NS}"><w:body>{body}</w:body></w:document>'
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("word/document.xml", xml)
+        zf.writestr("word/media/image1.png", b"png")
+
+
+def _word_mock():
+    word = MagicMock()
+    doc = MagicMock()
+    word.Documents.Open.return_value = doc
+    doc.ExportAsFixedFormat.side_effect = lambda OutputFileName, **kw: _write_real_pdf(OutputFileName)
+    return word, doc
+
+
+def test_make_disconnected_copy_removes_controls_only_in_copy(tmp_path: Path) -> None:
+    import zipfile
+
+    from src.postprocessing.converters import make_disconnected_copy
+
+    src, dst = tmp_path / "a.docx", tmp_path / "b.docx"
+    _write_docx(src, controls=3)
+    before = src.read_bytes()
+    assert make_disconnected_copy(src, dst) == 3
+    assert src.read_bytes() == before
+    with zipfile.ZipFile(dst) as zf:
+        assert b"w:control" not in zf.read("word/document.xml")
+        assert zf.read("word/media/image1.png") == b"png"
+
+
+def test_full_report_with_controls_opens_copy_and_restores_from_original(tmp_path: Path) -> None:
+    docx = tmp_path / "r.docx"
+    _write_docx(docx, controls=2)
+    original = docx.read_bytes()
+    word, _ = _word_mock()
+    seen: list[bytes] = []
+
+    def restore(snapshot: bytes, native: Path, out: Path):
+        seen.append(snapshot)
+        out.write_bytes(native.read_bytes())
+        return MagicMock()
+
+    opened: list[str] = []
+    word.Documents.Open.side_effect = lambda p, *a: (opened.append(p), word.Documents.Open.return_value)[1]
+    with patch("src.postprocessing.image_restoration.restore_source_images", restore):
+        ComDocumentConverter().convert_docx_to_pdf(docx, tmp_path / "o.pdf", word_app=word)
+
+    assert Path(opened[0]) != docx.resolve()
+    assert not Path(opened[0]).exists()  # throwaway copy removed
+    assert seen == [original]  # snapshot is the original, with controls
+    assert docx.read_bytes() == original
+
+
+def test_full_report_without_controls_opens_original(tmp_path: Path) -> None:
+    docx = tmp_path / "r.docx"
+    _write_docx(docx, controls=0)
+    word, _ = _word_mock()
+    conv = ComDocumentConverter()
+    with patch("src.postprocessing.image_restoration.restore_source_images",
+               lambda s, n, o: (o.write_bytes(n.read_bytes()), MagicMock())[1]):
+        conv.convert_docx_to_pdf(docx, tmp_path / "o.pdf", word_app=word)
+    word.Documents.Open.assert_called_once_with(str(docx.resolve()), False, True, False)
+    assert conv.last_conversion.warning is None
+
+
+def test_copy_failure_falls_back_to_normal_open_with_warning(tmp_path: Path) -> None:
+    docx = tmp_path / "r.docx"
+    docx.write_bytes(b"not a zip")
+    word, _ = _word_mock()
+    conv = ComDocumentConverter()
+    with patch("src.postprocessing.image_restoration.restore_source_images",
+               lambda s, n, o: (o.write_bytes(n.read_bytes()), MagicMock())[1]):
+        conv.convert_docx_to_pdf(docx, tmp_path / "o.pdf", word_app=word)
+    word.Documents.Open.assert_called_once_with(str(docx.resolve()), False, True, False)
+    assert "disconnected copy" in conv.last_conversion.warning
+
+
+def test_copy_open_failure_falls_back_to_original(tmp_path: Path) -> None:
+    docx = tmp_path / "r.docx"
+    _write_docx(docx, controls=1)
+    word, doc = _word_mock()
+    calls: list[str] = []
+
+    def open_(p, *a):
+        calls.append(p)
+        if len(calls) == 1:
+            raise OSError("boom")
+        return doc
+
+    word.Documents.Open.side_effect = open_
+    conv = ComDocumentConverter()
+    with patch("src.postprocessing.image_restoration.restore_source_images",
+               lambda s, n, o: (o.write_bytes(n.read_bytes()), MagicMock())[1]):
+        conv.convert_docx_to_pdf(docx, tmp_path / "o.pdf", word_app=word)
+    assert calls[1] == str(docx.resolve())
+    assert "could not open" in conv.last_conversion.warning
+
+
+def test_quick_report_keeps_normal_open(tmp_path: Path) -> None:
+    docx = tmp_path / "r.docx"
+    _write_docx(docx, controls=2)
+    word, _ = _word_mock()
+    ComDocumentConverter().convert_docx_to_pdf(docx, tmp_path / "o.pdf", word_app=word, restore_images=False)
+    word.Documents.Open.assert_called_once_with(str(docx.resolve()), False, True, False)
