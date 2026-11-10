@@ -20,6 +20,7 @@ import uuid
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 from xml.etree import ElementTree as ET
 
 from PIL import Image, ImageChops, ImageOps, ImageStat
@@ -360,6 +361,7 @@ def _harvest(docx_bytes: bytes) -> _Harvest:
                         crop = _imagedata_crop(data)
                         original = node.get("alt", "")
                     if not target:
+                        ids[ordinal] = _PictureId((), original)
                         continue
                     ext = posixpath.splitext(target)[1].lower()
                     key = (target, crop) if ext in RASTER_EXTS else (target, "meta")
@@ -564,9 +566,18 @@ def _xref_of(value: str) -> int:
     return int(value.split()[0])
 
 
-def _stamped_figures(doc) -> dict[tuple[int, int], tuple[int, int]]:
-    """(page xref, MCID) -> (figure element xref, stamp ordinal) for every figure Word tagged with a picture stamp."""
-    out: dict[tuple[int, int], tuple[int, int]] = {}
+class _Tagged(NamedTuple):
+    """A tagged picture element carrying a stamp. `page` and `mcid` are None when its content link is not simple."""
+
+    elem: int
+    ordinal: int
+    page: int | None
+    mcid: int | None
+
+
+def _stamped_elements(doc) -> list[_Tagged]:
+    """Every figure or inline shape Word tagged with a picture stamp, wherever its content link points."""
+    out: list[_Tagged] = []
     for x in range(1, doc.xref_length()):
         try:
             if doc.xref_get_key(x, "S")[1] not in _TAGGED_PICTURE:
@@ -575,19 +586,19 @@ def _stamped_figures(doc) -> dict[tuple[int, int], tuple[int, int]]:
             match = _ID_RE.match(alt.strip()) if kind == "string" else None
             if match is None:
                 continue
+        except Exception:  # a non-dictionary object: not a tagged element
+            continue
+        page = mcid = None
+        try:
             pg_kind, pg = doc.xref_get_key(x, "Pg")
             k_kind, k = doc.xref_get_key(x, "K")
-            if pg_kind != "xref":
-                continue
-            if k_kind == "int":
-                mcid = int(k)
-            elif k_kind == "array" and re.fullmatch(r"\[\s*\d+\s*\]", k.strip()):
-                mcid = int(k.strip("[] \t\r\n"))
-            else:
-                continue
-            out[(_xref_of(pg), mcid)] = (x, int(match.group(1)))
-        except Exception:  # a non-dictionary object: not a figure
-            continue
+            if pg_kind == "xref" and k_kind == "int":
+                page, mcid = _xref_of(pg), int(k)
+            elif pg_kind == "xref" and k_kind == "array" and re.fullmatch(r"\[\s*\d+\s*\]", k.strip()):
+                page, mcid = _xref_of(pg), int(k.strip("[] \t\r\n"))
+        except Exception:
+            page = mcid = None
+        out.append(_Tagged(x, int(match.group(1)), page, mcid))
     return out
 
 
@@ -611,11 +622,18 @@ def _images_drawn_by(doc, xref: int, seen: set[int]) -> set[int]:
     return found
 
 
-def _stamps_by_image(doc, figures: dict[tuple[int, int], tuple[int, int]]) -> dict[int, set[int]]:
-    """Image xref -> the stamp ordinals of every place the image is drawn."""
+def _stamps_by_image(doc, tagged: list[_Tagged]) -> dict[int, set[int]]:
+    """Image xref -> the stamp ordinals of every place the image is drawn.
+
+    An image that is also drawn somewhere with no stamp (an untagged header, a text box) is left out: its stamps
+    would narrow the candidates to pictures that explain only some of its uses.
+    """
+    by_content = {(t.page, t.mcid): t.ordinal for t in tagged if t.page is not None}
     stamps: dict[int, set[int]] = {}
-    if not figures:
+    if not by_content:
         return stamps
+    drawn: dict[int, int] = {}
+    stamped: dict[int, int] = {}
     for page in doc:
         names = {name: xref for xref, name, *_ in page.get_xobjects()}  # forms
         names.update({item[7]: item[0] for item in page.get_images(full=True) if not item[9]})  # drawn by the page
@@ -623,15 +641,22 @@ def _stamps_by_image(doc, figures: dict[tuple[int, int], tuple[int, int]]) -> di
             content = page.read_contents().decode("latin-1")
         except Exception:
             continue
+
+        def images_of(name: str) -> set[int]:
+            return _images_drawn_by(doc, names[name], set()) if name in names else set()
+
+        for name in _DO.findall(content):
+            for image in images_of(name):
+                drawn[image] = drawn.get(image, 0) + 1
         for mcid, body in _MCID_BLOCK.findall(content):
-            fig = figures.get((page.xref, int(mcid)))
-            if fig is None:
+            ordinal = by_content.get((page.xref, int(mcid)))
+            if ordinal is None:
                 continue
             for name in _DO.findall(body):
-                if name in names:
-                    for image in _images_drawn_by(doc, names[name], set()):
-                        stamps.setdefault(image, set()).add(fig[1])
-    return stamps
+                for image in images_of(name):
+                    stamps.setdefault(image, set()).add(ordinal)
+                    stamped[image] = stamped.get(image, 0) + 1
+    return {image: ords for image, ords in stamps.items() if stamped[image] == drawn.get(image, 0)}
 
 
 def _id_candidates(ordinals: set[int] | None, ids: dict[int, _PictureId]) -> list[_Source] | None:
@@ -651,11 +676,11 @@ def _id_candidates(ordinals: set[int] | None, ids: dict[int, _PictureId]) -> lis
     return list(union.values())
 
 
-def _strip_stamps(doc, figures: dict[tuple[int, int], tuple[int, int]], ids: dict[int, _PictureId]) -> None:
-    """Put each figure's original description back: stamps are scaffolding, not part of the deliverable."""
-    for elem, ordinal in figures.values():
-        original = ids[ordinal].original if ordinal in ids else ""
-        doc.xref_set_key(elem, "Alt", fitz.get_pdf_str(original) if original else "null")
+def _strip_stamps(doc, tagged: list[_Tagged], ids: dict[int, _PictureId]) -> None:
+    """Put each element's original description back: stamps are scaffolding, not part of the deliverable."""
+    for t in tagged:
+        original = ids[t.ordinal].original if t.ordinal in ids else ""
+        doc.xref_set_key(t.elem, "Alt", fitz.get_pdf_str(original) if original else "null")
 
 
 def _restore_into(doc, harvest: _Harvest) -> list[RestorationEntry]:
@@ -667,8 +692,8 @@ def _restore_into(doc, harvest: _Harvest) -> list[RestorationEntry]:
                 smasks.add(item[1])
             first_page.setdefault(item[0], pno + 1)
 
-    figures = _stamped_figures(doc)
-    stamps = _stamps_by_image(doc, figures)
+    tagged = _stamped_elements(doc)
+    stamps = _stamps_by_image(doc, tagged)
     entries: list[RestorationEntry] = []
     for xref, pno in first_page.items():
         if xref in smasks:
@@ -681,7 +706,7 @@ def _restore_into(doc, harvest: _Harvest) -> list[RestorationEntry]:
         except Exception as exc:
             logger.debug("Image xref %s left as rendered: %s", xref, exc)
             entries.append(RestorationEntry(pno, xref, (0, 0), None, "unmatched"))
-    _strip_stamps(doc, figures, harvest.ids)
+    _strip_stamps(doc, tagged, harvest.ids)
     return entries
 
 

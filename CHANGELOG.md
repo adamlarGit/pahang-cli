@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Source Image Restoration Reads Picture Stamps (`feat(restoration)`, `src/postprocessing/image_restoration.py`, `src/postprocessing/converters.py`, ADR 0012)**:
+  - The copy Word exports now stamps each picture with an ID that comes back in the PDF, so restoration knows which DOCX picture each image is instead of guessing from pixels. Pixels still confirm the match, and images with no usable stamp match by pixels as before.
+  - On the four proof reports every image is matched by stamp, none is ambiguous, and Sentosa's three US/TEV panels and Talapia's ten PRPD plots are restored to their source resolution. No other image changed. The fallback rule for unstamped images now clears a runner-up at 1.0% and 5 times the best score (was 1.5%). Every report with pictures now opens the export copy, not only reports with FLIR controls. Fixes #214.
 - **Fast Run Defaults to 8 Workers (`perf(tests)`, `scripts/run_full_suite.py`, `docs/agents/testing.md`)**:
   - The Fast Run median on the reference machine fell from 144.2 s at 4 workers to 108.3 s at 8, with the same tests and outcomes. Runs at 8 workers start a new timing history. Fixes #203.
 - **Guard `VISUAL DEFECT SUMMARY` Casing (`test(templates)`, `tests/test_template_heading_casing.py`)**:

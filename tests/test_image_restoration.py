@@ -716,3 +716,68 @@ def test_stamped_but_different_picture_is_not_restored_despite_stretch(paths):
     tag_figures(native, ["PSRID:1"])
     report = restore_source_images(docx_with_pictures([png_bytes(graph(7, size=(600, 424)))]), native, out)
     assert (report.unmatched, report.restored) == (1, 0)
+
+
+def native_pdf_sharing_one_image(path: Path, data: bytes, pages: int) -> Path:
+    """Word stores a picture once and draws it on every page that uses it."""
+    doc = fitz.open()
+    xref = 0
+    for _ in range(pages):
+        page = doc.new_page(width=595, height=842)
+        xref = page.insert_image(fitz.Rect(50, 100, 350, 300), stream=data) if not xref else xref
+        if page.number:
+            page.insert_image(fitz.Rect(50, 100, 350, 300), xref=xref)
+    doc.save(path)
+    doc.close()
+    return path
+
+
+def test_two_stamps_that_name_look_alike_pictures_stay_ambiguous(paths):
+    native, out = paths
+    a = graph(21)
+    b = a.copy()
+    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")  # ~0.7 % apart
+    native_pdf_sharing_one_image(native, png_bytes(b.resize((300, 200), Image.LANCZOS)), pages=2)
+    tag_figures(native, ["PSRID:1", "PSRID:2"])  # the one stored image is drawn as picture 1 and as picture 2
+    report = restore_source_images(docx_with_pictures([png_bytes(a), png_bytes(b)]), native, out)
+    assert (report.ambiguous, report.restored) == (1, 0)
+    assert pdf_images(out)[0][:2] == (300, 200)
+
+
+def test_image_also_drawn_without_a_stamp_is_not_narrowed_by_the_stamp(paths):
+    native, out = paths
+    src = graph(8)
+    native_pdf_sharing_one_image(native, png_bytes(src.resize((300, 200), Image.LANCZOS)), pages=2)
+    tag_figures(native, ["PSRID:1"])  # page 2 draws the same image untagged
+    report = restore_source_images(docx_with_pictures([png_bytes(src)]), native, out)
+    assert report.entries[0].evidence == "pixels"
+
+
+def test_stamp_is_removed_even_when_the_figure_link_is_not_simple(paths):
+    native, out = paths
+    src = graph(1)
+    native_pdf(native, [png_bytes(src.resize((300, 200), Image.LANCZOS))])
+    tag_figures(native, ["PSRID:1"])
+    with fitz.open(native) as doc:
+        elem = next(x for x in range(1, doc.xref_length()) if doc.xref_get_key(x, "S")[1] == "/Figure")
+        doc.xref_set_key(elem, "K", "[0 7]")
+        doc.saveIncr()
+    restore_source_images(docx_with_pictures([png_bytes(src)]), native, out)
+    assert figure_alts(out) == []
+
+
+def test_original_description_survives_when_a_drawing_has_no_picture():
+    from docx import Document as Doc
+
+    doc = Doc()
+    run = parse_xml(
+        '<w:r xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+        'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
+        '<w:drawing><wp:inline><wp:extent cx="1" cy="1"/><wp:docPr id="9" name="x" descr="keep me"/></wp:inline>'
+        "</w:drawing></w:r>"
+    )
+    doc.add_paragraph()._p.append(run)
+    out = io.BytesIO()
+    doc.save(out)
+    ids = ir._harvest(out.getvalue()).ids
+    assert ids[1].original == "keep me" and ids[1].sources == ()

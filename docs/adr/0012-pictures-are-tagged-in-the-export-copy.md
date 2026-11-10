@@ -10,13 +10,14 @@ The copy that Word exports (ADR 0011) now also gives every DOCX picture the desc
 
 - Pixels stay the gate. The stamped source must still match Word's image within the usual tolerance. If it does not, the image keeps Word's copy (unmatched), and no other candidate is tried.
 - Word stores identical pictures once, so an image can carry several stamps. Its candidates are all the sources those stamps name, and the pixels choose among them.
-- An image with no stamp, or with a stamp the DOCX does not explain, is matched by pixels over all sources as in ADR 0009.
+- An image with no stamp, with a stamp the DOCX does not explain, or that is also drawn somewhere without a stamp, is matched by pixels over all sources as in ADR 0009.
+- If several candidates look alike, the image stays ambiguous and keeps Word's copy, as in ADR 0009.
 - After matching, restoration puts each figure's original description back, so the stamps never reach the deliverable.
 - The operator's DOCX is never modified. Any report with pictures now opens the copy, not only reports with FLIR controls. If the copy fails, conversion opens the original and falls back to pixel matching, with the ADR 0011 warning.
 
 ## Why
 
-Pixels cannot tell apart panels that differ only in a few table digits. In the #212 proof, Sentosa's US/TEV panels differed by 1.35-1.46% of pixels, and any rule on that margin gets thinner the more alike the readings are (all-normal readings). The stamp identifies the picture directly. The pixel rule was also loosened (runner-up cleared at 1.0% and 5x the best score, was 1.5%) to serve as the fallback.
+Pixels cannot tell apart panels that differ only in a few table digits. In the #212 proof, Sentosa's US/TEV panels differed by 1.35-1.46% of pixels and APMM Part 32's 13x171 colour sliver by 1.17%, and any rule on that margin gets thinner the more alike the readings are (all-normal readings). The stamp identifies the picture directly. The pixel rule was also loosened (runner-up cleared at 1.0% and 5x the best score, was 1.5%) to serve as the fallback.
 
 ## Accepted limits
 
