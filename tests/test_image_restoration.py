@@ -994,3 +994,121 @@ def test_marked_content_operators_inside_names_and_escaped_strings_are_ignored(p
     tag_figures(native, ["PSRID:2"], before_image=b"/EMC gs (a\) EMC) Tj /P <</MCID 7>> BDC EMC ")
     report = restore_source_images(docx, native, out)
     assert (report.restored, report.entries[0].evidence) == (1, "id")
+
+
+# ---------------------------------------------------------------- inferring a missing stamp (#218, ADR 0012)
+
+
+def tagged_pages(path: Path, pages: list[list[tuple[bytes, str | None]]]) -> Path:
+    """One PDF page per list, drawing its pictures in order; a picture with a stamp is tagged as that figure."""
+    import re
+
+    doc = fitz.open()
+    for items in pages:
+        page = doc.new_page(width=595, height=842)
+        for k, (data, _) in enumerate(items):
+            page.insert_image(fitz.Rect(20, 20 + 120 * k, 200, 120 + 120 * k), stream=data)
+    root = doc.get_new_xref()
+    doc.update_object(root, "<<>>")
+    elems = []
+    for page, items in zip(doc, pages):
+        page.clean_contents()
+        xref = page.get_contents()[0]
+        parts = re.split(rb"(/\S+ Do)", doc.xref_stream(xref))
+        out, k = [], -1
+        for chunk in parts:
+            if chunk.endswith(b" Do") and chunk.startswith(b"/"):
+                k += 1
+                stamp = items[k][1]
+                if stamp is not None:
+                    chunk = b"/P <</MCID %d>> BDC " % k + chunk + b" EMC"
+                    elem = doc.get_new_xref()
+                    doc.update_object(
+                        elem, f"<</Type/StructElem/S/Figure/Alt({stamp})/K {k}/Pg {page.xref} 0 R/P {root} 0 R>>"
+                    )
+                    elems.append(elem)
+            out.append(chunk)
+        doc.update_stream(xref, b"".join(out))
+    doc.update_object(root, "<</Type/StructTreeRoot/K[" + " ".join(f"{e} 0 R" for e in elems) + "]>>")
+    doc.xref_set_key(doc.pdf_catalog(), "StructTreeRoot", f"{root} 0 R")
+    doc.save(path)
+    doc.close()
+    return path
+
+
+def _look_alike(img: Image.Image) -> Image.Image:
+    twin = img.copy()
+    ImageDraw.Draw(twin).rectangle([10, 10, 64, 39], fill="black")  # ~0.7 % apart: pixels call the pair ambiguous
+    return twin
+
+
+def _small(img: Image.Image) -> bytes:
+    return png_bytes(img.resize((300, 200), Image.LANCZOS))
+
+
+def test_single_gap_infers_the_missing_stamp(paths):
+    native, out = paths
+    a, b, c = graph(51), graph(52), graph(53)
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b), png_bytes(c), png_bytes(_look_alike(b))])
+    tagged_pages(native, [[(_small(a), "PSRID:1"), (_small(b), None), (_small(c), "PSRID:3")]])
+    report = restore_source_images(docx, native, out)
+    assert [e.action for e in report.entries] == ["restored"] * 3
+    assert report.entries[1].evidence == "id"
+    assert mean_abs_diff(pdf_pixels(out, 1), b) == 0  # not the twin that pixels alone cannot tell from it
+
+
+def test_two_images_in_the_gap_are_not_inferred(paths):
+    native, out = paths
+    a, b, c, x = graph(51), graph(52), graph(53), graph(54)
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b), png_bytes(c), png_bytes(_look_alike(b)), png_bytes(x)])
+    tagged_pages(
+        native, [[(_small(a), "PSRID:1"), (_small(b), None), (_small(x), None), (_small(c), "PSRID:3")]]
+    )
+    report = restore_source_images(docx, native, out)
+    assert report.entries[1].action == "ambiguous" and report.entries[1].evidence == "pixels"
+
+
+def test_two_drawings_in_the_gap_are_not_inferred(paths):
+    native, out = paths
+    a, b, c, e = graph(51), graph(52), graph(53), graph(55)
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b), png_bytes(e), png_bytes(c), png_bytes(_look_alike(b))])
+    tagged_pages(native, [[(_small(a), "PSRID:1"), (_small(b), None), (_small(c), "PSRID:4")]])
+    report = restore_source_images(docx, native, out)
+    assert report.entries[1].action == "ambiguous" and report.entries[1].evidence == "pixels"
+
+
+def test_neighbours_on_different_pages_are_not_inferred(paths):
+    native, out = paths
+    a, b, c = graph(51), graph(52), graph(53)
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b), png_bytes(c), png_bytes(_look_alike(b))])
+    tagged_pages(native, [[(_small(a), "PSRID:1"), (_small(b), None)], [(_small(c), "PSRID:3")]])
+    report = restore_source_images(docx, native, out)
+    assert report.entries[1].action == "ambiguous" and report.entries[1].evidence == "pixels"
+
+
+@pytest.mark.parametrize("where", ["before", "after"])
+def test_a_missing_neighbour_is_not_inferred(paths, where):
+    native, out = paths
+    a, b, c = graph(51), graph(52), graph(53)
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b), png_bytes(c), png_bytes(_look_alike(b))])
+    items = [(_small(a), "PSRID:1"), (_small(b), None)] if where == "after" else [(_small(b), None), (_small(c), "PSRID:3")]
+    tagged_pages(native, [items])
+    report = restore_source_images(docx, native, out)
+    unstamped = next(e for e in report.entries if e.action == "ambiguous")
+    assert unstamped.evidence == "pixels"
+
+
+def test_an_inferred_source_that_disagrees_with_the_pixels_keeps_words_copy(paths):
+    native, out = paths
+    a, b, c, z = graph(51), graph(52), graph(53), graph(56)
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b), png_bytes(c), png_bytes(z)])
+    tagged_pages(native, [[(_small(a), "PSRID:1"), (_small(z), None), (_small(c), "PSRID:3")]])
+    report = restore_source_images(docx, native, out)
+    assert report.entries[1].action == "unmatched"  # inferred drawing 2 is not what Word drew; no other try
+
+
+def test_inference_stays_inside_the_main_document_and_off_drawings_already_stamped():
+    events = [({1}, 1), ({2}, None), ({3}, 3)]
+    assert ir._infer_missing_stamps(events, {1, 3}, body_drawings=3) == {1: 2}
+    assert ir._infer_missing_stamps(events, {1, 3}, body_drawings=2) == {}  # drawing 3 is a header or footer
+    assert ir._infer_missing_stamps(events, {1, 2, 3}, body_drawings=3) == {}  # drawing 2 is stamped elsewhere

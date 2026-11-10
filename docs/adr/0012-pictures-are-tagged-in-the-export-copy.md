@@ -29,3 +29,13 @@ Pixels cannot tell apart panels that differ only in a few table digits. In the #
 A DrawingML group (`wpg:wgp`) or drawing canvas (`wpc`) has one `wp:docPr`, so it gets one stamp. The stamp names the sources of every picture inside it, and the pixels choose among them. Word is either tagging the group as one Figure, so every image in it carries that stamp, or tagging each child with no stamp, so each image falls back to pixels over all sources. Both outcomes restore. If any picture in the group cannot be traced to a source, the stamp does not narrow at all.
 
 What Word actually writes into the PDF structure for a group of two pictures has not been observed yet. The synthetic tests cover the one-Figure case (a group and a canvas). The unstamped case relies on the general pixel fallback and has no group-specific test; a real-Word probe should confirm which one happens.
+
+## Inferring a missing stamp (#218)
+
+An image Word did not tag gets identity evidence from its stamped neighbours when the case is unambiguous. If stamps `p` and `p+2` appear on one page and exactly one image is drawn between them in content order, that image is treated as stamped `p+1`. The rule applies only when:
+
+- both neighbours are on the same page and exactly one image sits in the gap,
+- exactly one drawing lies between them in the DOCX, and it is in the main document (headers and footers are artifacts outside the reading order, so they are out of scope),
+- no figure in the PDF carries a stamp for that drawing.
+
+Every other case falls through to pixels as before. The inferred stamp counts like a real one, so the safety rule still holds (an image also drawn without a stamp is matched by pixels), and pixels stay the gate: if the inferred source disagrees with Word's image, the image keeps Word's copy. Content order is paint order, which can differ from reading order for floating pictures; the pixel gate is what catches that.

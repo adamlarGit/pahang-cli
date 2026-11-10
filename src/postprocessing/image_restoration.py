@@ -302,6 +302,7 @@ class _PictureId:
 class _Harvest:
     sources: list[_Source]
     ids: dict[int, _PictureId]
+    body_drawings: int = 0  # drawings in the main document part; headers and footers count after them
 
 
 def harvest_sources(docx_bytes: bytes) -> list[_Source]:
@@ -318,10 +319,13 @@ def _harvest(docx_bytes: bytes) -> _Harvest:
     by_key: dict[tuple, list[_Source]] = {}
     ids: dict[int, _PictureId] = {}
     ordinal = 0
+    body_drawings: int | None = None
     with zf:
         try:
             names = set(zf.namelist())
             for part in picture_part_names(names):
+                if part != "word/document.xml" and body_drawings is None:
+                    body_drawings = ordinal
                 rels = _read_rels(zf, part)
                 root = ET.fromstring(zf.read(part))
                 for rid, crop in _picture_uses(root):
@@ -379,7 +383,7 @@ def _harvest(docx_bytes: bytes) -> _Harvest:
             raise
         except Exception as exc:
             raise RestorationError(f"Failed to harvest DOCX pictures: {exc}") from exc
-    return _Harvest(sources, ids)
+    return _Harvest(sources, ids, ordinal if body_drawings is None else body_drawings)
 
 
 def _raster_source(target: str, data: bytes, crop, ext: str) -> _Source | None:
@@ -664,13 +668,33 @@ def _images_drawn_by(doc, xref: int, seen: set[int]) -> set[int]:
     return found
 
 
-def _stamps_by_image(doc, tagged: list[_Tagged]) -> dict[int, set[int]]:
+def _infer_missing_stamps(events: list[tuple[set[int], int | None]], known: set[int], body_drawings: int) -> dict[int, int]:
+    """Event index -> the drawing ordinal inferred for an unstamped image on one page (ADR 0012, #218).
+
+    `events` lists the page's image draws in content order, each with its stamp ordinal or None. An unstamped image
+    gets drawing p+1 only when its stamped neighbours are p and p+2, it is the only image between them, and p+1 is
+    a main-document drawing no figure in the PDF is stamped with. Anything else is left to the pixels.
+    """
+    stamped = [i for i, (_, ordinal) in enumerate(events) if ordinal is not None]
+    inferred: dict[int, int] = {}
+    for before, after in zip(stamped, stamped[1:]):
+        if after - before != 2:  # not exactly one image between the neighbours
+            continue
+        p, n = events[before][1], events[after][1]
+        if n - p == 2 and n <= body_drawings and p + 1 not in known:
+            inferred[before + 1] = p + 1
+    return inferred
+
+
+def _stamps_by_image(doc, tagged: list[_Tagged], body_drawings: int = 0) -> dict[int, set[int]]:
     """Image xref -> the stamp ordinals of every place the image is drawn.
 
     An image that is also drawn somewhere with no stamp (an untagged header, a text box) is left out: its stamps
-    would narrow the candidates to pictures that explain only some of its uses.
+    would narrow the candidates to pictures that explain only some of its uses. An unstamped image that sits alone
+    between two stamped neighbours, one drawing apart, counts as stamped with the drawing between them (#218).
     """
     by_content = {(t.page, t.mcid): t.ordinal for t in tagged if t.page is not None}
+    known = {t.ordinal for t in tagged}
     stamps: dict[int, set[int]] = {}
     if not by_content:
         return stamps
@@ -684,13 +708,17 @@ def _stamps_by_image(doc, tagged: list[_Tagged]) -> dict[int, set[int]]:
         except Exception:
             continue
 
-        def images_of(name: str) -> set[int]:
-            return _images_drawn_by(doc, names[name], set()) if name in names else set()
-
+        events: list[tuple[set[int], int | None]] = []  # image draws in content order, with their stamp
         for name, mcids in _draws_in_content(content):
-            # the innermost enclosing section that is a tagged picture (nested sections may sit between)
-            ordinal = next((by_content[k] for m in mcids if (k := (page.xref, m)) in by_content), None)
-            for image in images_of(name):
+            images = _images_drawn_by(doc, names[name], set()) if name in names else set()
+            if images:
+                # the innermost enclosing section that is a tagged picture (nested sections may sit between)
+                ordinal = next((by_content[k] for m in mcids if (k := (page.xref, m)) in by_content), None)
+                events.append((images, ordinal))
+        inferred = _infer_missing_stamps(events, known, body_drawings)
+        for i, (images, ordinal) in enumerate(events):
+            ordinal = inferred.get(i, ordinal)
+            for image in images:
                 drawn[image] = drawn.get(image, 0) + 1
                 if ordinal is not None:
                     stamps.setdefault(image, set()).add(ordinal)
@@ -780,7 +808,7 @@ def _restore_into(doc, harvest: _Harvest) -> list[RestorationEntry]:
             first_page.setdefault(item[0], pno + 1)
 
     tagged = _stamped_elements(doc)
-    stamps = _stamps_by_image(doc, tagged)
+    stamps = _stamps_by_image(doc, tagged, harvest.body_drawings)
     entries: list[RestorationEntry] = []
     for xref, pno in first_page.items():
         if xref in smasks:
