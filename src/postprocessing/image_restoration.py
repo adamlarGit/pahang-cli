@@ -106,6 +106,7 @@ def stamp_picture_ids(roots) -> int:
         for node in _drawings(root):
             n += 1
             if node.tag == _DOCPR:
+                # a group (wpg:wgp) or canvas (wpc) has one docPr for every picture inside it
                 if next(node.getparent().iter(_BLIP_FILL), None) is not None:
                     node.set("descr", f"{PICTURE_ID_PREFIX}{n}")
                     stamped += 1
@@ -350,22 +351,26 @@ def _harvest(docx_bytes: bytes) -> _Harvest:
                 for node in _drawings(root):
                     ordinal += 1
                     if node.tag == _DOCPR:
-                        fill = next(parents[node].iter(_BLIP_FILL), None)
-                        blip = fill.find("a:blip", _NS) if fill is not None else None
-                        target = rels.get(blip.get(_R_EMBED)) if blip is not None else None
-                        crop = _fill_crop(fill) if fill is not None else None
                         original = node.get("descr", "")
+                        # a group or canvas holds several pictures under its one docPr: the stamp names all of them
+                        uses = []
+                        for fill in parents[node].iter(_BLIP_FILL):
+                            blip = fill.find("a:blip", _NS)
+                            target = rels.get(blip.get(_R_EMBED)) if blip is not None else None
+                            uses.append((target, _fill_crop(fill)))
                     else:
                         data = node.find(_IMAGEDATA)
-                        target = rels.get(data.get(_R_ID, ""))
-                        crop = _imagedata_crop(data)
+                        uses = [(rels.get(data.get(_R_ID, "")), _imagedata_crop(data))]
                         original = node.get("alt", "")
-                    if not target:
-                        ids[ordinal] = _PictureId((), original)
-                        continue
-                    ext = posixpath.splitext(target)[1].lower()
-                    key = (target, crop) if ext in RASTER_EXTS else (target, "meta")
-                    ids[ordinal] = _PictureId(tuple(by_key.get(key, ())), original)
+                    found: list[_Source] = []
+                    for target, crop in uses:
+                        if not target:
+                            found = []  # a picture we cannot name: the stamp cannot narrow, so all sources compete
+                            break
+                        ext = posixpath.splitext(target)[1].lower()
+                        key = (target, crop) if ext in RASTER_EXTS else (target, "meta")
+                        found.extend(s for s in by_key.get(key, ()) if s not in found)
+                    ids[ordinal] = _PictureId(tuple(found), original)
         except RestorationError:
             raise
         except Exception as exc:

@@ -850,3 +850,61 @@ def test_strip_picture_stamps_writes_nothing_without_a_stamp(paths):
     native_pdf(native, [png_bytes(graph(1))])
     assert ir.strip_picture_stamps(native, out, None) == 0
     assert not out.exists()
+
+
+# ---------------------------------------------------------------- groups and canvases (#216)
+
+_GROUP_NS = (
+    'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+    'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture" '
+    'xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" '
+    'xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"'
+)
+
+
+def docx_with_group(pictures: list[bytes], container: str = "wpg:wgp") -> bytes:
+    """One drawing (one ``wp:docPr``) whose group or canvas holds every picture."""
+    doc = Document()
+    pics = ""
+    for k, data in enumerate(pictures):
+        rid, _ = doc.part.get_or_add_image(io.BytesIO(data))
+        pics += (
+            f'<pic:pic><pic:nvPicPr><pic:cNvPr id="{k}" name="p{k}"/><pic:cNvPicPr/></pic:nvPicPr>'
+            f'<pic:blipFill><a:blip r:embed="{rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>'
+            f'<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/></a:xfrm></pic:spPr></pic:pic>'
+        )
+    run = parse_xml(
+        f'<w:r {NS} {_GROUP_NS}><w:drawing><wp:inline><wp:extent cx="1" cy="1"/><wp:docPr id="1" name="Group"/>'
+        f'<a:graphic><a:graphicData><{container}>{pics}</{container}></a:graphicData></a:graphic></wp:inline>'
+        f"</w:drawing></w:r>"
+    )
+    doc.add_paragraph()._p.append(run)
+    out = io.BytesIO()
+    doc.save(out)
+    return out.getvalue()
+
+
+@pytest.mark.parametrize("container", ["wpg:wgp", "wpc:wpc"])
+def test_group_or_canvas_stamp_names_every_picture_inside(container):
+    a, b = graph(41), graph(42)
+    docx = docx_with_group([png_bytes(a), png_bytes(b)], container)
+    ids = ir._harvest(docx).ids
+    assert list(ids) == [1] and len(ids[1].sources) == 2
+
+
+@pytest.mark.parametrize("container", ["wpg:wgp", "wpc:wpc"])
+def test_pictures_in_a_group_or_canvas_each_restore_to_their_own_source(paths, container):
+    native, out = paths
+    a, b = graph(41), graph(42)
+    docx = docx_with_group([png_bytes(a), png_bytes(b)], container)
+    native_pdf(
+        native,
+        [png_bytes(a.resize((300, 200), Image.LANCZOS)), png_bytes(b.resize((300, 200), Image.LANCZOS))],
+    )
+    tag_figures(native, ["PSRID:1", "PSRID:1"])  # Word tags the group as one figure: every picture carries its stamp
+    report = restore_source_images(docx, native, out)
+    assert (report.restored, report.unmatched) == (2, 0)
+    assert all(e.evidence == "id" for e in report.entries)
+    assert mean_abs_diff(pdf_pixels(out, 0), a) == 0
+    assert mean_abs_diff(pdf_pixels(out, 1), b) == 0
