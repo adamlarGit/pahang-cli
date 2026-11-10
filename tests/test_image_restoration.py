@@ -1139,3 +1139,19 @@ def test_inference_stays_inside_the_main_document_and_off_drawings_already_stamp
     assert ir._infer_missing_stamps(events, {1, 3}, body_drawings=1) == {}  # drawing 2 is a header or footer
     assert ir._infer_missing_stamps([({1}, 1), ({2, 9}, None), ({3}, 3)], {1, 3}, body_drawings=3) == {}  # a form of two images
     assert ir._infer_missing_stamps(events, {1, 2, 3}, body_drawings=3) == {}  # drawing 2 is stamped elsewhere
+
+
+def test_strip_drops_the_grouped_object_text_Word_adds_after_an_empty_stamp(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(graph(1))])
+    tag_figures(native, ["PSRID:1 (Grouped Object)"])
+    ir.strip_picture_stamps(native, out, None)
+    assert all_alts(out) == []  # an unstamped export has no description on the group
+
+
+def test_strip_keeps_the_grouped_object_text_after_a_real_description(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(graph(1))])
+    tag_figures(native, ["PSRID:1 (Grouped Object)"])
+    ir.strip_picture_stamps(native, out, docx_with_description("Busbar group"))
+    assert all_alts(out) == ["Busbar group (Grouped Object)"]

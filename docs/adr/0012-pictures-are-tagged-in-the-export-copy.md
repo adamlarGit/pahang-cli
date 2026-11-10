@@ -36,7 +36,7 @@ A DrawingML group (`wpg:wgp`) or drawing canvas (`wpc`) has one `wp:docPr`, so i
 
 So in real Word, pictures inside a group or canvas never carry a stamp. They fall through to pixel matching over all sources (ADR 0009). In the probe all four restored by pixels, each to its own source; none was ambiguous. The stamp change above is harmless but does not fire for these pictures. Identity evidence for them would need another route, such as the neighbour inference below.
 
-**Side effect found.** Word appends ` (Grouped Object)` to a group's `/Alt`. Removing the stamp leaves that text, so a restored PDF has `/Alt (Grouped Object)` on the group's Figure where an unstamped export has none. It carries no stamp and does not affect restoration; it is a cosmetic difference in the tagged structure.
+**Side effect, handled.** Word appends ` (Grouped Object)` to a group's `/Alt`, after the stamp. When the group's own description was empty, stamp removal drops that text too, so the published PDF matches an unstamped export (no description). After a real description it is kept. Only the English text is recognised.
 
 ## Inferring a missing stamp (#218)
 

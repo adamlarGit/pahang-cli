@@ -73,6 +73,9 @@ _R_ID = f"{{{_NS['r']}}}id"
 # picture's tagged figure, so restoration can read back exactly which DOCX picture each PDF image is.
 PICTURE_ID_PREFIX = "PSRID:"
 _ID_RE = re.compile(rf"{PICTURE_ID_PREFIX}(\d+)")
+# Word appends this to the description of a group it tags, after the stamp (English Word; other languages are left)
+_GROUPED_SUFFIX = " (Grouped Object)"
+_STAMP_WITH_SUFFIX = re.compile(rf"{PICTURE_ID_PREFIX}(\d+)(?P<suffix>{re.escape(_GROUPED_SUFFIX)})?")
 _DOCPR = f"{{{_NS['wp']}}}docPr"
 _VSHAPE = f"{{{_NS['v']}}}shape"
 _IMAGEDATA = f"{{{_NS['v']}}}imagedata"
@@ -760,7 +763,9 @@ def _strip_stamps(doc, originals: dict[int, str]) -> int:
     """
 
     def original(match: re.Match) -> str:
-        return originals.get(int(match.group(1)), "")
+        text = originals.get(int(match.group(1)), "")
+        # an unstamped export gives a group no description, so Word's added text goes with an empty one
+        return text + (match.group("suffix") or "") if text else ""
 
     changed = 0
     for x in range(1, doc.xref_length()):
@@ -768,7 +773,7 @@ def _strip_stamps(doc, originals: dict[int, str]) -> int:
             kind, alt = doc.xref_get_key(x, "Alt")
             if kind != "string" or _ID_RE.search(alt) is None:
                 continue
-            text = _ID_RE.sub(original, alt).strip()
+            text = _STAMP_WITH_SUFFIX.sub(original, alt).strip()
         except Exception:  # a non-dictionary object: no description to clean
             continue
         doc.xref_set_key(x, "Alt", fitz.get_pdf_str(text) if text else "null")
