@@ -325,6 +325,10 @@ _Avoid_: image replacement (ambiguous with Source Image Restoration), injection
 ### FlirActiveXIsolationPolicy
 The architectural rule governing Quick Report compilation in `src/quick_report/composer.py`. Mandates that multi-part documents containing FLIR Tools+ ActiveX controls (`CIRViewer`) merge through Microsoft Word COM Automation (`Documents.Add()`, read-only part opening, clipboard copy, page break, and paste). Prohibits pure Python OpenXML concatenation (`docxcompose`, `python-docx`) to prevent control identifier collisions and binary compound file corruption.
 
+### FLIR Crosstalk
+A FLIR IR viewer in a merged document showing another viewer's IR image instead of its own, because the two viewers were joined so that they share an identity or image data. Crosstalk can show up on opening, or only after save, close and reopen. Any way of joining documents that contain FLIR viewers must prove there is no crosstalk.
+_Avoid_: image bleed, control collision (that is the cause, not what the operator sees)
+
 ### ReportTarget
 The polymorphic target identifier accepted by `QuickReportWorkflow` entry points (`generate()` and `inspect()`). Supports `Path` (direct folder path), bare date string formatted as `DD-MM-YYYY` matching an inspection date folder, a single Functional Location string (e.g. `"CCHL/PCE/J00059"`), a comma-separated FL string (e.g. `"CCHL/PCE/J00059, CCHL/PCE/J00060"`), or a `Sequence[str]` / `Sequence[Path]` of dates, paths, or FLs. Disambiguates folder vs. FL modes strictly based on directory existence or calendar date format matching.
 
@@ -348,6 +352,10 @@ The domain generation rule established in ADR 0004 governing Transformer High Vo
 
 ### QuickReportIngestionSeam
 The ingestion boundary defined by `DocumentSlicer(Protocol)` and implemented by production `WordComDocumentSlicer` (with `FakeDocumentSlicer` for headless unit testing) responsible for slicing completed sections from the finalized Quick Report Word document into modular intermediate parts (`temp_parts/front_page.docx`, `vi_summary.docx`, `cbm_defects/`, `condition_pages.docx`, `vi_defect_pages.docx`, `sticker_page.docx`). Uses Word COM Automation with forward-scoped paragraph boundary detection (`"SUBSTATION CONDITION"`, `"VISUAL DEFECT"`, `"NORMAL/DEFECT STICKER"`) to guarantee 100% preservation of inspector DrawingML callouts, red boxes, and FLIR Tools+ ActiveX controls without false-positive heading collisions. Title transformation (`QUICK` -> `FULL`) is executed via native Word COM Find & Replace during front page slicing.
+
+### Slice Anchor
+A locked marker in a Quick Report that holds the exact bounds of one slice: one heading section (front page, VI summary, condition pages, VI defect pages, sticker page) or one CBM defect page. One CBM defect always fills exactly one page, so each CBM defect has its own Slice Anchor. Operators can edit anything inside a Slice Anchor but cannot delete the anchor itself. A Quick Report with a missing or damaged Slice Anchor is sliced the old way, and that fallback is logged.
+_Avoid_: section anchor ("Section" means a page group in a Full Report Part), bookmark
 
 ### CbmDefectHeaderParser & D37 Naming Grammar
 The CBM defect detail page inspection and metadata extraction service (`src/full_report/defect_parser.py`). Parses Table 1 from individual sliced CBM defect pages (`docx.table.Table` or 2D matrix) across Switchgear, Transformer, Feeder Pillar, and Battery Bank templates, extracting equipment category, instance, physical sequence (`p04`, `f02`, `s01`, `p00`), canonical equipment/panel ID (e.g. `CKN01309`), defect area (e.g. `FUSE_COMPARTMENT`), and severity. Generates standardized, fine-tuned left-to-right naming tokens adhering strictly to D37 grammar (`{eq_instance}_{seq}_{id}_{area}_{idx}.docx`), and saves sliced parts under `temp_parts/cbm_defects/` with automatic duplicate index incrementing (`_01`, `_02`) for downstream inline interleaving.
