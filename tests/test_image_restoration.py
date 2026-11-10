@@ -908,3 +908,16 @@ def test_pictures_in_a_group_or_canvas_each_restore_to_their_own_source(paths, c
     assert all(e.evidence == "id" for e in report.entries)
     assert mean_abs_diff(pdf_pixels(out, 0), a) == 0
     assert mean_abs_diff(pdf_pixels(out, 1), b) == 0
+
+
+def test_group_with_an_untraceable_picture_does_not_narrow():
+    import zipfile
+
+    src = io.BytesIO(docx_with_group([png_bytes(graph(41)), png_bytes(graph(42))]))
+    docx = io.BytesIO()
+    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(docx, "w") as zout:
+        media = sorted(n for n in zin.namelist() if n.startswith("word/media/"))
+        for n in zin.namelist():
+            zout.writestr(n, b"not an image" if n == media[1] else zin.read(n))
+    docx = docx.getvalue()
+    assert ir._harvest(docx).ids[1].sources == ()

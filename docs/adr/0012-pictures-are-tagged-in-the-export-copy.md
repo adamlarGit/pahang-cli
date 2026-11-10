@@ -28,4 +28,4 @@ Pixels cannot tell apart panels that differ only in a few table digits. In the #
 
 A DrawingML group (`wpg:wgp`) or drawing canvas (`wpc`) has one `wp:docPr`, so it gets one stamp. The stamp names the sources of every picture inside it, and the pixels choose among them. Word is either tagging the group as one Figure, so every image in it carries that stamp, or tagging each child with no stamp, so each image falls back to pixels over all sources. Both outcomes restore. If any picture in the group cannot be traced to a source, the stamp does not narrow at all.
 
-What Word actually writes into the PDF structure for a group of two pictures has not been observed yet. The synthetic tests cover the one-Figure case and the unstamped case; a real-Word probe should confirm which one happens.
+What Word actually writes into the PDF structure for a group of two pictures has not been observed yet. The synthetic tests cover the one-Figure case (a group and a canvas). The unstamped case relies on the general pixel fallback and has no group-specific test; a real-Word probe should confirm which one happens.

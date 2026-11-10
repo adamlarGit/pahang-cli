@@ -369,7 +369,11 @@ def _harvest(docx_bytes: bytes) -> _Harvest:
                             break
                         ext = posixpath.splitext(target)[1].lower()
                         key = (target, crop) if ext in RASTER_EXTS else (target, "meta")
-                        found.extend(s for s in by_key.get(key, ()) if s not in found)
+                        known = by_key.get(key, ())
+                        if not known:  # e.g. an undecodable picture: same, no narrowing
+                            found = []
+                            break
+                        found.extend(s for s in known if s not in found)
                     ids[ordinal] = _PictureId(tuple(found), original)
         except RestorationError:
             raise
