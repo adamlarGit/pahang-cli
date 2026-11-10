@@ -535,29 +535,39 @@ class PartConversionOutcome:
 _WORD_CONTROL_TAG = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}control"
 
 
-def make_disconnected_copy(docx_path: Path, copy_path: Path) -> int:
-    """Write a copy of `docx_path` with its FLIR ActiveX controls (`w:control`) removed; return how many.
+def make_export_copy(docx_path: Path, copy_path: Path) -> tuple[int, int]:
+    """Write the copy Word exports; return (FLIR controls removed, pictures stamped).
 
-    Only `word/document.xml` changes, so the pictures each control carries stay as stored previews. Returns 0
-    and writes nothing when the DOCX has no controls. `docx_path` is only read (ADR 0011).
+    The copy has its FLIR ActiveX controls (`w:control`) removed, so the pictures each control carries stay as stored
+    previews (ADR 0011), and every picture's description replaced by a stamp that Source Image Restoration reads back
+    from the PDF (ADR 0012). Only the picture parts change. Writes nothing and returns (0, 0) when there is nothing
+    to remove or stamp. `docx_path` is only read.
     """
     from lxml import etree
 
+    from .image_restoration import picture_part_names, stamp_picture_ids
+
     with zipfile.ZipFile(docx_path) as zin:
-        data = zin.read("word/document.xml")
-        if b"control" not in data:  # cheap pre-check; any namespace prefix
-            return 0
-        root = etree.fromstring(data)
-        nodes = list(root.iter(_WORD_CONTROL_TAG))
-        if not nodes:
-            return 0
-        for node in nodes:
-            node.getparent().remove(node)
-        data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+        parts = picture_part_names(zin.namelist())
+        roots = {name: etree.fromstring(zin.read(name)) for name in parts}
+        stamped = stamp_picture_ids(roots[name] for name in parts)
+        controls = 0
+        body = roots.get("word/document.xml")
+        if body is not None:
+            nodes = list(body.iter(_WORD_CONTROL_TAG))
+            for node in nodes:
+                node.getparent().remove(node)
+            controls = len(nodes)
+        if not controls and not stamped:
+            return 0, 0
+        rewritten = {
+            name: etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+            for name, root in roots.items()
+        }
         with zipfile.ZipFile(copy_path, "w") as out:
             for info in zin.infolist():
-                out.writestr(info, data if info.filename == "word/document.xml" else zin.read(info.filename))
-    return len(nodes)
+                out.writestr(info, rewritten[info.filename] if info.filename in rewritten else zin.read(info.filename))
+    return controls, stamped
 
 
 _OPEN_RETRY_DELAYS: tuple[float, ...] = (0.2, 0.5, 1.0)
@@ -1010,7 +1020,7 @@ class ComDocumentConverter(DocumentConverter):
                 if restore_images:  # Full Report only; Quick Report keeps the normal open (ADR 0011)
                     copy_path = Path(tempfile.gettempdir()) / f"fr_{uuid.uuid4().hex[:8]}.docx"
                     try:
-                        if make_disconnected_copy(docx, copy_path) == 0:
+                        if make_export_copy(docx, copy_path) == (0, 0):
                             copy_path = None
                     except Exception as exc:
                         warnings.append(f"could not make a disconnected copy of {docx.name} ({exc}); opened normally")

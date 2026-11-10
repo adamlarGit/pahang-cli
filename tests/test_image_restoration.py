@@ -268,11 +268,23 @@ def test_ambiguous_match_is_skipped(paths):
     native, out = paths
     a = graph(21)
     b = a.copy()
-    ImageDraw.Draw(b).rectangle([10, 10, 69, 49], fill="black")  # ~1% strongly different
+    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")  # ~0.7% strongly different
     native_pdf(native, [png_bytes(a.resize((300, 200), Image.LANCZOS))])
     report = restore_source_images(docx_with_pictures([png_bytes(a), png_bytes(b)]), native, out)
     assert report.ambiguous == 1 and report.restored == 0
     assert pdf_images(out)[0][:2] == (300, 200)
+
+
+def test_clearly_different_look_alike_does_not_block_restoration(paths):
+    # #214: a twin that differs by ~1.4 % is a different picture, not a rival for the exact match
+    native, out = paths
+    a = graph(21)
+    b = a.copy()
+    ImageDraw.Draw(b).rectangle([10, 10, 79, 49], fill="black")
+    native_pdf(native, [png_bytes(a.resize((300, 200), Image.LANCZOS))])
+    report = restore_source_images(docx_with_pictures([png_bytes(a), png_bytes(b)]), native, out)
+    assert report.ambiguous == 0 and report.restored == 1
+    assert mean_abs_diff(pdf_pixels(out, 0), a) == 0
 
 
 def test_unrelated_image_is_unmatched(paths):
@@ -545,3 +557,162 @@ def test_header_pictures_are_harvested():
     out = io.BytesIO()
     doc.save(out)
     assert len(ir.harvest_sources(out.getvalue())) == 1
+
+
+# ---------------------------------------------------------------- picture stamps (#214, ADR 0012)
+
+
+def tag_figures(path: Path, stamps: list[str]) -> Path:
+    """Tag each page's picture as a figure whose /Alt is the given stamp, the way Word's tagged export does."""
+    import re
+
+    with fitz.open(path) as doc:
+        root = doc.get_new_xref()
+        doc.update_object(root, "<<>>")
+        elems = []
+        for page, stamp in zip(doc, stamps):
+            page.clean_contents()
+            xref = page.get_contents()[0]
+            content = re.sub(rb"(/\S+ Do)", rb"/P <</MCID 0>> BDC \1 EMC", doc.xref_stream(xref))
+            doc.update_stream(xref, content)
+            elem = doc.get_new_xref()
+            doc.update_object(
+                elem, f"<</Type/StructElem/S/Figure/Alt({stamp})/K 0/Pg {page.xref} 0 R/P {root} 0 R>>"
+            )
+            elems.append(elem)
+        doc.update_object(
+            root, "<</Type/StructTreeRoot/K[" + " ".join(f"{e} 0 R" for e in elems) + "]>>"
+        )
+        doc.xref_set_key(doc.pdf_catalog(), "StructTreeRoot", f"{root} 0 R")
+        doc.saveIncr()
+    return path
+
+
+def figure_alts(path: Path) -> list[str]:
+    with fitz.open(path) as doc:
+        return [
+            doc.xref_get_key(x, "Alt")[1]
+            for x in range(1, doc.xref_length())
+            if doc.xref_get_key(x, "S")[1] == "/Figure" and doc.xref_get_key(x, "Alt")[0] == "string"
+        ]
+
+
+def test_stamp_resolves_a_look_alike_pair_pixels_cannot(paths):
+    native, out = paths
+    a = graph(21)
+    b = a.copy()
+    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")  # ~0.7 % apart: pixels call it ambiguous
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b)])
+    native_pdf(native, [png_bytes(b.resize((300, 200), Image.LANCZOS))])
+    tag_figures(native, ["PSRID:2"])  # the second picture in the DOCX
+    report = restore_source_images(docx, native, out)
+    assert (report.ambiguous, report.restored) == (0, 1)
+    assert report.entries[0].evidence == "id"
+    assert mean_abs_diff(pdf_pixels(out, 0), b) == 0
+
+
+def test_stamp_that_disagrees_with_the_pixels_keeps_words_copy(paths):
+    native, out = paths
+    shown, other = graph(31), graph(32)
+    docx = docx_with_pictures([png_bytes(other), png_bytes(shown)])
+    native_pdf(native, [png_bytes(shown.resize((300, 200), Image.LANCZOS))])
+    tag_figures(native, ["PSRID:1"])  # points at `other`; a correct source exists but the stamp is not trusted
+    report = restore_source_images(docx, native, out)
+    assert (report.unmatched, report.restored) == (1, 0)
+    assert pdf_images(out)[0][:2] == (300, 200)
+
+
+def test_stamps_are_removed_from_the_output(paths):
+    native, out = paths
+    src = graph(1)
+    native_pdf(native, [png_bytes(src.resize((300, 200), Image.LANCZOS))])
+    tag_figures(native, ["PSRID:1"])
+    restore_source_images(docx_with_pictures([png_bytes(src)]), native, out)
+    assert figure_alts(out) == []
+
+
+def test_unstamped_pdf_still_matches_by_pixels(paths):
+    native, out = paths
+    src = graph(1)
+    native_pdf(native, [png_bytes(src.resize((300, 200), Image.LANCZOS))])
+    report = restore_source_images(docx_with_pictures([png_bytes(src)]), native, out)
+    assert report.restored == 1 and report.entries[0].evidence == "pixels"
+
+
+def test_export_copy_stamps_each_picture_and_leaves_the_original(tmp_path):
+    import zipfile
+
+    from src.postprocessing.converters import make_export_copy
+
+    src, dst = tmp_path / "a.docx", tmp_path / "b.docx"
+    src.write_bytes(docx_with_pictures([png_bytes(graph(1)), png_bytes(graph(2))]))
+    before = src.read_bytes()
+    assert make_export_copy(src, dst) == (0, 2)
+    assert src.read_bytes() == before
+    with zipfile.ZipFile(dst) as zf:
+        xml = zf.read("word/document.xml").decode()
+    assert 'descr="PSRID:1"' in xml and 'descr="PSRID:2"' in xml
+    # the stamps the copy carries mean the same pictures restoration harvests from the original
+    ids = ir._harvest(before).ids
+    assert sorted(ids) == [1, 2] and all(len(v.sources) == 1 for v in ids.values())
+
+
+def test_shared_pdf_image_with_several_stamps_is_matched_among_all_of_them():
+    # Word stores identical pictures once, so one image can carry the stamps of several DOCX pictures
+    def src(label):
+        return ir._Source(label, b"", (10, 10), True, None, Image.new("L", (64, 64)))
+
+    a, b, c = src("a"), src("b"), src("c")
+    ids = {1: ir._PictureId((a,), ""), 2: ir._PictureId((b,), ""), 3: ir._PictureId((c,), "")}
+    assert ir._id_candidates({1, 2}, ids) == [a, b]
+    assert ir._id_candidates({1, 9}, ids) is None  # a stamp the DOCX does not explain: do not narrow
+    assert ir._id_candidates(None, ids) is None
+
+
+def test_images_inside_a_form_are_found_through_the_form(tmp_path):
+    # Word draws metafile pictures (FLIR previews) as a form XObject that holds the images
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_image(fitz.Rect(10, 10, 110, 110), stream=png_bytes(graph(3, (100, 100))))
+    image = page.get_images(full=True)[0][0]
+    form = doc.get_new_xref()
+    doc.update_object(form, f"<</Type/XObject/Subtype/Form/BBox[0 0 10 10]/Resources<</XObject<</Im0 {image} 0 R>>>>>>")
+    doc.update_stream(form, b"q /Im0 Do Q")
+    assert ir._images_drawn_by(doc, form, set()) == {image}
+    assert ir._images_drawn_by(doc, image, set()) == {image}
+
+
+def test_export_copy_stamps_a_vml_picture_with_alt(tmp_path):
+    import zipfile
+
+    from src.postprocessing.converters import make_export_copy
+
+    src, dst = tmp_path / "a.docx", tmp_path / "b.docx"
+    src.write_bytes(docx_with_vml_crop(png_bytes(graph(1)), cropleft="1000f"))
+    assert make_export_copy(src, dst) == (0, 1)
+    with zipfile.ZipFile(dst) as zf:
+        assert 'alt="PSRID:1"' in zf.read("word/document.xml").decode()
+    ids = ir._harvest(src.read_bytes()).ids
+    assert list(ids) == [1] and len(ids[1].sources) == 1
+
+
+def test_stamped_picture_stretched_by_word_is_still_restored(paths):
+    # #214: PRPD screenshots are squashed on the page, so Word's copy has a different aspect than the source
+    native, out = paths
+    src = graph(5, size=(600, 424))
+    native_pdf(native, [png_bytes(src.resize((300, 125), Image.LANCZOS))])
+    docx = docx_with_pictures([png_bytes(src)])
+    unstamped = restore_source_images(docx, native, out)
+    assert (unstamped.unmatched, unstamped.restored) == (1, 0)  # aspect check still guards unstamped images
+    tag_figures(native, ["PSRID:1"])
+    report = restore_source_images(docx, native, out)
+    assert (report.restored, report.entries[0].evidence) == (1, "id")
+    assert pdf_images(out)[0][:2] == (600, 424)
+
+
+def test_stamped_but_different_picture_is_not_restored_despite_stretch(paths):
+    native, out = paths
+    native_pdf(native, [png_bytes(graph(6, size=(600, 424)).resize((300, 125), Image.LANCZOS))])
+    tag_figures(native, ["PSRID:1"])
+    report = restore_source_images(docx_with_pictures([png_bytes(graph(7, size=(600, 424)))]), native, out)
+    assert (report.unmatched, report.restored) == (1, 0)

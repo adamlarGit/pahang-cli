@@ -563,15 +563,15 @@ def _word_mock():
     return word, doc
 
 
-def test_make_disconnected_copy_removes_controls_only_in_copy(tmp_path: Path) -> None:
+def test_make_export_copy_removes_controls_only_in_copy(tmp_path: Path) -> None:
     import zipfile
 
-    from src.postprocessing.converters import make_disconnected_copy
+    from src.postprocessing.converters import make_export_copy
 
     src, dst = tmp_path / "a.docx", tmp_path / "b.docx"
     _write_docx(src, controls=3)
     before = src.read_bytes()
-    assert make_disconnected_copy(src, dst) == 3
+    assert make_export_copy(src, dst) == (3, 0)
     assert src.read_bytes() == before
     with zipfile.ZipFile(dst) as zf:
         assert b"w:control" not in zf.read("word/document.xml")

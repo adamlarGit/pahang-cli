@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 import logging
 import posixpath
+import re
 import struct
 import time
 import uuid
@@ -41,7 +42,11 @@ STAGE1_MAX_DIFF = 10.0  # mean abs grey diff on the 64 px thumbnail
 STAGE1_KEEP = 6
 STRONG_DIFF = 48  # grey level difference counted as "strongly differing"
 ACCEPT_PCT = 0.5  # true matches measured <= 0.23 %
-IMPOSTOR_PCT = 1.5  # look-alikes measured >= 2.2 %; below this a runner-up is a threat
+# A runner-up could be the true source only if it scores like a true match (<= 0.23 %). One that scores at least
+# IMPOSTOR_PCT, and at least IMPOSTOR_RATIO times worse than the best, is a different picture. Mostly-white tables
+# (US/TEV panels) differ by only ~1.2-1.5 % even when every number differs, so the line sits at 1.0 (#214).
+IMPOSTOR_PCT = 1.0
+IMPOSTOR_RATIO = 5.0
 MORE_PIXELS_RATIO = 1.02
 MIN_CROP_PX = 4
 
@@ -53,8 +58,60 @@ _NS = {
     "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
     "rel": "http://schemas.openxmlformats.org/package/2006/relationships",
 }
+_NS["wp"] = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
 _R_EMBED = f"{{{_NS['r']}}}embed"
 _R_ID = f"{{{_NS['r']}}}id"
+
+
+# Picture ID stamps (#214, ADR 0012): the export copy gives every DOCX picture the description "PSRID:<n>", n being its
+# 1-based position among all ``wp:docPr`` elements. Word writes that description into the PDF as the /Alt text of the
+# picture's tagged figure, so restoration can read back exactly which DOCX picture each PDF image is.
+PICTURE_ID_PREFIX = "PSRID:"
+_ID_RE = re.compile(rf"{PICTURE_ID_PREFIX}(\d+)")
+_DOCPR = f"{{{_NS['wp']}}}docPr"
+_VSHAPE = f"{{{_NS['v']}}}shape"
+_IMAGEDATA = f"{{{_NS['v']}}}imagedata"
+_BLIP_FILL = f"{{{_NS['pic']}}}blipFill"
+
+
+def picture_part_names(names) -> list[str]:
+    """The DOCX parts that hold pictures, in the one order stamping and reading both count them."""
+    parts = [
+        n
+        for n in names
+        if n.startswith("word/")
+        and "/" not in n[5:]
+        and (n == "word/document.xml" or (n.endswith(".xml") and n[5:].startswith(("header", "footer"))))
+    ]
+    return sorted(parts, key=lambda n: (n != "word/document.xml", n))
+
+
+def _drawings(root):
+    """Every drawing that can carry a stamp, in document order: ``wp:docPr`` and VML shapes holding a picture."""
+    for node in root.iter():
+        if node.tag == _DOCPR or (node.tag == _VSHAPE and node.find(_IMAGEDATA) is not None):
+            yield node
+
+
+def stamp_picture_ids(roots) -> int:
+    """Stamp ``PSRID:<n>`` into every picture drawing of the given lxml part roots (in `picture_part_names` order).
+
+    n counts every drawing (shapes and connectors too), so it is stable; only drawings that hold a picture get the
+    stamp: the description (``descr``) of a DrawingML picture, the ``alt`` of a VML picture such as a FLIR
+    thermogram preview. Returns how many were stamped.
+    """
+    n = stamped = 0
+    for root in roots:
+        for node in _drawings(root):
+            n += 1
+            if node.tag == _DOCPR:
+                if next(node.getparent().iter(_BLIP_FILL), None) is not None:
+                    node.set("descr", f"{PICTURE_ID_PREFIX}{n}")
+                    stamped += 1
+            else:
+                node.set("alt", f"{PICTURE_ID_PREFIX}{n}")
+                stamped += 1
+    return stamped
 
 
 class RestorationError(Exception):
@@ -68,6 +125,7 @@ class RestorationEntry:
     pdf_size: tuple[int, int]
     source: str | None
     action: str  # restored | kept | unmatched | ambiguous | self_check_rejected
+    evidence: str = "pixels"  # id: the picture's stamp named the candidate source(s); pixels: matched by look
 
 
 @dataclass(frozen=True)
@@ -194,85 +252,123 @@ def _read_rels(zf: zipfile.ZipFile, part: str) -> dict[str, str]:
     return out
 
 
+def _imagedata_crop(node: ET.Element) -> tuple[float, float, float, float]:
+    return (
+        _vml_frac(node.get("cropleft")),
+        _vml_frac(node.get("croptop")),
+        _vml_frac(node.get("cropright")),
+        _vml_frac(node.get("cropbottom")),
+    )
+
+
+def _fill_crop(fill: ET.Element) -> tuple[float, float, float, float]:
+    fr = [0.0] * 4
+    rect = fill.find("a:srcRect", _NS)
+    if rect is not None:
+        for k, key in enumerate("ltrb"):
+            try:
+                fr[k] = int(rect.get(key, "0")) / 100000
+            except ValueError:
+                fr[k] = 0.0
+    return (fr[0], fr[1], fr[2], fr[3])
+
+
 def _picture_uses(root: ET.Element) -> list[tuple[str, tuple[float, float, float, float]]]:
     uses: list[tuple[str, tuple[float, float, float, float]]] = []
     for fill in root.iter(f"{{{_NS['pic']}}}blipFill"):
         blip = fill.find("a:blip", _NS)
         if blip is None or not blip.get(_R_EMBED):
             continue
-        fr = [0.0] * 4
-        rect = fill.find("a:srcRect", _NS)
-        if rect is not None:
-            for k, key in enumerate("ltrb"):
-                try:
-                    fr[k] = int(rect.get(key, "0")) / 100000
-                except ValueError:
-                    fr[k] = 0.0
-        uses.append((blip.get(_R_EMBED), (fr[0], fr[1], fr[2], fr[3])))
+        uses.append((blip.get(_R_EMBED), _fill_crop(fill)))
     for node in root.iter(f"{{{_NS['v']}}}imagedata"):
         rid = node.get(_R_ID)
         if not rid:
             continue
-        uses.append(
-            (
-                rid,
-                (
-                    _vml_frac(node.get("cropleft")),
-                    _vml_frac(node.get("croptop")),
-                    _vml_frac(node.get("cropright")),
-                    _vml_frac(node.get("cropbottom")),
-                ),
-            )
-        )
+        uses.append((rid, _imagedata_crop(node)))
     return uses
+
+
+@dataclass(frozen=True)
+class _PictureId:
+    """What stamp n means: the harvested source(s) of that DOCX picture and its original description."""
+
+    sources: tuple[_Source, ...]
+    original: str
+
+
+@dataclass(frozen=True)
+class _Harvest:
+    sources: list[_Source]
+    ids: dict[int, _PictureId]
 
 
 def harvest_sources(docx_bytes: bytes) -> list[_Source]:
     """Collect candidate source pictures from the DOCX byte snapshot (never from a path)."""
+    return _harvest(docx_bytes).sources
+
+
+def _harvest(docx_bytes: bytes) -> _Harvest:
     try:
         zf = zipfile.ZipFile(io.BytesIO(docx_bytes))
     except (zipfile.BadZipFile, OSError) as exc:
         raise RestorationError(f"DOCX snapshot is not a valid archive: {exc}") from exc
     sources: list[_Source] = []
-    seen: set[tuple] = set()
+    by_key: dict[tuple, list[_Source]] = {}
+    ids: dict[int, _PictureId] = {}
+    ordinal = 0
     with zf:
         try:
-            parts = [
-                n
-                for n in zf.namelist()
-                if n.startswith("word/")
-                and "/" not in n[5:]
-                and (n == "word/document.xml" or (n.endswith(".xml") and n[5:].startswith(("header", "footer"))))
-            ]
-            for part in parts:
+            names = set(zf.namelist())
+            for part in picture_part_names(names):
                 rels = _read_rels(zf, part)
-                for rid, crop in _picture_uses(ET.fromstring(zf.read(part))):
+                root = ET.fromstring(zf.read(part))
+                for rid, crop in _picture_uses(root):
                     target = rels.get(rid)
-                    if not target or target not in zf.namelist():
+                    if not target or target not in names:
                         continue
                     ext = posixpath.splitext(target)[1].lower()
                     if ext in RASTER_EXTS:
                         key: tuple = (target, crop)
-                        if key in seen:
+                        if key in by_key:
                             continue
-                        seen.add(key)
                         src = _raster_source(target, zf.read(target), crop, ext)
-                        if src is not None:
-                            sources.append(src)
+                        by_key[key] = [src] if src is not None else []
+                        sources.extend(by_key[key])
                     elif ext in METAFILE_EXTS:
-                        if (target, "meta") in seen:
+                        key = (target, "meta")
+                        if key in by_key:
                             continue
-                        seen.add((target, "meta"))
                         blob = zf.read(target)
-                        for k, span in enumerate(_dibs_in_metafile(blob)):
-                            src = _dib_source(f"{posixpath.basename(target)}#dib{k}", blob, span)
-                            if src is not None:
-                                sources.append(src)
+                        found = [
+                            _dib_source(f"{posixpath.basename(target)}#dib{k}", blob, span)
+                            for k, span in enumerate(_dibs_in_metafile(blob))
+                        ]
+                        by_key[key] = [x for x in found if x is not None]
+                        sources.extend(by_key[key])
+                parents = {child: parent for parent in root.iter() for child in parent}
+                for node in _drawings(root):
+                    ordinal += 1
+                    if node.tag == _DOCPR:
+                        fill = next(parents[node].iter(_BLIP_FILL), None)
+                        blip = fill.find("a:blip", _NS) if fill is not None else None
+                        target = rels.get(blip.get(_R_EMBED)) if blip is not None else None
+                        crop = _fill_crop(fill) if fill is not None else None
+                        original = node.get("descr", "")
+                    else:
+                        data = node.find(_IMAGEDATA)
+                        target = rels.get(data.get(_R_ID, ""))
+                        crop = _imagedata_crop(data)
+                        original = node.get("alt", "")
+                    if not target:
+                        continue
+                    ext = posixpath.splitext(target)[1].lower()
+                    key = (target, crop) if ext in RASTER_EXTS else (target, "meta")
+                    ids[ordinal] = _PictureId(tuple(by_key.get(key, ())), original)
         except RestorationError:
             raise
         except Exception as exc:
             raise RestorationError(f"Failed to harvest DOCX pictures: {exc}") from exc
-    return sources
+    return _Harvest(sources, ids)
 
 
 def _raster_source(target: str, data: bytes, crop, ext: str) -> _Source | None:
@@ -343,14 +439,20 @@ def _mutual_pct(size: tuple[int, int], a: _Source, b: _Source) -> float:
         pb.close()
 
 
-def _choose(pdf_img: Image.Image, sources: list[_Source]) -> tuple[_Source | None, str]:
-    """Return (best_source, status) where status is matched | unmatched | ambiguous."""
+def _choose(
+    pdf_img: Image.Image, sources: list[_Source], check_aspect: bool = True
+) -> tuple[_Source | None, str]:
+    """Return (best_source, status) where status is matched | unmatched | ambiguous.
+
+    `check_aspect=False` is for candidates a picture stamp named: Word may have stretched the picture, and the pixel
+    comparison (which resizes the source to the PDF image) still has to agree.
+    """
     pa = pdf_img.width / pdf_img.height
     pdf_thumb = _thumb(pdf_img)
     pre: list[tuple[float, _Source]] = []
     for s in sources:
         sa = s.size[0] / s.size[1]
-        if abs(sa - pa) / pa > ASPECT_TOL:
+        if check_aspect and abs(sa - pa) / pa > ASPECT_TOL:
             continue
         diff = ImageStat.Stat(ImageChops.difference(pdf_thumb, s.thumb)).mean[0]
         if diff <= STAGE1_MAX_DIFF:
@@ -361,7 +463,7 @@ def _choose(pdf_img: Image.Image, sources: list[_Source]) -> tuple[_Source | Non
         return None, "unmatched"
     best = scored[0][1]
     for pct, other in scored[1:]:
-        if pct >= IMPOSTOR_PCT:
+        if pct >= IMPOSTOR_PCT and pct >= IMPOSTOR_RATIO * scored[0][0]:
             continue
         if _mutual_pct(pdf_img.size, best, other) > ACCEPT_PCT:
             return None, "ambiguous"
@@ -451,7 +553,112 @@ def _smask_xref(doc, xref: int) -> int:
         return 0
 
 
-def _restore_into(doc, sources: list[_Source]) -> list[RestorationEntry]:
+# Word tags a DrawingML picture as a Figure and a VML picture (FLIR thermogram preview) as an InlineShape
+_TAGGED_PICTURE = ("/Figure", "/InlineShape")
+_MCID_BLOCK = re.compile(r"/MCID\s+(\d+)[^>]*>>\s*BDC((?:(?!EMC).)*)", re.S)
+_DO = re.compile(r"/(\S+?)\s+Do\b")
+_XOBJECT_REF = re.compile(r"/([^\s/<>\[\]()]+)\s+(\d+)\s+0\s+R")
+
+
+def _xref_of(value: str) -> int:
+    return int(value.split()[0])
+
+
+def _stamped_figures(doc) -> dict[tuple[int, int], tuple[int, int]]:
+    """(page xref, MCID) -> (figure element xref, stamp ordinal) for every figure Word tagged with a picture stamp."""
+    out: dict[tuple[int, int], tuple[int, int]] = {}
+    for x in range(1, doc.xref_length()):
+        try:
+            if doc.xref_get_key(x, "S")[1] not in _TAGGED_PICTURE:
+                continue
+            kind, alt = doc.xref_get_key(x, "Alt")
+            match = _ID_RE.match(alt.strip()) if kind == "string" else None
+            if match is None:
+                continue
+            pg_kind, pg = doc.xref_get_key(x, "Pg")
+            k_kind, k = doc.xref_get_key(x, "K")
+            if pg_kind != "xref":
+                continue
+            if k_kind == "int":
+                mcid = int(k)
+            elif k_kind == "array" and re.fullmatch(r"\[\s*\d+\s*\]", k.strip()):
+                mcid = int(k.strip("[] \t\r\n"))
+            else:
+                continue
+            out[(_xref_of(pg), mcid)] = (x, int(match.group(1)))
+        except Exception:  # a non-dictionary object: not a figure
+            continue
+    return out
+
+
+def _images_drawn_by(doc, xref: int, seen: set[int]) -> set[int]:
+    """Image xrefs that drawing XObject `xref` paints, looking inside forms (Word draws metafiles as forms)."""
+    if xref in seen:
+        return set()
+    seen.add(xref)
+    subtype = doc.xref_get_key(xref, "Subtype")[1]
+    if subtype == "/Image":
+        return {xref}
+    if subtype != "/Form":
+        return set()
+    found: set[int] = set()
+    kind, value = doc.xref_get_key(xref, "Resources/XObject")
+    if kind in ("dict", "xref"):
+        if kind == "xref":
+            value = doc.xref_object(_xref_of(value))
+        for _, child in _XOBJECT_REF.findall(value):
+            found |= _images_drawn_by(doc, int(child), seen)
+    return found
+
+
+def _stamps_by_image(doc, figures: dict[tuple[int, int], tuple[int, int]]) -> dict[int, set[int]]:
+    """Image xref -> the stamp ordinals of every place the image is drawn."""
+    stamps: dict[int, set[int]] = {}
+    if not figures:
+        return stamps
+    for page in doc:
+        names = {name: xref for xref, name, *_ in page.get_xobjects()}  # forms
+        names.update({item[7]: item[0] for item in page.get_images(full=True) if not item[9]})  # drawn by the page
+        try:
+            content = page.read_contents().decode("latin-1")
+        except Exception:
+            continue
+        for mcid, body in _MCID_BLOCK.findall(content):
+            fig = figures.get((page.xref, int(mcid)))
+            if fig is None:
+                continue
+            for name in _DO.findall(body):
+                if name in names:
+                    for image in _images_drawn_by(doc, names[name], set()):
+                        stamps.setdefault(image, set()).add(fig[1])
+    return stamps
+
+
+def _id_candidates(ordinals: set[int] | None, ids: dict[int, _PictureId]) -> list[_Source] | None:
+    """Every source the image's stamps name, or None when any stamp is unusable (then all sources are candidates).
+
+    Word stores identical pictures once, so one PDF image can carry several stamps; the true source is one of them.
+    """
+    if not ordinals:
+        return None
+    found = [ids.get(n) for n in sorted(ordinals)]
+    if any(f is None or not f.sources for f in found):
+        return None
+    union: dict[int, _Source] = {}
+    for f in found:
+        for src in f.sources:
+            union.setdefault(id(src), src)
+    return list(union.values())
+
+
+def _strip_stamps(doc, figures: dict[tuple[int, int], tuple[int, int]], ids: dict[int, _PictureId]) -> None:
+    """Put each figure's original description back: stamps are scaffolding, not part of the deliverable."""
+    for elem, ordinal in figures.values():
+        original = ids[ordinal].original if ordinal in ids else ""
+        doc.xref_set_key(elem, "Alt", fitz.get_pdf_str(original) if original else "null")
+
+
+def _restore_into(doc, harvest: _Harvest) -> list[RestorationEntry]:
     smasks: set[int] = set()
     first_page: dict[int, int] = {}
     for pno, page in enumerate(doc):
@@ -460,34 +667,42 @@ def _restore_into(doc, sources: list[_Source]) -> list[RestorationEntry]:
                 smasks.add(item[1])
             first_page.setdefault(item[0], pno + 1)
 
+    figures = _stamped_figures(doc)
+    stamps = _stamps_by_image(doc, figures)
     entries: list[RestorationEntry] = []
     for xref, pno in first_page.items():
         if xref in smasks:
             continue
         try:
-            entries.append(_restore_one(doc, xref, pno, sources))
+            by_id = _id_candidates(stamps.get(xref), harvest.ids)
+            entries.append(_restore_one(doc, xref, pno, harvest.sources, by_id))
         except RestorationError:
             raise
         except Exception as exc:
             logger.debug("Image xref %s left as rendered: %s", xref, exc)
             entries.append(RestorationEntry(pno, xref, (0, 0), None, "unmatched"))
+    _strip_stamps(doc, figures, harvest.ids)
     return entries
 
 
-def _restore_one(doc, xref: int, pno: int, sources: list[_Source]) -> RestorationEntry:
+def _restore_one(
+    doc, xref: int, pno: int, sources: list[_Source], by_id: list[_Source] | None = None
+) -> RestorationEntry:
     filt = doc.xref_get_key(xref, "Filter")[1]
     pdf_img = _pdf_image(doc, xref)
     size = pdf_img.size
-    best, status = _choose(pdf_img, sources)
+    evidence = "pixels" if by_id is None else "id"
+    # a stamp narrows the candidates to the picture Word drew; the pixels must still agree with it
+    best, status = _choose(pdf_img, sources, True) if by_id is None else _choose(pdf_img, by_id, False)
     if best is None:
-        return RestorationEntry(pno, xref, size, None, status)
+        return RestorationEntry(pno, xref, size, None, status, evidence)
 
     src_px = best.size[0] * best.size[1]
     pdf_px = size[0] * size[1]
     more_px = src_px > pdf_px * MORE_PIXELS_RATIO
     lossless_gain = best.lossless and "DCT" in filt and src_px >= pdf_px
     if not (more_px or lossless_gain):
-        return RestorationEntry(pno, xref, size, best.label, "kept")
+        return RestorationEntry(pno, xref, size, best.label, "kept", evidence)
 
     pixels = best.load()
     try:
@@ -499,13 +714,13 @@ def _restore_one(doc, xref: int, pno: int, sources: list[_Source]) -> Restoratio
         check.load()
         mismatch = _pct_vs_source(pdf_img, check)
     if mismatch > ACCEPT_PCT:
-        return RestorationEntry(pno, xref, size, best.label, "self_check_rejected")
+        return RestorationEntry(pno, xref, size, best.label, "self_check_rejected", evidence)
     try:
         _replace_xobject(doc, xref, payload)
     except Exception as exc:
         # the XObject may be half-rewritten (new stream under old dictionary keys): never ship this document
         raise RestorationError(f"Failed to rewrite image xref {xref}: {exc}") from exc
-    return RestorationEntry(pno, xref, size, best.label, "restored")
+    return RestorationEntry(pno, xref, size, best.label, "restored", evidence)
 
 
 # --------------------------------------------------------------------------- invariance gate
@@ -568,9 +783,9 @@ def restore_source_images(docx_bytes: bytes, native_pdf: Path, output_pdf: Path)
     native_pdf, output_pdf = Path(native_pdf), Path(output_pdf)
     tmp = output_pdf.with_name(f".tmp_restore_{uuid.uuid4().hex[:8]}_{output_pdf.name}")
     try:
-        sources = harvest_sources(docx_bytes)
+        harvest = _harvest(docx_bytes)
         with fitz.open(native_pdf) as doc:
-            entries = _restore_into(doc, sources)
+            entries = _restore_into(doc, harvest)
             doc.save(tmp, garbage=3, deflate=True)
         verify_invariance(native_pdf, tmp)
         if not safe_replace_with_retry(tmp, output_pdf):

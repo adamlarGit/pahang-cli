@@ -312,6 +312,7 @@ _Avoid_: image swap, image patching, re-embedding
 ### Restoration Report
 The per-part account of Source Image Restoration: images restored, images kept as Word rendered, and whether the part fell back to its unrestored native PDF. Shown to the operator in the batch summary and never persisted.
 An image is kept as Word rendered when no original in the source document is a confident match (**unmatched**), or when several originals look too alike to choose between (**ambiguous**). Neither replaces anything, so neither can put a wrong picture in the deliverable; the image is just not upgraded.
+When Word's export copy carries picture stamps (ADR 0012), restoration reads them back to know which original each image is, and the pixels only confirm it.
 _Avoid_: mismatch (no image is ever swapped for a non-matching one)
 
 ### ThermogramSourcePreservationPolicy
