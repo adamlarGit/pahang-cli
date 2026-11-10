@@ -569,10 +569,10 @@ _TAGGED_PICTURE = ("/Figure", "/InlineShape")
 # One pass over page content: literal strings (skipped, so text such as "(EMC)" is not an operator), a marked-content
 # start (BDC with an inline /MCID, other BDC, BMC), its end (EMC), and a drawing operator (Do).
 _CONTENT_TOKEN = re.compile(
-    r"(?P<str>\((?:\.|[^\)])*\))"
+    r"(?P<str>\((?:\\.|[^\\)])*\))"
     r"|/MCID\s+(?P<mcid>\d+)[^>]*>>\s*BDC\b"
-    r"|(?P<open>\bB(?:DC|MC)\b)"
-    r"|(?P<close>\bEMC\b)"
+    r"|(?P<open>(?<![\w/])B(?:DC|MC)\b)"
+    r"|(?P<close>(?<![\w/])EMC\b)"
     r"|/(?P<name>[^\s/<>\[\]()]+)\s+Do\b",
     re.S,
 )
@@ -580,7 +580,7 @@ _DO = re.compile(r"/([^\s/<>\[\]()]+)\s+Do\b")
 
 
 def _draws_in_content(content: str):
-    """Yield ``(xobject name, mcid)`` for every Do, mcid being the innermost enclosing marked-content id (or None).
+    """Yield ``(xobject name, mcids)`` for every Do, mcids being the enclosing marked-content ids, innermost first.
 
     Marked content nests, so each section is closed by its own EMC; a Do after a nested section still belongs to the
     enclosing one.
@@ -595,7 +595,7 @@ def _draws_in_content(content: str):
             if stack:
                 stack.pop()
         elif m.group("name") is not None:
-            yield m.group("name"), next((x for x in reversed(stack) if x is not None), None)
+            yield m.group("name"), [x for x in reversed(stack) if x is not None]
 _XOBJECT_REF = re.compile(r"/([^\s/<>\[\]()]+)\s+(\d+)\s+0\s+R")
 
 
@@ -687,8 +687,9 @@ def _stamps_by_image(doc, tagged: list[_Tagged]) -> dict[int, set[int]]:
         def images_of(name: str) -> set[int]:
             return _images_drawn_by(doc, names[name], set()) if name in names else set()
 
-        for name, mcid in _draws_in_content(content):
-            ordinal = by_content.get((page.xref, mcid)) if mcid is not None else None
+        for name, mcids in _draws_in_content(content):
+            # the innermost enclosing section that is a tagged picture (nested sections may sit between)
+            ordinal = next((by_content[k] for m in mcids if (k := (page.xref, m)) in by_content), None)
             for image in images_of(name):
                 drawn[image] = drawn.get(image, 0) + 1
                 if ordinal is not None:

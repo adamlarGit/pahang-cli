@@ -982,3 +982,15 @@ def test_form_nested_in_a_form_is_followed_only_where_drawn():
     doc.update_stream(unused, b"q Q")
     assert ir._images_drawn_by(doc, outer, set()) == {image}
     assert ir._images_drawn_by(doc, unused, set()) == set()
+
+
+def test_marked_content_operators_inside_names_and_escaped_strings_are_ignored(paths):
+    native, out = paths
+    a = graph(21)
+    b = a.copy()
+    ImageDraw.Draw(b).rectangle([10, 10, 64, 39], fill="black")
+    docx = docx_with_pictures([png_bytes(a), png_bytes(b)])
+    native_pdf(native, [png_bytes(b.resize((300, 200), Image.LANCZOS))])
+    tag_figures(native, ["PSRID:2"], before_image=b"/EMC gs (a\) EMC) Tj /P <</MCID 7>> BDC EMC ")
+    report = restore_source_images(docx, native, out)
+    assert (report.restored, report.entries[0].evidence) == (1, "id")
