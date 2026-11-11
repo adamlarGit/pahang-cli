@@ -132,6 +132,8 @@ The commands, in order, from a clean worktree.
 
 **Updating.** Rewrite the Verdict and the affected claims in place, add a dated line to the Change log and set `updated`. Claim IDs are permanent. To retract a claim, strike it through in its row and say why in the Change log.
 
+An update lands the same way as the first version. Set the new commit in the Path's State in the ticket body. Post a new summary comment only when the Verdict changes.
+
 **README claims** are the ones the verdict rests on. Each cites the Path claim behind it and carries that claim's label.
 
 ## Claim labels

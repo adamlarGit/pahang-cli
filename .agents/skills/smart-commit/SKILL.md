@@ -1,9 +1,11 @@
 ---
 name: smart-commit
-description: Automated pre-commit release check that updates README.md in-place, evaluates SemVer (MAJOR/MINOR/PATCH), bumps versions, logs CHANGELOG.md, and commits via caveman-commit format.
+description: Release workflow for commits and merges to main. Updates README.md in-place, evaluates SemVer (MAJOR/MINOR/PATCH), bumps versions, logs CHANGELOG.md, and commits via caveman-commit format.
 ---
 
 # Smart Commit (`smart-commit`) — Automated Release & Documentation Sync
+
+This is the release workflow for `main`: a commit on `main`, or the merge of the Integration Branch into it. Every other branch takes the plain commit in `.agents/rules/commit-workflow.md`.
 
 This skill enforces strict pre-commit discipline before staging and committing changes to version control. Whenever triggered (`/smart-commit`, "commit and push", "release changes", or invoked alongside `/caveman-commit`), the agent **MUST** execute the following 4-phase workflow sequentially:
 
