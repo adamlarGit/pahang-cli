@@ -37,8 +37,8 @@ ADR 0002's ban is not ready to lift on this evidence. Condition 4 and the field 
 | C8 | Word opens the joined file more slowly than the COM-compiled one: Part 03 15.42 s against 11.17 s, Part 32 129.02 s against 45.76 s. | Tested | `evidence/test_word_open_probe.py`; console output quoted in `evidence/ticket-comments.md`, comments 4 and 5 |
 | C9 | Word reports the same page counts for both versions (7 and 36) and one paragraph fewer in the joined file (1665 against 1666, 6699 against 6700). | Tested | `evidence/test_word_open_probe.py`; console output quoted in `evidence/ticket-comments.md`, comment 4 |
 | C10 | Word opens both joined files with no repair prompt. | Owner-confirmed | https://github.com/adamlarGit/pahang-cli/issues/225#issuecomment-6794398620, from opening both files by hand in Word. The automated probe cannot show this, because it sets `DisplayAlerts = 0` in its own Word instance. |
-| C11 | Every FLIR viewer in both joined files loads and can be edited, changed and saved. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11. The owner's own comment on #225 is still to be posted and linked here. |
-| C12 | No FLIR Crosstalk in either joined file, including after save, close and reopen. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11. The owner's own comment on #225 is still to be posted and linked here. |
+| C11 | Every FLIR viewer in both joined files loads and can be edited, changed and saved. | Owner-confirmed | https://github.com/adamlarGit/pahang-cli/issues/225#issuecomment-6795136371 |
+| C12 | No FLIR Crosstalk in either joined file, including after save, close and reopen. | Owner-confirmed | https://github.com/adamlarGit/pahang-cli/issues/225#issuecomment-6795136371 |
 | C13 | Word's PDF export of joined Part 03 and of COM-compiled Part 03 both give 7 pages and 26 embedded images (418,932 and 418,972 bytes). | Tested | `evidence/test_pdf_export_compare.py`; both PDFs hashed in `evidence/live-data-sha256.txt` |
 | C14 | The joined files match the COM-compiled ones through the Stage 2 disconnected export of ADR 0011, compared with the #212 tools. | Assumed | none. C13 used `ExportAsFixedFormat` on Part 03 and counted pages and images. Settled by running the #212 comparison on both Parts through the Stage 2 export. |
 | C15 | Leaving the first source un-rekeyed caused a first-open crosstalk flicker when both Parts were open in one Word session, because it kept the template Instance GUID `56a0ddda-5a37-4fd2-bb25-c99b89db71ba`. Rekeying it removed the flicker. | Assumed | none. Reported in `evidence/ticket-comments.md`, comment 5, with no output kept. Settled by joining without base rekeying and opening both files together. |
@@ -142,6 +142,7 @@ The two joined files are the ones the owner checked in Word. They exist only in 
 
 ## Change log
 
+- 2026-11-11: C11 and C12 now link the owner's comment on #225. C16 still rests on the owner's answer to the converting agent (Claude Code).
 - 2026-11-11: C19 now links the owner's comment on #225. The fix for C16 is ticketed as #234 (Claude Code).
 - 2026-11-11: added C19 and C20 after the owner checked the seven Part 03 sources in Word. The seven files still match the hashes in `evidence/live-data-sha256.txt` (Claude Code).
 - 2026-11-11: C10 now links the owner's comment on #225. C11, C12 and C16 still rest on the owner's answers to the converting agent (Claude Code).
