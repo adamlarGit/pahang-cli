@@ -27,7 +27,7 @@ The gap is the Word bookmark. It is stored twice in the binary: as the `_Fd` nam
 | C5 | The rekey keeps the digit count of the old name, so it produces names above 4,294,967,295 that cannot be stored as a uint32, such as `_Fd9036535755` in joined Part 03. | Tested | same log; `path-rekey-join.md` open question 3 |
 | C6 | Image crosstalk comes from two viewers that share an SDK UUID attaching to one live SDK. | Assumed | `path-static-cfb.md` C16 (Read) and C17 (Assumed). Supported by the first-open flicker reported in `docs/research/225-flir-xml-join-prototype/README.md` C15. Settled by joining two copies of one viewer with the SDK UUID unchanged and editing one. |
 | C7 | With fresh UUIDs on every viewer, every viewer in two real joined Parts loads and edits, with no crosstalk after save, close and reopen. | Owner-confirmed | `docs/research/225-flir-xml-join-prototype/README.md` C11, C12 |
-| C8 | The mismatch of C4 is why moving a spot in a joined file does not update the Word table values. | Assumed | none. Settled by writing the new number into the field archive of one viewer and repeating the owner's check. |
+| C8 | The mismatch of C4 is why moving a spot in a joined file does not update the Word table values. | Assumed | none direct. It fits what is known: the seven Part 03 sources have equal names and numbers and their fields follow the spots, and the joined file has neither (`docs/research/225-flir-xml-join-prototype/README.md` C16, C19, C20). Settled by writing the new number into the field archive of one viewer and repeating the owner's check. |
 | C9 | Replacing the ASCII UUIDs and `_Fd` names with same-length values leaves the binary a valid OLE file of unchanged size. | Tested | `path-rekey-join.md` C6 |
 | C10 | FLIR's installed libraries expose no public call that clones a viewer or gives it new identities. | Read | `path-flir-tools.md` C2 to C5 |
 
@@ -98,4 +98,5 @@ The log was captured on four files: the committed `swg-panel.docx`, `evidence/re
 
 ## Change log
 
+- 2026-11-11: C8 now cites the owner's check of the seven Part 03 sources. Its label stays Assumed until the fix is tried (Claude Code).
 - 2026-11-11: first version, written from the three Path files after converting the Codex and Antigravity work to this layout. The ten ticket comments are saved in `evidence/answer/ticket-comments.md`. C3 to C5 are new findings from a check written for this answer (Claude Code).
