@@ -12,6 +12,30 @@ _Avoid_: feature branch (when you mean this), release branch
 A pull request that resolves exactly one `ready-for-agent` issue, targets the Integration Branch, and closes the issue via `Closes #N`.
 _Avoid_: agent PR, fix PR
 
+**Path**:
+One line of investigation under a research or prototype ticket, with its own question and exactly one owning agent. A ticket has one or more.
+_Avoid_: track, thread, workstream
+
+**Ticket Folder**:
+The one folder on the Integration Branch holding everything a research or prototype ticket produced: its answer, its Path write-ups and the evidence they cite.
+_Avoid_: research note, scratch folder
+
+**Tested**:
+Claim label. The agent ran it, and the command and its output are kept as evidence.
+_Avoid_: proved, validated, verified
+
+**Read**:
+Claim label. A cited source states it and the agent did not run it.
+_Avoid_: confirmed, known
+
+**Assumed**:
+Claim label. Neither run nor found in a source.
+_Avoid_: likely, expected
+
+**Owner-confirmed**:
+Claim label. The owner checked it and said so in their own comment, which the claim links to.
+_Avoid_: confirmed by HITL, human-verified
+
 **Golden Benchmark**:
 A frozen set of source inputs plus the report output and folder tree they're known to produce, used to catch differences automatically instead of by eye. Synthetic ones live in the repo; real-site ones live in the Benchmark Vault.
 _Avoid_: fixture (when you mean the whole input-and-expected-output set), snapshot
