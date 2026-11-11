@@ -1,0 +1,52 @@
+
+=======================================================
+VALIDATING: 01. PPU APMM 3311kV - Part 03 - Panel 1 (33kV - SPARE) [XML-JOINED].docx
+File Size: 2,278,628 bytes
+=======================================================
+1. Controls count: 7 (expected: 7)
+   Unique control names: 7/7
+   Unique shapeids: 7/7
+   Unique relationship IDs: 7/7
+
+2. ActiveX Binaries in package: 7 parts
+   Instance GUIDs: 7 (unique: 7)
+   Measurement GUIDs: 28 (unique: 28)
+   Binary _Fd fields: 28 (unique: 28)
+
+3. Body DOCVARIABLE fields: 28 (unique: 28)
+   -> All document.xml fields are accounted for in binary TAG_R8_FLD headers!
+
+4. Settings.xml docVar count: 3888
+   -> All 28 _Fd variables declared in settings.xml!
+
+5. DrawingML docPr IDs: 12 (unique: 12)
+
+6. Page structure: 6 page breaks, 1 sectPr
+
+>>> RESULT: ALL STRUCTURAL INTEGRITY & CROSSTALK CHECKS PASSED! <<<
+
+=======================================================
+VALIDATING: 01. PPU APMM 3311kV - Part 32 - TX and Condition [XML-JOINED].docx
+File Size: 16,562,503 bytes
+=======================================================
+1. Controls count: 26 (expected: 26)
+   Unique control names: 26/26
+   Unique shapeids: 26/26
+   Unique relationship IDs: 26/26
+
+2. ActiveX Binaries in package: 26 parts
+   Instance GUIDs: 26 (unique: 26)
+   Measurement GUIDs: 101 (unique: 101)
+   Binary _Fd fields: 101 (unique: 101)
+
+3. Body DOCVARIABLE fields: 101 (unique: 101)
+   -> All document.xml fields are accounted for in binary TAG_R8_FLD headers!
+
+4. Settings.xml docVar count: 3904
+   -> All 101 _Fd variables declared in settings.xml!
+
+5. DrawingML docPr IDs: 110 (unique: 110)
+
+6. Page structure: 34 page breaks, 1 sectPr
+
+>>> RESULT: ALL STRUCTURAL INTEGRITY & CROSSTALK CHECKS PASSED! <<<

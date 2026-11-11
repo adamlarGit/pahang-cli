@@ -1,0 +1,42 @@
+# bytes  sha256  path   (read 2026-11-11; <BASE> = the r232 project base path, <OLD> = scratch/ of the old prototype worktree)
+410215  bd3eed5b51ce4ccb79d5141b048e608ffe7f40c1438cefb61d0bc7dfc7d614a4  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/201_scan_page_ptx1_-_overview.docx
+410223  3300f882242404ea9a616248733097f9f03603e6da9985b70f5374c12334d1a1  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/202_scan_page_ptx1_-_marshalling_kiosk.docx
+410220  02f65458e180eefdca876865cbe50df3ca16b287d9d6cfc8eac2edb7967721e6  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/203_scan_page_ptx1_-_conservator_tank.docx
+410216  a9c770d282dd42541762621fad290468b547b3a623be61f3a51c93241754eb23  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/204_scan_page_ptx1_-_cooling_fin.docx
+479279  a4660c0106d391fdb35a7ea682fb5cbc5a2d4979df4ee8905eeeac42a545b6f1  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/205_scan_page_ptx1_-_hv_bushing.docx
+479275  d22c30ff18c09ccca4af420de3ef3c43b6ab62e48b4e932c104c94fcdfe1c252  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/206_scan_page_ptx1_-_hv_cable.docx
+479280  75c5bc092b8e368bf6127369dc49fc14be5dffdee878135bc4cdab64a20a7625  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/207_scan_page_ptx1_-_hv_cable_split.docx
+488086  16921dd8739342d0029cf192ad9f18ee105d6835f481fd7099373ae703937dc3  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/208_scan_page_ptx1_-_lv_bushing.docx
+488081  ea72ffc07560f7791bb9b7ac626b387cf8522dc52e758f88d0ecf49f83ae03d7  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/209_scan_page_ptx1_-_lv_cable.docx
+410215  2c6b3b06a3be7b4a5b8d1c2d59857ee44924de20847b6e71e717ed7a3c98e230  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/210_scan_page_ptx2_-_overview.docx
+410223  61393beb658819b375a63998de537f1c8dabb915f418e58875626566a5955f70  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/211_scan_page_ptx2_-_marshalling_kiosk.docx
+410221  37f4ae03b717f5a8c527d7270444c2f62b67daa06b7749c2f943b1ee45bc8076  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/212_scan_page_ptx2_-_conservator_tank.docx
+410217  3a969b17064e576fb96e5f14c2683448b5449270aa535862b98ceef1611763b5  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/213_scan_page_ptx2_-_cooling_fin.docx
+479279  c5df32293c45a9aea4b9aed0ba9d4466ce9e7aced09a3595b9902bf9ab81a797  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/214_scan_page_ptx2_-_hv_bushing.docx
+479275  955cf40948a8529cdc63b67f81cfdf9d9ec872c74cbb4523f2f3889307ec5e7b  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/215_scan_page_ptx2_-_hv_cable.docx
+479281  6dee95a1a89d98f9415be437c5ec62ff0f09e30e5637268a393307c67827474d  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/216_scan_page_ptx2_-_hv_cable_split.docx
+488086  789bdf50d9bdb0c52a5ed2f2bafcbbf13b30f1afaa8d032c6123e2ddb10528e2  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/217_scan_page_ptx2_-_lv_bushing.docx
+488082  cfc8079324e8db1158a4697a92711845497b584ace73c0b589a0688fce592c14  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/218_scan_page_ptx2_-_lv_cable.docx
+410226  104953e70b45eba799215be95ba6604364bf7dc8b25294995020cbcab241f1c3  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/219_scan_page_ltx_-_overview.docx
+410230  53d040d06e0c978b0fb721cd44647b0c3f707219eaa73e7d7116e369fada988a  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/220_scan_page_ltx_-_overview_top.docx
+479287  e4df4ea2a2ce965bf785b35c56d2da073d76d2e4966acb6c34386e9f88c0167d  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/221_scan_page_ltx_-_hv_bushing.docx
+479281  59b7a43bfb7841730a8b043423a60cbcd6f2d92426aa94a2aa87f5206f00b288  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/222_scan_page_ltx_-_hv_cable.docx
+479286  9cf77c3ea7edd771077918d6716f72b81fca93c4210b350068ad831285131677  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/223_scan_page_ltx_-_hv_cable_split.docx
+488094  27a6b21c3b26f2e9ceb4a86c8f508bc3af39e9251601de25dd40f28ebd6ba20f  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/224_scan_page_ltx_-_lv_bushing.docx
+488090  4e82335c8bd08a145022d81c034d9197be7b266e88c407d9675a774482a6f7d2  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/225_scan_page_ltx_-_lv_cable.docx
+503413  c0f92e5604467386c43dc423b33a5797dfa8bf1ebe9d1e640b14c4591501becb  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/226_scan_page_lvdb_1_-_overview.docx
+6971145  6e674f8a66c18388bf0ae6ea1a98526cfd9ce04d584cca82b8e4aff235a5c046  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/227_condition_substation_condition.docx
+289289  b742831c89a8bfe0c4ab602335dd3ce3cd46e2f4a6f5f874961f54d30ff28357  <BASE>/.temp/full_report/001_PPU APMM 3311kV_07-10-2026/rendered/228_sticker_sticker_page.docx
+859813  6649a27e17444d69835cfc4c29b8f78a530852053d5ad0b22d9397e388b898bf  <OLD>/sources_part03/015_scan_page_panel_1_(spare)_-_breaker_compartment.docx
+859811  897dc24e80f59a903e8ea236fbcbe0c10e58e039d92f52a36bc95a09af032e8b  <OLD>/sources_part03/016_scan_page_panel_1_(spare)_-_cable_compartment.docx
+862572  41138ef5944abccd283796d3d877496d41f00e30f90970dc910b186633443418  <OLD>/sources_part03/017_scan_page_panel_1_(spare)_-_busbar_compartment.docx
+859806  b5f8af95267084c42eb298e942c32e38ccbcb775f22c7f759a71c30739776a47  <OLD>/sources_part03/018_scan_page_panel_1_(spare)_-_pt_compartment.docx
+862565  95058da14cdde794101c97d0457befa2a896d075583e2c1539e434335e5d7eef  <OLD>/sources_part03/019_scan_page_panel_1_(spare)_-_cable_entry.docx
+862424  58e45b42cc373c093d4fc8c2621c1ff91c6548fabf120cbeb1ad65efad572c8b  <OLD>/sources_part03/020_scan_page_panel_1_(spare)_-_link_box.docx
+862466  e32ca8ad9ab54dde75074b81d05381860ddd6a421638e4a01bbbfc05a26bc9fb  <OLD>/sources_part03/021_scan_page_panel_1_(spare)_-_secondary_compartment.docx
+2472593  97c01c3b1353bfbd1b764399001616f538ffa8ee8b9e07fdd66be20a0c309b39  <BASE>/FULL REPORT/GEBENG/01. OCTOBER/07-10-2026/01. PPU APMM 3311kV - Part 03 - Panel 1 (33kV - SPARE).docx
+17778631  5623636a19fc3d0f7df1408480354639e0c2b91574aeaced0e3dd81374be592a  <BASE>/FULL REPORT/GEBENG/01. OCTOBER/07-10-2026/01. PPU APMM 3311kV - Part 32 - TX and Condition.docx
+2278628  f45e035bf44fb11a958e2ad78fb122fb63c03ca78d007ee031cd8c0e0a25dce0  <OLD>/output/01. PPU APMM 3311kV - Part 03 - Panel 1 (33kV - SPARE) [XML-JOINED].docx
+16562503  6c102342593271e5961a1d04078f5cb5e005e6752df2df19d540d693b16acc8f  <OLD>/output/01. PPU APMM 3311kV - Part 32 - TX and Condition [XML-JOINED].docx
+418972  671a800702c084e98526347ebc7dd53714c3e3c8426ea81f621643bc30086b7c  <OLD>/output/part03_com.pdf
+418932  585ae6835d8a85d13942add134e151f988e635e083be2d6198fae5c713a68a2a  <OLD>/output/part03_xml.pdf
