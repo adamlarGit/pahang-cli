@@ -89,7 +89,7 @@ The log was captured on four files: the committed `swg-panel.docx`, `evidence/re
 
 ## Live data read
 
-`<BASE>` is the project base path of the #232 run. `<OLD>` is `scratch/` in the old #225 prototype worktree.
+`<BASE>` is the project base path of the #232 run. `<OLD>` was `scratch/` in the old #225 prototype worktree, which is now removed. On 2026-11-11 its `output/` and `sources_part03/` files were moved unchanged to `scratch/234-flir-field-link/` in the Integration Branch worktree, a folder git ignores.
 
 | Path | File | Bytes | SHA-256 | Read on |
 |------|------|-------|---------|---------|
@@ -98,5 +98,6 @@ The log was captured on four files: the committed `swg-panel.docx`, `evidence/re
 
 ## Change log
 
+- 2026-11-11: the joined Part 03 listed under Live data read moved to `scratch/234-flir-field-link/` (Claude Code).
 - 2026-11-11: C8 now cites the owner's check of the seven Part 03 sources. Its label stays Assumed until the fix is tried (Claude Code).
 - 2026-11-11: first version, written from the three Path files after converting the Codex and Antigravity work to this layout. The ten ticket comments are saved in `evidence/answer/ticket-comments.md`. C3 to C5 are new findings from a check written for this answer (Claude Code).
