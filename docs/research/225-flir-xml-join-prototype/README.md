@@ -4,24 +4,24 @@ type: prototype
 map: 221
 status: open
 updated: 2026-11-11
-agent: Claude Code, claude-fable-5-2 (converted from the work of an unsigned agent)
+agent: Antigravity (original work, named by the owner; its comments were unsigned); Claude Code, claude-fable-5-2 (conversion)
 ---
 # Can two real Full Report Parts with FLIR viewers be joined by hand-built XML, without Word?
 
 ## Verdict
 
-Two of the four pass conditions are met, one is met in part and one has no confirmation on record.
+Three of the four pass conditions are met and one is met in part. The joined files also have a field defect outside the four conditions.
 
 | # | Pass condition | Result |
 |---|----------------|--------|
-| 1 | Word opens the joined file with no repair prompt | Not on record (C10) |
+| 1 | Word opens the joined file with no repair prompt | Pass (C10) |
 | 2 | Every FLIR viewer loads and can be edited | Pass (C11) |
 | 3 | No FLIR Crosstalk, including after save, close and reopen | Pass (C12) |
 | 4 | Stage 2 disconnected export matches the COM-compiled file | Part met: Part 03 only, by a plain Word PDF export (C13, C14) |
 
-The join itself takes 0.50 s for Part 03 and 1.65 s for Part 32, against 46.52 s and 173.59 s for the COM compile (C6, C7). Word then opens the joined file more slowly than the COM-compiled one: 15.42 s against 11.17 s for Part 03, and 129.02 s against 45.76 s for Part 32 (C8). One defect is reported and not yet reproduced: moving a spot in FLIR Tools+ does not update the Word table values in the joined file (C16). A likely cause is found and untested (C18).
+The join itself takes 0.50 s for Part 03 and 1.65 s for Part 32, against 46.52 s and 173.59 s for the COM compile (C6, C7). Word then opens the joined file more slowly than the COM-compiled one: 15.42 s against 11.17 s for Part 03, and 129.02 s against 45.76 s for Part 32 (C8). The owner found one defect in both joined files: the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer (C16). A likely cause is found and untested (C18).
 
-ADR 0002's ban is not ready to lift on this evidence. Conditions 1 and 4 need closing first.
+ADR 0002's ban is not ready to lift on this evidence. Condition 4 and the field linkage need closing first.
 
 ## Claims
 
@@ -36,13 +36,13 @@ ADR 0002's ban is not ready to lift on this evidence. Conditions 1 and 4 need cl
 | C7 | The COM compile of the same Parts takes 46.52 s and 173.59 s. | Read | Constants in `evidence/run_prototype_225.py` lines 148 and 178, which cite the #232 baseline. Not checked against #232 here. |
 | C8 | Word opens the joined file more slowly than the COM-compiled one: Part 03 15.42 s against 11.17 s, Part 32 129.02 s against 45.76 s. | Tested | `evidence/test_word_open_probe.py`; console output quoted in `evidence/ticket-comments.md`, comments 4 and 5 |
 | C9 | Word reports the same page counts for both versions (7 and 36) and one paragraph fewer in the joined file (1665 against 1666, 6699 against 6700). | Tested | `evidence/test_word_open_probe.py`; console output quoted in `evidence/ticket-comments.md`, comment 4 |
-| C10 | Word opens both joined files with no repair prompt. | Assumed | none. The probe sets `DisplayAlerts = 0`, so it cannot see a prompt. Comment 5 says "Confirmed by HITL", and the owner's confirmation on record covers conditions 2 and 3 only. Settled by the owner saying whether a repair prompt appeared. |
+| C10 | Word opens both joined files with no repair prompt. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11, from opening both files by hand in Word. The owner's own comment on #225 is still to be posted and linked here. The automated probe cannot show this, because it sets `DisplayAlerts = 0` in its own Word instance. |
 | C11 | Every FLIR viewer in both joined files loads and can be edited, changed and saved. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11. The owner's own comment on #225 is still to be posted and linked here. |
 | C12 | No FLIR Crosstalk in either joined file, including after save, close and reopen. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11. The owner's own comment on #225 is still to be posted and linked here. |
 | C13 | Word's PDF export of joined Part 03 and of COM-compiled Part 03 both give 7 pages and 26 embedded images (418,932 and 418,972 bytes). | Tested | `evidence/test_pdf_export_compare.py`; both PDFs hashed in `evidence/live-data-sha256.txt` |
 | C14 | The joined files match the COM-compiled ones through the Stage 2 disconnected export of ADR 0011, compared with the #212 tools. | Assumed | none. C13 used `ExportAsFixedFormat` on Part 03 and counted pages and images. Settled by running the #212 comparison on both Parts through the Stage 2 export. |
 | C15 | Leaving the first source un-rekeyed caused a first-open crosstalk flicker when both Parts were open in one Word session, because it kept the template Instance GUID `56a0ddda-5a37-4fd2-bb25-c99b89db71ba`. Rekeying it removed the flicker. | Assumed | none. Reported in `evidence/ticket-comments.md`, comment 5, with no output kept. Settled by joining without base rekeying and opening both files together. |
-| C16 | In a joined file, moving `Sp1` or `Sp2` in FLIR Tools+ does not update the Word table values. | Assumed | none. Reported in `evidence/ticket-comments.md`, comment 5. Settled by repeating it in a joined file and in the COM-compiled file. |
+| C16 | In both joined files the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer. Comment 5 describes it as the table values not following a moved spot. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11. The owner's own comment on #225 is still to be posted and linked here. Comment 5 is in `evidence/ticket-comments.md`. |
 | C17 | The engine rekeys every source, the first included: fresh Session and Instance GUIDs, fresh Measurement GUIDs and fresh `_Fd` names, written to the binary, `document.xml` and `settings.xml` together. | Read | `evidence/prototype_join_engine.py`, `rekey_activex_bin` (lines 49 to 107) and `join_multiple_documents_in_xml` (from line 109) |
 | C18 | In joined Part 03, no `_Fd` name equals the number stored in its field archive (0 of 28), and all seven viewers hold the same four stored numbers. In the COM-compiled Part 03 they are equal in 28 of 28 fields. | Tested | `docs/research/223-flir-xml-join/evidence/answer/check_bookmark_sync.py`, `docs/research/223-flir-xml-join/evidence/answer/check-bookmark-sync-2026-11-11.log` |
 
@@ -96,7 +96,7 @@ The comment 4 outputs were overwritten by the comment 5 run. Every claim above u
 
 ## Open questions
 
-1. **Condition 1.** Did Word show a repair prompt on either joined file? (C10)
+1. **Field linkage in the COM-compiled file.** Do the same four fields link properly there? That check is the control for C16 and has not been reported.
 2. **Condition 4.** The comparison the ticket asks for has not been run, and Part 32 has not been compared at all. (C14)
 3. **Slower open.** Why does Word open the joined file more slowly, and does the extra time cancel the saving once the Stage 2 export opens the file? Comment 5 suggests 26 in-process ActiveX servers, with no evidence.
 4. **Measurement linkage.** Why do the table values not follow the spots (C16)? The leading explanation is C18: the rekey changes each `_Fd` name and leaves the number stored in the compressed field archive, so the two no longer match. See `docs/research/223-flir-xml-join/README.md` C3 to C5 and C8. It is untested. Comment 5 lists four other untested leads: the FLIR Word add-in may not attach its listeners to controls it did not paste; the compressed `TAG_R8_FLD` payload may hold an ID, checksum or length that the rekey left stale; FLIR Tools+ may write to `ActiveDocument.Variables` and need a `Fields.Update`; Word's copy and paste may write binding entries that the join omits.
@@ -140,4 +140,5 @@ The two joined files are the ones the owner checked in Word. They exist only in 
 
 ## Change log
 
+- 2026-11-11: C10 and C16 relabelled Owner-confirmed on the owner's answers. The owner named Antigravity as the agent behind the original work (Claude Code).
 - 2026-11-11: converted to the Ticket Folder layout from the original prototype branch (commits b075311 and 4c5bed0, never on the Integration Branch) and the five ticket comments. The structural validator and `inspect_com_parts.py` were rerun read-only to capture logs. Console output of the original runs was never saved, so C6, C8 and C9 rest on the output quoted in the ticket comments (Claude Code).
