@@ -19,7 +19,7 @@ Three of the four pass conditions are met and one is met in part. The joined fil
 | 3 | No FLIR Crosstalk, including after save, close and reopen | Pass (C12) |
 | 4 | Stage 2 disconnected export matches the COM-compiled file | Part met: Part 03 only, by a plain Word PDF export (C13, C14) |
 
-The join itself takes 0.50 s for Part 03 and 1.65 s for Part 32, against 46.52 s and 173.59 s for the COM compile (C6, C7). Word then opens the joined file more slowly than the COM-compiled one: 15.42 s against 11.17 s for Part 03, and 129.02 s against 45.76 s for Part 32 (C8). The owner found one defect in both joined files: the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer (C16). A likely cause is found and untested (C18).
+The join itself takes 0.50 s for Part 03 and 1.65 s for Part 32, against 46.52 s and 173.59 s for the COM compile (C6, C7). Word then opens the joined file more slowly than the COM-compiled one: 15.42 s against 11.17 s for Part 03, and 129.02 s against 45.76 s for Part 32 (C8). The owner found one defect in both joined files: the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer (C16). A likely cause is found and untested (C18). The seven Part 03 sources do not have the defect (C19), so the join introduces it.
 
 ADR 0002's ban is not ready to lift on this evidence. Condition 4 and the field linkage need closing first.
 
@@ -45,6 +45,8 @@ ADR 0002's ban is not ready to lift on this evidence. Condition 4 and the field 
 | C16 | In both joined files the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer. Comment 5 describes it as the table values not following a moved spot. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11. The owner's own comment on #225 is still to be posted and linked here. Comment 5 is in `evidence/ticket-comments.md`. |
 | C17 | The engine rekeys every source, the first included: fresh Session and Instance GUIDs, fresh Measurement GUIDs and fresh `_Fd` names, written to the binary, `document.xml` and `settings.xml` together. | Read | `evidence/prototype_join_engine.py`, `rekey_activex_bin` (lines 49 to 107) and `join_multiple_documents_in_xml` (from line 109) |
 | C18 | In joined Part 03, no `_Fd` name equals the number stored in its field archive (0 of 28), and all seven viewers hold the same four stored numbers. In the COM-compiled Part 03 they are equal in 28 of 28 fields. | Tested | `docs/research/223-flir-xml-join/evidence/answer/check_bookmark_sync.py`, `docs/research/223-flir-xml-join/evidence/answer/check-bookmark-sync-2026-11-11.log` |
+| C19 | Each of the seven Part 03 sources opens with no repair prompt, its IR viewer shows the image and lets it be edited, and the `Sp1`, `Sp2`, `Ar1` and `Dt` table values follow when `Sp1`, `Sp2` and `Ar1` are moved. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11. No owner comment on #225 covers it yet. |
+| C20 | In all seven Part 03 sources every `_Fd` name equals the number stored in its field archive (28 of 28 fields), and all seven sources carry the same four names. | Tested | `docs/research/223-flir-xml-join/evidence/answer/check_bookmark_sync.py`, `evidence/check-bookmark-sync-sources-2026-11-11.log` |
 
 ## Detail
 
@@ -96,7 +98,7 @@ The comment 4 outputs were overwritten by the comment 5 run. Every claim above u
 
 ## Open questions
 
-1. **Field linkage in the COM-compiled file.** Do the same four fields link properly there? That check is the control for C16 and has not been reported.
+1. **Field linkage after a COM compile.** The sources link properly (C19) and the joined files do not (C16). Whether the COM-compiled Part 03 links properly has not been checked.
 2. **Condition 4.** The comparison the ticket asks for has not been run, and Part 32 has not been compared at all. (C14)
 3. **Slower open.** Why does Word open the joined file more slowly, and does the extra time cancel the saving once the Stage 2 export opens the file? Comment 5 suggests 26 in-process ActiveX servers, with no evidence.
 4. **Measurement linkage.** Why do the table values not follow the spots (C16)? The leading explanation is C18: the rekey changes each `_Fd` name and leaves the number stored in the compressed field archive, so the two no longer match. See `docs/research/223-flir-xml-join/README.md` C3 to C5 and C8. It is untested. Comment 5 lists four other untested leads: the FLIR Word add-in may not attach its listeners to controls it did not paste; the compressed `TAG_R8_FLD` payload may hold an ID, checksum or length that the rekey left stale; FLIR Tools+ may write to `ActiveDocument.Variables` and need a `Fields.Update`; Word's copy and paste may write binding entries that the join omits.
@@ -140,6 +142,7 @@ The two joined files are the ones the owner checked in Word. They exist only in 
 
 ## Change log
 
+- 2026-11-11: added C19 and C20 after the owner checked the seven Part 03 sources in Word. The seven files still match the hashes in `evidence/live-data-sha256.txt` (Claude Code).
 - 2026-11-11: C10 now links the owner's comment on #225. C11, C12 and C16 still rest on the owner's answers to the converting agent (Claude Code).
 - 2026-11-11: C10 and C16 relabelled Owner-confirmed on the owner's answers. The owner named Antigravity as the agent behind the original work (Claude Code).
 - 2026-11-11: converted to the Ticket Folder layout from the original prototype branch (commits b075311 and 4c5bed0, never on the Integration Branch) and the five ticket comments. The structural validator and `inspect_com_parts.py` were rerun read-only to capture logs. Console output of the original runs was never saved, so C6, C8 and C9 rest on the output quoted in the ticket comments (Claude Code).
