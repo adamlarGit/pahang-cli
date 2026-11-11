@@ -19,7 +19,7 @@ Three of the four pass conditions are met and one is met in part. The joined fil
 | 3 | No FLIR Crosstalk, including after save, close and reopen | Pass (C12) |
 | 4 | Stage 2 disconnected export matches the COM-compiled file | Part met: Part 03 only, by a plain Word PDF export (C13, C14) |
 
-The join itself takes 0.50 s for Part 03 and 1.65 s for Part 32, against 46.52 s and 173.59 s for the COM compile (C6, C7). Word then opens the joined file more slowly than the COM-compiled one: 15.42 s against 11.17 s for Part 03, and 129.02 s against 45.76 s for Part 32 (C8). The owner found one defect in both joined files: the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer (C16). A likely cause is found and untested (C18). The seven Part 03 sources do not have the defect (C19), so the join introduces it.
+The join itself takes 0.50 s for Part 03 and 1.65 s for Part 32, against 46.52 s and 173.59 s for the COM compile (C6, C7). Word then opens the joined file more slowly than the COM-compiled one: 15.42 s against 11.17 s for Part 03, and 129.02 s against 45.76 s for Part 32 (C8). The owner found one defect in both joined files: the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer (C16). A likely cause is found and untested (C18). The seven Part 03 sources do not have the defect (C19), so the join introduces it. The copy-and-paste compile keeps the link (C21).
 
 ADR 0002's ban is not ready to lift on this evidence. Condition 4 and the field linkage need closing first.
 
@@ -42,11 +42,12 @@ ADR 0002's ban is not ready to lift on this evidence. Condition 4 and the field 
 | C13 | Word's PDF export of joined Part 03 and of COM-compiled Part 03 both give 7 pages and 26 embedded images (418,932 and 418,972 bytes). | Tested | `evidence/test_pdf_export_compare.py`; both PDFs hashed in `evidence/live-data-sha256.txt` |
 | C14 | The joined files match the COM-compiled ones through the Stage 2 disconnected export of ADR 0011, compared with the #212 tools. | Assumed | none. C13 used `ExportAsFixedFormat` on Part 03 and counted pages and images. Settled by running the #212 comparison on both Parts through the Stage 2 export. |
 | C15 | Leaving the first source un-rekeyed caused a first-open crosstalk flicker when both Parts were open in one Word session, because it kept the template Instance GUID `56a0ddda-5a37-4fd2-bb25-c99b89db71ba`. Rekeying it removed the flicker. | Assumed | none. Reported in `evidence/ticket-comments.md`, comment 5, with no output kept. Settled by joining without base rekeying and opening both files together. |
-| C16 | In both joined files the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer. Comment 5 describes it as the table values not following a moved spot. | Owner-confirmed | The owner's answer to the converting agent on 2026-11-11. The owner's own comment on #225 is still to be posted and linked here. Comment 5 is in `evidence/ticket-comments.md`. |
+| C16 | In both joined files the `Sp1`, `Sp2`, `Ar1` and `Dt` fields do not link properly to the IR viewer. Comment 5 describes it as the table values not following a moved spot. | Owner-confirmed | https://github.com/adamlarGit/pahang-cli/issues/225#issuecomment-6795487582. Comment 5 is in `evidence/ticket-comments.md`. |
 | C17 | The engine rekeys every source, the first included: fresh Session and Instance GUIDs, fresh Measurement GUIDs and fresh `_Fd` names, written to the binary, `document.xml` and `settings.xml` together. | Read | `evidence/prototype_join_engine.py`, `rekey_activex_bin` (lines 49 to 107) and `join_multiple_documents_in_xml` (from line 109) |
 | C18 | In joined Part 03, no `_Fd` name equals the number stored in its field archive (0 of 28), and all seven viewers hold the same four stored numbers. In the COM-compiled Part 03 they are equal in 28 of 28 fields. | Tested | `docs/research/223-flir-xml-join/evidence/answer/check_bookmark_sync.py`, `docs/research/223-flir-xml-join/evidence/answer/check-bookmark-sync-2026-11-11.log` |
 | C19 | Each of the seven Part 03 sources opens with no repair prompt, its IR viewer shows the image and lets it be edited, and the `Sp1`, `Sp2`, `Ar1` and `Dt` table values follow when `Sp1`, `Sp2` and `Ar1` are moved. | Owner-confirmed | https://github.com/adamlarGit/pahang-cli/issues/225#issuecomment-6794689490 |
 | C20 | In all seven Part 03 sources every `_Fd` name equals the number stored in its field archive (28 of 28 fields), and all seven sources carry the same four names. | Tested | `docs/research/223-flir-xml-join/evidence/answer/check_bookmark_sync.py`, `evidence/check-bookmark-sync-sources-2026-11-11.log` |
+| C21 | With the Word COM copy-and-paste compile the link between the four fields and the IR image survives. In a joined file the operator has to reassign the four values on each page. | Owner-confirmed | https://github.com/adamlarGit/pahang-cli/issues/225#issuecomment-6795487582 |
 
 ## Detail
 
@@ -98,18 +99,17 @@ The comment 4 outputs were overwritten by the comment 5 run. Every claim above u
 
 ## Open questions
 
-1. **Field linkage after a COM compile.** The sources link properly (C19) and the joined files do not (C16). Whether the COM-compiled Part 03 links properly has not been checked.
-2. **Condition 4.** The comparison the ticket asks for has not been run, and Part 32 has not been compared at all. (C14)
-3. **Slower open.** Why does Word open the joined file more slowly, and does the extra time cancel the saving once the Stage 2 export opens the file? Comment 5 suggests 26 in-process ActiveX servers, with no evidence.
-4. **Measurement linkage.** Why do the table values not follow the spots (C16)? Ticket #234 tests the leading explanation, C18: the rekey changes each `_Fd` name and leaves the number stored in the compressed field archive, so the two no longer match. See `docs/research/223-flir-xml-join/README.md` C3 to C5 and C8. It is untested. Comment 5 lists four other untested leads: the FLIR Word add-in may not attach its listeners to controls it did not paste; the compressed `TAG_R8_FLD` payload may hold an ID, checksum or length that the rekey left stale; FLIR Tools+ may write to `ActiveDocument.Variables` and need a `Fields.Update`; Word's copy and paste may write binding entries that the join omits.
-5. **Part 32 source count.** The run joins 28 sources. Comment 3 and the #221 map say 35.
-6. **Part 03 sources.** The seven files in `sources_part03` are about 860 KB each, while `rendered/015` to `021` of the #232 run are about 403 KB each. What produced the larger set is not recorded.
-7. **Document variables.** The joined files carry 3,888 and 3,904 `w:docVar` entries for 28 and 101 fields in use.
-8. **Baseline source.** The script cites #232 for the COM times. Comments 2 and 3 cite #224.
+1. **Condition 4.** The comparison the ticket asks for has not been run, and Part 32 has not been compared at all. (C14)
+2. **Slower open.** Why does Word open the joined file more slowly, and does the extra time cancel the saving once the Stage 2 export opens the file? Comment 5 suggests 26 in-process ActiveX servers, with no evidence.
+3. **Measurement linkage.** Why do the table values not follow the spots (C16)? Ticket #234 tests the leading explanation, C18: the rekey changes each `_Fd` name and leaves the number stored in the compressed field archive, so the two no longer match. See `docs/research/223-flir-xml-join/README.md` C3 to C5 and C8. It is untested. Comment 5 lists four other untested leads: the FLIR Word add-in may not attach its listeners to controls it did not paste; the compressed `TAG_R8_FLD` payload may hold an ID, checksum or length that the rekey left stale; FLIR Tools+ may write to `ActiveDocument.Variables` and need a `Fields.Update`; Word's copy and paste may write binding entries that the join omits.
+4. **Part 32 source count.** The run joins 28 sources. Comment 3 and the #221 map say 35.
+5. **Part 03 sources.** The seven files in `sources_part03` are about 860 KB each, while `rendered/015` to `021` of the #232 run are about 403 KB each. What produced the larger set is not recorded.
+6. **Document variables.** The joined files carry 3,888 and 3,904 `w:docVar` entries for 28 and 101 fields in use.
+7. **Baseline source.** The script cites #232 for the COM times. Comments 2 and 3 cite #224.
 
 ## How to reproduce
 
-The scripts hold absolute paths to the old prototype worktree and to the #232 run folder. Edit those paths first. The #232 run folder is in the user temp directory and may be gone.
+The scripts hold absolute paths to the old prototype worktree, which is removed, and to the #232 run folder. Edit those paths first. The #232 run folder is in the user temp directory and may be gone.
 
 ```
 python docs/research/225-flir-xml-join-prototype/evidence/run_prototype_225.py
@@ -125,7 +125,7 @@ python docs/research/225-flir-xml-join-prototype/evidence/test_pdf_export_compar
 
 ## Live data read
 
-`<BASE>` is the project base path of the #232 run. `<OLD>` is `scratch/` in the old prototype worktree. Sizes and SHA-256 for all 41 files are in `evidence/live-data-sha256.txt`.
+`<BASE>` is the project base path of the #232 run. `<OLD>` was `scratch/` in the old prototype worktree, which is now removed. On 2026-11-11 its `output/` and `sources_part03/` files were moved unchanged to `scratch/234-flir-field-link/` in the Integration Branch worktree, a folder git ignores. Sizes and SHA-256 for all 41 files are in `evidence/live-data-sha256.txt`.
 
 | Path | File | Bytes | SHA-256 | Read on |
 |------|------|-------|---------|---------|
@@ -138,10 +138,11 @@ python docs/research/225-flir-xml-join-prototype/evidence/test_pdf_export_compar
 | `<OLD>/output/` | `part03_com.pdf` | 418972 | `671a800702c084e98526347ebc7dd53714c3e3c8426ea81f621643bc30086b7c` | 2026-11-11 |
 | `<OLD>/output/` | `part03_xml.pdf` | 418932 | `585ae6835d8a85d13942add134e151f988e635e083be2d6198fae5c713a68a2a` | 2026-11-11 |
 
-The two joined files are the ones the owner checked in Word. They exist only in the old prototype worktree.
+The two joined files are the ones the owner checked in Word. They exist only in that ignored folder.
 
 ## Change log
 
+- 2026-11-11: C16 now links the owner's comment, and C21 is added from it. The old prototype worktree and branch are removed, and the files they alone held are in `scratch/234-flir-field-link/` (Claude Code).
 - 2026-11-11: C11 and C12 now link the owner's comment on #225. C16 still rests on the owner's answer to the converting agent (Claude Code).
 - 2026-11-11: C19 now links the owner's comment on #225. The fix for C16 is ticketed as #234 (Claude Code).
 - 2026-11-11: added C19 and C20 after the owner checked the seven Part 03 sources in Word. The seven files still match the hashes in `evidence/live-data-sha256.txt` (Claude Code).
