@@ -31,10 +31,10 @@ A join is not ruled out, and it has concrete targets. Each viewer carries three 
 | C8 | In the Talapia Full Report, 79 of the 90 names occur in binary field records and no name or ASCII UUID is shared between two binaries. | Tested | same script and inventory |
 | C9 | Every viewer and every nested field starts with a length-prefixed `R8:0.1`, an object UUID, an SDK UUID and a flag byte, in that order. | Tested | `evidence/static-cfb/decode_flir_contents.py`, `evidence/static-cfb/flir-binary-anatomy.inventory.json` |
 | C10 | All 111 nested fields carry the SDK UUID of their parent viewer. In `swg-panel.docx` the object UUID is `f0ff1a2f-6150-4fa9-ae4c-a199a4ec68ec` and the SDK UUID is `65f355f7-d614-4afe-85c8-dff34b8c47c7`. | Tested | same decoder and inventory |
-| C11 | The decimal suffix of each `_Fd` name is also stored as a little-endian uint32 inside that field's compressed archive, in 111 of 111 fields. | Tested | same decoder and inventory |
+| C11 | The decimal suffix of each `_Fd` name is also stored as a little-endian uint32 inside that field's compressed archive, in 111 of 111 fields. | Tested | same decoder and inventory. `evidence/static-cfb/decompressed-267.bin` is the first field archive of `swg-panel.docx`, inflated, with 1922861825 at offset 52. |
 | C12 | The six Talapia viewers with no `TAG_R8_FLD` (1, 2, 11, 16, 18, 23) have an explicit empty field list ending in `TAG_R8_END`. Their R8 wrapper is intact. | Tested | same decoder and inventory |
 | C13 | After the wrappers the data uses 10-byte KENT frames, and all 187 zlib blocks pass their checksum and match their declared sizes. | Tested | same decoder and inventory |
-| C14 | The viewer's SDK state inflates from 298,075 to 625,696 bytes in `swg-panel.docx`. Its record 1017 holds the original image path, the camera model and a 640 by 480 uint16 image plane. | Tested | same decoder and inventory |
+| C14 | The viewer's SDK state inflates from 298,075 to 625,696 bytes in `swg-panel.docx`. Its record 1017 holds the original image path, the camera model and a 640 by 480 uint16 image plane. | Tested | same decoder and inventory. `evidence/static-cfb/binary-plane-preview.png` is that plane drawn as an image. |
 | C15 | Talapia Quick Report viewers 1 to 3 hold byte-identical image records to Full Report viewers 25 to 27, while their UUIDs and field names differ. | Tested | same decoder and inventory |
 | C16 | The native viewer looks up its SDK GUID in a registry. If an SDK is already registered under that GUID it attaches to it, and otherwise it creates one. | Read | Static disassembly at VA `0x1004cc20`, recorded with DLL hashes in `evidence/static-cfb/original/flir-binary-implementation-notes.md`. The code was not executed. |
 | C17 | Two viewers that keep one SDK GUID can attach to one live SDK and share image state, whatever their part names, relationship IDs and control names. | Assumed | none. Inferred from C16. Settled by joining two copies of one viewer without changing the SDK GUID and editing one of them. |
@@ -134,7 +134,7 @@ uv run --frozen --with olefile==0.47 python docs/research/223-flir-xml-join/evid
 uv run --frozen --with olefile==0.47 python docs/research/223-flir-xml-join/evidence/static-cfb/decode_flir_contents.py "templates/FULL REPORT/NORMAL IR US TEV/swg-panel.docx"
 ```
 
-Both take one or more docx paths, only read them, and print JSON. The two inventories are those outputs for all ten documents. The disassembly behind C16 was done with `llvm-objdump` on the installed FLIR DLLs, and its output was not kept.
+Both take one or more docx paths, only read them, and print JSON. The two inventories are those outputs for all ten documents, and `evidence/static-cfb/decoded-template.json` is the full decoder output for `swg-panel.docx` alone. The disassembly behind C16 was done with `llvm-objdump` on the installed FLIR DLLs, and its output was not kept.
 
 ## Live data read
 
@@ -147,4 +147,5 @@ Both take one or more docx paths, only read them, and print JSON. The two invent
 
 ## Change log
 
+- 2026-11-11: added three files from Codex's scratch folder: the image drawn from the stored plane, the decoder output for the template and one inflated field archive. The command that drew the image was not kept. Its value range fits the plane in the `swg-panel.docx` binary (Claude Code).
 - 2026-11-11: converted from the three Codex write-ups, kept unchanged in `evidence/static-cfb/original/`. The first write-up's verdict was "can't tell without a prototype", and the second revised it to "a binary-aware isolation experiment has concrete targets". C12 replaces the first write-up's statement that six viewers lack field records (Claude Code).
