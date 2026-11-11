@@ -74,7 +74,7 @@ docs/research/<issue>-<slug>/
 ```
 
 - The folder name is the one in the ticket body. Names are kebab-case and dates are `YYYY-MM-DD`.
-- A ticket with one Path has no Path file. Its owner writes `README.md` directly and keeps evidence in `evidence/`.
+- A ticket with one Path has no Path file. Its owner writes the whole write-up into `README.md` and keeps evidence in `evidence/`.
 - A research ticket and its prototype ticket have separate folders and cite each other by path.
 - Commit a cited file when it is under 5 MB and holds no client data. For anything else, commit the command that produces it and record the file under Live data read.
 - `.scratch/` and `scratch/` are for files no write-up cites.
@@ -104,6 +104,10 @@ The answer in one paragraph. A prototype ticket gives pass or fail for each pass
 |----|-------|-------|----------|
 | C1 | Rekeying every Instance GUID leaves all viewers loading. | Tested | `evidence/rekey/test_full_rekey.py`, `evidence/rekey/run.log` |
 | C2 | The control name is stored in the `.bin` part. | Read | `path-static-cfb.md` C4 |
+
+## Detail
+
+The diagrams, tables and lists the claims rest on. Sub-headings are free here.
 
 ## Disputed
 
