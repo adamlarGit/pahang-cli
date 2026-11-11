@@ -1,0 +1,40 @@
+
+File: battery-overview.docx -> word/activeX/activeX1.bin (size 203776, 1 fields)
+  Top GUIDs: ['bd03c5ea-303b-4189-b2fe-91d68b05bd8a', 'cfbbc0b3-5bfc-45fb-b5df-bb25d65f0454']
+    Field: _Fd1255641131   | Measurement GUID: 1cd8d264-b77d-4d80-aa17-d01024cf609c | Tool: JAr1.Max. Temperature
+
+File: fp-overview.docx -> word/activeX/activeX1.bin (size 369152, 1 fields)
+  Top GUIDs: ['bf805f78-6b3d-43df-b357-be1f6e3d2e5c', '39e1138e-a054-4e66-ab7d-c561075b17eb']
+    Field: _Fd897741127    | Measurement GUID: e8e62ef2-10c0-4d61-a251-2adc08923877 | Tool: 5Ar1.Average Temperature
+
+File: swg-overview.docx -> word/activeX/activeX1.bin (size 180736, 1 fields)
+  Top GUIDs: ['a8778dba-7dc1-4f60-bcf2-e9bc1e4ddf40', 'eeef1d6a-b073-4ffa-a4a4-c0f2d2eefbef']
+    Field: _Fd1826990618   | Measurement GUID: c62ea810-d98e-427f-82a3-dc05fe6b91d5 | Tool: lAr1.Max. Temperature
+
+File: swg-panel.docx -> word/activeX/activeX1.bin (size 307200, 4 fields)
+  Top GUIDs: ['f0ff1a2f-6150-4fa9-ae4c-a199a4ec68ec', '65f355f7-d614-4afe-85c8-dff34b8c47c7']
+    Field: _Fd1922861825   | Measurement GUID: b6ff78c0-1459-43d3-a90a-9246e31cf8ab | Tool: rSp1.Max. Temperature
+    Field: _Fd1967887225   | Measurement GUID: fdd3008e-bb11-4f85-8d78-402a7e2ac8d6 | Tool: uSp1.Temperature
+    Field: _Fd81475520     | Measurement GUID: 67554dcf-a2e5-439f-b8b9-5b16c62a57c2 | Tool: Sp2.Temperature
+    Field: _Fd97091050     | Measurement GUID: 2c336045-beec-4eca-8283-9f8b408cf619 | Tool: Dt1
+
+File: tx-hv-sides.docx -> word/activeX/activeX1.bin (size 365056, 4 fields)
+  Top GUIDs: ['cd5efc47-6ff7-4227-bef0-30e8e2919cf9', '3e7aef2f-ff72-4346-88d9-b7712a463bc1']
+    Field: _Fd1146430293   | Measurement GUID: f8a709b8-9e19-4cf7-8e20-9806f6e07f6c | Tool: DAr1.Max. Temperature
+    Field: _Fd1406125345   | Measurement GUID: 49c901e7-be65-48d0-8e36-425e01370e2e | Tool: SSp2.Temperature
+    Field: _Fd1947060717   | Measurement GUID: d2ab8e7d-396f-4737-9f5f-b255e038fac5 | Tool: tSp1.Temperature
+    Field: _Fd506848005    | Measurement GUID: e8592902-7f00-4806-acd7-a15f0a18e1d1 | Tool: Dt1
+
+File: tx-lv-sides.docx -> word/activeX/activeX1.bin (size 375296, 4 fields)
+  Top GUIDs: ['503d4947-73c5-4eea-a99f-d7aba835b4c4', 'b4061d15-0269-4806-ab48-eb781cbb283e']
+    Field: _Fd1285941572   | Measurement GUID: efbc49cf-9156-4c29-88f6-649197d2af1b | Tool: LSp1.Temperature
+    Field: _Fd1669484723   | Measurement GUID: cd5e6744-1d9b-4e42-ac5b-6eb2ec54d0ab | Tool: cAr1.Max. Temperature
+    Field: _Fd1728863987   | Measurement GUID: 6e8a8208-ff32-4946-b01d-ed8106ec69c9 | Tool: gSp2.Temperature
+    Field: _Fd2140244306   | Measurement GUID: d205fb4f-90da-4994-a518-3f08e12a5e53 | Tool: Dt1
+
+File: tx-overview.docx -> word/activeX/activeX1.bin (size 311808, 4 fields)
+  Top GUIDs: ['a6e69964-680a-456d-80ad-261a94d8c881', '3214aaed-4b62-4137-905a-095942a47a48']
+    Field: _Fd1105419452   | Measurement GUID: eb52e85b-6abc-4782-ae88-7c9e66734fbe | Tool: ASp2.Temperature
+    Field: _Fd291190478    | Measurement GUID: 45a39686-522d-4d63-85e4-cc3b64efdcfc | Tool: Sp1.Temperature
+    Field: _Fd364596512    | Measurement GUID: e0e0c2f5-f2e5-41e4-9736-09bb5b1cd03e | Tool: Dt1
+    Field: _Fd531334444    | Measurement GUID: 0f908f1e-da98-46da-b21f-fc4dfef13db1 | Tool: Ar1.Max. Temperature

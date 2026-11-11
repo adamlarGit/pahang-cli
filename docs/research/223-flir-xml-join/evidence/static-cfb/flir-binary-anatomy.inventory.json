@@ -1,0 +1,3331 @@
+{
+  "investigation": "Codex - Static/CFB investigation: binary continuation",
+  "date": "2026-11-11",
+  "counts": {
+    "documents": 10,
+    "binaries": 38,
+    "field_records": 111,
+    "validated_zlib_blocks": 187,
+    "image_record_candidates": 38
+  },
+  "documents": [
+    {
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/battery-overview.docx",
+      "sha256": "c7fe4886b0907a815573a9f34a4f1288257afc32c825cacc99d88330470e903b",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "2d9c35379b172a5ee33fe865288b02003df0399320b23a8bc47fc569d30a5d14",
+          "contents_sha256": "55a4fee2e549d747e10a38089dc6ccc812c28c811dd5db5f28bfcbef1115f538",
+          "version": "R8:0.1",
+          "object_id": "bd03c5ea-303b-4189-b2fe-91d68b05bd8a",
+          "sdk_id": "cfbbc0b3-5bfc-45fb-b5df-bb25d65f0454",
+          "metadata_flag": 1,
+          "size": 198858,
+          "end_tag_offset": 559,
+          "kent_offset": 574,
+          "fields": [
+            {
+              "name": "_Fd1255641131",
+              "object_id": "1cd8d264-b77d-4d80-aa17-d01024cf609c",
+              "sdk_id": "cfbbc0b3-5bfc-45fb-b5df-bb25d65f0454",
+              "payload_offset": 131,
+              "payload_size": 428,
+              "bookmark_uint32": 1255641131,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 282,
+              "inflated_size": 689,
+              "inflated_sha256": "59bdbe16ad751741642b7f2095fbadd6de030594619cd85819693ec566bfdaf5"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 616,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 746,
+              "compressed_size": 198102,
+              "inflated_size": 622474,
+              "inflated_sha256": "d2d02c9a3990efc6c88054f2db5957390fd994720d8aecd796113ca7b192a7d3"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 32,
+            "102": 72,
+            "101": 30
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "a1d91d38c227735072669c46c5c3c5cecc1795f3955d645f07ae3beb714c3c01",
+              "record_sha256": "02fd1579a38f0ba34e953c3bd3db89ec0813270541efe4c1e07194e34ab2995e"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/fp-overview.docx",
+      "sha256": "d39a1358548652843f048e010892f1ec3a0b8c64b31bcd196883b588c637b8b9",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "43bd238da5f880c6813deab789fbd882959ab2b743cc25d0476a923a1dbdd87b",
+          "contents_sha256": "a126b3ac0fad0309d9311a4a997ebcbff206ceba30ad3ede67c54b6cf8858ba8",
+          "version": "R8:0.1",
+          "object_id": "bf805f78-6b3d-43df-b357-be1f6e3d2e5c",
+          "sdk_id": "39e1138e-a054-4e66-ab7d-c561075b17eb",
+          "metadata_flag": 1,
+          "size": 363177,
+          "end_tag_offset": 558,
+          "kent_offset": 573,
+          "fields": [
+            {
+              "name": "_Fd897741127",
+              "object_id": "e8e62ef2-10c0-4d61-a251-2adc08923877",
+              "sdk_id": "39e1138e-a054-4e66-ab7d-c561075b17eb",
+              "payload_offset": 130,
+              "payload_size": 428,
+              "bookmark_uint32": 897741127,
+              "label": [
+                "Ar1.Average Temperature"
+              ],
+              "compressed_size": 282,
+              "inflated_size": 695,
+              "inflated_sha256": "b2acfa36788761156fa488e45e24a67828a9d2807e13bffb42b9ef8e1e813a24"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 615,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 745,
+              "compressed_size": 362422,
+              "inflated_size": 622474,
+              "inflated_sha256": "0adea8d10cd043bef6cd1b850fac3f4ab2e49e3647879409cddede4f22be786a"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 32,
+            "102": 72,
+            "101": 30
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "7686fc5e86062e0ac2eb92d2662eb00a7ea9d61ed73ee306220947c26e453d79",
+              "record_sha256": "cdc1a7ec7db50d608c2e16d4e307fcc1b2f03ded880ed421fb43fce42999435f"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/swg-overview.docx",
+      "sha256": "9deeea0397f72b159c6454a5ad91343f73ad0519b7958920e3d5a34aa5376c74",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "8057be4b8ef75ee74e087a36e98dfacdbb4f82d5418952eec3fb9ef0c7497dce",
+          "contents_sha256": "a75ecaff95acedace5b1afd748af171fe73bb5148f9eea48fd5af565c3a45409",
+          "version": "R8:0.1",
+          "object_id": "a8778dba-7dc1-4f60-bcf2-e9bc1e4ddf40",
+          "sdk_id": "eeef1d6a-b073-4ffa-a4a4-c0f2d2eefbef",
+          "metadata_flag": 1,
+          "size": 176372,
+          "end_tag_offset": 556,
+          "kent_offset": 571,
+          "fields": [
+            {
+              "name": "_Fd1826990618",
+              "object_id": "c62ea810-d98e-427f-82a3-dc05fe6b91d5",
+              "sdk_id": "eeef1d6a-b073-4ffa-a4a4-c0f2d2eefbef",
+              "payload_offset": 131,
+              "payload_size": 425,
+              "bookmark_uint32": 1826990618,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 279,
+              "inflated_size": 689,
+              "inflated_sha256": "a983d6d783dc9145ca9e3416d0684b7d950292760c30142e0187efc6107a8d06"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 613,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 743,
+              "compressed_size": 175619,
+              "inflated_size": 622474,
+              "inflated_sha256": "4114dcfcce01030bd6481b45cb6ea496f0addd5231a52eca76d49356c4aef4bb"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 32,
+            "102": 72,
+            "101": 30
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "d9f10e351ab1fd597c847d116ad92c0215f04562bb5c1bb48cf0a98fd96a118d",
+              "record_sha256": "5ee774d429b882f8b22847043800fa85d8a66cc4438d2b4ec42e0b92d32c1882"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/swg-panel.docx",
+      "sha256": "b8230c4adccda8744c4952645049314761ebf9c5c11e61016816250f51698d94",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "51ab83705540d6e683717bf9ad1408210936c61b5bbe3f15b82f40b8a3141d6c",
+          "contents_sha256": "aa381922e583b42266804df413e0db1c9a44e0d33a53c8b8e36eb8f72ecfa022",
+          "version": "R8:0.1",
+          "object_id": "f0ff1a2f-6150-4fa9-ae4c-a199a4ec68ec",
+          "sdk_id": "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+          "metadata_flag": 1,
+          "size": 300182,
+          "end_tag_offset": 1910,
+          "kent_offset": 1925,
+          "fields": [
+            {
+              "name": "_Fd1922861825",
+              "object_id": "b6ff78c0-1459-43d3-a90a-9246e31cf8ab",
+              "sdk_id": "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+              "payload_offset": 131,
+              "payload_size": 430,
+              "bookmark_uint32": 1922861825,
+              "label": [
+                "Sp1.Max. Temperature"
+              ],
+              "compressed_size": 284,
+              "inflated_size": 689,
+              "inflated_sha256": "87fd2aba1c7b712ae990321ea9fd8573b01b828fb2c1fa4d9ea84ce4f7c93673"
+            },
+            {
+              "name": "_Fd1967887225",
+              "object_id": "fdd3008e-bb11-4f85-8d78-402a7e2ac8d6",
+              "sdk_id": "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+              "payload_offset": 598,
+              "payload_size": 422,
+              "bookmark_uint32": 1967887225,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 276,
+              "inflated_size": 679,
+              "inflated_sha256": "039fa1f240e3e51b8d3dc5f1b214e6ce55744aebac53e5a4e91e20d822caad75"
+            },
+            {
+              "name": "_Fd81475520",
+              "object_id": "67554dcf-a2e5-439f-b8b9-5b16c62a57c2",
+              "sdk_id": "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+              "payload_offset": 1055,
+              "payload_size": 421,
+              "bookmark_uint32": 81475520,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 275,
+              "inflated_size": 679,
+              "inflated_sha256": "28ea167b2dc694f22b6b39edb83bf1198896f49a59bb67019e3a2553e457833b"
+            },
+            {
+              "name": "_Fd97091050",
+              "object_id": "2c336045-beec-4eca-8283-9f8b408cf619",
+              "sdk_id": "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+              "payload_offset": 1511,
+              "payload_size": 399,
+              "bookmark_uint32": 97091050,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 253,
+              "inflated_size": 655,
+              "inflated_sha256": "72ba93926612d2d1552fc6bc333033b7591d6358cca82f2fcc596b9684ad9b6a"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1967,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2097,
+              "compressed_size": 298075,
+              "inflated_size": 625696,
+              "inflated_sha256": "917d8b394e5ce2211f2912193f13a1bbf97aff29d3ec157c443e57722194554f"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 121,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "ab6b67bf1c21637a992dbd7e62c469fb1938682b7fd4ac8f6aeba39a778c3db1",
+              "record_sha256": "fa1870bdb2226852b339950791a6b812a80a36def6440c8badba2c3e9e953d02"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/tx-hv-sides.docx",
+      "sha256": "1aee17dd511510d70d35780ca20d3c925d4cbd423570d2411877c59cb01f19f1",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "0258b45ae23fbcaebd9b49f011bb6359f83ff64dfee075193b3c1c90c8f2fd70",
+          "contents_sha256": "836098c3164c83bdf665aac816fdda7d370535fb13815efed043f13dd20636ca",
+          "version": "R8:0.1",
+          "object_id": "cd5efc47-6ff7-4227-bef0-30e8e2919cf9",
+          "sdk_id": "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+          "metadata_flag": 1,
+          "size": 357599,
+          "end_tag_offset": 1898,
+          "kent_offset": 1913,
+          "fields": [
+            {
+              "name": "_Fd1146430293",
+              "object_id": "f8a709b8-9e19-4cf7-8e20-9806f6e07f6c",
+              "sdk_id": "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+              "payload_offset": 131,
+              "payload_size": 426,
+              "bookmark_uint32": 1146430293,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "d3f223674d3758665496e9441c4cb033a93f91eb7e9de1fb19706aacf3f6918f"
+            },
+            {
+              "name": "_Fd1406125345",
+              "object_id": "49c901e7-be65-48d0-8e36-425e01370e2e",
+              "sdk_id": "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+              "payload_offset": 594,
+              "payload_size": 419,
+              "bookmark_uint32": 1406125345,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 273,
+              "inflated_size": 679,
+              "inflated_sha256": "73126b1e8c23dd9d0fee7c3fff260f6b5cab5872a2cd0060206b77427a995ac3"
+            },
+            {
+              "name": "_Fd1947060717",
+              "object_id": "d2ab8e7d-396f-4737-9f5f-b255e038fac5",
+              "sdk_id": "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+              "payload_offset": 1050,
+              "payload_size": 416,
+              "bookmark_uint32": 1947060717,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 270,
+              "inflated_size": 679,
+              "inflated_sha256": "7f3be425884aca9e47784da4e3ec6280a75f8fa9698452feaa73a25ac62a30d9"
+            },
+            {
+              "name": "_Fd506848005",
+              "object_id": "e8592902-7f00-4806-acd7-a15f0a18e1d1",
+              "sdk_id": "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+              "payload_offset": 1502,
+              "payload_size": 396,
+              "bookmark_uint32": 506848005,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 250,
+              "inflated_size": 655,
+              "inflated_sha256": "6a9804278301412d5e6f0d305319491d1b974154ff88f15826fe07ec6192436d"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1955,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2085,
+              "compressed_size": 355504,
+              "inflated_size": 625696,
+              "inflated_sha256": "9c63e7c1783c05aa90ac55238b1abece837b28282f444061bbcde153278a9248"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 121,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "a232d48e8784b3ac94f6b2facca54821f79ef34fe001a1b0fb5fac5d34101b85",
+              "record_sha256": "b4c8d2746f71dbb82f16562a4e6e98049656937d8ab271fa2880d7ce983336f1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/tx-lv-sides.docx",
+      "sha256": "3530b51018ff9aefa3febb1a51dba6ba5a1c8bd34c68d4793f515f028253f13f",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "50e3ed783986b218470af52e5286ba221a58e8cb305fd400d92b9db4f9adc37b",
+          "contents_sha256": "da95664918a51c3266f44f90efe52783022a9db0f2b4d4bf6f6ea6b45a9eb3e3",
+          "version": "R8:0.1",
+          "object_id": "503d4947-73c5-4eea-a99f-d7aba835b4c4",
+          "sdk_id": "b4061d15-0269-4806-ab48-eb781cbb283e",
+          "metadata_flag": 1,
+          "size": 367805,
+          "end_tag_offset": 1914,
+          "kent_offset": 1929,
+          "fields": [
+            {
+              "name": "_Fd1285941572",
+              "object_id": "efbc49cf-9156-4c29-88f6-649197d2af1b",
+              "sdk_id": "b4061d15-0269-4806-ab48-eb781cbb283e",
+              "payload_offset": 131,
+              "payload_size": 422,
+              "bookmark_uint32": 1285941572,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 276,
+              "inflated_size": 679,
+              "inflated_sha256": "f89a6b2f3b300653e487d1617b75b659a34a4862621d22bb04602df643419fb3"
+            },
+            {
+              "name": "_Fd1669484723",
+              "object_id": "cd5e6744-1d9b-4e42-ac5b-6eb2ec54d0ab",
+              "sdk_id": "b4061d15-0269-4806-ab48-eb781cbb283e",
+              "payload_offset": 590,
+              "payload_size": 429,
+              "bookmark_uint32": 1669484723,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 283,
+              "inflated_size": 689,
+              "inflated_sha256": "13598da5ccfef7f5dc8ef68c7b1861b73faf937a508c86b01c0141739944cc6f"
+            },
+            {
+              "name": "_Fd1728863987",
+              "object_id": "6e8a8208-ff32-4946-b01d-ed8106ec69c9",
+              "sdk_id": "b4061d15-0269-4806-ab48-eb781cbb283e",
+              "payload_offset": 1056,
+              "payload_size": 421,
+              "bookmark_uint32": 1728863987,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 275,
+              "inflated_size": 679,
+              "inflated_sha256": "238ad10a63025016300d2bc9b0b60214fcad84a89b6a805ea12e88fd3d21cfad"
+            },
+            {
+              "name": "_Fd2140244306",
+              "object_id": "d205fb4f-90da-4994-a518-3f08e12a5e53",
+              "sdk_id": "b4061d15-0269-4806-ab48-eb781cbb283e",
+              "payload_offset": 1514,
+              "payload_size": 400,
+              "bookmark_uint32": 2140244306,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 254,
+              "inflated_size": 655,
+              "inflated_sha256": "2ce7d93ade8b4d8954a09383857d3056bef25c6c3870eaf7c854216ab99a3cbc"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1971,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2101,
+              "compressed_size": 365694,
+              "inflated_size": 625696,
+              "inflated_sha256": "bd7630a193c0800c0680ad66bab8e89a7843349c690db2c32878d9a271a31b0e"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 121,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "ae2553ebd36c1f4d345ed6982cccc819a4404a391ae1ca5cd2022217a95c405c",
+              "record_sha256": "82d20f2cbe7b0c63090560aba9b090f1f83664723b6aa8f6572948ab49599946"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/tx-overview.docx",
+      "sha256": "bcefa6f2cce6245dab2af7e2431b7e11fb2ba9ee17b645f9e5d28d40d5a2df69",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "236d3d1b739ae9931c1fadc6e986ec387d7cd99adfbb554a3c5fb73c1f1625be",
+          "contents_sha256": "d85d98ef87a278e6d8b2037134c77e4a9013558b29127474ac4a3a93a4c41667",
+          "version": "R8:0.1",
+          "object_id": "a6e69964-680a-456d-80ad-261a94d8c881",
+          "sdk_id": "3214aaed-4b62-4137-905a-095942a47a48",
+          "metadata_flag": 1,
+          "size": 304861,
+          "end_tag_offset": 1909,
+          "kent_offset": 1924,
+          "fields": [
+            {
+              "name": "_Fd1105419452",
+              "object_id": "eb52e85b-6abc-4782-ae88-7c9e66734fbe",
+              "sdk_id": "3214aaed-4b62-4137-905a-095942a47a48",
+              "payload_offset": 131,
+              "payload_size": 422,
+              "bookmark_uint32": 1105419452,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 276,
+              "inflated_size": 679,
+              "inflated_sha256": "9faff9f61e29790cacd8dfb711729a1c8e74c034302bd0664a0d4ac577f59b5a"
+            },
+            {
+              "name": "_Fd291190478",
+              "object_id": "45a39686-522d-4d63-85e4-cc3b64efdcfc",
+              "sdk_id": "3214aaed-4b62-4137-905a-095942a47a48",
+              "payload_offset": 589,
+              "payload_size": 421,
+              "bookmark_uint32": 291190478,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 275,
+              "inflated_size": 679,
+              "inflated_sha256": "40747bc53c482709787133d20c114a4686db3998c45518b2f3da8dc5993f8484"
+            },
+            {
+              "name": "_Fd364596512",
+              "object_id": "e0e0c2f5-f2e5-41e4-9736-09bb5b1cd03e",
+              "sdk_id": "3214aaed-4b62-4137-905a-095942a47a48",
+              "payload_offset": 1046,
+              "payload_size": 399,
+              "bookmark_uint32": 364596512,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 253,
+              "inflated_size": 655,
+              "inflated_sha256": "5b780cf28d44e83481f332ad086535aece7b6c8db37a78e8c1bca64f0ceb8442"
+            },
+            {
+              "name": "_Fd531334444",
+              "object_id": "0f908f1e-da98-46da-b21f-fc4dfef13db1",
+              "sdk_id": "3214aaed-4b62-4137-905a-095942a47a48",
+              "payload_offset": 1481,
+              "payload_size": 428,
+              "bookmark_uint32": 531334444,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 282,
+              "inflated_size": 689,
+              "inflated_sha256": "8b2c2fda6703ea52951ec755ce8b3604c6bbf3aacdac705dfc421bc5f98d8737"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1966,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2096,
+              "compressed_size": 302755,
+              "inflated_size": 625696,
+              "inflated_sha256": "66e896b3e910bb26babb5aff60dc676942149f7007d2ef2706884b30584c81c8"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 121,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "3dbb22ba9b9e31cf3ce4af303751789770f6f08e51ea417e2f9b8d00af35b539",
+              "record_sha256": "bfb42df8b5b7d29c7d99a9710cc7743dfe0d23874ab81779040f4ca48aee63f4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "templates/QUICK REPORT/DEFECT IR/swg-panel.docx",
+      "sha256": "dd194a9958e2b812d3d6127150f86b53d791655494cee4944bfb0077a16add26",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "a07d8d4d0f9dac676139e2c302019a6c9517ca27510f29e6c555f9b3df95e554",
+          "contents_sha256": "ef2be7dbb7a6ba35b1cb9383734a5d15bfa64edd187c98661d70c0c7264c92a9",
+          "version": "R8:0.1",
+          "object_id": "4349c08f-a2fb-4680-9650-b868a96adc06",
+          "sdk_id": "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+          "metadata_flag": 1,
+          "size": 167949,
+          "end_tag_offset": 1911,
+          "kent_offset": 1926,
+          "fields": [
+            {
+              "name": "_Fd1016358474",
+              "object_id": "e1db400e-8048-491e-b3bc-94933d63a2c2",
+              "sdk_id": "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+              "payload_offset": 131,
+              "payload_size": 428,
+              "bookmark_uint32": 1016358474,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 282,
+              "inflated_size": 689,
+              "inflated_sha256": "22b08606d6bb99ccea60deebf7dc89eaa964f81ce2c3c444f983131e4e700d8d"
+            },
+            {
+              "name": "_Fd127214868",
+              "object_id": "130f7d20-b77c-404c-b82a-58ea4f4e505f",
+              "sdk_id": "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+              "payload_offset": 595,
+              "payload_size": 423,
+              "bookmark_uint32": 127214868,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 277,
+              "inflated_size": 679,
+              "inflated_sha256": "6cc66b3f632c968f64014b506f0b3738e9b85dc7725757559dd9486f4caa54c3"
+            },
+            {
+              "name": "_Fd1561285838",
+              "object_id": "c72ef3eb-6c07-4b67-8cde-d8ed3c79cd35",
+              "sdk_id": "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+              "payload_offset": 1055,
+              "payload_size": 399,
+              "bookmark_uint32": 1561285838,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 253,
+              "inflated_size": 655,
+              "inflated_sha256": "522516c754215d53891624883f16bc8df5d5c6ed6150999ec31a2b2a297982ae"
+            },
+            {
+              "name": "_Fd684423630",
+              "object_id": "865a1d57-d0ca-41d5-b443-1b2ad6040d8e",
+              "sdk_id": "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+              "payload_offset": 1490,
+              "payload_size": 421,
+              "bookmark_uint32": 684423630,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 275,
+              "inflated_size": 679,
+              "inflated_sha256": "eb52dd3f4480c21c200edf28e2da79c85c42526e13a0524732a57f0ee75a7da3"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1968,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2098,
+              "compressed_size": 165841,
+              "inflated_size": 625696,
+              "inflated_sha256": "1dbbb18cf3ab855080d960e801d9151ac093fcb2edac75d9deaa2a17832be707"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 121,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "15b3a5a14c23dbb544d12aad1ece1ca0590addbd149980e37a90ae9ef1c607bc",
+              "record_sha256": "f3de5ee5bc464217da331d4d46d747b0a1011c1442c08ed0e0329e867089fbf6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "<project>/QUICK REPORT/RAUB/01. AUGUST/04-08-2026/005. TALAPIA (IR+VI).docx",
+      "sha256": "772df026a8f6fb32d705fa7aa922a3857385f78ec32034b2a4acc04cc4f3fb5d",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "f43fbf721e9b09cf56d4f6921b90c0673261b1537abb4af4440adee076083444",
+          "contents_sha256": "3ac0a859d44f67f958050a2ac2ff9e2e29715f01f4f0eb7a3b1c9295ca835e73",
+          "version": "R8:0.1",
+          "object_id": "dbf0dc67-5e12-46ac-9fbc-b469ad7c8993",
+          "sdk_id": "c7d69f77-26b4-48bb-86e3-9ac5e1630b9e",
+          "metadata_flag": 1,
+          "size": 1105773,
+          "end_tag_offset": 557,
+          "kent_offset": 572,
+          "fields": [
+            {
+              "name": "_Fd2060461679",
+              "object_id": "e15247c9-2286-4adb-bf0d-e223c5dca28a",
+              "sdk_id": "c7d69f77-26b4-48bb-86e3-9ac5e1630b9e",
+              "payload_offset": 131,
+              "payload_size": 426,
+              "bookmark_uint32": 2060461679,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "13a961db4931589193a7a5a7dda8dffb105886167bd8a5a37d4d5811a79d0c86"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 614,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 744,
+              "compressed_size": 1105019,
+              "inflated_size": 1383114,
+              "inflated_sha256": "29e2ae3b8f271e746fd930cf733da0920758d46c4dc6dd578f08b8d59c11a4a5"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 32,
+            "102": 74,
+            "101": 30
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "95b066b45fb19c457f1159c79ecb2102948472b39151fa427374f47434f67419",
+              "record_sha256": "5ea599094c9ec3e056f3102959998594f33ddd859ae7864cb7909c2857bc4030"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX2.bin",
+          "binary_sha256": "b518631ff521d35a9c04e642945f47731e3cddb07c5787e3ad173b72154b0ece",
+          "contents_sha256": "4ec4ae76445e5a33e5f9bdf11d466753667304328e7b0f112927a30de39618f2",
+          "version": "R8:0.1",
+          "object_id": "df9e8732-790b-4aef-90c8-e2daff7ce83f",
+          "sdk_id": "c77a5d0d-3327-4046-848a-333950c36d2d",
+          "metadata_flag": 1,
+          "size": 1127636,
+          "end_tag_offset": 1906,
+          "kent_offset": 1921,
+          "fields": [
+            {
+              "name": "_Fd1500662078",
+              "object_id": "dc506e9c-ef13-4df6-b326-6378349cba25",
+              "sdk_id": "c77a5d0d-3327-4046-848a-333950c36d2d",
+              "payload_offset": 131,
+              "payload_size": 426,
+              "bookmark_uint32": 1500662078,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "0a79fec4a894dd9fd8a10599fdc8249897d365210da4029be4b3ed8b1bd766dc"
+            },
+            {
+              "name": "_Fd1503281449",
+              "object_id": "700b0c55-8bd6-4b08-b8a6-06f7c9aa170c",
+              "sdk_id": "c77a5d0d-3327-4046-848a-333950c36d2d",
+              "payload_offset": 594,
+              "payload_size": 418,
+              "bookmark_uint32": 1503281449,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "95cb5426cca77c594d6f6844e7a113fcca6f43c9ae9096d036dee0ec1e27d821"
+            },
+            {
+              "name": "_Fd1834659615",
+              "object_id": "91542dc3-8bc9-4b85-aa87-ba5c14d9fb26",
+              "sdk_id": "c77a5d0d-3327-4046-848a-333950c36d2d",
+              "payload_offset": 1049,
+              "payload_size": 395,
+              "bookmark_uint32": 1834659615,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 249,
+              "inflated_size": 655,
+              "inflated_sha256": "03528242b8a1d91bc8100f43873130d523b266c9754ad8e9af86ea71f271c563"
+            },
+            {
+              "name": "_Fd183660914",
+              "object_id": "c94372db-7bc2-473f-847b-7738eff4173d",
+              "sdk_id": "c77a5d0d-3327-4046-848a-333950c36d2d",
+              "payload_offset": 1480,
+              "payload_size": 426,
+              "bookmark_uint32": 183660914,
+              "label": [
+                "Sp1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "12d8928c40c026fd9088fa7d9b20daeb1e320b339a0d69206a696f8a5c723ebc"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1963,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2093,
+              "compressed_size": 1125533,
+              "inflated_size": 1382943,
+              "inflated_sha256": "d7c9444a6b9689dd5c3067f10d66b25c17fb677736b2376ba010bcb5616deea9"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 56,
+            "102": 122,
+            "101": 54
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "13d07b528c35077acffa98f48d8bbb5414421176e75300fd487417e46b71ee9b",
+              "record_sha256": "955d078ab2cc5b26fda98a177ce61f0a6ac9a5a6bf5c3a2f20cd165ed8ff476f"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX3.bin",
+          "binary_sha256": "3e43bf413d2843b24f214ad570f615fb93eaedcf445d4bc63efccc9526dd72f9",
+          "contents_sha256": "c30a8b4f58c087706365567d3e53f356c2762dcfa87d3da2c8e78c85440fa3a5",
+          "version": "R8:0.1",
+          "object_id": "bdbfef27-c2f9-4a8a-b64c-15dd786ff08c",
+          "sdk_id": "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+          "metadata_flag": 1,
+          "size": 1046303,
+          "end_tag_offset": 1910,
+          "kent_offset": 1925,
+          "fields": [
+            {
+              "name": "_Fd1742324731",
+              "object_id": "e7a53703-b5dd-422f-8d4c-1252fe4e8250",
+              "sdk_id": "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+              "payload_offset": 131,
+              "payload_size": 428,
+              "bookmark_uint32": 1742324731,
+              "label": [
+                "Sp1.Max. Temperature"
+              ],
+              "compressed_size": 282,
+              "inflated_size": 689,
+              "inflated_sha256": "f658d77548b9fdd57c58fc4dec78da8b1d7ade599d6f081013953c08862ce761"
+            },
+            {
+              "name": "_Fd1953124534",
+              "object_id": "173ec402-5cde-4bc6-a66e-61b194ed5f21",
+              "sdk_id": "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+              "payload_offset": 596,
+              "payload_size": 426,
+              "bookmark_uint32": 1953124534,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "7f325de758f6adbc9d2488fa55b91202aa687eed25178104294b59a3854237b0"
+            },
+            {
+              "name": "_Fd299677120",
+              "object_id": "39af5c3b-96d9-4533-aba2-9374bd7cc310",
+              "sdk_id": "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+              "payload_offset": 1058,
+              "payload_size": 419,
+              "bookmark_uint32": 299677120,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 273,
+              "inflated_size": 679,
+              "inflated_sha256": "22a4f02e75b5f66f26c0b7df0a9202998a8f6ab96b7bcada4fe2362b3e23cd65"
+            },
+            {
+              "name": "_Fd495201260",
+              "object_id": "7a5f01fa-c0f8-4569-aff6-66e4f5c04250",
+              "sdk_id": "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+              "payload_offset": 1513,
+              "payload_size": 397,
+              "bookmark_uint32": 495201260,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "804572b9a5cb5ce7626ede632f7ae6cbecf5bf58286b2295edb966f77f51745b"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1967,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2097,
+              "compressed_size": 1044196,
+              "inflated_size": 1330655,
+              "inflated_sha256": "f0decb394a8219f7ecc333e13c33ba2a6d67cbfcac25e5639c90d1b59c9749cc"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 56,
+            "102": 122,
+            "101": 54
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "a1c7e9484b16a3b40ce3e8b490d8e959360460a1761bf1022917b38dcefae89b",
+              "record_sha256": "d3412959bff831928b810b76826c21fc7c4281a0af83060098ec4d6cbb8765b8"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "<project>/FULL REPORT/RAUB/01. AUGUST/04-08-2026/005. TALAPIA (IR+VI).docx",
+      "sha256": "eca3aa5c26db1ca5ef1bacb87baa22b10475ed2aff13ca7551010231a4e7523f",
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "binary_sha256": "6af69ab7f08041ac4341c6a6792b89c706d041794ed998eb95e7dabd02810a98",
+          "contents_sha256": "cc76ea00e40cadf8739e117978fb64134ce6d9e8a0021f565ce8c0ce432164a5",
+          "version": "R8:0.1",
+          "object_id": "ee602b79-930b-4247-a933-322fada21ed5",
+          "sdk_id": "94133180-5a0a-46ea-8f6f-829e203e9845",
+          "metadata_flag": 1,
+          "size": 929539,
+          "end_tag_offset": 94,
+          "kent_offset": 109,
+          "fields": [],
+          "state_blocks": [
+            {
+              "compressed_offset": 151,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 281,
+              "compressed_size": 929248,
+              "inflated_size": 1328800,
+              "inflated_sha256": "f5a2c99c5ae8d7c83e85773a836d5a4bf18193aa2d7f084017c4e2913dda1e86"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 32,
+            "102": 74,
+            "101": 30
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "2d925e95445773d517483ec087e9f585f9961097e6915c2b723289c11b434273",
+              "record_sha256": "96e33b81ac0543f2727f9ca9248e066f2520f8e4c10e00d897c721585cb6cd92"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX10.bin",
+          "binary_sha256": "ca42476e120531deaa5317dcbe8fd963eef34f93cbb992c8febcd1eb2c0b3fb7",
+          "contents_sha256": "95409583c8f3394a6dc6444d84741bc55ce247f67aba8ce31148c1bbff266594",
+          "version": "R8:0.1",
+          "object_id": "e276492e-a46c-43ac-989c-5d0120eea461",
+          "sdk_id": "934176c5-1465-4072-b809-846230fc2e82",
+          "metadata_flag": 1,
+          "size": 1014307,
+          "end_tag_offset": 1895,
+          "kent_offset": 1910,
+          "fields": [
+            {
+              "name": "_Fd1413378776",
+              "object_id": "5c7b89d8-3bed-48c5-a2c1-0aa6a6c3faf2",
+              "sdk_id": "934176c5-1465-4072-b809-846230fc2e82",
+              "payload_offset": 131,
+              "payload_size": 416,
+              "bookmark_uint32": 1413378776,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 270,
+              "inflated_size": 679,
+              "inflated_sha256": "78f73fe168ac39659c5624c74b9e243b88d7a41cb35b70cde90307ebdfca0f79"
+            },
+            {
+              "name": "_Fd269050247",
+              "object_id": "322f327c-4fd9-4f34-a8ba-f8da14d5cec7",
+              "sdk_id": "934176c5-1465-4072-b809-846230fc2e82",
+              "payload_offset": 583,
+              "payload_size": 397,
+              "bookmark_uint32": 269050247,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "cf9972537bea145e7b9c7fc0782334060e34e159e2d67e4936410c055e5eb0b4"
+            },
+            {
+              "name": "_Fd370813302",
+              "object_id": "838e5b2f-024a-465e-beb0-4487725d3e82",
+              "sdk_id": "934176c5-1465-4072-b809-846230fc2e82",
+              "payload_offset": 1016,
+              "payload_size": 425,
+              "bookmark_uint32": 370813302,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 279,
+              "inflated_size": 689,
+              "inflated_sha256": "c90e676cde7e3ec4585cefbc33e30cdcbceb4eac6ce831a0fd5aabee6dee5a2d"
+            },
+            {
+              "name": "_Fd941263881",
+              "object_id": "63414ab8-d252-4c73-bf5c-1c51e53f5cdf",
+              "sdk_id": "934176c5-1465-4072-b809-846230fc2e82",
+              "payload_offset": 1477,
+              "payload_size": 418,
+              "bookmark_uint32": 941263881,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "a8b47b36becfb7907ea77e7d219a621f0df7491c4764f57541e17d08d6b6b43c"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1952,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2082,
+              "compressed_size": 1012215,
+              "inflated_size": 1413719,
+              "inflated_sha256": "6eeb318892a93267506d931ac0b33307bf48d4695621d3af7648f66cae55ec85"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "c10e929b987aa90dee533f4a3b28f007184059f73fc7f0c3a4d8e6345689e359",
+              "record_sha256": "14285c02e5e57b78237b8179993d0c55135a4453fb0fd19f5cf7e89ada098466"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX11.bin",
+          "binary_sha256": "83525e4c3fd8ba9fc9ce403ca4993604aa30e9874e5ab4cf29e7b331e8393ac2",
+          "contents_sha256": "3e229b6d8b941a70ec045935dae856cda8a82f6397171d527852b90818a93dad",
+          "version": "R8:0.1",
+          "object_id": "880f2255-2201-450e-b5dc-e3d595af78d5",
+          "sdk_id": "0765efb8-3ace-4ece-b254-1c88eb1bb44f",
+          "metadata_flag": 1,
+          "size": 1057050,
+          "end_tag_offset": 94,
+          "kent_offset": 109,
+          "fields": [],
+          "state_blocks": [
+            {
+              "compressed_offset": 151,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 281,
+              "compressed_size": 1056759,
+              "inflated_size": 1329048,
+              "inflated_sha256": "5db042796baa1bde91fa939383b6d65811ef1dc15bd419842301cd94516bbaae"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "89ccbfdf43be7d3f047c3f8d8d8b11f1481cc6d5d0fd2397314cc785ed7ae1a7",
+              "record_sha256": "6565fcc6a9c1f289ace7df99069903791b56326b8fdf109a12dc0bb6615ce636"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX12.bin",
+          "binary_sha256": "2f79f24325dab6054aeef956d4ad1c134d8244cb543260c72bb16fc54a77ddaa",
+          "contents_sha256": "09305dc9135e398b4b9a74d863f948db5a4fce7d2266e4fc721a0f1a4dbd18ce",
+          "version": "R8:0.1",
+          "object_id": "8bfc0171-5401-445c-af79-6308e33117c6",
+          "sdk_id": "93f2110e-b714-43cc-b6b5-8622dc294c75",
+          "metadata_flag": 1,
+          "size": 1146228,
+          "end_tag_offset": 1435,
+          "kent_offset": 1450,
+          "fields": [
+            {
+              "name": "_Fd1527794006",
+              "object_id": "891beeb8-e3d2-4ca5-8be7-8bf7e948ef19",
+              "sdk_id": "93f2110e-b714-43cc-b6b5-8622dc294c75",
+              "payload_offset": 131,
+              "payload_size": 418,
+              "bookmark_uint32": 1527794006,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "3f850e5df25be48e772863c5c39f9e6584b4e4251823679186f5d6f9230ca7d3"
+            },
+            {
+              "name": "_Fd173198185",
+              "object_id": "0a8acd51-5197-44f9-9dbb-f79b3f8b3121",
+              "sdk_id": "93f2110e-b714-43cc-b6b5-8622dc294c75",
+              "payload_offset": 585,
+              "payload_size": 396,
+              "bookmark_uint32": 173198185,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 250,
+              "inflated_size": 655,
+              "inflated_sha256": "cd5cf37efd24e282ba6f01cecde89a66cfcc79c69ab2710ad643ff8589c10899"
+            },
+            {
+              "name": "_Fd454581283",
+              "object_id": "6366e2ef-e482-4e97-8132-8eed69fee2cb",
+              "sdk_id": "93f2110e-b714-43cc-b6b5-8622dc294c75",
+              "payload_offset": 1017,
+              "payload_size": 418,
+              "bookmark_uint32": 454581283,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "5b0d0459e961683ea111cbd3e4ec28273c9c9fbf425c3c84ec3a5d309546478d"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1492,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 1622,
+              "compressed_size": 1144596,
+              "inflated_size": 1394303,
+              "inflated_sha256": "d8b43a2c3e93c196073fb3dc730c76509e838fcafd69f595136190a9de288697"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "98c5938c4a5d57be39877374ab3b5f7c46608e3c6a898d9c8ec7f5e783e55021",
+              "record_sha256": "a1b928c070ffe73c6c2925b98317f8290a2bd68206cbba83893766299ba946fc"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX13.bin",
+          "binary_sha256": "d408bf0bf67a0a3b8c026216f6a64fdc94e828312cb70e16854aaa8af624defc",
+          "contents_sha256": "6b2ab05de63b42b5821fadeb734540b2511d62247111b6cc3320e9955f6155f9",
+          "version": "R8:0.1",
+          "object_id": "c7dd57b6-e488-47d3-b67b-2311e28677ab",
+          "sdk_id": "d2b28727-1717-4fbd-858e-9179bc6eba16",
+          "metadata_flag": 1,
+          "size": 1172547,
+          "end_tag_offset": 1903,
+          "kent_offset": 1918,
+          "fields": [
+            {
+              "name": "_Fd1307007476",
+              "object_id": "8207f1af-fbf9-4105-b06e-92be434762ea",
+              "sdk_id": "d2b28727-1717-4fbd-858e-9179bc6eba16",
+              "payload_offset": 131,
+              "payload_size": 397,
+              "bookmark_uint32": 1307007476,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "016bb4072cb700b64fd81a8d1f56ae6630e310e628efaa845bbbdf4d03cb3459"
+            },
+            {
+              "name": "_Fd1367711777",
+              "object_id": "d3a7ff75-3d70-4f40-bef6-e347cff54ed9",
+              "sdk_id": "d2b28727-1717-4fbd-858e-9179bc6eba16",
+              "payload_offset": 565,
+              "payload_size": 426,
+              "bookmark_uint32": 1367711777,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "c39ce2490f751cb4109dd9cbf9ec69fe07da44f875de32c5a0a4d3d9b088990b"
+            },
+            {
+              "name": "_Fd1835633553",
+              "object_id": "992b95ff-a73a-427b-bc59-242057a4e4a7",
+              "sdk_id": "d2b28727-1717-4fbd-858e-9179bc6eba16",
+              "payload_offset": 1028,
+              "payload_size": 420,
+              "bookmark_uint32": 1835633553,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "121c8a2eacb631af835ae02d24f92cda7f38755ea522c7eb1adf6b2180549305"
+            },
+            {
+              "name": "_Fd1999927428",
+              "object_id": "c9b6eada-4d66-4a36-a2d9-d4c18a181e29",
+              "sdk_id": "d2b28727-1717-4fbd-858e-9179bc6eba16",
+              "payload_offset": 1485,
+              "payload_size": 418,
+              "bookmark_uint32": 1999927428,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "f73bea0b3375186ae703734c05c45b159b5e2b144a2f1eddbbe334bafae8642d"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1960,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2090,
+              "compressed_size": 1170447,
+              "inflated_size": 1426708,
+              "inflated_sha256": "4659eba0e5f0dabd81fe625103f20f9ff42d075c88cc45ecc514c87e28d86e25"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "623d140291b3c6d538ef3baeda5eb3da8633eb2094690a2b0a1349b8455892fe",
+              "record_sha256": "d41f1e7095fe9f546cdaf8da6ee741f27c992ac93fab80937e19c357f79e4d46"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX14.bin",
+          "binary_sha256": "2b871a70c72f85afa7c898dc54a7c972fcc2125ee44df3950e6c17ccc93b7c8b",
+          "contents_sha256": "97b532929a8e7444eedd4f5c1902fd7da14c3a939fafee2ffeee6a67c75d71c8",
+          "version": "R8:0.1",
+          "object_id": "1bdc3650-aac2-4c5a-b10d-fe0e1ac51f7e",
+          "sdk_id": "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+          "metadata_flag": 1,
+          "size": 1069226,
+          "end_tag_offset": 1904,
+          "kent_offset": 1919,
+          "fields": [
+            {
+              "name": "_Fd1133600257",
+              "object_id": "2505d168-1061-49a1-bd26-37fb3d2bd905",
+              "sdk_id": "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+              "payload_offset": 131,
+              "payload_size": 420,
+              "bookmark_uint32": 1133600257,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "563d473db16358b32208c44d272e4452b9eb5ada94737c1dcd69e01bf7b3ef21"
+            },
+            {
+              "name": "_Fd1232975865",
+              "object_id": "61f22b02-fc67-4cfc-89f8-d8a0b9c314dc",
+              "sdk_id": "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+              "payload_offset": 588,
+              "payload_size": 419,
+              "bookmark_uint32": 1232975865,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 273,
+              "inflated_size": 679,
+              "inflated_sha256": "0b09a6f1a7cca4dfb5783cb1d89e59875044ffcf02b8cf9828243aa84247b81f"
+            },
+            {
+              "name": "_Fd1666804391",
+              "object_id": "395e4419-d7ae-4877-86b8-cffde0f405de",
+              "sdk_id": "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+              "payload_offset": 1044,
+              "payload_size": 426,
+              "bookmark_uint32": 1666804391,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "917c04e107bed1456777e141b4452c44d7de952e9d0210b9b9ec91ac15e04970"
+            },
+            {
+              "name": "_Fd2029115479",
+              "object_id": "f785d5db-3ad3-4228-8247-0041a89789bd",
+              "sdk_id": "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+              "payload_offset": 1507,
+              "payload_size": 397,
+              "bookmark_uint32": 2029115479,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "3bc4275d8a6c523e79c38e4c878ef4606bd82d984f615b070624e474ef91912a"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1961,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2091,
+              "compressed_size": 1067125,
+              "inflated_size": 1394768,
+              "inflated_sha256": "f02051b148b3d582af73db8e18040cfeb672c78902c333c47ee46a74fd772540"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "aa3f3179d2a866ead3661481aa2c4f1ce74b1cae5f15a7b598a0f573f0ccf930",
+              "record_sha256": "ae75d3603d8c8bb0330fe753bc9cdd3aa878f2d42f3266ac7666615eace58da0"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX15.bin",
+          "binary_sha256": "72008240df6114d9a1b23d02eeb6093542dfe2277ffbd3980dc98a0414990213",
+          "contents_sha256": "f4989a39d61c7bfc879ef0fe53be40262aadca92eb3d1e192df41be383589bf4",
+          "version": "R8:0.1",
+          "object_id": "41101bf2-7925-409a-8b97-258057f284cc",
+          "sdk_id": "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+          "metadata_flag": 1,
+          "size": 1020124,
+          "end_tag_offset": 1893,
+          "kent_offset": 1908,
+          "fields": [
+            {
+              "name": "_Fd1227969371",
+              "object_id": "7e4b25e3-efd9-4ad5-98c8-6fa1be65901a",
+              "sdk_id": "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+              "payload_offset": 131,
+              "payload_size": 395,
+              "bookmark_uint32": 1227969371,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 249,
+              "inflated_size": 655,
+              "inflated_sha256": "3a0f0fb28bc40d5fa97a0d03ac2de13dfcca00e0b76160e4f7e8d8741bb0f710"
+            },
+            {
+              "name": "_Fd1697538177",
+              "object_id": "9f27247c-0b6a-46de-a9a0-cad8656b1347",
+              "sdk_id": "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+              "payload_offset": 563,
+              "payload_size": 424,
+              "bookmark_uint32": 1697538177,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 278,
+              "inflated_size": 689,
+              "inflated_sha256": "897df52f1dcfc709b1802c5181278256d90be6decae0ede68bf8d82a94d24e5e"
+            },
+            {
+              "name": "_Fd385445510",
+              "object_id": "f8a91323-ba02-4a8d-95eb-445733c057ee",
+              "sdk_id": "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+              "payload_offset": 1023,
+              "payload_size": 417,
+              "bookmark_uint32": 385445510,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 271,
+              "inflated_size": 679,
+              "inflated_sha256": "ac2f65f415cc7b0a48490815315a671b3ad7c953228da8a9c93e9f3997597fff"
+            },
+            {
+              "name": "_Fd43218637",
+              "object_id": "67dd257a-bdda-4080-85c5-fb9826b1eada",
+              "sdk_id": "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+              "payload_offset": 1475,
+              "payload_size": 418,
+              "bookmark_uint32": 43218637,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "662ef66d30a5f8f1c6545e4576b7a2a8a6956a972ed24dd72a271d294fef7b2f"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1950,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2080,
+              "compressed_size": 1018034,
+              "inflated_size": 1366572,
+              "inflated_sha256": "0044f3000ca64a755e753f6ee77eea2df5f126b1bed31be8b460fa9c279eb932"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "124d1ab8116e761e1df93fbe9991303368aa5473b6052aa9a83ed48648c14c2d",
+              "record_sha256": "55e25eec3a260e7d6e04af668dc9eee031d6f388446f5298f4ec42fb175053c3"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX16.bin",
+          "binary_sha256": "c8e6f80a81f1b14f956da8ff5ec170d2a7098151428819a00d5318e190bc23b3",
+          "contents_sha256": "e8a55c52cbee95cbd39009385489719d99a24e6c4cafdb8097a68715030213a9",
+          "version": "R8:0.1",
+          "object_id": "d4691f82-c95a-4cd3-bcd0-bf365e3c3e67",
+          "sdk_id": "e358a4ee-0290-4580-a268-181f66852823",
+          "metadata_flag": 1,
+          "size": 1105192,
+          "end_tag_offset": 94,
+          "kent_offset": 109,
+          "fields": [],
+          "state_blocks": [
+            {
+              "compressed_offset": 151,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 281,
+              "compressed_size": 1104901,
+              "inflated_size": 1396175,
+              "inflated_sha256": "a36cad62a607a4b4d56d80e5cc36466d56ac663b2f0de1bfffae8ff71eed9cf4"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "bad23d904120bd2c984c961dd7511c350d9b4219bd9ff219ca5e80091c28351d",
+              "record_sha256": "83bf70c740bdd342c56bdd3260b384bd52eaf485e223af6c883e5a4dfb027610"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX17.bin",
+          "binary_sha256": "2c563785f35b97c0a82d27659c5a83629227b8f620e5a5b62073f80f22fd21ee",
+          "contents_sha256": "7e9ecb255eeddf5ff326278005eed141f45f46916bd1da5d8b34e37a67b5d3b2",
+          "version": "R8:0.1",
+          "object_id": "f7a0c038-1fb9-471b-b2de-20d1912236e6",
+          "sdk_id": "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+          "metadata_flag": 1,
+          "size": 1041093,
+          "end_tag_offset": 1897,
+          "kent_offset": 1912,
+          "fields": [
+            {
+              "name": "_Fd1532659334",
+              "object_id": "f1461e4a-bcb7-4923-9f18-1d109a445aee",
+              "sdk_id": "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+              "payload_offset": 131,
+              "payload_size": 397,
+              "bookmark_uint32": 1532659334,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "15eea0eef5df958d7a6f2ec12744675655e6a1c2cec99dca772d1f4caf6d8354"
+            },
+            {
+              "name": "_Fd1607841827",
+              "object_id": "d62e9870-0973-4c9d-bed6-c948f413da66",
+              "sdk_id": "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+              "payload_offset": 565,
+              "payload_size": 418,
+              "bookmark_uint32": 1607841827,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "91a0a267bb0c483b0a1210713ae1f2f7a160a37223e06c3ff765d30a04bc8ec4"
+            },
+            {
+              "name": "_Fd270761584",
+              "object_id": "e0052c8b-bd02-4c40-b09f-47dd7c68531d",
+              "sdk_id": "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+              "payload_offset": 1019,
+              "payload_size": 424,
+              "bookmark_uint32": 270761584,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 278,
+              "inflated_size": 689,
+              "inflated_sha256": "0bdc3fc3bb97af47887078a8f558d8e1c68535fd5034a051aa3b504994f432a6"
+            },
+            {
+              "name": "_Fd437487577",
+              "object_id": "1769123c-e934-4c76-a434-cd55913212cb",
+              "sdk_id": "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+              "payload_offset": 1479,
+              "payload_size": 418,
+              "bookmark_uint32": 437487577,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "cabece4bf31d9fac9a450ec9ce6ae93b6b2b3c8f861eb09e430fb2ce69cb99b3"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1954,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2084,
+              "compressed_size": 1038999,
+              "inflated_size": 1368335,
+              "inflated_sha256": "da0ccb65f637920cbad5c1389ce7c049b025a2aab5aed5fedcb68ac3357f908e"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "3fdb306bb98643b0c236fa94bdec1249679745e48109e9eac32256b147dc38e4",
+              "record_sha256": "82941c111d50a74cc5a23648259cbbc21efeccaa87d09a10e54a942eb6c486e2"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX18.bin",
+          "binary_sha256": "30751d5e63872714da1b0e9693fa17fd5c2a64f6dd2d99eb4acbdf478f700740",
+          "contents_sha256": "34b54db8fede363a3bfe5bb63d58fc5839c8e2c9c432dfa7f9fe020da87fa6aa",
+          "version": "R8:0.1",
+          "object_id": "da7048f2-730f-4a86-b31f-47f83a747b19",
+          "sdk_id": "5cea3bcd-7cfd-4bae-a109-6e2a703d9b4a",
+          "metadata_flag": 1,
+          "size": 1073055,
+          "end_tag_offset": 94,
+          "kent_offset": 109,
+          "fields": [],
+          "state_blocks": [
+            {
+              "compressed_offset": 151,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 281,
+              "compressed_size": 1072764,
+              "inflated_size": 1342679,
+              "inflated_sha256": "34761d83b3c711e52889c871203e7756d574d07537cdba5439042da408de4877"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "666cfac3aee585b9b92f514f1f8e705cd36080fa70e41c27784ea185bb916e68",
+              "record_sha256": "cbf1061a90972c18f3629cea68a1ebce63a80cf0ccf9aa56f85bebc677c17b4c"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX19.bin",
+          "binary_sha256": "1a1a47aeecc3f69086dee1a210fbad56d3fc77ef474fcb3c535a1115e6d5e5ab",
+          "contents_sha256": "cef539e4397e7cf240445ad5b2621bccc141b4a40a8be4fe5d2b69332243447a",
+          "version": "R8:0.1",
+          "object_id": "59e3ddba-7c4a-44d0-acab-525fe6aeb4e0",
+          "sdk_id": "9f2f6ba1-fafc-46e1-aaee-8a257d7861f7",
+          "metadata_flag": 1,
+          "size": 1156442,
+          "end_tag_offset": 1438,
+          "kent_offset": 1453,
+          "fields": [
+            {
+              "name": "_Fd1639816294",
+              "object_id": "ceeba825-03d3-4ca0-8fb8-5e69195dfd29",
+              "sdk_id": "9f2f6ba1-fafc-46e1-aaee-8a257d7861f7",
+              "payload_offset": 131,
+              "payload_size": 397,
+              "bookmark_uint32": 1639816294,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "4a440ba9a4c88f202182ce8d262827befba294f42edec8e3b9e3d1cca2c674ef"
+            },
+            {
+              "name": "_Fd738234157",
+              "object_id": "f1b08276-3de2-40fb-8532-7c3f0af86c6f",
+              "sdk_id": "9f2f6ba1-fafc-46e1-aaee-8a257d7861f7",
+              "payload_offset": 564,
+              "payload_size": 418,
+              "bookmark_uint32": 738234157,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "ecc82b3d6f8610f3e7bb3480bb344b414974264c944792a31ba6af21ab6a06d4"
+            },
+            {
+              "name": "_Fd987590543",
+              "object_id": "d669f1df-9a36-4558-8e62-1464f4827ee0",
+              "sdk_id": "9f2f6ba1-fafc-46e1-aaee-8a257d7861f7",
+              "payload_offset": 1018,
+              "payload_size": 420,
+              "bookmark_uint32": 987590543,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "77060b1fbc04393e37832959c01c04905072dd78f19db467be4a3b01a57b2426"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1495,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 1625,
+              "compressed_size": 1154807,
+              "inflated_size": 1412487,
+              "inflated_sha256": "778faa572567a1c39eccc848a986bdc22b71c7d785a1c53b0ac4a823667ba402"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "6133b2e1be72a33131788dfe89f1c3022c3b65a8a97d3aab63832f28ad0bc5a0",
+              "record_sha256": "38bcafb8b8204b6b66970956c5f821d06a2d056681770702a9182f3e7c9f8192"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX2.bin",
+          "binary_sha256": "266cb82c2ebed4187cfaee6c1d0b4a4c88f467ec39d8ce07964d51cc2512e971",
+          "contents_sha256": "cddf87476cee765b575f2446b55dc50a5981eb6b7cd22ff3dd91fed3ebe40351",
+          "version": "R8:0.1",
+          "object_id": "15aaae2e-5afc-4d03-9ae9-201793040109",
+          "sdk_id": "00194dde-9264-4a8c-be46-377455181cdd",
+          "metadata_flag": 1,
+          "size": 958366,
+          "end_tag_offset": 94,
+          "kent_offset": 109,
+          "fields": [],
+          "state_blocks": [
+            {
+              "compressed_offset": 151,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 281,
+              "compressed_size": 958075,
+              "inflated_size": 1359749,
+              "inflated_sha256": "7c20bea2c06b6f4015b100dc1fc15f4ef72993b2203a55499f1a09a8e55422fb"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 32,
+            "102": 74,
+            "101": 30
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "e0bc75fd43ee0d0cf3fb70fb056df341d3016daf2417715815029e7632399d96",
+              "record_sha256": "ec517937d8c1418f77d23d86eac3e0d59f97c846b5162dbf5fa56de9ffe4354e"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX20.bin",
+          "binary_sha256": "b0da60aadb4091d606f0242b018aa1318301a2adb44938d6d16202885d99971f",
+          "contents_sha256": "3ee46fe02cbf4447e853db85c24a80370309c8d056ce27db7fbb798440cecb29",
+          "version": "R8:0.1",
+          "object_id": "da5f7337-1994-4f1b-b07b-48497e1176b8",
+          "sdk_id": "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+          "metadata_flag": 1,
+          "size": 1124053,
+          "end_tag_offset": 1901,
+          "kent_offset": 1916,
+          "fields": [
+            {
+              "name": "_Fd1410566573",
+              "object_id": "820e3bdd-2019-4d1a-87fb-7daff5d7f2b9",
+              "sdk_id": "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+              "payload_offset": 131,
+              "payload_size": 395,
+              "bookmark_uint32": 1410566573,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 249,
+              "inflated_size": 655,
+              "inflated_sha256": "1c588f7c47e382d319814959878f3b30a6ac4f6c9bd355d97a5117051bf9ce86"
+            },
+            {
+              "name": "_Fd1513324402",
+              "object_id": "db535bde-215f-4792-a456-dc3ca3fc8075",
+              "sdk_id": "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+              "payload_offset": 563,
+              "payload_size": 426,
+              "bookmark_uint32": 1513324402,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "de9076810d43aad8e6a5031103facccadc7d9f578fdcd98945bc7a35858e8e45"
+            },
+            {
+              "name": "_Fd1630484491",
+              "object_id": "671afe76-7d99-4523-bd0e-a788a05440cf",
+              "sdk_id": "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+              "payload_offset": 1026,
+              "payload_size": 418,
+              "bookmark_uint32": 1630484491,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "5c4d4d0e0498b1ded79ed4828528d83ed71723d2b248e797883f473bac66bf3a"
+            },
+            {
+              "name": "_Fd1850567077",
+              "object_id": "b91a261a-6646-4e48-90de-4a7ab3b4645b",
+              "sdk_id": "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+              "payload_offset": 1481,
+              "payload_size": 420,
+              "bookmark_uint32": 1850567077,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "31f39f02671e9748205f40e1a6465deb1abde01fb588c37dc14c37c19baa9756"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1958,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2088,
+              "compressed_size": 1121955,
+              "inflated_size": 1397893,
+              "inflated_sha256": "6ea3671136a35650d4e9bedbbd4afd28d84b3238c1b0789a6d850c341d358e10"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "4f25beec9155a3c857ad584e0d03c839983b6417b5cf0489a62bcef8c202db49",
+              "record_sha256": "c0ec734f3f4ce502fa4bab67e30f76a366c29fdf28d61b327bf87563bc06182d"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX21.bin",
+          "binary_sha256": "a79c3c4e809ec313f19d35371131f2f0077d82b5f2978b60d4b4a7efa8391010",
+          "contents_sha256": "482e7d18957fc90f6c19c247efe916c8561ed09860f95c00c6fd5c3d58c25a09",
+          "version": "R8:0.1",
+          "object_id": "66ac7eab-70b8-45d7-8051-97e8f0315add",
+          "sdk_id": "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+          "metadata_flag": 1,
+          "size": 1129586,
+          "end_tag_offset": 1897,
+          "kent_offset": 1912,
+          "fields": [
+            {
+              "name": "_Fd1363769464",
+              "object_id": "2fbbfacf-3b5c-4540-8f7b-e2aaec038b3e",
+              "sdk_id": "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+              "payload_offset": 131,
+              "payload_size": 418,
+              "bookmark_uint32": 1363769464,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "df42f5502c7335670d84b84454ce8fbc954f247bc5d8b6496de30144f8a2dbcd"
+            },
+            {
+              "name": "_Fd1769689472",
+              "object_id": "8ec8c5a5-7f9b-4250-a449-f4d23c81f71e",
+              "sdk_id": "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+              "payload_offset": 586,
+              "payload_size": 397,
+              "bookmark_uint32": 1769689472,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "90d8fa95113a5c0caa631d68e7a627e8b7e094ee4148f4cd82fa8947a0f9292e"
+            },
+            {
+              "name": "_Fd337924883",
+              "object_id": "0fa2f119-623b-4f84-b3e0-4b6449e051a3",
+              "sdk_id": "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+              "payload_offset": 1019,
+              "payload_size": 418,
+              "bookmark_uint32": 337924883,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "83fdd5bf7984b39474274058b53136bdbb390d9d9ae92aaab4a4e907b055b721"
+            },
+            {
+              "name": "_Fd833457447",
+              "object_id": "651c7de0-40e6-4026-9762-e7af931ecc97",
+              "sdk_id": "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+              "payload_offset": 1473,
+              "payload_size": 424,
+              "bookmark_uint32": 833457447,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 278,
+              "inflated_size": 689,
+              "inflated_sha256": "a0b579f69ff2920c6fea068e5f487d1b8a748aa5e484ea86f517757ad2d01fb3"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1954,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2084,
+              "compressed_size": 1127492,
+              "inflated_size": 1443394,
+              "inflated_sha256": "f342ea5eaddce1fca42c547a07aab78b40b52c9e4d13423aa0add953dccb8f05"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "c9d0a184628b0d0abc43d19268518d7ef16f135c4cf0ff551f4b57487355ad9b",
+              "record_sha256": "1cf78b0c28d906f1c200cea9e5f23f4b788f5fbdcd8f255fed9218a131bd1640"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX22.bin",
+          "binary_sha256": "5fd023ba44f92411cef1c9501f86285bf8acef6005b98d3ac58b69ca6b800949",
+          "contents_sha256": "758cd87f1be475bbd1681822d608b43883b4c4490ba369a97c5db5135664b2fe",
+          "version": "R8:0.1",
+          "object_id": "c9e33d81-d956-4f36-9ff1-1871b6099228",
+          "sdk_id": "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+          "metadata_flag": 1,
+          "size": 1048316,
+          "end_tag_offset": 1901,
+          "kent_offset": 1916,
+          "fields": [
+            {
+              "name": "_Fd1253730138",
+              "object_id": "69b172d3-a5e4-4fb6-99af-656bc06b6c95",
+              "sdk_id": "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+              "payload_offset": 131,
+              "payload_size": 426,
+              "bookmark_uint32": 1253730138,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "ffcb25671f381608ee2bc9b3c58f991930418f5c6d1ce07db838ac19f4b48bcf"
+            },
+            {
+              "name": "_Fd1507489676",
+              "object_id": "c5c7800b-a7f8-487d-a456-3bec85ae8357",
+              "sdk_id": "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+              "payload_offset": 594,
+              "payload_size": 395,
+              "bookmark_uint32": 1507489676,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 249,
+              "inflated_size": 655,
+              "inflated_sha256": "280b019004d4dd05e8574be3614367de47370a67e8ed52fbb802ae36bb254751"
+            },
+            {
+              "name": "_Fd1775786892",
+              "object_id": "0830970f-02ed-405f-a689-adfffb6a44d2",
+              "sdk_id": "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+              "payload_offset": 1026,
+              "payload_size": 418,
+              "bookmark_uint32": 1775786892,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "bb7ed0b9632d7b494c52ab4a35c8ed6343d7f2dab52826591dfc84dd9b9e7499"
+            },
+            {
+              "name": "_Fd2079895776",
+              "object_id": "86ff1f93-cef2-4b81-892d-640b3cd13919",
+              "sdk_id": "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+              "payload_offset": 1481,
+              "payload_size": 420,
+              "bookmark_uint32": 2079895776,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "7ba58e4530ee147e11bea59978617d698ce4078303d25c02d7135aa4f9fb6e26"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1958,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2088,
+              "compressed_size": 1046218,
+              "inflated_size": 1393133,
+              "inflated_sha256": "e281e0ac00a687ed455cf783329d0c305a2fbdf57e13a652c83b1ef06d4b532f"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "2abfaf546a543ef21ad269e1894cb4d8a0438646a3bbd165f54a3bd1449f0bbf",
+              "record_sha256": "87033d906c3ca852b89f366b0dd1f650f06c7965cd320fcd92443129310d125e"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX23.bin",
+          "binary_sha256": "a7ec2b97ae44094a0e28eb15faacc62058460a3c46d8e959d6e8cf3cdee99ef3",
+          "contents_sha256": "1398d4af58dbc01f9c2aebc3cf518dd4356f82b5278b18e8523122b1a8865477",
+          "version": "R8:0.1",
+          "object_id": "c876ef4d-fee3-48d3-8c1f-d62706a94e04",
+          "sdk_id": "82d30919-ef56-4397-b18c-3532b42fbad9",
+          "metadata_flag": 1,
+          "size": 1082111,
+          "end_tag_offset": 94,
+          "kent_offset": 109,
+          "fields": [],
+          "state_blocks": [
+            {
+              "compressed_offset": 151,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 281,
+              "compressed_size": 1081820,
+              "inflated_size": 1386502,
+              "inflated_sha256": "03a855f85018dd449a78d9d48cf10c128007b1be61384306ee5be1bde430a8a9"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "e4f43c43e4bf438cf03d33cb8a3ee6bcefaec9e30842fe104af1d3811cbff3ed",
+              "record_sha256": "692a97c3202d22afb3e6a3dd0404a4b2246a63c8610511c9998ea48aeca4e22f"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX24.bin",
+          "binary_sha256": "c1b3fd846a6707e36a608d8d728b66132adddce896ede93d36a70226886484b8",
+          "contents_sha256": "8140bf805289b8ba00e726ecbc96cf81a6c5a673962b1561e54b75275c67d45d",
+          "version": "R8:0.1",
+          "object_id": "8b551555-3307-4b2d-af9e-a9d14ff2359b",
+          "sdk_id": "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+          "metadata_flag": 1,
+          "size": 1039436,
+          "end_tag_offset": 1901,
+          "kent_offset": 1916,
+          "fields": [
+            {
+              "name": "_Fd1688275297",
+              "object_id": "23633fb0-3f0c-4005-a09a-49094b25a1e5",
+              "sdk_id": "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+              "payload_offset": 131,
+              "payload_size": 418,
+              "bookmark_uint32": 1688275297,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "7e0e867cb38d20b0b9ee8a3f6ec9a2745bda664a8ccc6cbf2afb25dcc4ab14a4"
+            },
+            {
+              "name": "_Fd1707766124",
+              "object_id": "5c1bbfd1-c174-4a26-9ced-cc92fc207e64",
+              "sdk_id": "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+              "payload_offset": 586,
+              "payload_size": 424,
+              "bookmark_uint32": 1707766124,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 278,
+              "inflated_size": 689,
+              "inflated_sha256": "9179b5a931aeeaaadfd263ae38bf5d5da9fd0b1ead792ad48d0f11704638172f"
+            },
+            {
+              "name": "_Fd1964254772",
+              "object_id": "02b3b82c-2174-4868-90ae-18dd93d94377",
+              "sdk_id": "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+              "payload_offset": 1047,
+              "payload_size": 397,
+              "bookmark_uint32": 1964254772,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "770678b5ac2b80d65290f73a7ee05b696b6d7d964b89bc158edd091ca1ab41f7"
+            },
+            {
+              "name": "_Fd2136786175",
+              "object_id": "17faa237-db37-49f5-9ddc-321c141dd052",
+              "sdk_id": "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+              "payload_offset": 1481,
+              "payload_size": 420,
+              "bookmark_uint32": 2136786175,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "cf14f4cd18bb570b9db3c3e1f77de9635633698a88f84e7e01383ba8c1d00215"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1958,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2088,
+              "compressed_size": 1037338,
+              "inflated_size": 1381874,
+              "inflated_sha256": "c7d0fb23040b71db05b144fd309af3f913e419a54f98fc54ab12478a2ffd08d6"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "f0d288555101863add14258a1b6f17b4ff5809196a9fd0151f0f8368905c68e1",
+              "record_sha256": "ba52f4583036ff87dc09a71c7d2b0fb73fc0ee62c19cb4cd3524e06bfedcfa32"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX25.bin",
+          "binary_sha256": "867ddea06274de5ab2099fb986d9dd886bdf67eaa1584135757b09091f0e8d8d",
+          "contents_sha256": "7cc9e74c3357facbae2167f91a9e80de57ecaf95980054ab5642f9ed1c984098",
+          "version": "R8:0.1",
+          "object_id": "8b01f06e-dc7d-4021-9200-a6d723b43b5d",
+          "sdk_id": "d255e99a-5a5b-40eb-be94-f2a62e763e6c",
+          "metadata_flag": 1,
+          "size": 1105772,
+          "end_tag_offset": 556,
+          "kent_offset": 571,
+          "fields": [
+            {
+              "name": "_Fd703628520",
+              "object_id": "41221c95-65e0-41cf-9728-0aeda39b00c6",
+              "sdk_id": "d255e99a-5a5b-40eb-be94-f2a62e763e6c",
+              "payload_offset": 130,
+              "payload_size": 426,
+              "bookmark_uint32": 703628520,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "9bee78ad2c8cbbe0cfce069198ba824f44e64e2e3831a9e53dbdef55e4fe111a"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 613,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 743,
+              "compressed_size": 1105019,
+              "inflated_size": 1383114,
+              "inflated_sha256": "5851d14160b775bcb0a4c20a31a49438575033164e06a4473391bc2819ddd2e2"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 32,
+            "102": 74,
+            "101": 30
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "95b066b45fb19c457f1159c79ecb2102948472b39151fa427374f47434f67419",
+              "record_sha256": "5ea599094c9ec3e056f3102959998594f33ddd859ae7864cb7909c2857bc4030"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX26.bin",
+          "binary_sha256": "f6cbd38c8006199fe5d845bfd3d045ed4f253e07955d92ffedb677aa5cfdb277",
+          "contents_sha256": "4ea83af20708f262dc74187d1fddac1ef5507c0b39443e64b7c8d48b81f76027",
+          "version": "R8:0.1",
+          "object_id": "732bf3f0-e588-4690-9f0d-9f76acd5864e",
+          "sdk_id": "403c9b34-c848-49d7-a819-05df14e7cf39",
+          "metadata_flag": 1,
+          "size": 1127646,
+          "end_tag_offset": 1909,
+          "kent_offset": 1924,
+          "fields": [
+            {
+              "name": "_Fd1720080055",
+              "object_id": "ed5b0f08-94f8-4497-b04b-b1b2f746aaa4",
+              "sdk_id": "403c9b34-c848-49d7-a819-05df14e7cf39",
+              "payload_offset": 131,
+              "payload_size": 397,
+              "bookmark_uint32": 1720080055,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "8b5dde2ae2732535d08059b41d821192b8bd0a94d43d60571ee3f9950b60705a"
+            },
+            {
+              "name": "_Fd496096926",
+              "object_id": "2da78147-2fa4-4b83-a132-7ee31fd140e2",
+              "sdk_id": "403c9b34-c848-49d7-a819-05df14e7cf39",
+              "payload_offset": 564,
+              "payload_size": 419,
+              "bookmark_uint32": 496096926,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 273,
+              "inflated_size": 679,
+              "inflated_sha256": "1cb12558a5cbdf7725dff16229250f2cf9578fa1cdc0fdbb1b9a402826adb134"
+            },
+            {
+              "name": "_Fd546724564",
+              "object_id": "0a08e31a-573d-4723-ad63-13fb1efa09aa",
+              "sdk_id": "403c9b34-c848-49d7-a819-05df14e7cf39",
+              "payload_offset": 1019,
+              "payload_size": 426,
+              "bookmark_uint32": 546724564,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "4d60128c6017eaae0ec9bb3ec91093ae8638a5911b3ed98818f18f8988e265b6"
+            },
+            {
+              "name": "_Fd820875086",
+              "object_id": "f311aa6d-2439-4685-9db5-d7c231d1e2b9",
+              "sdk_id": "403c9b34-c848-49d7-a819-05df14e7cf39",
+              "payload_offset": 1481,
+              "payload_size": 428,
+              "bookmark_uint32": 820875086,
+              "label": [
+                "Sp1.Max. Temperature"
+              ],
+              "compressed_size": 282,
+              "inflated_size": 689,
+              "inflated_sha256": "2f732240067189d4a13434e3b1f3a7c6538e59309e20e0b318ac598e8913215c"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1966,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2096,
+              "compressed_size": 1125540,
+              "inflated_size": 1382943,
+              "inflated_sha256": "60b42008a049551204a57c8ed92f6a99df606ad169d1fcf159bdffee9a0d30ef"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 56,
+            "102": 122,
+            "101": 54
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "13d07b528c35077acffa98f48d8bbb5414421176e75300fd487417e46b71ee9b",
+              "record_sha256": "955d078ab2cc5b26fda98a177ce61f0a6ac9a5a6bf5c3a2f20cd165ed8ff476f"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX27.bin",
+          "binary_sha256": "4f26a1d2716ebeee7065fa1f9bda7f08c75c3c0f6d955cad220083144f97930a",
+          "contents_sha256": "c24600af52ec55b1b515857da24c7dd8c0490f60861856bc4383f82413532b49",
+          "version": "R8:0.1",
+          "object_id": "77d556e8-2b14-4d72-b408-422879ccfa8d",
+          "sdk_id": "88835f05-3866-4e4b-9e8d-930c53809797",
+          "metadata_flag": 1,
+          "size": 1046310,
+          "end_tag_offset": 1908,
+          "kent_offset": 1923,
+          "fields": [
+            {
+              "name": "_Fd1064219773",
+              "object_id": "5ddfbd4c-ca52-4fc4-844c-b84919f4d328",
+              "sdk_id": "88835f05-3866-4e4b-9e8d-930c53809797",
+              "payload_offset": 131,
+              "payload_size": 428,
+              "bookmark_uint32": 1064219773,
+              "label": [
+                "Sp1.Max. Temperature"
+              ],
+              "compressed_size": 282,
+              "inflated_size": 689,
+              "inflated_sha256": "367063915e4595c4301fffee244a8bb750fe82d17a0ef3d23e8b66e68cea934b"
+            },
+            {
+              "name": "_Fd1067021722",
+              "object_id": "0acc2023-0730-4b8b-a218-90e5ba120bc3",
+              "sdk_id": "88835f05-3866-4e4b-9e8d-930c53809797",
+              "payload_offset": 596,
+              "payload_size": 426,
+              "bookmark_uint32": 1067021722,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "d2b317ea776795983cd2e79d8718e7fed8bfbf774face34cf6caa11b52a57269"
+            },
+            {
+              "name": "_Fd1280274198",
+              "object_id": "d318c355-b96c-4f39-a113-e2ff93e08443",
+              "sdk_id": "88835f05-3866-4e4b-9e8d-930c53809797",
+              "payload_offset": 1059,
+              "payload_size": 395,
+              "bookmark_uint32": 1280274198,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 249,
+              "inflated_size": 655,
+              "inflated_sha256": "e8ebd3bcb98e95f84b0b5a4808fc114c812c7c3dfa85bc5ef9807dd4bcd99944"
+            },
+            {
+              "name": "_Fd1764377785",
+              "object_id": "6bde23e8-bb20-4210-a18b-6b21eabd8e58",
+              "sdk_id": "88835f05-3866-4e4b-9e8d-930c53809797",
+              "payload_offset": 1491,
+              "payload_size": 417,
+              "bookmark_uint32": 1764377785,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 271,
+              "inflated_size": 679,
+              "inflated_sha256": "7e21f1961e8c825a788797c697e88fc52c8de83aa5a45a9bbb17e9832eb37475"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1965,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2095,
+              "compressed_size": 1044205,
+              "inflated_size": 1330655,
+              "inflated_sha256": "4a911d1647183f6d5b2a4cc7504e38df2097c43bee6f0c0e00a69db378260a26"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 56,
+            "102": 122,
+            "101": 54
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "a1c7e9484b16a3b40ce3e8b490d8e959360460a1761bf1022917b38dcefae89b",
+              "record_sha256": "d3412959bff831928b810b76826c21fc7c4281a0af83060098ec4d6cbb8765b8"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX3.bin",
+          "binary_sha256": "6da9e0ab963602c2f4c3fb787a3df9c126041667220d73f30bc5a1bd7fa900c4",
+          "contents_sha256": "2de517f4ef1aa3763482301f17d0d39064c11b781b550757957af203f6f10e5e",
+          "version": "R8:0.1",
+          "object_id": "fd1e2998-c991-47d7-922b-d4e51419fc07",
+          "sdk_id": "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+          "metadata_flag": 1,
+          "size": 973547,
+          "end_tag_offset": 1902,
+          "kent_offset": 1917,
+          "fields": [
+            {
+              "name": "_Fd1016708312",
+              "object_id": "2696ed2f-8a38-45f6-a438-5bde4fc3f285",
+              "sdk_id": "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+              "payload_offset": 131,
+              "payload_size": 397,
+              "bookmark_uint32": 1016708312,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "2522d738d2c09b3159b5d6db653deaa0f41c3af7fe862f6e643cc13ff431be9b"
+            },
+            {
+              "name": "_Fd1057524925",
+              "object_id": "3375a511-5355-4e54-95e2-5d2ccd54dc3f",
+              "sdk_id": "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+              "payload_offset": 565,
+              "payload_size": 426,
+              "bookmark_uint32": 1057524925,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "245be718a0e127599afdbd6ff9ec38f18afb7ad920e62654090529afca64ad72"
+            },
+            {
+              "name": "_Fd2144415276",
+              "object_id": "00eafc12-febf-4b1d-94f0-ffd548867624",
+              "sdk_id": "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+              "payload_offset": 1028,
+              "payload_size": 420,
+              "bookmark_uint32": 2144415276,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "0d5ad382961af730ac723efe4367e8eeb4a82bd7f9d08b5babb1c33942c33614"
+            },
+            {
+              "name": "_Fd97815547",
+              "object_id": "f4d36ef8-fa46-4efd-8b89-1a8cd53ada90",
+              "sdk_id": "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+              "payload_offset": 1483,
+              "payload_size": 419,
+              "bookmark_uint32": 97815547,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 273,
+              "inflated_size": 679,
+              "inflated_sha256": "1d422e7676a10284797d91c2a2f3ec3f4e0ed60986cb8578d33471eb56fe62c1"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1959,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2089,
+              "compressed_size": 971448,
+              "inflated_size": 1400256,
+              "inflated_sha256": "78546cb99c49ee1ddcf074140a0c6961397b82928f1d6c407d4a9c7e678f7fa5"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "acb5eac7ccd47c16d7c52e3ab514d87c76207ffb237c8932bb257f98649a315a",
+              "record_sha256": "c26c59756b79b4b8ec655ab521c98aa3b780b91b4252da00611634fdcb2f7887"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX4.bin",
+          "binary_sha256": "bb72b35e8cf56d01a1f4879a6f8c4760c3557eeac2ce0c17d1e7a979a2591fcb",
+          "contents_sha256": "db120b82b79457be38657214b0b6b834756d1fd1758fd8c4e6d839c904957043",
+          "version": "R8:0.1",
+          "object_id": "11cb4ec6-6589-4ca8-b719-40eef7181c4a",
+          "sdk_id": "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+          "metadata_flag": 1,
+          "size": 993349,
+          "end_tag_offset": 1901,
+          "kent_offset": 1916,
+          "fields": [
+            {
+              "name": "_Fd1367909439",
+              "object_id": "e93f3cdf-e6e7-4029-a0c6-3264c003a2b5",
+              "sdk_id": "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+              "payload_offset": 131,
+              "payload_size": 420,
+              "bookmark_uint32": 1367909439,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "9b341d7ad5fbab0b97df268b612f881e592a1a3b6a6b9c4ad5f1cb213bbe77c0"
+            },
+            {
+              "name": "_Fd1559606081",
+              "object_id": "ff03dddc-3b52-4d33-a3d8-40140436373b",
+              "sdk_id": "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+              "payload_offset": 588,
+              "payload_size": 419,
+              "bookmark_uint32": 1559606081,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 273,
+              "inflated_size": 679,
+              "inflated_sha256": "2606ca8e1e826deac2eda088f726407fdb9c798b8f90a4e5ac53c09bfe1c1b3c"
+            },
+            {
+              "name": "_Fd2092746574",
+              "object_id": "c152e358-a5e9-4362-8347-b388ef23de0e",
+              "sdk_id": "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+              "payload_offset": 1044,
+              "payload_size": 426,
+              "bookmark_uint32": 2092746574,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "21d6b31ed3c89776d6fefbf0509ccfa002ebeda0cd5a380fc56e8426de9f88a1"
+            },
+            {
+              "name": "_Fd5631611",
+              "object_id": "49819dfe-d1d2-466c-9524-139e8da54a78",
+              "sdk_id": "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+              "payload_offset": 1504,
+              "payload_size": 397,
+              "bookmark_uint32": 5631611,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "9a77ea1bc4cfaab96bc09a1796dfd66a002a2d9d42c0f61d11f823ea7d7f8333"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1958,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2088,
+              "compressed_size": 991251,
+              "inflated_size": 1400422,
+              "inflated_sha256": "de1d7fb5b5e80fd730ff9a83f25493889767fca352bd65455083822b7b27ee53"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "64dd24627c97c7544a906095002de034555612c1cf3df7fb04375ab48a2dc07e",
+              "record_sha256": "a02bb73733d215d19212bde44f7f887e648a21e49c615118c07353daa730d8ba"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX5.bin",
+          "binary_sha256": "cdbf7ac5fb254b51cbb0a7c81970d1482b1f950141fb57ec92c7b822239ae75b",
+          "contents_sha256": "5b62a197834eef02d5c25d6f86d00a519a5de269059859f6c394d9f1c0980747",
+          "version": "R8:0.1",
+          "object_id": "833f6439-849c-4934-b821-c46b16c0ba16",
+          "sdk_id": "0b33bf90-d804-439d-a932-341f129e5497",
+          "metadata_flag": 1,
+          "size": 964222,
+          "end_tag_offset": 1903,
+          "kent_offset": 1918,
+          "fields": [
+            {
+              "name": "_Fd1347780533",
+              "object_id": "59c3ef7f-dbdc-4e5b-ab45-416307ac89eb",
+              "sdk_id": "0b33bf90-d804-439d-a932-341f129e5497",
+              "payload_offset": 131,
+              "payload_size": 419,
+              "bookmark_uint32": 1347780533,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 273,
+              "inflated_size": 679,
+              "inflated_sha256": "32c7faf31193a9d49ff2eb50933e66ff3ce7be44ac74271d3356af9573cb19aa"
+            },
+            {
+              "name": "_Fd1623032130",
+              "object_id": "a713df20-ea8d-491f-94f7-8e4ae4a335f2",
+              "sdk_id": "0b33bf90-d804-439d-a932-341f129e5497",
+              "payload_offset": 587,
+              "payload_size": 426,
+              "bookmark_uint32": 1623032130,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "c3ace1f5661b97db4b57116a509fdeeba517d604e5d8bd4727fc2efdacee2c81"
+            },
+            {
+              "name": "_Fd1737418188",
+              "object_id": "dc51d49a-a1a9-4726-a851-bdda0fc9fdb1",
+              "sdk_id": "0b33bf90-d804-439d-a932-341f129e5497",
+              "payload_offset": 1050,
+              "payload_size": 420,
+              "bookmark_uint32": 1737418188,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "49136ad4c4a55f571bffb365c3de60f7b53d80214027b5d5938382688cb59793"
+            },
+            {
+              "name": "_Fd423313352",
+              "object_id": "9feae17d-5316-4bb1-96b6-2dfe3985827a",
+              "sdk_id": "0b33bf90-d804-439d-a932-341f129e5497",
+              "payload_offset": 1506,
+              "payload_size": 397,
+              "bookmark_uint32": 423313352,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "8fcbf1d76952066f316aa7496009678dfe1e8dfbd9098d5977b381e0e711a9d1"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1960,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2090,
+              "compressed_size": 962122,
+              "inflated_size": 1407153,
+              "inflated_sha256": "f138a9b6cc51cb5386a5bf90c8021011fd96f8f4f74fc32a5dcc4b4c8969e798"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "8c2b415ac540d4887b595db875ce8107c3b695be3265c2f0a2932ace42824ff9",
+              "record_sha256": "d33f887a7ded286421c1a14d4ad36a05a8bf6040ba6622ed6ddedee594e7b029"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX6.bin",
+          "binary_sha256": "238374b89593a4f01bde06f8789e62a3869a6438e547b1d138d3f7cd6ffdb2e7",
+          "contents_sha256": "4b438aef1dcb7e0b9d2680b561ac7440458282527d0ae3a403869b5553a4d316",
+          "version": "R8:0.1",
+          "object_id": "cd341bb6-aae0-49e3-9d0a-f918100633be",
+          "sdk_id": "20590ca0-be91-4037-944f-b180fd8ef445",
+          "metadata_flag": 1,
+          "size": 952261,
+          "end_tag_offset": 1902,
+          "kent_offset": 1917,
+          "fields": [
+            {
+              "name": "_Fd1200134904",
+              "object_id": "a75c8d6b-20a7-45ca-9c7d-ce9948df56cd",
+              "sdk_id": "20590ca0-be91-4037-944f-b180fd8ef445",
+              "payload_offset": 131,
+              "payload_size": 426,
+              "bookmark_uint32": 1200134904,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "c0cc84bde96f6d922f40069606bd9ce0fa3c182486ccc9396bed641acbebc61e"
+            },
+            {
+              "name": "_Fd1605427229",
+              "object_id": "44fde81f-70b2-4523-8ddf-b908920aef9a",
+              "sdk_id": "20590ca0-be91-4037-944f-b180fd8ef445",
+              "payload_offset": 594,
+              "payload_size": 396,
+              "bookmark_uint32": 1605427229,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 250,
+              "inflated_size": 655,
+              "inflated_sha256": "c0b23eb1d3b80880282793d0a42a2254efbcea47d76291a92c96b2e2a2688e15"
+            },
+            {
+              "name": "_Fd1721532153",
+              "object_id": "c29807dc-b34f-4eda-83f7-8fd3ac460d58",
+              "sdk_id": "20590ca0-be91-4037-944f-b180fd8ef445",
+              "payload_offset": 1027,
+              "payload_size": 420,
+              "bookmark_uint32": 1721532153,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "c35885b5309343c7eee450f68e17b37e06082545a197df8b1972365c43521402"
+            },
+            {
+              "name": "_Fd383296451",
+              "object_id": "7f3500c0-f07b-45e6-a343-a1c02a34c19d",
+              "sdk_id": "20590ca0-be91-4037-944f-b180fd8ef445",
+              "payload_offset": 1483,
+              "payload_size": 419,
+              "bookmark_uint32": 383296451,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 273,
+              "inflated_size": 679,
+              "inflated_sha256": "6cd28d80e72ae3c41bc40d9ce513e8583b9dc0401315c598d91ecd662aa184d1"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1959,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2089,
+              "compressed_size": 950162,
+              "inflated_size": 1381601,
+              "inflated_sha256": "f0391f51a1d167d4b8df4c9ccd7aa4ca70ade39b4e608cfb2b0164f8cd1b9ce8"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "145c8320e72244a3370d86cdd92450ce110cea017f55c581fc14f1125b85c086",
+              "record_sha256": "63614408af07362a96a6c1046b075bcfc5c4e01ed53ebb6c73de1fa1b9d14bbb"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX7.bin",
+          "binary_sha256": "f2ad93dd42fb32893d72ba40a95248ed5a92770c1f72c629c78f81d507003441",
+          "contents_sha256": "cfa5b46ac76273b0f5e3a4c382785569c1dbc9f784a288406a755cf3cd0d799c",
+          "version": "R8:0.1",
+          "object_id": "820749cf-b71e-431a-83dd-197153b0d214",
+          "sdk_id": "49deddbc-9e24-4244-ba18-c3c596e6661c",
+          "metadata_flag": 1,
+          "size": 912503,
+          "end_tag_offset": 1900,
+          "kent_offset": 1915,
+          "fields": [
+            {
+              "name": "_Fd1078840485",
+              "object_id": "14938fcd-fac0-4646-8506-2e78392ec9f1",
+              "sdk_id": "49deddbc-9e24-4244-ba18-c3c596e6661c",
+              "payload_offset": 131,
+              "payload_size": 418,
+              "bookmark_uint32": 1078840485,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "e79bf7ec6a29327da75939df2279dec985229d46724805978f344fd12f7c819b"
+            },
+            {
+              "name": "_Fd1792372118",
+              "object_id": "90b40c3b-95f1-4171-bd91-70c535ea9eb4",
+              "sdk_id": "49deddbc-9e24-4244-ba18-c3c596e6661c",
+              "payload_offset": 586,
+              "payload_size": 397,
+              "bookmark_uint32": 1792372118,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "cf5637d1b9bec2e09ae7fe16628499431fb10228be7bcbf18f1cf576bac4105a"
+            },
+            {
+              "name": "_Fd248682315",
+              "object_id": "13182ca0-908e-4f7b-8d0f-ae3c2712d1d1",
+              "sdk_id": "49deddbc-9e24-4244-ba18-c3c596e6661c",
+              "payload_offset": 1019,
+              "payload_size": 426,
+              "bookmark_uint32": 248682315,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "701cf930d4314a71f117228ecb02ecc524e71407fe73b0a5056638898afe9879"
+            },
+            {
+              "name": "_Fd63553607",
+              "object_id": "89b37568-0c0d-4141-9099-91fc66964091",
+              "sdk_id": "49deddbc-9e24-4244-ba18-c3c596e6661c",
+              "payload_offset": 1480,
+              "payload_size": 420,
+              "bookmark_uint32": 63553607,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "de1eeb901cbf930438726613e640ba5a5e4e50891e015b08646893849e2742ba"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1957,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2087,
+              "compressed_size": 910406,
+              "inflated_size": 1349105,
+              "inflated_sha256": "7b9e23bcfa913099e9cb3d5eca52e96b59b44dc149d479588303a05ca42796de"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "aebc4e0394598b4395ad9ee0a318dea907516574d0b96b91f4a6b810a2dc4352",
+              "record_sha256": "41e092bf1ad6c6cbb57d8a736b38a75cee6a4c16790186b771ed6cebc047bff6"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX8.bin",
+          "binary_sha256": "2a37d90127145fe261120e78894285d69b020ea18975abfa30236e6149ca090f",
+          "contents_sha256": "557ba9cf056753a76496b9cb101cf787f901bfd7b946b0038b82cd827c5dea75",
+          "version": "R8:0.1",
+          "object_id": "0fe85ccb-6d96-43db-bf1d-6430ccbe8abc",
+          "sdk_id": "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+          "metadata_flag": 1,
+          "size": 860604,
+          "end_tag_offset": 1902,
+          "kent_offset": 1917,
+          "fields": [
+            {
+              "name": "_Fd1229945691",
+              "object_id": "2fe50bd9-a414-4abc-9193-0a189970ac3d",
+              "sdk_id": "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+              "payload_offset": 131,
+              "payload_size": 418,
+              "bookmark_uint32": 1229945691,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "ad218bbbd65ff04a38264ff8a545805296336dabff4d82500c0b454873ce58b0"
+            },
+            {
+              "name": "_Fd1603701097",
+              "object_id": "2680944f-73e8-4722-8b43-f617cd3b169b",
+              "sdk_id": "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+              "payload_offset": 586,
+              "payload_size": 420,
+              "bookmark_uint32": 1603701097,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 274,
+              "inflated_size": 679,
+              "inflated_sha256": "1d142c2735296167a71b2f70a90d6b6b2d40198a104e2aef482860f9200a3038"
+            },
+            {
+              "name": "_Fd1807228622",
+              "object_id": "550a3941-db34-4b9c-a966-9e58065b3195",
+              "sdk_id": "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+              "payload_offset": 1043,
+              "payload_size": 397,
+              "bookmark_uint32": 1807228622,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 251,
+              "inflated_size": 655,
+              "inflated_sha256": "f4c9b3139c47868067e138a5ec63884311a07f6c55a2278c01c5e17b44c4e33d"
+            },
+            {
+              "name": "_Fd316616349",
+              "object_id": "eb38d929-9f53-4a33-84fb-5d1b43d02c46",
+              "sdk_id": "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+              "payload_offset": 1476,
+              "payload_size": 426,
+              "bookmark_uint32": 316616349,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 280,
+              "inflated_size": 689,
+              "inflated_sha256": "5c6019a85744791a38358b0c5276909305ef444c728782615c74cf875cfe87b0"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1959,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2089,
+              "compressed_size": 858505,
+              "inflated_size": 1298602,
+              "inflated_sha256": "742dc17b10c305b77838bb0cf95aaf2251ad217bcc956acd6322d6f7f60d8afb"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 57,
+            "102": 123,
+            "101": 55
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "8ccd7f1fe2aa3b1cc1420e9a6b46fe9a94df17fc6662ca22f09f177f1acdee4f",
+              "record_sha256": "9ffbfc3ecd46faae14109f8c4bdd14376f66c003fb9a71ecca2db7380dcab498"
+            }
+          ]
+        },
+        {
+          "part": "word/activeX/activeX9.bin",
+          "binary_sha256": "8aedbef7d9654955a6a962211b1c3056082043f8bb6eea54c64ba2d726609998",
+          "contents_sha256": "db5323ff11f66920dfe90a2fda5cb979311bcc6aee1db63800327bcd6dad442d",
+          "version": "R8:0.1",
+          "object_id": "66a21f13-1f55-4cbe-bcb5-4d96a8bb9a39",
+          "sdk_id": "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+          "metadata_flag": 1,
+          "size": 998115,
+          "end_tag_offset": 1893,
+          "kent_offset": 1908,
+          "fields": [
+            {
+              "name": "_Fd1138066438",
+              "object_id": "cf6708a5-db69-4f31-8d26-643420bdf0a3",
+              "sdk_id": "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+              "payload_offset": 131,
+              "payload_size": 418,
+              "bookmark_uint32": 1138066438,
+              "label": [
+                "Sp2.Temperature"
+              ],
+              "compressed_size": 272,
+              "inflated_size": 679,
+              "inflated_sha256": "79969c1203ea741074c55795ea6dc8b471bc66c9206dba12cdc730763444995c"
+            },
+            {
+              "name": "_Fd181838646",
+              "object_id": "d225518a-a901-4d58-8e8f-260d34d79e5b",
+              "sdk_id": "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+              "payload_offset": 585,
+              "payload_size": 416,
+              "bookmark_uint32": 181838646,
+              "label": [
+                "Sp1.Temperature"
+              ],
+              "compressed_size": 270,
+              "inflated_size": 679,
+              "inflated_sha256": "2939ca0ec739e6a85bd0563862259877161a1cab57b41f83fe842972c4bbf829"
+            },
+            {
+              "name": "_Fd2072950825",
+              "object_id": "8f74d5f6-f01e-40d8-a8a9-9926fefabd16",
+              "sdk_id": "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+              "payload_offset": 1038,
+              "payload_size": 395,
+              "bookmark_uint32": 2072950825,
+              "label": [
+                "Dt1"
+              ],
+              "compressed_size": 249,
+              "inflated_size": 655,
+              "inflated_sha256": "d8ce79067aa15e1c8da7d5f69cb8e72a6fe2d831d4719f5bda506e9b8764b7bd"
+            },
+            {
+              "name": "_Fd553495716",
+              "object_id": "0851042d-80da-48a9-8a22-bcca2b55f4f6",
+              "sdk_id": "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+              "payload_offset": 1469,
+              "payload_size": 424,
+              "bookmark_uint32": 553495716,
+              "label": [
+                "Ar1.Max. Temperature"
+              ],
+              "compressed_size": 278,
+              "inflated_size": 689,
+              "inflated_sha256": "e4b5cca533d05fe7966849f732008865102c1609db023f056d136d07f9d355a6"
+            }
+          ],
+          "state_blocks": [
+            {
+              "compressed_offset": 1950,
+              "compressed_size": 58,
+              "inflated_size": 112,
+              "inflated_sha256": "0dfd68541053138e7e7e75389881e0fa45dabea3bc7d1991b1821fe00c55ece6"
+            },
+            {
+              "compressed_offset": 2080,
+              "compressed_size": 996025,
+              "inflated_size": 1441983,
+              "inflated_sha256": "afc91d748b15b67bdd09fb7152eaf9e49a17d74610797611b8a5ba6ce6f0c022"
+            }
+          ],
+          "sdk_frame_codes": {
+            "100": 59,
+            "102": 125,
+            "101": 57
+          },
+          "image_records": [
+            {
+              "record_id": 1017,
+              "size": 618320,
+              "width_candidate": 640,
+              "height_candidate": 480,
+              "plane_offset_in_record": 3920,
+              "plane_size": 614400,
+              "plane_sha256": "34ea231a1edbb3d7359d208010e5457301a8fa8645cbc2966ab09a2625b276bb",
+              "record_sha256": "e913a90a6b4e54b2dcc317ca1c9177f13666f40d5eb29a9f2f50929ed997f1fb"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+
+== swg-panel (committed template).docx (1 binaries)
+  activeX1.bin     _Fd1922861825    bookmark 1922861825   same
+  activeX1.bin     _Fd1967887225    bookmark 1967887225   same
+  activeX1.bin     _Fd81475520      bookmark 81475520     same
+  activeX1.bin     _Fd97091050      bookmark 97091050     same
+   total: 4 same, 0 different, 0 unreadable
+   viewer object UUIDs: 1, unique 1
+   viewer SDK UUIDs:    1, unique 1
+
+== joined_swg_panels_proof (rekey-join 2-panel).docx (2 binaries)
+  activeX1.bin     _Fd1922861825    bookmark 1922861825   same
+  activeX1.bin     _Fd1967887225    bookmark 1967887225   same
+  activeX1.bin     _Fd81475520      bookmark 81475520     same
+  activeX1.bin     _Fd97091050      bookmark 97091050     same
+  activeX2.bin     _Fd3509985251    bookmark 1922861825   DIFFERENT
+  activeX2.bin     _Fd1540926724    bookmark 1967887225   DIFFERENT
+  activeX2.bin     _Fd20366934      bookmark 81475520     DIFFERENT
+  activeX2.bin     _Fd29816013      bookmark 97091050     DIFFERENT
+   total: 4 same, 4 different, 0 unreadable
+   viewer object UUIDs: 2, unique 1
+   viewer SDK UUIDs:    2, unique 2
+
+== 01. PPU APMM 3311kV - Part 03 - Panel 1 (33kV - SPARE).docx (7 binaries)
+  activeX1.bin     _Fd1133139245    bookmark 1133139245   same
+  activeX1.bin     _Fd1429381031    bookmark 1429381031   same
+  activeX1.bin     _Fd1889886030    bookmark 1889886030   same
+  activeX1.bin     _Fd2071905749    bookmark 2071905749   same
+  activeX2.bin     _Fd1005220199    bookmark 1005220199   same
+  activeX2.bin     _Fd1235325680    bookmark 1235325680   same
+  activeX2.bin     _Fd616246260     bookmark 616246260    same
+  activeX2.bin     _Fd83328049      bookmark 83328049     same
+  activeX3.bin     _Fd144407912     bookmark 144407912    same
+  activeX3.bin     _Fd1516477118    bookmark 1516477118   same
+  activeX3.bin     _Fd1558879400    bookmark 1558879400   same
+  activeX3.bin     _Fd267666409     bookmark 267666409    same
+  activeX4.bin     _Fd1014335694    bookmark 1014335694   same
+  activeX4.bin     _Fd1384075614    bookmark 1384075614   same
+  activeX4.bin     _Fd1407223880    bookmark 1407223880   same
+  activeX4.bin     _Fd1724797654    bookmark 1724797654   same
+  activeX5.bin     _Fd1281443418    bookmark 1281443418   same
+  activeX5.bin     _Fd1454015588    bookmark 1454015588   same
+  activeX5.bin     _Fd1963811113    bookmark 1963811113   same
+  activeX5.bin     _Fd252542726     bookmark 252542726    same
+  activeX6.bin     _Fd1007505297    bookmark 1007505297   same
+  activeX6.bin     _Fd1713316030    bookmark 1713316030   same
+  activeX6.bin     _Fd2091168359    bookmark 2091168359   same
+  activeX6.bin     _Fd914529686     bookmark 914529686    same
+  activeX7.bin     _Fd1045267201    bookmark 1045267201   same
+  activeX7.bin     _Fd1833044940    bookmark 1833044940   same
+  activeX7.bin     _Fd33920305      bookmark 33920305     same
+  activeX7.bin     _Fd787582983     bookmark 787582983    same
+   total: 28 same, 0 different, 0 unreadable
+   viewer object UUIDs: 7, unique 7
+   viewer SDK UUIDs:    7, unique 7
+
+== 01. PPU APMM 3311kV - Part 03 - Panel 1 (33kV - SPARE) [XML-JOINED].docx (7 binaries)
+  activeX1.bin     _Fd1610969120    bookmark 1475637730   DIFFERENT
+  activeX1.bin     _Fd9036535755    bookmark 1746235066   DIFFERENT
+  activeX1.bin     _Fd434711213     bookmark 691201561    DIFFERENT
+  activeX1.bin     _Fd99740255      bookmark 93285715     DIFFERENT
+  activeX2.bin     _Fd4799429040    bookmark 1475637730   DIFFERENT
+  activeX2.bin     _Fd3486971461    bookmark 1746235066   DIFFERENT
+  activeX2.bin     _Fd794380440     bookmark 691201561    DIFFERENT
+  activeX2.bin     _Fd70260488      bookmark 93285715     DIFFERENT
+  activeX3.bin     _Fd4280958165    bookmark 1475637730   DIFFERENT
+  activeX3.bin     _Fd3873578660    bookmark 1746235066   DIFFERENT
+  activeX3.bin     _Fd261395254     bookmark 691201561    DIFFERENT
+  activeX3.bin     _Fd78341966      bookmark 93285715     DIFFERENT
+  activeX4.bin     _Fd4318729633    bookmark 1475637730   DIFFERENT
+  activeX4.bin     _Fd1054731241    bookmark 1746235066   DIFFERENT
+  activeX4.bin     _Fd160980114     bookmark 691201561    DIFFERENT
+  activeX4.bin     _Fd53637590      bookmark 93285715     DIFFERENT
+  activeX5.bin     _Fd1386383726    bookmark 1475637730   DIFFERENT
+  activeX5.bin     _Fd6023782078    bookmark 1746235066   DIFFERENT
+  activeX5.bin     _Fd180445134     bookmark 691201561    DIFFERENT
+  activeX5.bin     _Fd54577615      bookmark 93285715     DIFFERENT
+  activeX6.bin     _Fd2605551702    bookmark 1475637730   DIFFERENT
+  activeX6.bin     _Fd7929346409    bookmark 1746235066   DIFFERENT
+  activeX6.bin     _Fd984927988     bookmark 691201561    DIFFERENT
+  activeX6.bin     _Fd98049909      bookmark 93285715     DIFFERENT
+  activeX7.bin     _Fd6571001436    bookmark 1475637730   DIFFERENT
+  activeX7.bin     _Fd1345178180    bookmark 1746235066   DIFFERENT
+  activeX7.bin     _Fd334717308     bookmark 691201561    DIFFERENT
+  activeX7.bin     _Fd21714464      bookmark 93285715     DIFFERENT
+   total: 0 same, 28 different, 0 unreadable
+   viewer object UUIDs: 7, unique 7
+   viewer SDK UUIDs:    7, unique 7

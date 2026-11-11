@@ -1,0 +1,2615 @@
+{
+  "investigation": "Codex - Static/CFB investigation",
+  "branch": "research/flir-activex-xml-join",
+  "date": "2026-11-11",
+  "method": "Read-only ZIP, XML and CFB inspection; ASCII field/UUID inventory, not a FLIR decoder",
+  "documents": [
+    {
+      "sha256": "c7fe4886b0907a815573a9f34a4f1288257afc32c825cacc99d88330470e903b",
+      "controls": [
+        {
+          "id": "rId8",
+          "name": "CIRViewer121111113121111",
+          "shapeid": "_x0000_i1030"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 3783,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd1255641131"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {},
+      "fallback_shapes": [],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 203776,
+          "sha256": "2d9c35379b172a5ee33fe865288b02003df0399320b23a8bc47fc569d30a5d14",
+          "tag_offsets": [
+            2146,
+            4706
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 198858,
+              "sha256": "55a4fee2e549d747e10a38089dc6ccc812c28c811dd5db5f28bfcbef1115f538",
+              "field_names": [
+                "_Fd1255641131"
+              ],
+              "guids": [
+                "bd03c5ea-303b-4189-b2fe-91d68b05bd8a",
+                "cfbbc0b3-5bfc-45fb-b5df-bb25d65f0454",
+                "1cd8d264-b77d-4d80-aa17-d01024cf609c",
+                "cfbbc0b3-5bfc-45fb-b5df-bb25d65f0454"
+              ],
+              "field_offsets": {
+                "_Fd1255641131": 113
+              },
+              "tag_offsets": [
+                98
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/battery-overview.docx",
+      "body_field_count": 1,
+      "unique_body_field_count": 1,
+      "docpr_count": 1
+    },
+    {
+      "sha256": "d39a1358548652843f048e010892f1ec3a0b8c64b31bcd196883b588c637b8b9",
+      "controls": [
+        {
+          "id": "rId8",
+          "name": "CIRViewer121111113121",
+          "shapeid": "_x0000_i1027"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 3779,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd897741127"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {},
+      "fallback_shapes": [],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 369152,
+          "sha256": "43bd238da5f880c6813deab789fbd882959ab2b743cc25d0476a923a1dbdd87b",
+          "tag_offsets": [
+            2146,
+            5730
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 363177,
+              "sha256": "a126b3ac0fad0309d9311a4a997ebcbff206ceba30ad3ede67c54b6cf8858ba8",
+              "field_names": [
+                "_Fd897741127"
+              ],
+              "guids": [
+                "bf805f78-6b3d-43df-b357-be1f6e3d2e5c",
+                "39e1138e-a054-4e66-ab7d-c561075b17eb",
+                "e8e62ef2-10c0-4d61-a251-2adc08923877",
+                "39e1138e-a054-4e66-ab7d-c561075b17eb"
+              ],
+              "field_offsets": {
+                "_Fd897741127": 113
+              },
+              "tag_offsets": [
+                98
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/fp-overview.docx",
+      "body_field_count": 1,
+      "unique_body_field_count": 1,
+      "docpr_count": 2
+    },
+    {
+      "sha256": "9deeea0397f72b159c6454a5ad91343f73ad0519b7958920e3d5a34aa5376c74",
+      "controls": [
+        {
+          "id": "rId8",
+          "name": "CIRViewer121111",
+          "shapeid": "_x0000_i1027"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 3707,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd1826990618"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {},
+      "fallback_shapes": [],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 180736,
+          "sha256": "8057be4b8ef75ee74e087a36e98dfacdbb4f82d5418952eec3fb9ef0c7497dce",
+          "tag_offsets": [
+            2146,
+            4194
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 176372,
+              "sha256": "a75ecaff95acedace5b1afd748af171fe73bb5148f9eea48fd5af565c3a45409",
+              "field_names": [
+                "_Fd1826990618"
+              ],
+              "guids": [
+                "a8778dba-7dc1-4f60-bcf2-e9bc1e4ddf40",
+                "eeef1d6a-b073-4ffa-a4a4-c0f2d2eefbef",
+                "c62ea810-d98e-427f-82a3-dc05fe6b91d5",
+                "eeef1d6a-b073-4ffa-a4a4-c0f2d2eefbef"
+              ],
+              "field_offsets": {
+                "_Fd1826990618": 113
+              },
+              "tag_offsets": [
+                98
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/swg-overview.docx",
+      "body_field_count": 1,
+      "unique_body_field_count": 1,
+      "docpr_count": 1
+    },
+    {
+      "sha256": "b8230c4adccda8744c4952645049314761ebf9c5c11e61016816250f51698d94",
+      "controls": [
+        {
+          "id": "rId8",
+          "name": "CIRViewer1211111131211",
+          "shapeid": "_x0000_i1032"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 3855,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd1967887225",
+        "_Fd81475520",
+        "_Fd1922861825",
+        "_Fd97091050"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {},
+      "fallback_shapes": [],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 307200,
+          "sha256": "51ab83705540d6e683717bf9ad1408210936c61b5bbe3f15b82f40b8a3141d6c",
+          "tag_offsets": [
+            2146,
+            2613,
+            3072,
+            3528,
+            6754,
+            7221,
+            7680,
+            8136
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 300182,
+              "sha256": "aa381922e583b42266804df413e0db1c9a44e0d33a53c8b8e36eb8f72ecfa022",
+              "field_names": [
+                "_Fd1922861825",
+                "_Fd1967887225",
+                "_Fd81475520",
+                "_Fd97091050"
+              ],
+              "guids": [
+                "f0ff1a2f-6150-4fa9-ae4c-a199a4ec68ec",
+                "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+                "b6ff78c0-1459-43d3-a90a-9246e31cf8ab",
+                "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+                "fdd3008e-bb11-4f85-8d78-402a7e2ac8d6",
+                "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+                "67554dcf-a2e5-439f-b8b9-5b16c62a57c2",
+                "65f355f7-d614-4afe-85c8-dff34b8c47c7",
+                "2c336045-beec-4eca-8283-9f8b408cf619",
+                "65f355f7-d614-4afe-85c8-dff34b8c47c7"
+              ],
+              "field_offsets": {
+                "_Fd1922861825": 113,
+                "_Fd1967887225": 580,
+                "_Fd81475520": 1039,
+                "_Fd97091050": 1495
+              },
+              "tag_offsets": [
+                98,
+                565,
+                1024,
+                1480
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/swg-panel.docx",
+      "body_field_count": 4,
+      "unique_body_field_count": 4,
+      "docpr_count": 2
+    },
+    {
+      "sha256": "1aee17dd511510d70d35780ca20d3c925d4cbd423570d2411877c59cb01f19f1",
+      "controls": [
+        {
+          "id": "rId8",
+          "name": "CIRViewer1211111131",
+          "shapeid": "_x0000_i1029"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 3814,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd1947060717",
+        "_Fd1406125345",
+        "_Fd1146430293",
+        "_Fd506848005"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {},
+      "fallback_shapes": [],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 365056,
+          "sha256": "0258b45ae23fbcaebd9b49f011bb6359f83ff64dfee075193b3c1c90c8f2fd70",
+          "tag_offsets": [
+            2146,
+            2609,
+            3065,
+            3518,
+            7266,
+            7729,
+            8185,
+            8638
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 357599,
+              "sha256": "836098c3164c83bdf665aac816fdda7d370535fb13815efed043f13dd20636ca",
+              "field_names": [
+                "_Fd1146430293",
+                "_Fd1406125345",
+                "_Fd1947060717",
+                "_Fd506848005"
+              ],
+              "guids": [
+                "cd5efc47-6ff7-4227-bef0-30e8e2919cf9",
+                "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+                "f8a709b8-9e19-4cf7-8e20-9806f6e07f6c",
+                "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+                "49c901e7-be65-48d0-8e36-425e01370e2e",
+                "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+                "d2ab8e7d-396f-4737-9f5f-b255e038fac5",
+                "3e7aef2f-ff72-4346-88d9-b7712a463bc1",
+                "e8592902-7f00-4806-acd7-a15f0a18e1d1",
+                "3e7aef2f-ff72-4346-88d9-b7712a463bc1"
+              ],
+              "field_offsets": {
+                "_Fd1146430293": 113,
+                "_Fd1406125345": 576,
+                "_Fd1947060717": 1032,
+                "_Fd506848005": 1485
+              },
+              "tag_offsets": [
+                98,
+                561,
+                1017,
+                1470
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/tx-hv-sides.docx",
+      "body_field_count": 4,
+      "unique_body_field_count": 4,
+      "docpr_count": 2
+    },
+    {
+      "sha256": "3530b51018ff9aefa3febb1a51dba6ba5a1c8bd34c68d4793f515f028253f13f",
+      "controls": [
+        {
+          "id": "rId8",
+          "name": "CIRViewer1211111131",
+          "shapeid": "_x0000_i1029"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 3801,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd1285941572",
+        "_Fd1728863987",
+        "_Fd1669484723",
+        "_Fd2140244306"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {},
+      "fallback_shapes": [],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 375296,
+          "sha256": "50e3ed783986b218470af52e5286ba221a58e8cb305fd400d92b9db4f9adc37b",
+          "tag_offsets": [
+            2146,
+            2605,
+            3071,
+            3529,
+            7266,
+            7725,
+            8191,
+            8649
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 367805,
+              "sha256": "da95664918a51c3266f44f90efe52783022a9db0f2b4d4bf6f6ea6b45a9eb3e3",
+              "field_names": [
+                "_Fd1285941572",
+                "_Fd1669484723",
+                "_Fd1728863987",
+                "_Fd2140244306"
+              ],
+              "guids": [
+                "503d4947-73c5-4eea-a99f-d7aba835b4c4",
+                "b4061d15-0269-4806-ab48-eb781cbb283e",
+                "efbc49cf-9156-4c29-88f6-649197d2af1b",
+                "b4061d15-0269-4806-ab48-eb781cbb283e",
+                "cd5e6744-1d9b-4e42-ac5b-6eb2ec54d0ab",
+                "b4061d15-0269-4806-ab48-eb781cbb283e",
+                "6e8a8208-ff32-4946-b01d-ed8106ec69c9",
+                "b4061d15-0269-4806-ab48-eb781cbb283e",
+                "d205fb4f-90da-4994-a518-3f08e12a5e53",
+                "b4061d15-0269-4806-ab48-eb781cbb283e"
+              ],
+              "field_offsets": {
+                "_Fd1285941572": 113,
+                "_Fd1669484723": 572,
+                "_Fd1728863987": 1038,
+                "_Fd2140244306": 1496
+              },
+              "tag_offsets": [
+                98,
+                557,
+                1023,
+                1481
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/tx-lv-sides.docx",
+      "body_field_count": 4,
+      "unique_body_field_count": 4,
+      "docpr_count": 1
+    },
+    {
+      "sha256": "bcefa6f2cce6245dab2af7e2431b7e11fb2ba9ee17b645f9e5d28d40d5a2df69",
+      "controls": [
+        {
+          "id": "rId8",
+          "name": "CIRViewer1211111131",
+          "shapeid": "_x0000_i1029"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 3803,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd291190478",
+        "_Fd1105419452",
+        "_Fd531334444",
+        "_Fd364596512"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {},
+      "fallback_shapes": [],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 311808,
+          "sha256": "236d3d1b739ae9931c1fadc6e986ec387d7cd99adfbb554a3c5fb73c1f1625be",
+          "tag_offsets": [
+            2146,
+            2605,
+            3062,
+            3497,
+            6754,
+            7213,
+            7670,
+            8105
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 304861,
+              "sha256": "d85d98ef87a278e6d8b2037134c77e4a9013558b29127474ac4a3a93a4c41667",
+              "field_names": [
+                "_Fd1105419452",
+                "_Fd291190478",
+                "_Fd364596512",
+                "_Fd531334444"
+              ],
+              "guids": [
+                "a6e69964-680a-456d-80ad-261a94d8c881",
+                "3214aaed-4b62-4137-905a-095942a47a48",
+                "eb52e85b-6abc-4782-ae88-7c9e66734fbe",
+                "3214aaed-4b62-4137-905a-095942a47a48",
+                "45a39686-522d-4d63-85e4-cc3b64efdcfc",
+                "3214aaed-4b62-4137-905a-095942a47a48",
+                "e0e0c2f5-f2e5-41e4-9736-09bb5b1cd03e",
+                "3214aaed-4b62-4137-905a-095942a47a48",
+                "0f908f1e-da98-46da-b21f-fc4dfef13db1",
+                "3214aaed-4b62-4137-905a-095942a47a48"
+              ],
+              "field_offsets": {
+                "_Fd1105419452": 113,
+                "_Fd291190478": 572,
+                "_Fd364596512": 1029,
+                "_Fd531334444": 1464
+              },
+              "tag_offsets": [
+                98,
+                557,
+                1014,
+                1449
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "templates/FULL REPORT/NORMAL IR US TEV/tx-overview.docx",
+      "body_field_count": 4,
+      "unique_body_field_count": 4,
+      "docpr_count": 1
+    },
+    {
+      "sha256": "dd194a9958e2b812d3d6127150f86b53d791655494cee4944bfb0077a16add26",
+      "controls": [
+        {
+          "id": "rId8",
+          "name": "CIRViewer1211111",
+          "shapeid": "_x0000_i1029"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 3790,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd684423630",
+        "_Fd127214868",
+        "_Fd1016358474",
+        "_Fd1561285838"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {},
+      "fallback_shapes": [],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 174080,
+          "sha256": "a07d8d4d0f9dac676139e2c302019a6c9517ca27510f29e6c555f9b3df95e554",
+          "tag_offsets": [
+            2146,
+            2611,
+            3070,
+            3506,
+            5730,
+            6195,
+            6654,
+            7090
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 167949,
+              "sha256": "ef2be7dbb7a6ba35b1cb9383734a5d15bfa64edd187c98661d70c0c7264c92a9",
+              "field_names": [
+                "_Fd1016358474",
+                "_Fd127214868",
+                "_Fd1561285838",
+                "_Fd684423630"
+              ],
+              "guids": [
+                "4349c08f-a2fb-4680-9650-b868a96adc06",
+                "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+                "e1db400e-8048-491e-b3bc-94933d63a2c2",
+                "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+                "130f7d20-b77c-404c-b82a-58ea4f4e505f",
+                "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+                "c72ef3eb-6c07-4b67-8cde-d8ed3c79cd35",
+                "6ff9f8d8-4017-4a04-a704-2e016db8f8e4",
+                "865a1d57-d0ca-41d5-b443-1b2ad6040d8e",
+                "6ff9f8d8-4017-4a04-a704-2e016db8f8e4"
+              ],
+              "field_offsets": {
+                "_Fd1016358474": 113,
+                "_Fd127214868": 578,
+                "_Fd1561285838": 1037,
+                "_Fd684423630": 1473
+              },
+              "tag_offsets": [
+                98,
+                563,
+                1022,
+                1458
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "templates/QUICK REPORT/DEFECT IR/swg-panel.docx",
+      "body_field_count": 4,
+      "unique_body_field_count": 4,
+      "docpr_count": 1
+    },
+    {
+      "sha256": "772df026a8f6fb32d705fa7aa922a3857385f78ec32034b2a4acc04cc4f3fb5d",
+      "controls": [
+        {
+          "id": "rId13",
+          "name": "CIRViewer121111113121",
+          "shapeid": "_x0000_i1057"
+        },
+        {
+          "id": "rId16",
+          "name": "CIRViewer1211111131211",
+          "shapeid": "_x0000_i1056"
+        },
+        {
+          "id": "rId19",
+          "name": "CIRViewer12111111312111",
+          "shapeid": "_x0000_i1055"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 1896,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd2060461679",
+        "_Fd183660914",
+        "_Fd1503281449",
+        "_Fd1500662078",
+        "_Fd1834659615",
+        "_Fd1742324731",
+        "_Fd299677120",
+        "_Fd1953124534",
+        "_Fd495201260"
+      ],
+      "duplicate_field_names": {},
+      "duplicate_shape_ids": {
+        "Straight Arrow Connector 3": 2,
+        "Straight Arrow Connector 19": 9
+      },
+      "fallback_shapes": [
+        {
+          "id": "Straight Arrow Connector 3",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:133.95pt;margin-top:107.45pt;width:18.4pt;height:26.1pt;flip:x y;z-index:251682304;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\ncmV2LnhtbFBLBQYAAAAABAAEAPMAAABQBQAAAAA=\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "64F78508",
+          "id": "Straight Arrow Connector 3",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:122.4pt;margin-top:27.9pt;width:15.15pt;height:31.15pt;flip:x;z-index:251684352;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nAAAAAAQABADzAAAARQUAAAAA\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:83pt;margin-top:142.3pt;width:43.45pt;height:0;z-index:251677184;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\n8wAAAD0FAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "3D908D99",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:13pt;margin-top:95.6pt;width:43.45pt;height:0;z-index:251671040;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nAAAAPAUAAAAA\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "0A1999D0",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:31pt;margin-top:86.6pt;width:43.45pt;height:0;z-index:251675136;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\n8wAAAD0FAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "4E875966",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:19.75pt;margin-top:85.1pt;width:43.45pt;height:0;z-index:251673088;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\n8wAAAD0FAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "4DB6368F",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:151.9pt;margin-top:75.35pt;width:155.25pt;height:3.55pt;flip:x;z-index:251668992;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nBgAAAAAEAAQA8wAAAEYFAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "3A9E862E",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:159.45pt;margin-top:66.95pt;width:151.5pt;height:3.75pt;flip:y;z-index:251666944;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nAAAEAAQA8wAAAEMFAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "7C69EBEC",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:60.45pt;margin-top:59.45pt;width:30.75pt;height:3.55pt;flip:x;z-index:251664896;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nAAAAAAQABADzAAAARQUAAAAA\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "7BDCB73B",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:151.95pt;margin-top:68.6pt;width:31.5pt;height:3.55pt;z-index:251662848;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "UEsDBBQABgAIAAAAIQC2gziS/gAAAOEBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbJSRQU7DMBBF\n90jcwfIWJU67QAgl6YK0S0CoHGBkTxKLZGx5TGhvj5O2G0SRWNoz/78nu9wcxkFMGNg6quQqL6RA\n0s5Y6ir5vt9lD1JwBDIwOMJKHpHlpr69KfdHjyxSmriSfYz+USnWPY7AufNIadK6MEJMx9ApD/oD\nOlTrorhX2lFEilmcO2RdNtjC5xDF9pCuTyYBB5bi6bQ4syoJ3g9WQ0ymaiLzg5KdCXlKLjvcW893\nSUOqXwnz5DrgnHtJTxOsQfEKIT7DmDSUCaxw7Rqn8787ZsmRM9e2VmPeBN4uqYvTtW7jvijg9N/y\nJsXecLq0q+WD6m8AAAD//wMAUEsDBBQABgAIAAAAIQA4/SH/1gAAAJQBAAALAAAAX3JlbHMvLnJl\nbHOkkMFqwzAMhu+DvYPRfXGawxijTi+j0GvpHsDYimMaW0Yy2fr2M4PBMnrbUb/Q94l/f/hMi1qR\nJVI2sOt6UJgd+ZiDgffL8ekFlFSbvV0oo4EbChzGx4f9GRdb25HMsYhqlCwG5lrLq9biZkxWOiqY\n22YiTra2kYMu1l1tQD30/bPm3wwYN0x18gb45AdQl1tp5j/sFB2T0FQ7R0nTNEV3j6o9feQzro1i\nOWA14Fm+Q8a1a8+Bvu/d/dMb2JY5uiPbhG/ktn4cqGU/er3pcvwCAAD//wMAUEsDBBQABgAIAAAA\nIQCMRVf73AEAAAwEAAAOAAAAZHJzL2Uyb0RvYy54bWysU8GO0zAQvSPxD1buNOlqi5aq6R66lAuC\nFSwf4DrjxJJjW+OhSf+esdOmLIgDq704Gdtv3ps348392FtxBIzGu7pYLqpCgFO+Ma6tix9P+3d3\nhYgkXSOtd1AXJ4jF/fbtm80Q1nDjO28bQMFJXFwPoS46orAuy6g66GVc+ACOD7XHXhKH2JYNyoGz\n97a8qar35eCxCegVxMi7D9Nhsc35tQZFX7WOQMLWBWujvGJeD2kttxu5blGGzqizDPkCFb00jknn\nVA+SpPiJ5q9UvVHoo9e0UL4vvdZGQa6Bq1lWf1TzvZMBci1sTgyzTfH10qovx517RLZhCHEdwyOm\nKkaNffqyPjFms06zWTCSULx5W1XVii1VfHS7qu5Wycvyig0Y6RP4XqSfuoiE0rQd7bxz3BWPy+yX\nPH6ONAEvgERsnRh4nD4khhRHb02zN9bmANvDzqI4Sm7qfs86ch+Z+9k1ksZ+dI2gU+DBIzTStRbO\nKq1jsdeS8x+dLEzk30AL03CRk8g8jTBTSqXA0XLOxLcTTLO8GXiWncb4X8Dz/QSFPKn/A54Rmdk7\nmsG9cR4n056z03iRrKf7FwemupMFB9+c8jBka3jkckfPzyPN9O9xhl8f8fYXAAAA//8DAFBLAwQU\nAAYACAAAACEA9w/HKd8AAAALAQAADwAAAGRycy9kb3ducmV2LnhtbEyPwU7DMBBE70j8g7VI3KhD\nXAUIcSoUAeLAJQUhuLnxkkTE68h22/D3LCc47szT7Ey1WdwkDhji6EnD5SoDgdR5O1Kv4fXl4eIa\nREyGrJk8oYZvjLCpT08qU1p/pBYP29QLDqFYGg1DSnMpZewGdCau/IzE3qcPziQ+Qy9tMEcOd5PM\ns6yQzozEHwYzYzNg97XdOw35m/x4f5LtOLddg8347MK9fdT6/Gy5uwWRcEl/MPzW5+pQc6ed35ON\nYtKgMnXDKBvqKgfBhCoKVnasrNcKZF3J/xvqHwAAAP//AwBQSwECLQAUAAYACAAAACEAtoM4kv4A\nAADhAQAAEwAAAAAAAAAAAAAAAAAAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQItABQABgAIAAAA\nIQA4/SH/1gAAAJQBAAALAAAAAAAAAAAAAAAAAC8BAABfcmVscy8ucmVsc1BLAQItABQABgAIAAAA\nIQCMRVf73AEAAAwEAAAOAAAAAAAAAAAAAAAAAC4CAABkcnMvZTJvRG9jLnhtbFBLAQItABQABgAI\nAAAAIQD3D8cp3wAAAAsBAAAPAAAAAAAAAAAAAAAAADYEAABkcnMvZG93bnJldi54bWxQSwUGAAAA\nAAQABADzAAAAQgUAAAAA\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "75573266",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:97.75pt;margin-top:91.1pt;width:43.45pt;height:0;z-index:251660800;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\n8wAAAD0FAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        }
+      ],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 1117696,
+          "sha256": "f43fbf721e9b09cf56d4f6921b90c0673261b1537abb4af4440adee076083444",
+          "tag_offsets": [
+            2146,
+            11874
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1105773,
+              "sha256": "3ac0a859d44f67f958050a2ac2ff9e2e29715f01f4f0eb7a3b1c9295ca835e73",
+              "field_names": [
+                "_Fd2060461679"
+              ],
+              "guids": [
+                "dbf0dc67-5e12-46ac-9fbc-b469ad7c8993",
+                "c7d69f77-26b4-48bb-86e3-9ac5e1630b9e",
+                "e15247c9-2286-4adb-bf0d-e223c5dca28a",
+                "c7d69f77-26b4-48bb-86e3-9ac5e1630b9e"
+              ],
+              "field_offsets": {
+                "_Fd2060461679": 113
+              },
+              "tag_offsets": [
+                98
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX2.bin",
+          "size": 1141248,
+          "sha256": "b518631ff521d35a9c04e642945f47731e3cddb07c5787e3ad173b72154b0ece",
+          "tag_offsets": [
+            2146,
+            2609,
+            3064,
+            3496,
+            13410,
+            13873,
+            14328,
+            14760
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1127636,
+              "sha256": "4ec4ae76445e5a33e5f9bdf11d466753667304328e7b0f112927a30de39618f2",
+              "field_names": [
+                "_Fd1500662078",
+                "_Fd1503281449",
+                "_Fd1834659615",
+                "_Fd183660914"
+              ],
+              "guids": [
+                "df9e8732-790b-4aef-90c8-e2daff7ce83f",
+                "c77a5d0d-3327-4046-848a-333950c36d2d",
+                "dc506e9c-ef13-4df6-b326-6378349cba25",
+                "c77a5d0d-3327-4046-848a-333950c36d2d",
+                "700b0c55-8bd6-4b08-b8a6-06f7c9aa170c",
+                "c77a5d0d-3327-4046-848a-333950c36d2d",
+                "91542dc3-8bc9-4b85-aa87-ba5c14d9fb26",
+                "c77a5d0d-3327-4046-848a-333950c36d2d",
+                "c94372db-7bc2-473f-847b-7738eff4173d",
+                "c77a5d0d-3327-4046-848a-333950c36d2d"
+              ],
+              "field_offsets": {
+                "_Fd1500662078": 113,
+                "_Fd1503281449": 576,
+                "_Fd1834659615": 1031,
+                "_Fd183660914": 1463
+              },
+              "tag_offsets": [
+                98,
+                561,
+                1016,
+                1448
+              ],
+              "jpeg_soi_count": 1,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX3.bin",
+          "size": 1059328,
+          "sha256": "3e43bf413d2843b24f214ad570f615fb93eaedcf445d4bc63efccc9526dd72f9",
+          "tag_offsets": [
+            2146,
+            2611,
+            3074,
+            3529,
+            12898,
+            13363,
+            13826,
+            14281
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1046303,
+              "sha256": "c30a8b4f58c087706365567d3e53f356c2762dcfa87d3da2c8e78c85440fa3a5",
+              "field_names": [
+                "_Fd1742324731",
+                "_Fd1953124534",
+                "_Fd299677120",
+                "_Fd495201260"
+              ],
+              "guids": [
+                "bdbfef27-c2f9-4a8a-b64c-15dd786ff08c",
+                "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+                "e7a53703-b5dd-422f-8d4c-1252fe4e8250",
+                "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+                "173ec402-5cde-4bc6-a66e-61b194ed5f21",
+                "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+                "39af5c3b-96d9-4533-aba2-9374bd7cc310",
+                "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb",
+                "7a5f01fa-c0f8-4569-aff6-66e4f5c04250",
+                "1a1fedb9-f115-4cb4-9008-fd4ac17bf8bb"
+              ],
+              "field_offsets": {
+                "_Fd1742324731": 113,
+                "_Fd1953124534": 578,
+                "_Fd299677120": 1041,
+                "_Fd495201260": 1496
+              },
+              "tag_offsets": [
+                98,
+                563,
+                1026,
+                1481
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "<project>/QUICK REPORT/RAUB/01. AUGUST/04-08-2026/005. TALAPIA (IR+VI).docx",
+      "body_field_count": 9,
+      "unique_body_field_count": 9,
+      "docpr_count": 54
+    },
+    {
+      "sha256": "eca3aa5c26db1ca5ef1bacb87baa22b10475ed2aff13ca7551010231a4e7523f",
+      "controls": [
+        {
+          "id": "rId11",
+          "name": "CIRViewer121111",
+          "shapeid": "_x0000_i1079"
+        },
+        {
+          "id": "rId14",
+          "name": "CIRViewer1211112",
+          "shapeid": "_x0000_i1081"
+        },
+        {
+          "id": "rId17",
+          "name": "CIRViewer1211111",
+          "shapeid": "_x0000_i1083"
+        },
+        {
+          "id": "rId23",
+          "name": "CIRViewer12111111",
+          "shapeid": "_x0000_i1092"
+        },
+        {
+          "id": "rId26",
+          "name": "CIRViewer12111112",
+          "shapeid": "_x0000_i1104"
+        },
+        {
+          "id": "rId31",
+          "name": "CIRViewer12111113",
+          "shapeid": "_x0000_i1106"
+        },
+        {
+          "id": "rId34",
+          "name": "CIRViewer12111114",
+          "shapeid": "_x0000_i1108"
+        },
+        {
+          "id": "rId39",
+          "name": "CIRViewer12111115",
+          "shapeid": "_x0000_i1118"
+        },
+        {
+          "id": "rId42",
+          "name": "CIRViewer12111116",
+          "shapeid": "_x0000_i1119"
+        },
+        {
+          "id": "rId47",
+          "name": "CIRViewer12111117",
+          "shapeid": "_x0000_i1120"
+        },
+        {
+          "id": "rId50",
+          "name": "CIRViewer1211111131",
+          "shapeid": "_x0000_i1121"
+        },
+        {
+          "id": "rId53",
+          "name": "CIRViewer12111111311",
+          "shapeid": "_x0000_i1122"
+        },
+        {
+          "id": "rId56",
+          "name": "CIRViewer121111113112",
+          "shapeid": "_x0000_i1123"
+        },
+        {
+          "id": "rId60",
+          "name": "CIRViewer121111113113",
+          "shapeid": "_x0000_i1124"
+        },
+        {
+          "id": "rId63",
+          "name": "CIRViewer121111113114",
+          "shapeid": "_x0000_i1125"
+        },
+        {
+          "id": "rId66",
+          "name": "CIRViewer121111113111",
+          "shapeid": "_x0000_i1126"
+        },
+        {
+          "id": "rId69",
+          "name": "CIRViewer1211111131111",
+          "shapeid": "_x0000_i1174"
+        },
+        {
+          "id": "rId72",
+          "name": "CIRViewer12111111314",
+          "shapeid": "_x0000_i1225"
+        },
+        {
+          "id": "rId75",
+          "name": "CIRViewer121111113117",
+          "shapeid": "_x0000_i1227"
+        },
+        {
+          "id": "rId78",
+          "name": "CIRViewer1211111131123",
+          "shapeid": "_x0000_i1229"
+        },
+        {
+          "id": "rId82",
+          "name": "CIRViewer1211111131133",
+          "shapeid": "_x0000_i1231"
+        },
+        {
+          "id": "rId85",
+          "name": "CIRViewer1211111131143",
+          "shapeid": "_x0000_i1233"
+        },
+        {
+          "id": "rId88",
+          "name": "CIRViewer1211111131114",
+          "shapeid": "_x0000_i1235"
+        },
+        {
+          "id": "rId91",
+          "name": "CIRViewer12111111311113",
+          "shapeid": "_x0000_i1237"
+        },
+        {
+          "id": "rId94",
+          "name": "CIRViewer121111113121",
+          "shapeid": "_x0000_i1239"
+        },
+        {
+          "id": "rId97",
+          "name": "CIRViewer1211111131211",
+          "shapeid": "_x0000_i1242"
+        },
+        {
+          "id": "rId100",
+          "name": "CIRViewer12111111312111",
+          "shapeid": "_x0000_i1243"
+        }
+      ],
+      "duplicate_control_names": {},
+      "docvar_count": 4025,
+      "duplicate_docvar_names": {},
+      "field_names": [
+        "_Fd2013445779",
+        "_Fd1701545612",
+        "_Fd97815547",
+        "_Fd2144415276",
+        "_Fd1057524925",
+        "_Fd1016708312",
+        "_Fd1559606081",
+        "_Fd1367909439",
+        "_Fd2092746574",
+        "_Fd5631611",
+        "_Fd1347780533",
+        "_Fd1737418188",
+        "_Fd1623032130",
+        "_Fd423313352",
+        "_Fd383296451",
+        "_Fd1721532153",
+        "_Fd1200134904",
+        "_Fd1605427229",
+        "_Fd1078840485",
+        "_Fd63553607",
+        "_Fd248682315",
+        "_Fd1792372118",
+        "_Fd1229945691",
+        "_Fd1603701097",
+        "_Fd316616349",
+        "_Fd1807228622",
+        "_Fd181838646",
+        "_Fd1138066438",
+        "_Fd553495716",
+        "_Fd2072950825",
+        "_Fd1413378776",
+        "_Fd941263881",
+        "_Fd370813302",
+        "_Fd269050247",
+        "_Fd715416184",
+        "_Fd632321712",
+        "_Fd1762046236",
+        "_Fd1155285986",
+        "_Fd1527794006",
+        "_Fd454581283",
+        "_Fd912557116",
+        "_Fd173198185",
+        "_Fd1999927428",
+        "_Fd1835633553",
+        "_Fd1367711777",
+        "_Fd1307007476",
+        "_Fd1232975865",
+        "_Fd1133600257",
+        "_Fd1666804391",
+        "_Fd2029115479",
+        "_Fd385445510",
+        "_Fd43218637",
+        "_Fd1697538177",
+        "_Fd1227969371",
+        "_Fd1961634598",
+        "_Fd926064389",
+        "_Fd1206794782",
+        "_Fd1861462833",
+        "_Fd437487577",
+        "_Fd1607841827",
+        "_Fd270761584",
+        "_Fd1532659334",
+        "_Fd715416184",
+        "_Fd632321712",
+        "_Fd1762046236",
+        "_Fd1155285986",
+        "_Fd738234157",
+        "_Fd987590543",
+        "_Fd912557116",
+        "_Fd1639816294",
+        "_Fd1630484491",
+        "_Fd1850567077",
+        "_Fd1513324402",
+        "_Fd1410566573",
+        "_Fd1363769464",
+        "_Fd337924883",
+        "_Fd833457447",
+        "_Fd1769689472",
+        "_Fd1775786892",
+        "_Fd2079895776",
+        "_Fd1253730138",
+        "_Fd1507489676",
+        "_Fd1961634598",
+        "_Fd926064389",
+        "_Fd1206794782",
+        "_Fd1861462833",
+        "_Fd1688275297",
+        "_Fd2136786175",
+        "_Fd1707766124",
+        "_Fd1964254772",
+        "_Fd703628520",
+        "_Fd820875086",
+        "_Fd496096926",
+        "_Fd546724564",
+        "_Fd1720080055",
+        "_Fd1064219773",
+        "_Fd1764377785",
+        "_Fd1067021722",
+        "_Fd1280274198"
+      ],
+      "duplicate_field_names": {
+        "_Fd715416184": 2,
+        "_Fd632321712": 2,
+        "_Fd1762046236": 2,
+        "_Fd1155285986": 2,
+        "_Fd912557116": 2,
+        "_Fd1961634598": 2,
+        "_Fd926064389": 2,
+        "_Fd1206794782": 2,
+        "_Fd1861462833": 2
+      },
+      "duplicate_shape_ids": {
+        "Straight Arrow Connector 3": 2,
+        "Straight Arrow Connector 19": 9
+      },
+      "fallback_shapes": [
+        {
+          "id": "Straight Arrow Connector 3",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:133.95pt;margin-top:107.45pt;width:18.4pt;height:26.1pt;flip:x y;z-index:251670528;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\ncmV2LnhtbFBLBQYAAAAABAAEAPMAAABQBQAAAAA=\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "762880D5",
+          "id": "Straight Arrow Connector 3",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:122.4pt;margin-top:27.9pt;width:15.15pt;height:31.15pt;flip:x;z-index:251672576;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nAAAAAAQABADzAAAARQUAAAAA\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "3ED05C6C",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:83pt;margin-top:142.3pt;width:43.45pt;height:0;z-index:251667456;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\n8wAAAD0FAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "34635FCD",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:13pt;margin-top:95.6pt;width:43.45pt;height:0;z-index:251664384;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nAAAAPAUAAAAA\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "1B623B35",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:31pt;margin-top:86.6pt;width:43.45pt;height:0;z-index:251666432;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\n8wAAAD0FAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "65969764",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:19.75pt;margin-top:85.1pt;width:43.45pt;height:0;z-index:251665408;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\n8wAAAD0FAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "4CAD5983",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:151.9pt;margin-top:75.35pt;width:155.25pt;height:3.55pt;flip:x;z-index:251663360;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nBgAAAAAEAAQA8wAAAEYFAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "63B69D10",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:159.45pt;margin-top:66.95pt;width:151.5pt;height:3.75pt;flip:y;z-index:251662336;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nAAAEAAQA8wAAAEMFAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "4E16FF21",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:60.45pt;margin-top:59.45pt;width:30.75pt;height:3.55pt;flip:x;z-index:251661312;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "UEsDBBQABgAIAAAAIQC2gziS/gAAAOEBAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbJSRQU7DMBBF\n90jcwfIWJU67QAgl6YK0S0CoHGBkTxKLZGx5TGhvj5O2G0SRWNoz/78nu9wcxkFMGNg6quQqL6RA\n0s5Y6ir5vt9lD1JwBDIwOMJKHpHlpr69KfdHjyxSmriSfYz+USnWPY7AufNIadK6MEJMx9ApD/oD\nOlTrorhX2lFEilmcO2RdNtjC5xDF9pCuTyYBB5bi6bQ4syoJ3g9WQ0ymaiLzg5KdCXlKLjvcW893\nSUOqXwnz5DrgnHtJTxOsQfEKIT7DmDSUCaxw7Rqn8787ZsmRM9e2VmPeBN4uqYvTtW7jvijg9N/y\nJsXecLq0q+WD6m8AAAD//wMAUEsDBBQABgAIAAAAIQA4/SH/1gAAAJQBAAALAAAAX3JlbHMvLnJl\nbHOkkMFqwzAMhu+DvYPRfXGawxijTi+j0GvpHsDYimMaW0Yy2fr2M4PBMnrbUb/Q94l/f/hMi1qR\nJVI2sOt6UJgd+ZiDgffL8ekFlFSbvV0oo4EbChzGx4f9GRdb25HMsYhqlCwG5lrLq9biZkxWOiqY\n22YiTra2kYMu1l1tQD30/bPm3wwYN0x18gb45AdQl1tp5j/sFB2T0FQ7R0nTNEV3j6o9feQzro1i\nOWA14Fm+Q8a1a8+Bvu/d/dMb2JY5uiPbhG/ktn4cqGU/er3pcvwCAAD//wMAUEsDBBQABgAIAAAA\nIQDMDYdm4gEAABYEAAAOAAAAZHJzL2Uyb0RvYy54bWysU8GO0zAQvSPxD5bvNGmhaIma7qFL4YBg\nBewHuI6dWHJsazw0zd8zdtIsC+KwiBysJJ735r3n8e720lt2VhCNdzVfr0rOlJO+Ma6t+cP346sb\nziIK1wjrnar5qCK/3b98sRtCpTa+87ZRwIjExWoINe8QQ1UUUXaqF3Hlg3K0qT30AukT2qIBMRB7\nb4tNWb4tBg9NAC9VjPT3btrk+8yvtZL4ReuokNmakzbMK+T1lNZivxNVCyJ0Rs4yxD+o6IVx1HSh\nuhMo2A8wf1D1RoKPXuNK+r7wWhupsgdysy5/c/OtE0FlLxRODEtM8f/Rys/ng7sHimEIsYrhHpKL\ni4aeaWvCRzrT7IuUskuObVxiUxdkkn6+flduN1vOJG292ZY325RqMbEktgARPyjfs/RS84ggTNvh\nwTtH5+Nh6iDOnyJOwCsgga1jA4mgFmUWEr01zdFYmzYjtKeDBXYWdLzHY0nP3PtJGQpj37uG4Rho\nBBGMcK1Vc6V1JPbRfH7D0aqp+VelmWnI5CQyz6VaWgoplcP1wkTVCaZJ3gKcZaeB/htwrk9QlWf2\nOeAFkTt7hwu4N87DFNrT7ni5StZT/TWByXeK4OSbMY9FjoaGL5/ofFHSdP/6neGP13n/EwAA//8D\nAFBLAwQUAAYACAAAACEAv6p2EdwAAAALAQAADwAAAGRycy9kb3ducmV2LnhtbEyPzW6DMBCE75X6\nDtZG6q2xQVFEKCaKolbpNWkewMFbQPiHYhPI23c5tbcZzWj222I/W8PuOITWOwnJWgBDV3ndulrC\n9evjNQMWonJaGe9QwgMD7Mvnp0Ll2k/ujPdLrBmNuJArCU2Mfc55qBq0Kqx9j46ybz9YFckONdeD\nmmjcGp4KseVWtY4uNKrHY4NVdxmthOp00t3cT9efbtyYM39/7JLPo5Qvq/nwBiziHP/KsOATOpTE\ndPOj04EZ8qnYUZVEkpFYGlm6AXZboq0AXhb8/w/lLwAAAP//AwBQSwECLQAUAAYACAAAACEAtoM4\nkv4AAADhAQAAEwAAAAAAAAAAAAAAAAAAAAAAW0NvbnRlbnRfVHlwZXNdLnhtbFBLAQItABQABgAI\nAAAAIQA4/SH/1gAAAJQBAAALAAAAAAAAAAAAAAAAAC8BAABfcmVscy8ucmVsc1BLAQItABQABgAI\nAAAAIQDMDYdm4gEAABYEAAAOAAAAAAAAAAAAAAAAAC4CAABkcnMvZTJvRG9jLnhtbFBLAQItABQA\nBgAIAAAAIQC/qnYR3AAAAAsBAAAPAAAAAAAAAAAAAAAAADwEAABkcnMvZG93bnJldi54bWxQSwUG\nAAAAAAQABADzAAAARQUAAAAA\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "3E763635",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:151.95pt;margin-top:68.6pt;width:31.5pt;height:3.55pt;z-index:251660288;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\nAAQABADzAAAAQgUAAAAA\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        },
+        {
+          "anchorId": "791A75B3",
+          "id": "Straight Arrow Connector 19",
+          "spid": "_x0000_s1026",
+          "type": "#_x0000_t32",
+          "style": "position:absolute;margin-left:97.75pt;margin-top:91.1pt;width:43.45pt;height:0;z-index:251659264;visibility:visible;mso-wrap-style:square;mso-width-percent:0;mso-height-percent:0;mso-wrap-distance-left:9pt;mso-wrap-distance-top:0;mso-wrap-distance-right:9pt;mso-wrap-distance-bottom:0;mso-position-horizontal:absolute;mso-position-horizontal-relative:text;mso-position-vertical:absolute;mso-position-vertical-relative:text;mso-width-percent:0;mso-height-percent:0;mso-width-relative:margin;mso-height-relative:margin",
+          "gfxdata": "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\n8wAAAD0FAAAAAA==\n",
+          "strokecolor": "red",
+          "strokeweight": "1.5pt"
+        }
+      ],
+      "duplicate_docpr_ids": {},
+      "missing_docvars": [],
+      "fields_absent_from_binary": [
+        "_Fd1155285986",
+        "_Fd1206794782",
+        "_Fd1701545612",
+        "_Fd1762046236",
+        "_Fd1861462833",
+        "_Fd1961634598",
+        "_Fd2013445779",
+        "_Fd632321712",
+        "_Fd715416184",
+        "_Fd912557116",
+        "_Fd926064389"
+      ],
+      "binary_fields_absent_from_body": [],
+      "shared_binary_fields": {},
+      "binaries": [
+        {
+          "part": "word/activeX/activeX1.bin",
+          "size": 939520,
+          "sha256": "6af69ab7f08041ac4341c6a6792b89c706d041794ed998eb95e7dabd02810a98",
+          "tag_offsets": [],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 929539,
+              "sha256": "cc76ea00e40cadf8739e117978fb64134ce6d9e8a0021f565ce8c0ce432164a5",
+              "field_names": [],
+              "guids": [
+                "ee602b79-930b-4247-a933-322fada21ed5",
+                "94133180-5a0a-46ea-8f6f-829e203e9845"
+              ],
+              "field_offsets": {},
+              "tag_offsets": [],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX10.bin",
+          "size": 1027072,
+          "sha256": "ca42476e120531deaa5317dcbe8fd963eef34f93cbb992c8febcd1eb2c0b3fb7",
+          "tag_offsets": [
+            2146,
+            2599,
+            3032,
+            3493,
+            12386,
+            12839,
+            13272,
+            13733
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1014307,
+              "sha256": "95409583c8f3394a6dc6444d84741bc55ce247f67aba8ce31148c1bbff266594",
+              "field_names": [
+                "_Fd1413378776",
+                "_Fd269050247",
+                "_Fd370813302",
+                "_Fd941263881"
+              ],
+              "guids": [
+                "e276492e-a46c-43ac-989c-5d0120eea461",
+                "934176c5-1465-4072-b809-846230fc2e82",
+                "5c7b89d8-3bed-48c5-a2c1-0aa6a6c3faf2",
+                "934176c5-1465-4072-b809-846230fc2e82",
+                "322f327c-4fd9-4f34-a8ba-f8da14d5cec7",
+                "934176c5-1465-4072-b809-846230fc2e82",
+                "838e5b2f-024a-465e-beb0-4487725d3e82",
+                "934176c5-1465-4072-b809-846230fc2e82",
+                "63414ab8-d252-4c73-bf5c-1c51e53f5cdf",
+                "934176c5-1465-4072-b809-846230fc2e82"
+              ],
+              "field_offsets": {
+                "_Fd1413378776": 113,
+                "_Fd269050247": 566,
+                "_Fd370813302": 999,
+                "_Fd941263881": 1460
+              },
+              "tag_offsets": [
+                98,
+                551,
+                984,
+                1445
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX11.bin",
+          "size": 1068032,
+          "sha256": "83525e4c3fd8ba9fc9ce403ca4993604aa30e9874e5ab4cf29e7b331e8393ac2",
+          "tag_offsets": [],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1057050,
+              "sha256": "3e229b6d8b941a70ec045935dae856cda8a82f6397171d527852b90818a93dad",
+              "field_names": [],
+              "guids": [
+                "880f2255-2201-450e-b5dc-e3d595af78d5",
+                "0765efb8-3ace-4ece-b254-1c88eb1bb44f"
+              ],
+              "field_offsets": {},
+              "tag_offsets": [],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX12.bin",
+          "size": 1159168,
+          "sha256": "2f79f24325dab6054aeef956d4ad1c134d8244cb543260c72bb16fc54a77ddaa",
+          "tag_offsets": [
+            2146,
+            2601,
+            3033,
+            12898,
+            13353,
+            13785
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1146228,
+              "sha256": "09305dc9135e398b4b9a74d863f948db5a4fce7d2266e4fc721a0f1a4dbd18ce",
+              "field_names": [
+                "_Fd1527794006",
+                "_Fd173198185",
+                "_Fd454581283"
+              ],
+              "guids": [
+                "8bfc0171-5401-445c-af79-6308e33117c6",
+                "93f2110e-b714-43cc-b6b5-8622dc294c75",
+                "891beeb8-e3d2-4ca5-8be7-8bf7e948ef19",
+                "93f2110e-b714-43cc-b6b5-8622dc294c75",
+                "0a8acd51-5197-44f9-9dbb-f79b3f8b3121",
+                "93f2110e-b714-43cc-b6b5-8622dc294c75",
+                "6366e2ef-e482-4e97-8132-8eed69fee2cb",
+                "93f2110e-b714-43cc-b6b5-8622dc294c75"
+              ],
+              "field_offsets": {
+                "_Fd1527794006": 113,
+                "_Fd173198185": 568,
+                "_Fd454581283": 1000
+              },
+              "tag_offsets": [
+                98,
+                553,
+                985
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX13.bin",
+          "size": 1186816,
+          "sha256": "d408bf0bf67a0a3b8c026216f6a64fdc94e828312cb70e16854aaa8af624defc",
+          "tag_offsets": [
+            2146,
+            2580,
+            3043,
+            3500,
+            13922,
+            14356,
+            14819,
+            15276
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1172547,
+              "sha256": "6b2ab05de63b42b5821fadeb734540b2511d62247111b6cc3320e9955f6155f9",
+              "field_names": [
+                "_Fd1307007476",
+                "_Fd1367711777",
+                "_Fd1835633553",
+                "_Fd1999927428"
+              ],
+              "guids": [
+                "c7dd57b6-e488-47d3-b67b-2311e28677ab",
+                "d2b28727-1717-4fbd-858e-9179bc6eba16",
+                "8207f1af-fbf9-4105-b06e-92be434762ea",
+                "d2b28727-1717-4fbd-858e-9179bc6eba16",
+                "d3a7ff75-3d70-4f40-bef6-e347cff54ed9",
+                "d2b28727-1717-4fbd-858e-9179bc6eba16",
+                "992b95ff-a73a-427b-bc59-242057a4e4a7",
+                "d2b28727-1717-4fbd-858e-9179bc6eba16",
+                "c9b6eada-4d66-4a36-a2d9-d4c18a181e29",
+                "d2b28727-1717-4fbd-858e-9179bc6eba16"
+              ],
+              "field_offsets": {
+                "_Fd1307007476": 113,
+                "_Fd1367711777": 547,
+                "_Fd1835633553": 1010,
+                "_Fd1999927428": 1467
+              },
+              "tag_offsets": [
+                98,
+                532,
+                995,
+                1452
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX14.bin",
+          "size": 1082368,
+          "sha256": "2b871a70c72f85afa7c898dc54a7c972fcc2125ee44df3950e6c17ccc93b7c8b",
+          "tag_offsets": [
+            2146,
+            2603,
+            3059,
+            3522,
+            12898,
+            13355,
+            13811,
+            14274
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1069226,
+              "sha256": "97b532929a8e7444eedd4f5c1902fd7da14c3a939fafee2ffeee6a67c75d71c8",
+              "field_names": [
+                "_Fd1133600257",
+                "_Fd1232975865",
+                "_Fd1666804391",
+                "_Fd2029115479"
+              ],
+              "guids": [
+                "1bdc3650-aac2-4c5a-b10d-fe0e1ac51f7e",
+                "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+                "2505d168-1061-49a1-bd26-37fb3d2bd905",
+                "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+                "61f22b02-fc67-4cfc-89f8-d8a0b9c314dc",
+                "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+                "395e4419-d7ae-4877-86b8-cffde0f405de",
+                "911e4edc-3c51-4eb0-ae0e-caad4350c4e8",
+                "f785d5db-3ad3-4228-8247-0041a89789bd",
+                "911e4edc-3c51-4eb0-ae0e-caad4350c4e8"
+              ],
+              "field_offsets": {
+                "_Fd1133600257": 113,
+                "_Fd1232975865": 570,
+                "_Fd1666804391": 1026,
+                "_Fd2029115479": 1489
+              },
+              "tag_offsets": [
+                98,
+                555,
+                1011,
+                1474
+              ],
+              "jpeg_soi_count": 2,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX15.bin",
+          "size": 1032704,
+          "sha256": "72008240df6114d9a1b23d02eeb6093542dfe2277ffbd3980dc98a0414990213",
+          "tag_offsets": [
+            2146,
+            2578,
+            3039,
+            3492,
+            12386,
+            12818,
+            13279,
+            13732
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1020124,
+              "sha256": "f4989a39d61c7bfc879ef0fe53be40262aadca92eb3d1e192df41be383589bf4",
+              "field_names": [
+                "_Fd1227969371",
+                "_Fd1697538177",
+                "_Fd385445510",
+                "_Fd43218637"
+              ],
+              "guids": [
+                "41101bf2-7925-409a-8b97-258057f284cc",
+                "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+                "7e4b25e3-efd9-4ad5-98c8-6fa1be65901a",
+                "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+                "9f27247c-0b6a-46de-a9a0-cad8656b1347",
+                "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+                "f8a91323-ba02-4a8d-95eb-445733c057ee",
+                "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742",
+                "67dd257a-bdda-4080-85c5-fb9826b1eada",
+                "dae8b3c8-2456-44e4-8e6b-ae0d1be3c742"
+              ],
+              "field_offsets": {
+                "_Fd1227969371": 113,
+                "_Fd1697538177": 545,
+                "_Fd385445510": 1006,
+                "_Fd43218637": 1459
+              },
+              "tag_offsets": [
+                98,
+                530,
+                991,
+                1444
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX16.bin",
+          "size": 1116672,
+          "sha256": "c8e6f80a81f1b14f956da8ff5ec170d2a7098151428819a00d5318e190bc23b3",
+          "tag_offsets": [],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1105192,
+              "sha256": "e8a55c52cbee95cbd39009385489719d99a24e6c4cafdb8097a68715030213a9",
+              "field_names": [],
+              "guids": [
+                "d4691f82-c95a-4cd3-bcd0-bf365e3c3e67",
+                "e358a4ee-0290-4580-a268-181f66852823"
+              ],
+              "field_offsets": {},
+              "tag_offsets": [],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX17.bin",
+          "size": 1054208,
+          "sha256": "2c563785f35b97c0a82d27659c5a83629227b8f620e5a5b62073f80f22fd21ee",
+          "tag_offsets": [
+            2146,
+            2580,
+            3035,
+            3495,
+            12898,
+            13332,
+            13787,
+            14247
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1041093,
+              "sha256": "7e9ecb255eeddf5ff326278005eed141f45f46916bd1da5d8b34e37a67b5d3b2",
+              "field_names": [
+                "_Fd1532659334",
+                "_Fd1607841827",
+                "_Fd270761584",
+                "_Fd437487577"
+              ],
+              "guids": [
+                "f7a0c038-1fb9-471b-b2de-20d1912236e6",
+                "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+                "f1461e4a-bcb7-4923-9f18-1d109a445aee",
+                "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+                "d62e9870-0973-4c9d-bed6-c948f413da66",
+                "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+                "e0052c8b-bd02-4c40-b09f-47dd7c68531d",
+                "f2b58d93-7e85-46a9-ba3e-d8e159302a19",
+                "1769123c-e934-4c76-a434-cd55913212cb",
+                "f2b58d93-7e85-46a9-ba3e-d8e159302a19"
+              ],
+              "field_offsets": {
+                "_Fd1532659334": 113,
+                "_Fd1607841827": 547,
+                "_Fd270761584": 1002,
+                "_Fd437487577": 1462
+              },
+              "tag_offsets": [
+                98,
+                532,
+                987,
+                1447
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX18.bin",
+          "size": 1083904,
+          "sha256": "30751d5e63872714da1b0e9693fa17fd5c2a64f6dd2d99eb4acbdf478f700740",
+          "tag_offsets": [],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1073055,
+              "sha256": "34b54db8fede363a3bfe5bb63d58fc5839c8e2c9c432dfa7f9fe020da87fa6aa",
+              "field_names": [],
+              "guids": [
+                "da7048f2-730f-4a86-b31f-47f83a747b19",
+                "5cea3bcd-7cfd-4bae-a109-6e2a703d9b4a"
+              ],
+              "field_offsets": {},
+              "tag_offsets": [],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX19.bin",
+          "size": 1169408,
+          "sha256": "1a1a47aeecc3f69086dee1a210fbad56d3fc77ef474fcb3c535a1115e6d5e5ab",
+          "tag_offsets": [
+            2146,
+            2580,
+            3034,
+            12898,
+            13332,
+            13786
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1156442,
+              "sha256": "cef539e4397e7cf240445ad5b2621bccc141b4a40a8be4fe5d2b69332243447a",
+              "field_names": [
+                "_Fd1639816294",
+                "_Fd738234157",
+                "_Fd987590543"
+              ],
+              "guids": [
+                "59e3ddba-7c4a-44d0-acab-525fe6aeb4e0",
+                "9f2f6ba1-fafc-46e1-aaee-8a257d7861f7",
+                "ceeba825-03d3-4ca0-8fb8-5e69195dfd29",
+                "9f2f6ba1-fafc-46e1-aaee-8a257d7861f7",
+                "f1b08276-3de2-40fb-8532-7c3f0af86c6f",
+                "9f2f6ba1-fafc-46e1-aaee-8a257d7861f7",
+                "d669f1df-9a36-4558-8e62-1464f4827ee0",
+                "9f2f6ba1-fafc-46e1-aaee-8a257d7861f7"
+              ],
+              "field_offsets": {
+                "_Fd1639816294": 113,
+                "_Fd738234157": 547,
+                "_Fd987590543": 1001
+              },
+              "tag_offsets": [
+                98,
+                532,
+                986
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX2.bin",
+          "size": 968192,
+          "sha256": "266cb82c2ebed4187cfaee6c1d0b4a4c88f467ec39d8ce07964d51cc2512e971",
+          "tag_offsets": [],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 958366,
+              "sha256": "cddf87476cee765b575f2446b55dc50a5981eb6b7cd22ff3dd91fed3ebe40351",
+              "field_names": [],
+              "guids": [
+                "15aaae2e-5afc-4d03-9ae9-201793040109",
+                "00194dde-9264-4a8c-be46-377455181cdd"
+              ],
+              "field_offsets": {},
+              "tag_offsets": [],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX20.bin",
+          "size": 1137664,
+          "sha256": "b0da60aadb4091d606f0242b018aa1318301a2adb44938d6d16202885d99971f",
+          "tag_offsets": [
+            2146,
+            2578,
+            3041,
+            3496,
+            13410,
+            13842,
+            14305,
+            14760
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1124053,
+              "sha256": "3ee46fe02cbf4447e853db85c24a80370309c8d056ce27db7fbb798440cecb29",
+              "field_names": [
+                "_Fd1410566573",
+                "_Fd1513324402",
+                "_Fd1630484491",
+                "_Fd1850567077"
+              ],
+              "guids": [
+                "da5f7337-1994-4f1b-b07b-48497e1176b8",
+                "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+                "820e3bdd-2019-4d1a-87fb-7daff5d7f2b9",
+                "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+                "db535bde-215f-4792-a456-dc3ca3fc8075",
+                "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+                "671afe76-7d99-4523-bd0e-a788a05440cf",
+                "b05dfe96-26cc-49ca-80a7-f4ea9d38d272",
+                "b91a261a-6646-4e48-90de-4a7ab3b4645b",
+                "b05dfe96-26cc-49ca-80a7-f4ea9d38d272"
+              ],
+              "field_offsets": {
+                "_Fd1410566573": 113,
+                "_Fd1513324402": 545,
+                "_Fd1630484491": 1008,
+                "_Fd1850567077": 1463
+              },
+              "tag_offsets": [
+                98,
+                530,
+                993,
+                1448
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX21.bin",
+          "size": 1143296,
+          "sha256": "a79c3c4e809ec313f19d35371131f2f0077d82b5f2978b60d4b4a7efa8391010",
+          "tag_offsets": [
+            2146,
+            2601,
+            3035,
+            3489,
+            13410,
+            13865,
+            14299,
+            14753
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1129586,
+              "sha256": "482e7d18957fc90f6c19c247efe916c8561ed09860f95c00c6fd5c3d58c25a09",
+              "field_names": [
+                "_Fd1363769464",
+                "_Fd1769689472",
+                "_Fd337924883",
+                "_Fd833457447"
+              ],
+              "guids": [
+                "66ac7eab-70b8-45d7-8051-97e8f0315add",
+                "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+                "2fbbfacf-3b5c-4540-8f7b-e2aaec038b3e",
+                "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+                "8ec8c5a5-7f9b-4250-a449-f4d23c81f71e",
+                "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+                "0fa2f119-623b-4f84-b3e0-4b6449e051a3",
+                "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e",
+                "651c7de0-40e6-4026-9762-e7af931ecc97",
+                "22d661ef-fb14-4e83-8db7-fa3bdfffaf5e"
+              ],
+              "field_offsets": {
+                "_Fd1363769464": 113,
+                "_Fd1769689472": 568,
+                "_Fd337924883": 1002,
+                "_Fd833457447": 1456
+              },
+              "tag_offsets": [
+                98,
+                553,
+                987,
+                1441
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX22.bin",
+          "size": 1061376,
+          "sha256": "5fd023ba44f92411cef1c9501f86285bf8acef6005b98d3ac58b69ca6b800949",
+          "tag_offsets": [
+            2146,
+            2609,
+            3041,
+            3496,
+            12898,
+            13361,
+            13793,
+            14248
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1048316,
+              "sha256": "758cd87f1be475bbd1681822d608b43883b4c4490ba369a97c5db5135664b2fe",
+              "field_names": [
+                "_Fd1253730138",
+                "_Fd1507489676",
+                "_Fd1775786892",
+                "_Fd2079895776"
+              ],
+              "guids": [
+                "c9e33d81-d956-4f36-9ff1-1871b6099228",
+                "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+                "69b172d3-a5e4-4fb6-99af-656bc06b6c95",
+                "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+                "c5c7800b-a7f8-487d-a456-3bec85ae8357",
+                "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+                "0830970f-02ed-405f-a689-adfffb6a44d2",
+                "612fa93e-bf0d-4e36-a6e3-c001d8451458",
+                "86ff1f93-cef2-4b81-892d-640b3cd13919",
+                "612fa93e-bf0d-4e36-a6e3-c001d8451458"
+              ],
+              "field_offsets": {
+                "_Fd1253730138": 113,
+                "_Fd1507489676": 576,
+                "_Fd1775786892": 1008,
+                "_Fd2079895776": 1463
+              },
+              "tag_offsets": [
+                98,
+                561,
+                993,
+                1448
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX23.bin",
+          "size": 1093120,
+          "sha256": "a7ec2b97ae44094a0e28eb15faacc62058460a3c46d8e959d6e8cf3cdee99ef3",
+          "tag_offsets": [],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1082111,
+              "sha256": "1398d4af58dbc01f9c2aebc3cf518dd4356f82b5278b18e8523122b1a8865477",
+              "field_names": [],
+              "guids": [
+                "c876ef4d-fee3-48d3-8c1f-d62706a94e04",
+                "82d30919-ef56-4397-b18c-3532b42fbad9"
+              ],
+              "field_offsets": {},
+              "tag_offsets": [],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX24.bin",
+          "size": 1052672,
+          "sha256": "c1b3fd846a6707e36a608d8d728b66132adddce896ede93d36a70226886484b8",
+          "tag_offsets": [
+            2146,
+            2601,
+            3062,
+            3496,
+            12898,
+            13353,
+            13814,
+            14248
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1039436,
+              "sha256": "8140bf805289b8ba00e726ecbc96cf81a6c5a673962b1561e54b75275c67d45d",
+              "field_names": [
+                "_Fd1688275297",
+                "_Fd1707766124",
+                "_Fd1964254772",
+                "_Fd2136786175"
+              ],
+              "guids": [
+                "8b551555-3307-4b2d-af9e-a9d14ff2359b",
+                "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+                "23633fb0-3f0c-4005-a09a-49094b25a1e5",
+                "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+                "5c1bbfd1-c174-4a26-9ced-cc92fc207e64",
+                "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+                "02b3b82c-2174-4868-90ae-18dd93d94377",
+                "84aaa469-3e7a-4d3e-888c-7904f3f3c341",
+                "17faa237-db37-49f5-9ddc-321c141dd052",
+                "84aaa469-3e7a-4d3e-888c-7904f3f3c341"
+              ],
+              "field_offsets": {
+                "_Fd1688275297": 113,
+                "_Fd1707766124": 568,
+                "_Fd1964254772": 1029,
+                "_Fd2136786175": 1463
+              },
+              "tag_offsets": [
+                98,
+                553,
+                1014,
+                1448
+              ],
+              "jpeg_soi_count": 2,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX25.bin",
+          "size": 1117696,
+          "sha256": "867ddea06274de5ab2099fb986d9dd886bdf67eaa1584135757b09091f0e8d8d",
+          "tag_offsets": [
+            2146,
+            11874
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1105772,
+              "sha256": "7cc9e74c3357facbae2167f91a9e80de57ecaf95980054ab5642f9ed1c984098",
+              "field_names": [
+                "_Fd703628520"
+              ],
+              "guids": [
+                "8b01f06e-dc7d-4021-9200-a6d723b43b5d",
+                "d255e99a-5a5b-40eb-be94-f2a62e763e6c",
+                "41221c95-65e0-41cf-9728-0aeda39b00c6",
+                "d255e99a-5a5b-40eb-be94-f2a62e763e6c"
+              ],
+              "field_offsets": {
+                "_Fd703628520": 113
+              },
+              "tag_offsets": [
+                98
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX26.bin",
+          "size": 1141248,
+          "sha256": "f6cbd38c8006199fe5d845bfd3d045ed4f253e07955d92ffedb677aa5cfdb277",
+          "tag_offsets": [
+            2146,
+            2580,
+            3035,
+            3497,
+            13410,
+            13844,
+            14299,
+            14761
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1127646,
+              "sha256": "4ea83af20708f262dc74187d1fddac1ef5507c0b39443e64b7c8d48b81f76027",
+              "field_names": [
+                "_Fd1720080055",
+                "_Fd496096926",
+                "_Fd546724564",
+                "_Fd820875086"
+              ],
+              "guids": [
+                "732bf3f0-e588-4690-9f0d-9f76acd5864e",
+                "403c9b34-c848-49d7-a819-05df14e7cf39",
+                "ed5b0f08-94f8-4497-b04b-b1b2f746aaa4",
+                "403c9b34-c848-49d7-a819-05df14e7cf39",
+                "2da78147-2fa4-4b83-a132-7ee31fd140e2",
+                "403c9b34-c848-49d7-a819-05df14e7cf39",
+                "0a08e31a-573d-4723-ad63-13fb1efa09aa",
+                "403c9b34-c848-49d7-a819-05df14e7cf39",
+                "f311aa6d-2439-4685-9db5-d7c231d1e2b9",
+                "403c9b34-c848-49d7-a819-05df14e7cf39"
+              ],
+              "field_offsets": {
+                "_Fd1720080055": 113,
+                "_Fd496096926": 547,
+                "_Fd546724564": 1002,
+                "_Fd820875086": 1464
+              },
+              "tag_offsets": [
+                98,
+                532,
+                987,
+                1449
+              ],
+              "jpeg_soi_count": 1,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX27.bin",
+          "size": 1059328,
+          "sha256": "4f26a1d2716ebeee7065fa1f9bda7f08c75c3c0f6d955cad220083144f97930a",
+          "tag_offsets": [
+            2146,
+            2611,
+            3074,
+            3506,
+            12898,
+            13363,
+            13826,
+            14258
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 1046310,
+              "sha256": "c24600af52ec55b1b515857da24c7dd8c0490f60861856bc4383f82413532b49",
+              "field_names": [
+                "_Fd1064219773",
+                "_Fd1067021722",
+                "_Fd1280274198",
+                "_Fd1764377785"
+              ],
+              "guids": [
+                "77d556e8-2b14-4d72-b408-422879ccfa8d",
+                "88835f05-3866-4e4b-9e8d-930c53809797",
+                "5ddfbd4c-ca52-4fc4-844c-b84919f4d328",
+                "88835f05-3866-4e4b-9e8d-930c53809797",
+                "0acc2023-0730-4b8b-a218-90e5ba120bc3",
+                "88835f05-3866-4e4b-9e8d-930c53809797",
+                "d318c355-b96c-4f39-a113-e2ff93e08443",
+                "88835f05-3866-4e4b-9e8d-930c53809797",
+                "6bde23e8-bb20-4210-a18b-6b21eabd8e58",
+                "88835f05-3866-4e4b-9e8d-930c53809797"
+              ],
+              "field_offsets": {
+                "_Fd1064219773": 113,
+                "_Fd1067021722": 578,
+                "_Fd1280274198": 1041,
+                "_Fd1764377785": 1473
+              },
+              "tag_offsets": [
+                98,
+                563,
+                1026,
+                1458
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX3.bin",
+          "size": 986112,
+          "sha256": "6da9e0ab963602c2f4c3fb787a3df9c126041667220d73f30bc5a1bd7fa900c4",
+          "tag_offsets": [
+            2146,
+            2580,
+            3043,
+            3500,
+            12386,
+            12820,
+            13283,
+            13740
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 973547,
+              "sha256": "2de517f4ef1aa3763482301f17d0d39064c11b781b550757957af203f6f10e5e",
+              "field_names": [
+                "_Fd1016708312",
+                "_Fd1057524925",
+                "_Fd2144415276",
+                "_Fd97815547"
+              ],
+              "guids": [
+                "fd1e2998-c991-47d7-922b-d4e51419fc07",
+                "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+                "2696ed2f-8a38-45f6-a438-5bde4fc3f285",
+                "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+                "3375a511-5355-4e54-95e2-5d2ccd54dc3f",
+                "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+                "00eafc12-febf-4b1d-94f0-ffd548867624",
+                "8b2f1f99-0da3-4b2a-a313-79b9a353742d",
+                "f4d36ef8-fa46-4efd-8b89-1a8cd53ada90",
+                "8b2f1f99-0da3-4b2a-a313-79b9a353742d"
+              ],
+              "field_offsets": {
+                "_Fd1016708312": 113,
+                "_Fd1057524925": 547,
+                "_Fd2144415276": 1010,
+                "_Fd97815547": 1467
+              },
+              "tag_offsets": [
+                98,
+                532,
+                995,
+                1452
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX4.bin",
+          "size": 1006080,
+          "sha256": "bb72b35e8cf56d01a1f4879a6f8c4760c3557eeac2ce0c17d1e7a979a2591fcb",
+          "tag_offsets": [
+            2146,
+            2603,
+            3059,
+            3522,
+            12386,
+            12843,
+            13299,
+            13762
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 993349,
+              "sha256": "db120b82b79457be38657214b0b6b834756d1fd1758fd8c4e6d839c904957043",
+              "field_names": [
+                "_Fd1367909439",
+                "_Fd1559606081",
+                "_Fd2092746574",
+                "_Fd5631611"
+              ],
+              "guids": [
+                "11cb4ec6-6589-4ca8-b719-40eef7181c4a",
+                "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+                "e93f3cdf-e6e7-4029-a0c6-3264c003a2b5",
+                "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+                "ff03dddc-3b52-4d33-a3d8-40140436373b",
+                "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+                "c152e358-a5e9-4362-8347-b388ef23de0e",
+                "7896b916-a07b-4e25-a63f-08b8ffdbcf68",
+                "49819dfe-d1d2-466c-9524-139e8da54a78",
+                "7896b916-a07b-4e25-a63f-08b8ffdbcf68"
+              ],
+              "field_offsets": {
+                "_Fd1367909439": 113,
+                "_Fd1559606081": 570,
+                "_Fd2092746574": 1026,
+                "_Fd5631611": 1489
+              },
+              "tag_offsets": [
+                98,
+                555,
+                1011,
+                1474
+              ],
+              "jpeg_soi_count": 1,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX5.bin",
+          "size": 976384,
+          "sha256": "cdbf7ac5fb254b51cbb0a7c81970d1482b1f950141fb57ec92c7b822239ae75b",
+          "tag_offsets": [
+            2146,
+            2602,
+            3065,
+            3522,
+            11874,
+            12330,
+            12793,
+            13250
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 964222,
+              "sha256": "5b62a197834eef02d5c25d6f86d00a519a5de269059859f6c394d9f1c0980747",
+              "field_names": [
+                "_Fd1347780533",
+                "_Fd1623032130",
+                "_Fd1737418188",
+                "_Fd423313352"
+              ],
+              "guids": [
+                "833f6439-849c-4934-b821-c46b16c0ba16",
+                "0b33bf90-d804-439d-a932-341f129e5497",
+                "59c3ef7f-dbdc-4e5b-ab45-416307ac89eb",
+                "0b33bf90-d804-439d-a932-341f129e5497",
+                "a713df20-ea8d-491f-94f7-8e4ae4a335f2",
+                "0b33bf90-d804-439d-a932-341f129e5497",
+                "dc51d49a-a1a9-4726-a851-bdda0fc9fdb1",
+                "0b33bf90-d804-439d-a932-341f129e5497",
+                "9feae17d-5316-4bb1-96b6-2dfe3985827a",
+                "0b33bf90-d804-439d-a932-341f129e5497"
+              ],
+              "field_offsets": {
+                "_Fd1347780533": 113,
+                "_Fd1623032130": 569,
+                "_Fd1737418188": 1032,
+                "_Fd423313352": 1489
+              },
+              "tag_offsets": [
+                98,
+                554,
+                1017,
+                1474
+              ],
+              "jpeg_soi_count": 2,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX6.bin",
+          "size": 964096,
+          "sha256": "238374b89593a4f01bde06f8789e62a3869a6438e547b1d138d3f7cd6ffdb2e7",
+          "tag_offsets": [
+            2146,
+            2609,
+            3042,
+            3499,
+            11874,
+            12337,
+            12770,
+            13227
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 952261,
+              "sha256": "4b438aef1dcb7e0b9d2680b561ac7440458282527d0ae3a403869b5553a4d316",
+              "field_names": [
+                "_Fd1200134904",
+                "_Fd1605427229",
+                "_Fd1721532153",
+                "_Fd383296451"
+              ],
+              "guids": [
+                "cd341bb6-aae0-49e3-9d0a-f918100633be",
+                "20590ca0-be91-4037-944f-b180fd8ef445",
+                "a75c8d6b-20a7-45ca-9c7d-ce9948df56cd",
+                "20590ca0-be91-4037-944f-b180fd8ef445",
+                "44fde81f-70b2-4523-8ddf-b908920aef9a",
+                "20590ca0-be91-4037-944f-b180fd8ef445",
+                "c29807dc-b34f-4eda-83f7-8fd3ac460d58",
+                "20590ca0-be91-4037-944f-b180fd8ef445",
+                "7f3500c0-f07b-45e6-a343-a1c02a34c19d",
+                "20590ca0-be91-4037-944f-b180fd8ef445"
+              ],
+              "field_offsets": {
+                "_Fd1200134904": 113,
+                "_Fd1605427229": 576,
+                "_Fd1721532153": 1009,
+                "_Fd383296451": 1466
+              },
+              "tag_offsets": [
+                98,
+                561,
+                994,
+                1451
+              ],
+              "jpeg_soi_count": 1,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX7.bin",
+          "size": 924672,
+          "sha256": "f2ad93dd42fb32893d72ba40a95248ed5a92770c1f72c629c78f81d507003441",
+          "tag_offsets": [
+            2146,
+            2601,
+            3035,
+            3497,
+            11874,
+            12329,
+            12763,
+            13225
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 912503,
+              "sha256": "cfa5b46ac76273b0f5e3a4c382785569c1dbc9f784a288406a755cf3cd0d799c",
+              "field_names": [
+                "_Fd1078840485",
+                "_Fd1792372118",
+                "_Fd248682315",
+                "_Fd63553607"
+              ],
+              "guids": [
+                "820749cf-b71e-431a-83dd-197153b0d214",
+                "49deddbc-9e24-4244-ba18-c3c596e6661c",
+                "14938fcd-fac0-4646-8506-2e78392ec9f1",
+                "49deddbc-9e24-4244-ba18-c3c596e6661c",
+                "90b40c3b-95f1-4171-bd91-70c535ea9eb4",
+                "49deddbc-9e24-4244-ba18-c3c596e6661c",
+                "13182ca0-908e-4f7b-8d0f-ae3c2712d1d1",
+                "49deddbc-9e24-4244-ba18-c3c596e6661c",
+                "89b37568-0c0d-4141-9099-91fc66964091",
+                "49deddbc-9e24-4244-ba18-c3c596e6661c"
+              ],
+              "field_offsets": {
+                "_Fd1078840485": 113,
+                "_Fd1792372118": 568,
+                "_Fd248682315": 1002,
+                "_Fd63553607": 1464
+              },
+              "tag_offsets": [
+                98,
+                553,
+                987,
+                1449
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX8.bin",
+          "size": 871936,
+          "sha256": "2a37d90127145fe261120e78894285d69b020ea18975abfa30236e6149ca090f",
+          "tag_offsets": [
+            2146,
+            2601,
+            3058,
+            3492,
+            11362,
+            11817,
+            12274,
+            12708
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 860604,
+              "sha256": "557ba9cf056753a76496b9cb101cf787f901bfd7b946b0038b82cd827c5dea75",
+              "field_names": [
+                "_Fd1229945691",
+                "_Fd1603701097",
+                "_Fd1807228622",
+                "_Fd316616349"
+              ],
+              "guids": [
+                "0fe85ccb-6d96-43db-bf1d-6430ccbe8abc",
+                "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+                "2fe50bd9-a414-4abc-9193-0a189970ac3d",
+                "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+                "2680944f-73e8-4722-8b43-f617cd3b169b",
+                "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+                "550a3941-db34-4b9c-a966-9e58065b3195",
+                "2fa3fc53-b773-4b6d-af51-f1e8fbb54141",
+                "eb38d929-9f53-4a33-84fb-5d1b43d02c46",
+                "2fa3fc53-b773-4b6d-af51-f1e8fbb54141"
+              ],
+              "field_offsets": {
+                "_Fd1229945691": 113,
+                "_Fd1603701097": 568,
+                "_Fd1807228622": 1025,
+                "_Fd316616349": 1459
+              },
+              "tag_offsets": [
+                98,
+                553,
+                1010,
+                1444
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        },
+        {
+          "part": "word/activeX/activeX9.bin",
+          "size": 1010688,
+          "sha256": "8aedbef7d9654955a6a962211b1c3056082043f8bb6eea54c64ba2d726609998",
+          "tag_offsets": [
+            2146,
+            2601,
+            3053,
+            3485,
+            12386,
+            12841,
+            13293,
+            13725
+          ],
+          "streams": [
+            {
+              "name": "Contents",
+              "size": 998115,
+              "sha256": "db5323ff11f66920dfe90a2fda5cb979311bcc6aee1db63800327bcd6dad442d",
+              "field_names": [
+                "_Fd1138066438",
+                "_Fd181838646",
+                "_Fd2072950825",
+                "_Fd553495716"
+              ],
+              "guids": [
+                "66a21f13-1f55-4cbe-bcb5-4d96a8bb9a39",
+                "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+                "cf6708a5-db69-4f31-8d26-643420bdf0a3",
+                "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+                "d225518a-a901-4d58-8e8f-260d34d79e5b",
+                "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+                "8f74d5f6-f01e-40d8-a8a9-9926fefabd16",
+                "c8911c9f-ff5d-414e-991c-2e8dc82a1329",
+                "0851042d-80da-48a9-8a22-bcca2b55f4f6",
+                "c8911c9f-ff5d-414e-991c-2e8dc82a1329"
+              ],
+              "field_offsets": {
+                "_Fd1138066438": 113,
+                "_Fd181838646": 568,
+                "_Fd2072950825": 1020,
+                "_Fd553495716": 1452
+              },
+              "tag_offsets": [
+                98,
+                553,
+                1005,
+                1437
+              ],
+              "jpeg_soi_count": 0,
+              "control_names_found": []
+            }
+          ],
+          "root_clsid": "C5F5764B-B932-4F33-8BF3-9941F22FAE18"
+        }
+      ],
+      "source_unchanged": true,
+      "missing_internal_relationship_targets": [],
+      "path": "<project>/FULL REPORT/RAUB/01. AUGUST/04-08-2026/005. TALAPIA (IR+VI).docx",
+      "body_field_count": 99,
+      "unique_body_field_count": 90,
+      "docpr_count": 134
+    }
+  ]
+}

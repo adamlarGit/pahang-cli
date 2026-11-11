@@ -1,0 +1,1885 @@
+{
+  "investigation": "Codex - Static/CFB investigation: installed tools",
+  "date": "2026-11-11",
+  "method": "Reflection-only metadata; no vendor method invocation",
+  "assemblies": [
+    {
+      "Path": "C:\\Program Files (x86)\\FLIR Systems\\FLIR Tools\\bin\\Flir.Atlas.DocXEngine.dll",
+      "SHA256": "EFA49EAE8A4982762CD8065EE3409B2553D6E8ED5D1ABB990FB7EE7315E0D2A2",
+      "AssemblyName": "Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+      "ReferencedAssemblies": [
+        "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed",
+        "Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System.Xml.Linq, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a",
+        "Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Flir.Atlas.Wpf.UI, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Jint, Version=2.9.1.0, Culture=neutral, PublicKeyToken=2e92ba9c8d81157f",
+        "Flir.Atlas.DocXEngine.ProxyObjects, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "WindowsBase, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "System.Core, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "DocumentFormat.OpenXml, Version=2.5.5631.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "PresentationCore, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "mscorlib, Version=2.0.5.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e, Retargetable=Yes",
+        "Microsoft.CSharp, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a",
+        "OpenXmlPowerTools, Version=1.0.0.0, Culture=neutral, PublicKeyToken=caa391fd8e07c76b"
+      ],
+      "Errors": [
+        "Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. System.Exception (Exception from HRESULT: 0x80131501)",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\"",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\"",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\"",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\"",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\"",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\"",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\""
+      ],
+      "Types": [
+        {
+          "Name": "Flir.Atlas.DocXEngine.Constants",
+          "Base": "System.Object",
+          "Constructors": [],
+          "Methods": []
+        },
+        {
+          "Name": "Flir.Atlas.DocXEngine.ReportGenerator",
+          "Error": "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\""
+        },
+        {
+          "Name": "Flir.Atlas.DocXEngine.ReportProcessing",
+          "Base": "System.Object",
+          "Constructors": [
+            "Void .ctor()"
+          ],
+          "Methods": [
+            {
+              "Name": "Flatten",
+              "Static": true,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "sourceFilePath",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "targetFilePath",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Cleanup",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "filePath",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Cleanup",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "docCtx",
+                  "Type": "Flir.Atlas.DocXEngine.Targets.IDocContext",
+                  "Out": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Flir.Atlas.DocXEngine.Targets.DocX.DocXOLEExtractor",
+          "Base": "System.Object",
+          "Constructors": [
+            "Void .ctor()"
+          ],
+          "Methods": [
+            {
+              "Name": "ExtractMatching",
+              "Static": true,
+              "ReturnType": "System.Collections.Generic.List`1[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+              "Parameters": [
+                {
+                  "Name": "docxPath",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "pathToMatch",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "tempFolder",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "ExtractAll",
+              "Static": true,
+              "ReturnType": "System.Collections.Generic.List`1[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+              "Parameters": [
+                {
+                  "Name": "docxPath",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "outputRoot",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Flir.Atlas.DocXEngine.Targets.DocX.DocXBuilder",
+          "Base": "System.Object",
+          "Constructors": [
+            "Void .ctor()"
+          ],
+          "Methods": [
+            {
+              "Name": "Build",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "analysis",
+                  "Type": "Flir.Atlas.DocXEngine.TemplateAnalysis",
+                  "Out": false
+                },
+                {
+                  "Name": "sectionsInfo",
+                  "Type": "System.Collections.Generic.List`1[[Flir.Atlas.DocXEngine.Contexts.DataSectionInfo, Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+                  "Out": false
+                },
+                {
+                  "Name": "outputPath",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Flir.Atlas.DocXEngine.Targets.DocX.DocXContext",
+          "Base": "System.Object",
+          "Constructors": [
+            "Void .ctor(System.String)",
+            "Void .ctor(System.String, Boolean, Boolean)"
+          ],
+          "Methods": [
+            {
+              "Name": "Load",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.DocXEngine.Targets.IDocContext",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Path",
+              "Static": false,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "Commit",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "Release",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Document",
+              "Static": false,
+              "ReturnType": "DocumentFormat.OpenXml.Packaging.WordprocessingDocument",
+              "Parameters": []
+            },
+            {
+              "Name": "FixRedundantPageBreaks",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "RemoveSectionBorders",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "GetContentControlsById",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IEnumerable`1[[Flir.Atlas.DocXEngine.Targets.IContentControl, Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": [
+                {
+                  "Name": "id",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetAllContentControlsQuery",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IEnumerable`1[[Flir.Atlas.DocXEngine.Targets.IContentControl, Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "GetContentControlsAfterReference",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IEnumerable`1[[Flir.Atlas.DocXEngine.Targets.IContentControl, Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": [
+                {
+                  "Name": "reference",
+                  "Type": "Flir.Atlas.DocXEngine.Targets.IContentControl",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "FindDocumentVariable",
+              "Static": false,
+              "ReturnType": "System.String",
+              "Parameters": [
+                {
+                  "Name": "name",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "FindDocumentVariables",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.Dictionary`2[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089],[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+              "Parameters": [
+                {
+                  "Name": "query",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "SearchDocumentVariables",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.Dictionary`2[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089],[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+              "Parameters": [
+                {
+                  "Name": "query",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "SetDocumentVariable",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "name",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "value",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "FindDocumentProperty",
+              "Static": false,
+              "ReturnType": null,
+              "Parameters": [
+                {
+                  "Name": "name",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "SetDocumentProperty",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "name",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "value",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "RemoveDocumentVariable",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "name",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "RemoveDocumentProperty",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "name",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "FillWordField",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "field",
+                  "Type": "Flir.Atlas.DocXEngine.TemplateParts.WordField",
+                  "Out": false
+                },
+                {
+                  "Name": "value",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_ReferenceControl",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.DocXEngine.Targets.IContentControl",
+              "Parameters": []
+            },
+            {
+              "Name": "set_ReferenceControl",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "Flir.Atlas.DocXEngine.Targets.IContentControl",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_ContentControlsToRemove",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.List`1[[Flir.Atlas.DocXEngine.Helpers.ContentControlCache, Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_ContentControlsToReset",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.List`1[[Flir.Atlas.DocXEngine.Helpers.ContentControlCache, Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            }
+          ]
+        },
+        {
+          "Name": "Flir.Atlas.DocXEngine.Helpers.IdHelpers",
+          "Base": "System.Object",
+          "Constructors": [],
+          "Methods": [
+            {
+              "Name": "CreateWordId",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": [
+                {
+                  "Name": "fieldType",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "fieldUniqueId",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "CreateNewWordId",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": [
+                {
+                  "Name": "oldId",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "fieldNewUniqueId",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "fieldRefObjUniqueId",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GenerateNewGuid",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "GenerateNewReferenceId",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "FindRelatedObjectUniqueId",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": [
+                {
+                  "Name": "wordId",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "FindObjectType",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": [
+                {
+                  "Name": "wordId",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "FindRelatedObjectType",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": [
+                {
+                  "Name": "wordId",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "FindObjectUniqueId",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": [
+                {
+                  "Name": "wordId",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Path": "C:\\Program Files (x86)\\FLIR Systems\\FLIR Tools\\bin\\Flir.Atlas.Image.dll",
+      "SHA256": "C5BEEF438B09CE030A742580B2E64671EB5D22F837FE164C9FE323855000139D",
+      "AssemblyName": "Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+      "ReferencedAssemblies": [
+        "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "Flir.Cronos.Common, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a",
+        "System.Xml.Linq, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "Flir.Cronos.Filter, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "PresentationCore, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "Flir.Cronos.Filter.Adapter, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Flir.FormatPlugin.IRSDK, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "System.Core, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "WindowsBase, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "Flir.Cronos.Panorama, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b"
+      ],
+      "Errors": [],
+      "Types": [
+        {
+          "Name": "Flir.Atlas.Image.Measurements.MeasurementShape",
+          "Base": "System.Object",
+          "Constructors": [],
+          "Methods": [
+            {
+              "Name": "Copy",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "source",
+                  "Type": "Flir.Atlas.Image.Measurements.MeasurementShape",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_Identity",
+              "Static": false,
+              "ReturnType": "System.Guid",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Name",
+              "Static": false,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "set_Name",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_ThermalParameters",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementParameters",
+              "Parameters": []
+            },
+            {
+              "Name": "Offset",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "point",
+                  "Type": "System.Drawing.Point",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetValues",
+              "Static": false,
+              "ReturnType": "System.Double[]",
+              "Parameters": []
+            }
+          ]
+        },
+        {
+          "Name": "Flir.Atlas.Image.MeasurementCollection",
+          "Base": "Flir.Atlas.Image.Measurements.MeasurementShapeCollection`1[[Flir.Atlas.Image.Measurements.MeasurementShape, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+          "Constructors": [],
+          "Methods": [
+            {
+              "Name": "Copy",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "src",
+                  "Type": "Flir.Atlas.Image.MeasurementCollection",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Add",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementSpot",
+              "Parameters": [
+                {
+                  "Name": "point",
+                  "Type": "System.Drawing.Point",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Add",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementPolygon",
+              "Parameters": [
+                {
+                  "Name": "points",
+                  "Type": "System.Collections.Generic.List`1[[System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "AddSpot",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementSpot",
+              "Parameters": [
+                {
+                  "Name": "x",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "y",
+                  "Type": "System.Int32",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Add",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementDelta",
+              "Parameters": [
+                {
+                  "Name": "name1",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "val1",
+                  "Type": "Flir.Atlas.Image.Measurements.ValueMember",
+                  "Out": false
+                },
+                {
+                  "Name": "name2",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "val2",
+                  "Type": "Flir.Atlas.Image.Measurements.ValueMember",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Add",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementRectangle",
+              "Parameters": [
+                {
+                  "Name": "rectangle",
+                  "Type": "System.Drawing.Rectangle",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "AddRectangle",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementRectangle",
+              "Parameters": [
+                {
+                  "Name": "x",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "y",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "width",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "height",
+                  "Type": "System.Int32",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "AddPolygon",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementPolygon",
+              "Parameters": [
+                {
+                  "Name": "points",
+                  "Type": "System.Collections.Generic.List`1[[System.Drawing.Point, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a]]",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "AddEllipse",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementEllipse",
+              "Parameters": [
+                {
+                  "Name": "rectangle",
+                  "Type": "System.Drawing.Rectangle",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "AddEllipse",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementEllipse",
+              "Parameters": [
+                {
+                  "Name": "x",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "y",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "width",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "height",
+                  "Type": "System.Int32",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Add",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementLine",
+              "Parameters": [
+                {
+                  "Name": "start",
+                  "Type": "System.Drawing.Point",
+                  "Out": false
+                },
+                {
+                  "Name": "end",
+                  "Type": "System.Drawing.Point",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "AddLine",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.MeasurementLine",
+              "Parameters": [
+                {
+                  "Name": "x1",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "y1",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "x2",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "y2",
+                  "Type": "System.Int32",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_MeasurementEllipses",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IList`1[[Flir.Atlas.Image.Measurements.MeasurementEllipse, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_MeasurementRectangles",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IList`1[[Flir.Atlas.Image.Measurements.MeasurementRectangle, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_MeasurementPolygons",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IList`1[[Flir.Atlas.Image.Measurements.MeasurementPolygon, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_MeasurementLines",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IList`1[[Flir.Atlas.Image.Measurements.MeasurementLine, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_MeasurementSpots",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IList`1[[Flir.Atlas.Image.Measurements.MeasurementSpot, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_MeasurementDeltas",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.IList`1[[Flir.Atlas.Image.Measurements.MeasurementDelta, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "GetSpotRadius",
+              "Static": false,
+              "ReturnType": "System.Int32",
+              "Parameters": []
+            }
+          ]
+        },
+        {
+          "Name": "Flir.Atlas.Image.ThermalImage",
+          "Base": "Flir.Atlas.Image.ImageBase",
+          "Constructors": [
+            "Void .ctor()"
+          ],
+          "Methods": [
+            {
+              "Name": "Dispose",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "SaveSnapshot",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "filename",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetValueAt",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.ThermalValue",
+              "Parameters": [
+                {
+                  "Name": "location",
+                  "Type": "System.Drawing.Point",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetValueFromSignal",
+              "Static": false,
+              "ReturnType": "System.Double",
+              "Parameters": [
+                {
+                  "Name": "signal",
+                  "Type": "System.Int32",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetValues",
+              "Static": false,
+              "ReturnType": "System.Double[]",
+              "Parameters": [
+                {
+                  "Name": "points",
+                  "Type": "System.Drawing.Point[]",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetValues",
+              "Static": false,
+              "ReturnType": "System.Double[]",
+              "Parameters": [
+                {
+                  "Name": "rectangle",
+                  "Type": "System.Drawing.Rectangle",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetEmissivityFromValue",
+              "Static": false,
+              "ReturnType": "System.Double",
+              "Parameters": [
+                {
+                  "Name": "temperatureMeasured",
+                  "Type": "System.Double",
+                  "Out": false
+                },
+                {
+                  "Name": "actualTemperature",
+                  "Type": "System.Double",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetEmissivityFromValue",
+              "Static": false,
+              "ReturnType": "System.Double",
+              "Parameters": [
+                {
+                  "Name": "x",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "y",
+                  "Type": "System.Int32",
+                  "Out": false
+                },
+                {
+                  "Name": "actualTemperature",
+                  "Type": "System.Double",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetValueFromEmissivity",
+              "Static": false,
+              "ReturnType": "System.Double",
+              "Parameters": [
+                {
+                  "Name": "emissivity",
+                  "Type": "System.Double",
+                  "Out": false
+                },
+                {
+                  "Name": "temperature",
+                  "Type": "System.Double",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "CalculateEmissivity",
+              "Static": false,
+              "ReturnType": "System.Double",
+              "Parameters": [
+                {
+                  "Name": "radiationMeasured",
+                  "Type": "System.Double",
+                  "Out": false
+                },
+                {
+                  "Name": "emissivityMeasured",
+                  "Type": "System.Nullable`1[[System.Double, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                  "Out": false
+                },
+                {
+                  "Name": "radiationKnown",
+                  "Type": "System.Double",
+                  "Out": false
+                },
+                {
+                  "Name": "radiationReflected",
+                  "Type": "System.Double",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_OverflowSignalValue",
+              "Static": false,
+              "ReturnType": "System.Int32",
+              "Parameters": []
+            },
+            {
+              "Name": "get_UnderflowSignalValue",
+              "Static": false,
+              "ReturnType": "System.Int32",
+              "Parameters": []
+            },
+            {
+              "Name": "get_MinSignalValue",
+              "Static": false,
+              "ReturnType": "System.Int32",
+              "Parameters": []
+            },
+            {
+              "Name": "get_MaxSignalValue",
+              "Static": false,
+              "ReturnType": "System.Int32",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Precision",
+              "Static": false,
+              "ReturnType": "System.Int32",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Zoom",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.ZoomSettings",
+              "Parameters": []
+            },
+            {
+              "Name": "get_ColorDistribution",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.ColorDistribution",
+              "Parameters": []
+            },
+            {
+              "Name": "set_ColorDistribution",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "Flir.Atlas.Image.ColorDistribution",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_Statistics",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.ImageStatistics",
+              "Parameters": []
+            },
+            {
+              "Name": "add_TemperatureUnitChanged",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "System.EventHandler`1[[Flir.Atlas.Image.TemperatureUnitEventArgs, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "remove_TemperatureUnitChanged",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "System.EventHandler`1[[Flir.Atlas.Image.TemperatureUnitEventArgs, Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_ThermalParameters",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.ImageParameters",
+              "Parameters": []
+            },
+            {
+              "Name": "get_TemperatureUnit",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.TemperatureUnit",
+              "Parameters": []
+            },
+            {
+              "Name": "set_TemperatureUnit",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "Flir.Atlas.Image.TemperatureUnit",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "set_DistanceUnit",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "Flir.Atlas.Image.DistanceUnit",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_DistanceUnit",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.DistanceUnit",
+              "Parameters": []
+            },
+            {
+              "Name": "get_CameraInformation",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.CameraInformation",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Histogram",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Measurements.Histogram",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Measurements",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.MeasurementCollection",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Trigger",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.TriggerData",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Scale",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Scale",
+              "Parameters": []
+            },
+            {
+              "Name": "get_PaletteManager",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Palettes.PaletteManager",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Palette",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Palettes.Palette",
+              "Parameters": []
+            },
+            {
+              "Name": "set_Palette",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "Flir.Atlas.Image.Palettes.Palette",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_Isotherms",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Isotherms.IsothermCollection",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Alarms",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Alarms.AlarmCollection",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Fusion",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Fusion.Fusion",
+              "Parameters": []
+            },
+            {
+              "Name": "RenderTo",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "imagePixels",
+                  "Type": "Flir.Atlas.Image.Interfaces.IPixels",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "ImageArray",
+              "Static": false,
+              "ReturnType": "System.Byte[,,]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Image",
+              "Static": false,
+              "ReturnType": "System.Drawing.Bitmap",
+              "Parameters": []
+            },
+            {
+              "Name": "Rotate",
+              "Static": false,
+              "ReturnType": "System.Drawing.Bitmap",
+              "Parameters": [
+                {
+                  "Name": "angle",
+                  "Type": "System.Int32",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "SetRotate",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "angle",
+                  "Type": "System.Int32",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "get_DateTime",
+              "Static": false,
+              "ReturnType": "System.DateTime",
+              "Parameters": []
+            },
+            {
+              "Name": "get_DateTaken",
+              "Static": false,
+              "ReturnType": "System.DateTime",
+              "Parameters": []
+            },
+            {
+              "Name": "SetSketch",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "value",
+                  "Type": "System.Boolean",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "GetPhoto",
+              "Static": false,
+              "ReturnType": "System.Drawing.Bitmap",
+              "Parameters": []
+            },
+            {
+              "Name": "Copy",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "src",
+                  "Type": "Flir.Atlas.Image.ImageBase",
+                  "Out": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Flir.Atlas.Image.ThermalImageFile",
+          "Base": "Flir.Atlas.Image.ThermalImage",
+          "Constructors": [
+            "Void .ctor()",
+            "Void .ctor(System.String)"
+          ],
+          "Methods": [
+            {
+              "Name": "Dispose",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "get_SensorsCollection",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Sensors.SensorsCollection",
+              "Parameters": []
+            },
+            {
+              "Name": "get_TextAnnotations",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.Dictionary`2[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089],[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_ThermalSequencePlayer",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.Playback.ThermalSequencePlayer",
+              "Parameters": []
+            },
+            {
+              "Name": "Count",
+              "Static": false,
+              "ReturnType": "System.Int32",
+              "Parameters": []
+            },
+            {
+              "Name": "get_VoiceAnnotation",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.VoiceAnnotation",
+              "Parameters": []
+            },
+            {
+              "Name": "get_FileName",
+              "Static": false,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "get_ContainsUltraMaxData",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": []
+            },
+            {
+              "Name": "ConvertToUltraMax",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "get_Title",
+              "Static": false,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "IsThermalImage",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "fileName",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Open",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "fileName",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Close",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "Crop",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "rect",
+                  "Type": "System.Drawing.Rectangle",
+                  "Out": false
+                },
+                {
+                  "Name": "path",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Save",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "overlay",
+                  "Type": "System.Drawing.Bitmap",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Save",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "filename",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "overlay",
+                  "Type": "System.Drawing.Bitmap",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Save",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "targetStream",
+                  "Type": "System.IO.Stream",
+                  "Out": false
+                },
+                {
+                  "Name": "overlay",
+                  "Type": "System.Drawing.Bitmap",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "Save",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "Save",
+              "Static": false,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "filename",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Path": "C:\\Program Files (x86)\\FLIR Systems\\FLIR Word Reporting\\bin\\WizardClassLibrary.dll",
+      "SHA256": "681F35BDEED7A63EA2E805B4CBD2FCECA7EFD152F2B5B66F16B72DA2CDA7561C",
+      "AssemblyName": "WizardClassLibrary, Version=9.1.13095.1000, Culture=neutral, PublicKeyToken=null",
+      "ReferencedAssemblies": [
+        "mscorlib, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System.Xml, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System.Drawing, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a",
+        "Interop.IRSDKLib, Version=1.3.0.0, Culture=neutral, PublicKeyToken=null",
+        "nspring, Version=1.1.1392.23289, Culture=neutral, PublicKeyToken=null",
+        "Interop.Word, Version=8.1.0.0, Culture=neutral, PublicKeyToken=37747e46094a224d",
+        "Interop.WordAddin, Version=1.1.0.0, Culture=neutral, PublicKeyToken=null",
+        "System, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "Interop.IRPhoto, Version=1.0.0.0, Culture=neutral, PublicKeyToken=5e0aad079af6ded2",
+        "Flir.Cronos.Metadata.Association, Version=1.1.9356.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "System.Core, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "Flir.Cronos.IR.Formats, Version=1.1.9356.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Interop.Office, Version=2.1.0.0, Culture=neutral, PublicKeyToken=37747e46094a224d"
+      ],
+      "Errors": [
+        "Could not load file or assembly 'System.Drawing, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a' or one of its dependencies. System.Exception (Exception from HRESULT: 0x80131501)"
+      ],
+      "Types": [
+        {
+          "Name": "WizardClassLibrary.WordApp",
+          "Base": "System.Object",
+          "Constructors": [],
+          "Methods": [
+            {
+              "Name": "CloseWordApp",
+              "Static": true,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "KillWordApp",
+              "Static": true,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "GetWordApp",
+              "Static": true,
+              "ReturnType": "Word.Application",
+              "Parameters": []
+            },
+            {
+              "Name": "GetUserTemplatesPath",
+              "Static": true,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "StartApp",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": []
+            },
+            {
+              "Name": "ShowApp",
+              "Static": true,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "HideApp",
+              "Static": true,
+              "ReturnType": "System.Void",
+              "Parameters": []
+            },
+            {
+              "Name": "CheckAndRegisterWordAddin",
+              "Static": true,
+              "ReturnType": "System.Void",
+              "Parameters": [
+                {
+                  "Name": "dllPath",
+                  "Type": "System.String",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "CreateReport",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "reportFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "wordAddinFound",
+                  "Type": "System.Boolean&",
+                  "Out": true
+                },
+                {
+                  "Name": "log",
+                  "Type": "WizardClassLibrary.Log",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "CreateReport",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "reportFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "wordAddinFound",
+                  "Type": "System.Boolean&",
+                  "Out": true
+                }
+              ]
+            },
+            {
+              "Name": "AnalyzeTemplate",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "templateFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "infoFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "wordAddinFound",
+                  "Type": "System.Boolean&",
+                  "Out": true
+                },
+                {
+                  "Name": "log",
+                  "Type": "WizardClassLibrary.Log",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "AnalyzeTemplate",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "templateFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "infoFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "wordAddinFound",
+                  "Type": "System.Boolean&",
+                  "Out": true
+                }
+              ]
+            },
+            {
+              "Name": "CreateTemplatePreview",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "templateFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "previewFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "wordAddinFound",
+                  "Type": "System.Boolean&",
+                  "Out": true
+                },
+                {
+                  "Name": "log",
+                  "Type": "WizardClassLibrary.Log",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "CreateTemplatePreview",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "templateFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "previewFile",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "wordAddinFound",
+                  "Type": "System.Boolean&",
+                  "Out": true
+                }
+              ]
+            },
+            {
+              "Name": "FindWordAddin",
+              "Static": true,
+              "ReturnType": "WordAddin.IWordAddin",
+              "Parameters": [
+                {
+                  "Name": "log",
+                  "Type": "WizardClassLibrary.Log",
+                  "Out": false
+                }
+              ]
+            },
+            {
+              "Name": "FindWordAddin",
+              "Static": true,
+              "ReturnType": "WordAddin.IWordAddin",
+              "Parameters": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Path": "C:\\Program Files (x86)\\FLIR Systems\\FLIR Word Reporting\\bin\\RapidReportCreator.exe",
+      "SHA256": "4835CF85D63E121D230E6047D94AE7AD3206DC5114D547A5C244F5C6DEF51BAE",
+      "AssemblyName": "RapidReportCreator, Version=9.1.13095.1000, Culture=neutral, PublicKeyToken=null",
+      "ReferencedAssemblies": [
+        "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "WizardClassLibrary, Version=9.1.13095.1000, Culture=neutral, PublicKeyToken=null",
+        "System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a",
+        "Flir.Cronos.LicenseManager, Version=1.1.9356.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "mscorlib, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System.Core, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "Interop.LicenseMgrLib, Version=1.3.0.0, Culture=neutral, PublicKeyToken=null"
+      ],
+      "Errors": [],
+      "Types": []
+    },
+    {
+      "Path": "C:\\Program Files (x86)\\FLIR Systems\\FLIR Tools\\bin\\FLIR Report Studio.exe",
+      "SHA256": "C84232091DD2D584DE6DF4D44BE951EFDC34AAAD092548F690F3985F65AAAFE1",
+      "AssemblyName": "FLIR Report Studio, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+      "ReferencedAssemblies": [
+        "mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "PresentationFramework, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "Flir.Reporting.Common, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "System.Xaml, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Flir.Reporting.Common.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Flir.Atlas.Image, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "System.Xml.Linq, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "WindowsBase, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "PresentationCore, Version=4.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+        "System.Core, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "System.Management, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a",
+        "Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed",
+        "System.Xml, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089",
+        "Flir.Atlas.Localization, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Flir.Login, Version=2.0.0.0, Culture=neutral, PublicKeyToken=caa391fd8e07c76b",
+        "Flir.Atlas.Wpf.UI, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b"
+      ],
+      "Errors": [
+        "Could not load file or assembly 'Flir.Reporting.Common, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. System.Exception (Exception from HRESULT: 0x80131501)",
+        "Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. System.Exception (Exception from HRESULT: 0x80131501)",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Atlas.Wpf, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\"",
+        "Exception calling \"ReflectionOnlyLoad\" with \"1\" argument(s): \"Could not load file or assembly 'Flir.Reporting.Common, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. The system cannot find the file specified.\"",
+        "Could not load file or assembly 'Flir.Reporting.Common.UI, Version=0.0.0.0, Culture=neutral, PublicKeyToken=caa391fd8e07c76b' or one of its dependencies. System.Exception (Exception from HRESULT: 0x80131501)"
+      ],
+      "Types": [
+        {
+          "Name": "Flir.Reporting.Wizard.Helpers.ExternalReportData",
+          "Base": "System.Object",
+          "Constructors": [
+            "Void .ctor()"
+          ],
+          "Methods": [
+            {
+              "Name": "get_IsExternalReport",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": []
+            },
+            {
+              "Name": "get_TemplateFilePath",
+              "Static": false,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "get_ReportOutputPath",
+              "Static": false,
+              "ReturnType": "System.String",
+              "Parameters": []
+            },
+            {
+              "Name": "get_ImageFiles",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.List`1[[System.String, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_GroupImageFiles",
+              "Static": false,
+              "ReturnType": "System.Collections.Generic.List`1[[Flir.Atlas.DocXEngine.Helpers.FileGroupExternal, Flir.Atlas.DocXEngine, Version=2.0.14266.1000, Culture=neutral, PublicKeyToken=caa391fd8e07c76b]]",
+              "Parameters": []
+            },
+            {
+              "Name": "get_IsUnitValid",
+              "Static": false,
+              "ReturnType": "System.Boolean",
+              "Parameters": []
+            },
+            {
+              "Name": "get_TempUnit",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.TemperatureUnit",
+              "Parameters": []
+            },
+            {
+              "Name": "get_DistUnit",
+              "Static": false,
+              "ReturnType": "Flir.Atlas.Image.DistanceUnit",
+              "Parameters": []
+            },
+            {
+              "Name": "FromCommandLine",
+              "Static": true,
+              "ReturnType": "Flir.Reporting.Wizard.Helpers.ExternalReportData",
+              "Parameters": []
+            }
+          ]
+        },
+        {
+          "Name": "Flir.Reporting.Wizard.Helpers.Merger",
+          "Base": "System.Object",
+          "Constructors": [],
+          "Methods": [
+            {
+              "Name": "MergeDocX",
+              "Static": true,
+              "ReturnType": "System.Boolean",
+              "Parameters": [
+                {
+                  "Name": "docxPath",
+                  "Type": "System.String",
+                  "Out": false
+                },
+                {
+                  "Name": "onProgress",
+                  "Type": "System.Action`2[[System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089],[System.Int32, mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089]]",
+                  "Out": false
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

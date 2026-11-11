@@ -1,0 +1,27 @@
+Searching for Measurement GUIDs in swg-panel.docx activeX1.bin:
+
+GUID: b6ff78c0-1459-43d3-a90a-9246e31cf8ab
+  ASCII occurrences in Contents: [146]
+  Binary (LE) in Contents: []
+  Binary (BE) in Contents: []
+
+GUID: fdd3008e-bb11-4f85-8d78-402a7e2ac8d6
+  ASCII occurrences in Contents: [613]
+  Binary (LE) in Contents: []
+  Binary (BE) in Contents: []
+
+GUID: 67554dcf-a2e5-439f-b8b9-5b16c62a57c2
+  ASCII occurrences in Contents: [1070]
+  Binary (LE) in Contents: []
+  Binary (BE) in Contents: []
+
+GUID: 2c336045-beec-4eca-8283-9f8b408cf619
+  ASCII occurrences in Contents: [1526]
+  Binary (LE) in Contents: []
+  Binary (BE) in Contents: []
+
+Big sensor block decompressed size: 625696
+In decompressed sensor block -> GUID b6ff78c0: ASCII=[], BinLE=[], BinBE=[]
+In decompressed sensor block -> GUID fdd3008e: ASCII=[], BinLE=[], BinBE=[]
+In decompressed sensor block -> GUID 67554dcf: ASCII=[], BinLE=[], BinBE=[]
+In decompressed sensor block -> GUID 2c336045: ASCII=[], BinLE=[], BinBE=[]

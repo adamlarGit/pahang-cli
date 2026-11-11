@@ -1,0 +1,16 @@
+Controls count: 2
+  Control 1: name='CIRViewer1211111131211', r:id='rId8', shapeid='_x0000_i1032'
+  Control 2: name='CIRViewer12111111312111', r:id='rId12', shapeid='_x0000_i1'
+
+ActiveX Binaries: ['word/activeX/activeX1.bin', 'word/activeX/activeX2.bin']
+  word/activeX/activeX1.bin: size=307200, instance_guid=65f355f7-d614-4afe-85c8-dff34b8c47c7, fds=['_Fd1967887225', '_Fd81475520', '_Fd1922861825', '_Fd97091050']
+  word/activeX/activeX2.bin: size=307200, instance_guid=422ee16b-06fc-42f0-bfc6-fddc50267f79, fds=['_Fd1540926724', '_Fd29816013', '_Fd20366934', '_Fd3509985251']
+
+Document.xml DOCVARIABLE fields (8 total):
+  Fields: ['_Fd1967887225', '_Fd81475520', '_Fd1922861825', '_Fd97091050', '_Fd1540926724', '_Fd20366934', '_Fd3509985251', '_Fd29816013']
+  Unique fields: 8
+
+Settings.xml docVar count: 3859
+All DOCVARIABLE fields are correctly declared in settings.xml!
+
+>>> ALL VALIDATION CHECKS PASSED PERFECTLY! <<<

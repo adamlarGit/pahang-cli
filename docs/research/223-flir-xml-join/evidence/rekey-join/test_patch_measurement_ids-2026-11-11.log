@@ -1,0 +1,22 @@
+Original binary size: 307200
+Original Contents stream size: 300182
+Original Instance GUID: 65f355f7-d614-4afe-85c8-dff34b8c47c7
+Original Field names: ['_Fd97091050', '_Fd81475520', '_Fd1922861825', '_Fd1967887225']
+New Instance GUID: 18b7c6ab-4998-416d-9751-2d63e1321cf3
+  Field _Fd97091050 (11 chars) -> _Fd99000000 (11 chars)
+  Field _Fd81475520 (11 chars) -> _Fd99010000 (11 chars)
+  Field _Fd1922861825 (13 chars) -> _Fd9902000000 (13 chars)
+  Field _Fd1967887225 (13 chars) -> _Fd9903000000 (13 chars)
+Replacing 65f355f7-d614-4afe-85c8-dff34b8c47c7 (10 occurrences)...
+Replacing _Fd97091050 (2 occurrences)...
+Replacing _Fd81475520 (2 occurrences)...
+Replacing _Fd1922861825 (2 occurrences)...
+Replacing _Fd1967887225 (2 occurrences)...
+
+Patched binary size: 307200
+Patched OLE Root CLSID: C5F5764B-B932-4F33-8BF3-9941F22FAE18
+Verifying patched Contents stream...
+All old IDs successfully replaced with new IDs in Contents stream!
+Patched sensor zlib decompressed successfully! (size=625696)
+
+SUCCESS! Fixed-length Measurement ID and Variable patching is 100% mathematically and structurally verified!
