@@ -6,8 +6,9 @@ breaks and heading paragraphs, and checks the CBM defect pieces. No Word.
     uv run --frozen python docs/research/230-xml-slice-bounds/evidence/bounds.py \
         --config <path to .cli_config.json> --out <temp dir>
 
-With --com, it also runs WordComDocumentSlicer on temp copies of the five benchmark reports
-and compares each COM slice with the prototype's slice. Output goes only to --out, except the
+With --com, it also runs WordComDocumentSlicer on temp copies of the five benchmark reports,
+plus any named with --com-extra, and compares each COM slice with the prototype's slice.
+"Rule B" in the code is the README's defect-table rule. Output goes only to --out, except the
 summary files written next to this script with --write-evidence.
 """
 
@@ -21,6 +22,7 @@ import re
 import shutil
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
@@ -110,7 +112,8 @@ def read_units(path: Path) -> tuple[list[Unit], dict]:
     d = docx.Document(str(path))
     body = d.element.body
     units: list[Unit] = []
-    info = {"breaks_inside_tables": [], "lrpb_before_first_break": 0}
+    info = {"breaks_inside_tables": [], "lrpb_before_first_break": 0,
+            "lrpb_total": sum(1 for _ in body.iter(W + "lastRenderedPageBreak"))}
     for idx, el in enumerate(body):
         if el.tag == W + "p":
             units.extend(_paragraph_units(el, idx))
@@ -334,6 +337,7 @@ def derive(path: Path, station: str, master_cbm: int | None) -> dict:
     if find_heading(units, HEADINGS, 0, front_end) is not None:
         fail.append({"shape": "deleted page break", "detail": "a slicer heading sits on the front page"})
     res["front_page_lrpb"] = info["lrpb_before_first_break"]
+    res["lrpb_total"] = info["lrpb_total"]
 
     slices: dict[str, tuple[int, int]] = {"front_page": (0, front_end)}
     if visum is not None:
@@ -504,20 +508,24 @@ def compare_with_com(qr: Path, res: dict, station: str, vi_count: int, out: Path
 
     com_cbm = [fingerprint_file(Path(p)) for p in sliced.cbm_defect_pages]
 
+    def key(fp: dict) -> tuple:
+        return (fp["sha"], fp["tables"], fp["images"], fp["objects"])
+
     def cbm_compare(cbm_slices) -> dict:
-        mine_cbm = {}
-        for s, e, _ in cbm_slices:
-            fp = fingerprint_units([u for u in units[s:e] if u.kind != "break"])
-            mine_cbm[fp["sha"]] = fp
-        matched = sum(1 for fp in com_cbm if fp["sha"] in mine_cbm)
-        row = {"xml": len(cbm_slices), "com": len(com_cbm), "text_matched": matched}
-        if matched != len(com_cbm) or len(com_cbm) != len(cbm_slices):
+        """Match CBM pages as a multiset of (text hash, tables, images, objects), and check order."""
+        mine = [fingerprint_units([u for u in units[s:e] if u.kind != "break"]) for s, e, _ in cbm_slices]
+        left = Counter(key(fp) for fp in mine)
+        matched = 0
+        for fp in com_cbm:
+            if left[key(fp)] > 0:
+                left[key(fp)] -= 1
+                matched += 1
+        row = {"xml": len(mine), "com": len(com_cbm), "matched": matched,
+               "same_order": [key(f) for f in mine] == [key(f) for f in com_cbm]}
+        if matched != len(com_cbm) or len(com_cbm) != len(mine):
+            mine_keys = Counter(key(fp) for fp in mine)
             row["unmatched_com"] = [
-                {k: v for k, v in fp.items() if k != "_text"} for fp in com_cbm if fp["sha"] not in mine_cbm
-            ]
-            row["unmatched_xml"] = [
-                {k: v for k, v in fp.items() if k != "_text"} for sha, fp in mine_cbm.items()
-                if sha not in {c["sha"] for c in com_cbm}
+                {k: v for k, v in fp.items() if k != "_text"} for fp in com_cbm if key(fp) not in mine_keys
             ]
         return row
 
@@ -756,6 +764,15 @@ def main() -> int:
         "failed": len(failed),
         "failure_shapes": shapes,
         "front_page_lrpb_nonzero": sum(1 for r in results if r.get("front_page_lrpb")),
+        "reports_with_any_lrpb": sum(1 for r in results if r.get("lrpb_total")),
+        "rule_b_failed_by_shape_reports": {
+            shape: sum(1 for r in results if any(f["shape"] == shape for f in (r["b"]["failures"] if "b" in r else r["failures"])))
+            for shape in ("count mismatch", "other", "unreadable")
+        },
+        "ticket_rule_failed_by_shape_reports": {
+            shape: sum(1 for r in results if any(f["shape"] == shape for f in r["failures"]))
+            for shape in shapes
+        },
         "read_only_changed_files": len(changed),
         "rule_b_mismatch_causes": mismatch_causes,
         "rule_b_suffixed_overview_pages": suffixed_stats,

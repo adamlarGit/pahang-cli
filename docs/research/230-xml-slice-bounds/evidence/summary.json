@@ -18,7 +18,20 @@
   "unreadable": 1
  },
  "front_page_lrpb_nonzero": 0,
- "read_only_changed_files": 1,
+ "reports_with_any_lrpb": 400,
+ "rule_b_failed_by_shape_reports": {
+  "count mismatch": 38,
+  "other": 2,
+  "unreadable": 1
+ },
+ "ticket_rule_failed_by_shape_reports": {
+  "deleted page break": 27,
+  "template with a break inside it": 9,
+  "count mismatch": 42,
+  "other": 1,
+  "unreadable": 1
+ },
+ "read_only_changed_files": 0,
  "rule_b_mismatch_causes": {
   "master_has_no_cbm_rows": 7,
   "report_has_more_pages": 31,

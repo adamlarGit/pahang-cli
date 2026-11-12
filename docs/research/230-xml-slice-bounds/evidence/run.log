@@ -1,6 +1,5 @@
-snapshot: 91879 files under 2 project folders
-discover thunder_cycle_4_2026_4: 40 packages, 0 errors, 65.0s
-discover ktn_rau_chl_2026_3: 353 packages, 0 errors, 211.2s
+snapshot: 91880 files under 2 project folders
+masters: 393 reused from an earlier run
 quick reports: 401
 COM slicing talapia: <BASE>/QUICK REPORT/RAUB/01. AUGUST/04-08-2026/005. TALAPIA (IR+VI).docx
 COM slicing sentosa: <BASE>/QUICK REPORT/RAUB/01. AUGUST/04-08-2026/007. CS RESTORAN SENTOSA (VI).docx
@@ -11,8 +10,7 @@ COM slicing lipis: <BASE>/QUICK REPORT/KUALA LIPIS/01. OCTOBER/14-10-2026/19. PM
 COM slicing astana: <BASE>/QUICK REPORT/KUANTAN/01. AUGUST/14-08-2026/080. ASTANA VIEW (IR+VI).docx
 COM slicing lianfatt: <BASE>/QUICK REPORT/CAMERON HIGHLAND/01. AUGUST/20-08-2026/125. LIAN FATT (IR+VI).docx
 COM slicing telanok: <BASE>/QUICK REPORT/CAMERON HIGHLAND/01. OCTOBER/16-10-2026/26. MINI PPU TELANOK 33-11kV (US+VI).docx
-read-only guard: 1 files changed under project folders
-  changed: <BASE>/FULL REPORT/40. PMU JENGKA.txt
+read-only guard: 0 files changed under project folders
 {
   "rule_b_passed_every_check": 353,
   "rule_b_failed": 40,
@@ -33,7 +31,20 @@ read-only guard: 1 files changed under project folders
     "unreadable": 1
   },
   "front_page_lrpb_nonzero": 0,
-  "read_only_changed_files": 1,
+  "reports_with_any_lrpb": 400,
+  "rule_b_failed_by_shape_reports": {
+    "count mismatch": 38,
+    "other": 2,
+    "unreadable": 1
+  },
+  "ticket_rule_failed_by_shape_reports": {
+    "deleted page break": 27,
+    "template with a break inside it": 9,
+    "count mismatch": 42,
+    "other": 1,
+    "unreadable": 1
+  },
+  "read_only_changed_files": 0,
   "rule_b_mismatch_causes": {
     "master_has_no_cbm_rows": 7,
     "report_has_more_pages": 31,
