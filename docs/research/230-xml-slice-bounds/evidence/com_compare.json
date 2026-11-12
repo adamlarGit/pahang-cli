@@ -1,0 +1,406 @@
+{
+ "talapia": {
+  "path": "<BASE>/QUICK REPORT/RAUB/01. AUGUST/04-08-2026/005. TALAPIA (IR+VI).docx",
+  "com_seconds": 29.3,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": true
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 3,
+   "com": 3,
+   "text_matched": 3
+  },
+  "b": {
+   "cbm": {
+    "xml": 3,
+    "com": 3,
+    "text_matched": 3
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ },
+ "sentosa": {
+  "path": "<BASE>/QUICK REPORT/RAUB/01. AUGUST/04-08-2026/007. CS RESTORAN SENTOSA (VI).docx",
+  "com_seconds": 10.4,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": true
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 0,
+   "com": 0,
+   "text_matched": 0
+  },
+  "b": {
+   "cbm": {
+    "xml": 0,
+    "com": 0,
+    "text_matched": 0
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ },
+ "094": {
+  "path": "<BASE>/QUICK REPORT/CAMERON HIGHLAND/01. AUGUST/17-08-2026/094. CHAN YIM SOM (IR+VI).docx",
+  "com_seconds": 33.6,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": true
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 4,
+   "com": 4,
+   "text_matched": 4
+  },
+  "b": {
+   "cbm": {
+    "xml": 4,
+    "com": 4,
+    "text_matched": 4
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ },
+ "apmm": {
+  "path": "<BASE>/QUICK REPORT/GEBENG/01. OCTOBER/07-10-2026/01. PPU APMM 33-11kV (VI).docx",
+  "com_seconds": 15.4,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": true
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 0,
+   "com": 0,
+   "text_matched": 0
+  },
+  "b": {
+   "cbm": {
+    "xml": 0,
+    "com": 0,
+    "text_matched": 0
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ },
+ "pe157": {
+  "path": "<BASE>/QUICK REPORT/KUANTAN/01. AUGUST/25-08-2026/157. PERPUSTAKAAN AWAM(VCB) (VI).docx",
+  "com_seconds": 10.2,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": true
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 0,
+   "com": 0,
+   "text_matched": 0
+  },
+  "b": {
+   "cbm": {
+    "xml": 0,
+    "com": 0,
+    "text_matched": 0
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ },
+ "lipis": {
+  "path": "<BASE>/QUICK REPORT/KUALA LIPIS/01. OCTOBER/14-10-2026/19. PMU KUALA LIPIS 132-33kV (US+VI).docx",
+  "com_seconds": 25.3,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": true
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 2,
+   "com": 4,
+   "text_matched": 2,
+   "unmatched_com": [
+    {
+     "chars": 505,
+     "sha": "78d6a3f0d0b263e7",
+     "tables": 1,
+     "images": 3,
+     "objects": 1
+    },
+    {
+     "chars": 505,
+     "sha": "a753754e53a74c81",
+     "tables": 1,
+     "images": 3,
+     "objects": 1
+    }
+   ],
+   "unmatched_xml": []
+  },
+  "b": {
+   "cbm": {
+    "xml": 4,
+    "com": 4,
+    "text_matched": 4
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ },
+ "astana": {
+  "path": "<BASE>/QUICK REPORT/KUANTAN/01. AUGUST/14-08-2026/080. ASTANA VIEW (IR+VI).docx",
+  "com_seconds": 23.7,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": true
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 0,
+   "com": 2,
+   "text_matched": 0,
+   "unmatched_com": [
+    {
+     "chars": 529,
+     "sha": "8265ff0110ca14ac",
+     "tables": 1,
+     "images": 3,
+     "objects": 1
+    },
+    {
+     "chars": 743,
+     "sha": "1edee254c6050906",
+     "tables": 1,
+     "images": 5,
+     "objects": 1
+    }
+   ],
+   "unmatched_xml": []
+  },
+  "b": {
+   "cbm": {
+    "xml": 2,
+    "com": 2,
+    "text_matched": 2
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ },
+ "lianfatt": {
+  "path": "<BASE>/QUICK REPORT/CAMERON HIGHLAND/01. AUGUST/20-08-2026/125. LIAN FATT (IR+VI).docx",
+  "com_seconds": 28.2,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": true
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 3,
+   "com": 3,
+   "text_matched": 3
+  },
+  "b": {
+   "cbm": {
+    "xml": 3,
+    "com": 3,
+    "text_matched": 3
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ },
+ "telanok": {
+  "path": "<BASE>/QUICK REPORT/CAMERON HIGHLAND/01. OCTOBER/16-10-2026/26. MINI PPU TELANOK 33-11kV (US+VI).docx",
+  "com_seconds": 35.4,
+  "sections": {
+   "front_page": {
+    "same": true
+   },
+   "vi_summary": {
+    "same": false,
+    "xml": {
+     "chars": 2562,
+     "sha": "ca4bb828e4aac6da",
+     "tables": 5,
+     "images": 16,
+     "objects": 4
+    },
+    "com": {
+     "chars": 232,
+     "sha": "ce100e7c33cfa506",
+     "tables": 1,
+     "images": 0,
+     "objects": 0
+    },
+    "first_diff_at": 232
+   },
+   "condition_pages": {
+    "same": true
+   },
+   "vi_defect_pages": {
+    "same": true
+   },
+   "sticker_page": {
+    "same": true
+   }
+  },
+  "cbm": {
+   "xml": 0,
+   "com": 4,
+   "text_matched": 0,
+   "unmatched_com": [
+    {
+     "chars": 496,
+     "sha": "2b2057a00da865fc",
+     "tables": 1,
+     "images": 3,
+     "objects": 1
+    },
+    {
+     "chars": 624,
+     "sha": "a0089f5775f74142",
+     "tables": 1,
+     "images": 5,
+     "objects": 1
+    },
+    {
+     "chars": 500,
+     "sha": "b6a3b6068e19b8cf",
+     "tables": 1,
+     "images": 3,
+     "objects": 1
+    },
+    {
+     "chars": 710,
+     "sha": "a134ded046c02b3b",
+     "tables": 1,
+     "images": 5,
+     "objects": 1
+    }
+   ],
+   "unmatched_xml": []
+  },
+  "b": {
+   "cbm": {
+    "xml": 4,
+    "com": 4,
+    "text_matched": 4
+   },
+   "vi_summary": {
+    "same": true
+   }
+  }
+ }
+}

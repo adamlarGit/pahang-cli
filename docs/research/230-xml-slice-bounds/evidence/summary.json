@@ -1,0 +1,41 @@
+{
+ "rule_b_passed_every_check": 353,
+ "rule_b_failed": 40,
+ "rule_b_failure_shapes": {
+  "count mismatch": 38,
+  "other": 4,
+  "unreadable": 1
+ },
+ "reports": 401,
+ "passed_every_check": 345,
+ "structure_ok_no_master_match": 8,
+ "failed": 48,
+ "failure_shapes": {
+  "deleted page break": 30,
+  "template with a break inside it": 9,
+  "count mismatch": 42,
+  "other": 2,
+  "unreadable": 1
+ },
+ "front_page_lrpb_nonzero": 0,
+ "read_only_changed_files": 1,
+ "rule_b_mismatch_causes": {
+  "master_has_no_cbm_rows": 7,
+  "report_has_more_pages": 31,
+  "report_has_fewer_pages": 0
+ },
+ "rule_b_suffixed_overview_pages": {
+  "match": {
+   "reports": 354,
+   "cbm_pages": 170,
+   "suffixed_overview_pages": 1,
+   "reports_with_one": 1
+  },
+  "mismatch": {
+   "reports": 38,
+   "cbm_pages": 177,
+   "suffixed_overview_pages": 35,
+   "reports_with_one": 23
+  }
+ }
+}

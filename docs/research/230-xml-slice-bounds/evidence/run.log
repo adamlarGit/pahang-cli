@@ -1,0 +1,56 @@
+snapshot: 91879 files under 2 project folders
+discover thunder_cycle_4_2026_4: 40 packages, 0 errors, 65.0s
+discover ktn_rau_chl_2026_3: 353 packages, 0 errors, 211.2s
+quick reports: 401
+COM slicing talapia: <BASE>/QUICK REPORT/RAUB/01. AUGUST/04-08-2026/005. TALAPIA (IR+VI).docx
+COM slicing sentosa: <BASE>/QUICK REPORT/RAUB/01. AUGUST/04-08-2026/007. CS RESTORAN SENTOSA (VI).docx
+COM slicing 094: <BASE>/QUICK REPORT/CAMERON HIGHLAND/01. AUGUST/17-08-2026/094. CHAN YIM SOM (IR+VI).docx
+COM slicing apmm: <BASE>/QUICK REPORT/GEBENG/01. OCTOBER/07-10-2026/01. PPU APMM 33-11kV (VI).docx
+COM slicing pe157: <BASE>/QUICK REPORT/KUANTAN/01. AUGUST/25-08-2026/157. PERPUSTAKAAN AWAM(VCB) (VI).docx
+COM slicing lipis: <BASE>/QUICK REPORT/KUALA LIPIS/01. OCTOBER/14-10-2026/19. PMU KUALA LIPIS 132-33kV (US+VI).docx
+COM slicing astana: <BASE>/QUICK REPORT/KUANTAN/01. AUGUST/14-08-2026/080. ASTANA VIEW (IR+VI).docx
+COM slicing lianfatt: <BASE>/QUICK REPORT/CAMERON HIGHLAND/01. AUGUST/20-08-2026/125. LIAN FATT (IR+VI).docx
+COM slicing telanok: <BASE>/QUICK REPORT/CAMERON HIGHLAND/01. OCTOBER/16-10-2026/26. MINI PPU TELANOK 33-11kV (US+VI).docx
+read-only guard: 1 files changed under project folders
+  changed: <BASE>/FULL REPORT/40. PMU JENGKA.txt
+{
+  "rule_b_passed_every_check": 353,
+  "rule_b_failed": 40,
+  "rule_b_failure_shapes": {
+    "count mismatch": 38,
+    "other": 4,
+    "unreadable": 1
+  },
+  "reports": 401,
+  "passed_every_check": 345,
+  "structure_ok_no_master_match": 8,
+  "failed": 48,
+  "failure_shapes": {
+    "deleted page break": 30,
+    "template with a break inside it": 9,
+    "count mismatch": 42,
+    "other": 2,
+    "unreadable": 1
+  },
+  "front_page_lrpb_nonzero": 0,
+  "read_only_changed_files": 1,
+  "rule_b_mismatch_causes": {
+    "master_has_no_cbm_rows": 7,
+    "report_has_more_pages": 31,
+    "report_has_fewer_pages": 0
+  },
+  "rule_b_suffixed_overview_pages": {
+    "match": {
+      "reports": 354,
+      "cbm_pages": 170,
+      "suffixed_overview_pages": 1,
+      "reports_with_one": 1
+    },
+    "mismatch": {
+      "reports": 38,
+      "cbm_pages": 177,
+      "suffixed_overview_pages": 35,
+      "reports_with_one": 23
+    }
+  }
+}
