@@ -1,0 +1,18 @@
+FLIR0011 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x80 float32 1.900 ~ Dt C
+FLIR0011 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+FLIR0012 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   no reading found
+FLIR0012 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+FLIR0012 Word CIRViewer edit  records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x4ec float32 309.547 ~ Ar1 (avg) K
+FLIR0013 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   no reading found
+FLIR0013 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+FLIR0014 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x3f float32 -2.000 ~ Dt C
+FLIR0014 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
