@@ -25,3 +25,9 @@ Canonical five-role triage labels (`needs-triage`, `needs-info`, `ready-for-agen
 ### Domain docs
 
 Single-context layout (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
+
+## Thermal editor (separate repo)
+
+The standalone editor for thermal images lives in its own repo, `adamlarGit/thermal-editor`, with its own map and tickets. Work on the editor goes there, not here.
+
+This repo and the editor share files on disk and no code. The pipeline reads the image in a substation's `RAW DATA/IR/` folder as saved, and the CLI does not launch the editor. The decision record is issue #239.
