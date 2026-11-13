@@ -12,6 +12,8 @@ agent: Claude Code, claude-opus-5-5
 
 Yes, for the two FLIR cameras in use, the T640 and the T440. A short Python reader using only numpy and Pillow, with no FLIR software and no Word, computes `Sp1`, `Sp2`, the area average and `Dt` from an image saved in FLIR Tools+ or by the Word viewer. It equals FLIR's own Atlas SDK within 0.00022 °C on 86 of the 87 values of the 18 files (C13): spots, boxes, polygons and circular ellipses (C8, C19). The exception is a stretched ellipse, whose average is 0.009 °C below Atlas (C23). Against the owner's readings it matches to the displayed digit in every one of the 40 values read after an edit: 24 on the T640, in FLIR Tools+ and Word, and 16 on the T440, in FLIR Tools+ (C15).
 
+A delivered report can be read the same way, with Word closed and no saved JPEG. In the Talapia Full Report every viewer field's last result is stored as plain text, and each viewer's binary carries the camera's own calibration record and raw plane, its tools and its `Dt` formula. Computing from the viewer state gives the cached result of all 79 viewer-backed fields to the digit (C25 to C29). Twenty table cells show values whose viewer is not in the file, so those cannot be checked (C30).
+
 The file stores the raw thermal plane, the calibration and the tool positions, but no readings. An edit rewrites the positions. An image-level emissivity or distance change goes into the calibration record (C20), and a per-tool one goes into that tool's header (C24). The reader uses both. The values are computed with FLIR's one-path atmosphere model (C14).
 
 Four conditions:
@@ -49,7 +51,12 @@ Four conditions:
 | C22 | ~~Cameras in use other than the T640 and the T440 share the layout.~~ | Assumed | Moot. The owner says these are the only FLIR models in use, and the rare Fluke camera is out of scope. See Change log. |
 | C23 | A stretched ellipse does not follow C19's midpoint rule. For the Word ellipse of FLIR0012, rectangle (78, 54, 402, 200), Atlas measures 63022 pixels over rows 55 to 253 and columns 78 to 479. The midpoint rule gives 63611 pixels, 589 of them different, and an average 0.0090 °C below Atlas. No tried midpoint or analytic rule fits exactly. The closest, an analytic ellipse about (277.5, 154) with semi-axes 200.5 and 100, is 98 pixels off. Both averages round to Word's 36.2. | Tested | `evidence/check-ellipse-mask-2026-11-13d.log`, `evidence/compare-to-atlas-2026-11-13d.log`, `evidence/compare-2026-11-13d.log` |
 | C24 | A per-tool emissivity, FLIR's "local parameters", is stored in that tool's 36-byte header. The flag word at header byte 22 goes from 0x0080 to 0x0087, and bytes 24, 28 and 32 hold float32 emissivity 0.8, distance 1.0 m and reflected temperature 293.15 K. Atlas reports the same three for both spots, with `UseCustomObjectParameters` True. With them the reader gives `Sp1` 40.901 and `Sp2` 41.347, equal to Atlas and to the owner's 40.9 and 41.3. Only the emissivity differed from the image's values, so which flag bit belongs to which parameter is not settled. | Tested | `evidence/flir_fff.py` `measurement_tools()`, `evidence/compare-2026-11-13d.log`, `evidence/compare-to-atlas-2026-11-13d.log` |
-| C25 | A delivered Part's Word fields that show `Sp1`, `Sp2`, `Ar1` and `Dt` keep their last displayed results as text in the `.docx`, readable without Word. | Assumed | none. Settled by reading `word/document.xml` of a Part whose IR table uses the viewer's fields and comparing the cached results with the viewer. |
+| C25 | A delivered report's viewer fields keep their last results as text, readable without Word. In the Talapia Full Report all 99 field uses are `DOCVARIABLE` fields. Each one's cached result in `document.xml` equals its `w:docVar` value in `settings.xml`, such as `32.6 °C`. Of the 4,025 variables, only the 90 the body names are in use. | Tested | `evidence/read_part.py`, `evidence/read-part-talapia-2026-11-13.log` |
+| C26 | Each viewer's state carries what the reader needs. Record 1017 holds the camera's whole CameraInfo record in the FFF layout, 2476 bytes long, with the camera model at +0xD4, and ends with the 640 × 480 uint16 raw plane. After the rendered picture, record 112, each tool is a group of records ending in a text record 103 with its label. Record 1001 gives the kind: 1 spot, 4 box, 16 polygon, 1024 delta. Record 104 gives the geometry: `[1, x, y]`, `[2, x1, y1, x2, y2]` or `[n, x1, y1, …]`. An 80-byte record 1000 holds float32 emissivity, reflected and atmospheric temperature in K, distance, transmission and humidity. | Tested | `evidence/read_part.py` `viewer_state()`, `evidence/read-part-talapia-2026-11-13.log`; builds on `223-flir-xml-join` `path-static-cfb.md` C9 to C14 |
+| C27 | Computed from the viewer state with `flir_fff.py`, the value of every one of the 79 viewer-backed fields equals its cached result to the digit: 38 spots, 19 area averages (12 boxes, 7 polygons), 2 box maxima and 20 deltas. Box corners are both included. The other reading, x1 to x2 − 1, would miss one field in viewer 22, 35.654 against 35.6. That is the only one of the 14 box fields that tells the two apart. Six of the 27 viewers have no fields. | Tested | `evidence/read_part.py`, `evidence/read-part-talapia-2026-11-13.log` |
+| C28 | A field's object says what it shows. Bytes 20 to 32 of its record 1000 are the tool class (8 spot, 7 area, 10 delta), the member (32 spot value, 64 area average, 61 area maximum, 104 delta) and the tool number. The caption that follows can be stale. The 19 average fields under "Average Temp. (Ar1)" are captioned `Ar1.Max. Temperature`, yet their member is 64 and their cached value is the average. | Tested | `evidence/read_part.py` `viewer_state()`, `evidence/read-part-talapia-2026-11-13.log` |
+| C29 | In a delivered report the absolute `Dt` is stored, as the delta's formula in the viewer state, record 1004. 18 deltas read `abs([ana.Sp1.temp] - [ana.Sp2.temp])`. Viewers 26 and 27, whose `Sp1` is a box, read `abs([ana.Sp1.max] - [ana.Sp2.temp])`. This fits C17: the tick lives in the viewer, not in the JPEG the viewer saves. | Tested | `evidence/read-part-talapia-2026-11-13.log` |
+| C30 | Eleven body field names, used in 20 table cells, belong to no viewer in the file. Their values are only in the `w:docVar`s, and none equals a spot, area or delta value of any of the 27 viewers, apart from three coincidences with an area minimum or a delta of 0.0. Nine of the names are the repeated TX1 and TX2 cells of `223-flir-xml-join` `path-static-cfb.md` C7. | Tested | `evidence/read-part-talapia-2026-11-13.log` (last section) |
 
 ## Detail
 
@@ -123,6 +130,20 @@ Computed is from the file, rounded to one decimal. Shown is the owner's reading:
 
 Unrounded values are in `evidence/compare-2026-11-13d.log`. The six misses are camera-computed values (C16). FLIR's desktop SDK gives the same figures as the reader for them (C13).
 
+### Reading a delivered report
+
+`evidence/read_part.py` opens the `.docx` read-only, as a zip. It reads the field results and variables from `document.xml` and `settings.xml`. It opens each `word/activeX/activeXN.bin` as a compound file and decodes its `Contents` stream with #223's `decode_flir_contents.py`. Then it measures every tool with `flir_fff.py`.
+
+| From | Gives | Claim |
+|---|---|---|
+| `document.xml` field result, `settings.xml` `w:docVar` | the value the viewer last showed, as text | C25 |
+| field object in the viewer binary | which tool and member a field shows | C28 |
+| viewer record 1017 | CameraInfo and raw plane | C26 |
+| viewer tool groups | label, kind, geometry, object parameters | C26 |
+| viewer record 1004 | the delta formula, with `abs()` | C29 |
+
+The cached text is enough to fill the report's table. The computed route checks it, and can be used where a field is missing. Neither needs Word or FLIR software. The parsing of the viewer state rests on one report. It covers spots, boxes, polygons and `abs()` deltas, every tool with the image's own parameters, and a single camera, the T640.
+
 ### Absolute `Dt`
 
 The tick is a setting of the Word formula field that displays `Dt` (C17). Saving the image from the viewer does not carry it. FLIR Tools+ has no such option for a delta. A pipeline that drops the live viewer has to apply `abs()` when it writes the table, just as the operator ticks it today.
@@ -145,7 +166,7 @@ None. One Path.
 3. Answered: FLIR Tools+ subtracts by tool number (C7).
 4. Answered: the original column was read from the camera panel (C16).
 5. What is the 8-byte `0x29` record that a FLIR Tools+ save adds?
-6. Can the four values be read from a delivered Part itself, from its `.docx` file with Word closed? The viewer's own copy of the image is in its binary (`223-flir-xml-join` `path-static-cfb.md` C14), not in a saved JPEG. The owner points out that the viewer can insert Word fields for `Sp1`, `Sp2`, `Dt` and `Ar1`, and Word keeps a field's last result as text (C25).
+6. Answered: a delivered report can be read with Word closed, from the cached field text or from the viewer state (C25 to C29). Still open: viewers with ellipses, T440 images or per-tool parameters, which the Talapia report does not have. Also, where the 20 cells of C30 got their values.
 7. Why does the T440 panel's difference disagree with its own max and spot (C16)? It does not affect saved images.
 8. What pixel rule does Atlas use for a stretched ellipse (C23)?
 
@@ -160,7 +181,10 @@ uv run --frozen python -I $E/compare_readings.py "$S/Flir T640" "$S/Flir T440"
 uv run --frozen python -I $E/search_stored_values.py "$S/Flir T640" "$S/Flir T440"
 uv run --frozen python -I $E/check_edit_preserves_raw.py "$S/Flir T640" "$S/Flir T440"
 uv run --frozen python -I $E/hypotheses.py "$S/Flir T640"
+uv run --frozen --with olefile python -I $E/read_part.py "<BASE>/FULL REPORT/RAUB/01. AUGUST/04-08-2026/005. TALAPIA (IR+VI).docx"
 ```
+
+`olefile` is not in `uv.lock`. `--with` adds it for the one run, so the lock does not change.
 
 The FLIR SDK reference runs in 32-bit PowerShell and needs FLIR Tools installed:
 
@@ -206,9 +230,13 @@ The logs in `evidence/` were captured with the system Python 3.13.1, numpy 2.3.2
 | `<SAMPLES>/Flir T440/editted/` | `IR_0017.jpg` | 237453 | `19e04718178e9e4f6d018521482ede067e79245d39fe9715f8f646872bb35b3b` | 2026-11-13 |
 | `<SAMPLES>/Flir T440/editted/` | `IR_0023.jpg` | 236931 | `53010cc9c1f77a9fa7c07131952f90dbe32134d02c04e5e6cb0745574ef9ed9b` | 2026-11-13 |
 | `<SAMPLES>/Flir T440/` | `IR-readings.csv` | 886 | `ba12a34c22acf25ac6f4c7f8e2fdc30e832ec8a7e7a1177ff84d49dd4ed40850` | 2026-11-13 |
+| `<BASE>/FULL REPORT/RAUB/01. AUGUST/04-08-2026/` | `005. TALAPIA (IR+VI).docx`, read-only | 41260522 | `eca3aa5c26db1ca5ef1bacb87baa22b10475ed2aff13ca7551010231a4e7523f` | 2026-11-13 |
+
+`<BASE>` is the `PO 42360565 - PAHANG - 11kV CYCLE3 - AZZAD` project folder, as in `223-flir-xml-join` `path-static-cfb.md`, which read the same file with the same hash on 2026-11-11.
 
 ## Change log
 
+- 2026-11-13: fifth version (Claude Code). The owner pointed to the Talapia Full Report and said reading a delivered report is one of the reasons for the ticket. C25 is rewritten from Assumed to Tested. New: C26 to C30, and `evidence/read_part.py`. The verdict gains a paragraph on delivered reports, and open question 6 is answered for this report.
 - 2026-11-13: fourth version (Claude Code). Prompted by the owner's Word save of FLIR0012 with a stretched ellipse and per-spot emissivity 0.8, and the owner's statement, given in the agent session, that only the T640 and the T440 are in use among FLIR cameras and that Fluke is out of scope. C22 is struck as moot. C19 is rewritten: Atlas takes an ellipse's rectangle from its params when the trailing block's flag is 0. C23 is rewritten from Assumed to Tested: the stretched ellipse does not follow the midpoint rule, and the reader is 0.009 °C below Atlas on it. New: C24, per-tool parameters in the tool header, and C25, the Word fields of a delivered Part, Assumed. The reader now applies a tool's local parameters. C1, C2, C6 to C9, C12, C13, C15 to C18, C20 and C21 now cite the `d` logs. The verdict gains the stretched-ellipse condition. Open questions 1 and 2 are answered, 6 is reworded around the owner's note on Word fields, and 8 now asks for Atlas's stretched-ellipse rule.
 - 2026-11-13: third version (Claude Code). Prompted by the owner's T440 samples and answers to open questions 2 to 5, given in the agent session. The owner said: the original column was read from the camera panel; FLIR Tools+ shows `Dt` as 0.1 for the FLIR Tools+ edit of FLIR0012; the T440 edits change emissivity and distance and add an ellipse. C12 is rewritten from Assumed to Tested for the T440, and other cameras move to the new C22. C7 now records that the difference follows tool numbers, and `compare_readings.py` carries the owner's corrected 0.1. The reader now picks the spot-to-spot difference tool rather than computing `Sp1 − Sp2` by label. That gives the same value on every file except that one. C1, C2, C6, C8, C9, C13, C15, C16 and C18 are updated for both cameras. New: C19 to C23. Open questions 3 and 4 are answered, 2 is narrowed, 7 and 8 are new. The verdict now covers two cameras and ellipse areas. These owner answers are cited from the session. Claims resting on them stay Tested or Read until the owner posts them on the ticket.
 - 2026-11-13: second version (Claude Code). Prompted by the owner's absolute-`Dt` sample and the suggestion to inspect FLIR's SDK. Used as a reference, Atlas showed that the first version's transmission model was wrong (C14). The reader now matches Atlas (C13) and every edited reading (C15). C3, C4 and C5 are struck because their figures came from the old model. C8 is rewritten with the new figure. C11 is struck because C17 disproves it. New: C13 to C18. The verdict no longer carries the ±0.1 °C condition. The Atlas SDK is used only as a reference in this version. The `atlas-sdk` Path was not followed here; the owner later reinstated it on the ticket (#235) to be tried.

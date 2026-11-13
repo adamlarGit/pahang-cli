@@ -1,0 +1,186 @@
+005. TALAPIA (IR+VI).docx: 193 parts, 99 DOCVARIABLE uses, 90 names, 4025 w:docVar entries
+
+== activeX1.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:box geometry [2, 101, 24, 485, 424]
+   computed: Ar1 avg=33.293, Ar1 max=35.617, Ar1 min=32.103, Ar1 avg excl=33.295
+
+== activeX2.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:box geometry [2, 60, 182, 596, 381]
+   computed: Ar1 avg=32.311, Ar1 max=34.038, Ar1 min=31.401, Ar1 avg excl=32.312
+
+== activeX3.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Dt1:delta, Sp2:spot, Ar1:polygon, Sp1:spot
+   computed: Sp2=32.858, Ar1 avg=32.724, Ar1 max=32.992, Ar1 min=31.582, Sp1=32.628, Dt1=0.230
+   _Fd1016708312   class 10 member 104 #1 caption 'Dt1'                    var 0.2 cached [0.2] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.230
+   _Fd1057524925   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 32.7 cached [32.7] row 'Average Temp. (Ar1)' computed Ar1 avg=32.724
+   _Fd2144415276   class  8 member  32 #2 caption 'Sp2.Temperature'        var 32.9 cached [32.9] row 'Spot Temp. 2 (Sp 2)' computed Sp2=32.858
+   _Fd97815547     class  8 member  32 #1 caption 'Sp1.Temperature'        var 32.6 cached [32.6] row 'Spot Temp.1 (Sp 1)' computed Sp1=32.628
+
+== activeX4.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Dt1:delta, Sp2:spot, Ar1:box geometry [2, 269, 75, 378, 467], Sp1:spot
+   computed: Sp2=32.218, Ar1 avg=32.235, Ar1 max=32.832, Ar1 min=31.640, Ar1 avg excl=32.237, Sp1=32.404, Dt1=0.186
+   _Fd1367909439   class  8 member  32 #2 caption 'Sp2.Temperature'        var 32.2 cached [32.2] row 'Spot Temp. 2 (Sp 2)' computed Sp2=32.218
+   _Fd1559606081   class  8 member  32 #1 caption 'Sp1.Temperature'        var 32.4 cached [32.4] row 'Spot Temp.1 (Sp 1)' computed Sp1=32.404
+   _Fd2092746574   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 32.2 cached [32.2] row 'Average Temp. (Ar1)' computed Ar1 avg=32.235
+   _Fd5631611      class 10 member 104 #1 caption 'Dt1'                    var 0.2 cached [0.2] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.186
+
+== activeX5.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:polygon, Dt1:delta, Sp2:spot, Sp1:spot
+   computed: Ar1 avg=33.045, Ar1 max=33.487, Ar1 min=32.596, Sp2=33.386, Sp1=33.329, Dt1=0.057
+   _Fd1347780533   class  8 member  32 #1 caption 'Sp1.Temperature'        var 33.3 cached [33.3] row 'Spot Temp.1 (Sp 1)' computed Sp1=33.329
+   _Fd1623032130   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 33.0 cached [33.0] row 'Average Temp. (Ar1)' computed Ar1 avg=33.045
+   _Fd1737418188   class  8 member  32 #2 caption 'Sp2.Temperature'        var 33.4 cached [33.4] row 'Spot Temp. 2 (Sp 2)' computed Sp2=33.386
+   _Fd423313352    class 10 member 104 #1 caption 'Dt1'                    var 0.1 cached [0.1] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.057
+
+== activeX6.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Dt1:delta, Ar1:box geometry [2, 284, 153, 350, 472], Sp2:spot, Sp1:spot
+   computed: Ar1 avg=32.544, Ar1 max=32.845, Ar1 min=32.212, Ar1 avg excl=32.544, Sp2=32.564, Sp1=32.507, Dt1=0.058
+   _Fd1200134904   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 32.5 cached [32.5] row 'Average Temp. (Ar1)' computed Ar1 avg=32.544
+   _Fd1605427229   class 10 member 104 #1 caption 'Dt1'                    var 0.1 cached [0.1] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.058
+   _Fd1721532153   class  8 member  32 #2 caption 'Sp2.Temperature'        var 32.6 cached [32.6] row 'Spot Temp. 2 (Sp 2)' computed Sp2=32.564
+   _Fd383296451    class  8 member  32 #1 caption 'Sp1.Temperature'        var 32.5 cached [32.5] row 'Spot Temp.1 (Sp 1)' computed Sp1=32.507
+
+== activeX7.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Dt1:delta, Ar1:polygon, Sp2:spot, Sp1:spot
+   computed: Ar1 avg=33.130, Ar1 max=33.538, Ar1 min=32.794, Sp2=33.462, Sp1=33.506, Dt1=0.044
+   _Fd1078840485   class  8 member  32 #1 caption 'Sp1.Temperature'        var 33.5 cached [33.5] row 'Spot Temp.1 (Sp 1)' computed Sp1=33.506
+   _Fd1792372118   class 10 member 104 #1 caption 'Dt1'                    var 0.0 cached [0.0] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.044
+   _Fd248682315    class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 33.1 cached [33.1] row 'Average Temp. (Ar1)' computed Ar1 avg=33.130
+   _Fd63553607     class  8 member  32 #2 caption 'Sp2.Temperature'        var 33.5 cached [33.5] row 'Spot Temp. 2 (Sp 2)' computed Sp2=33.462
+
+== activeX8.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Dt1:delta, Sp2:spot, Ar1:box geometry [2, 259, 70, 411, 477], Sp1:spot
+   computed: Sp2=32.801, Ar1 avg=32.730, Ar1 max=33.132, Ar1 min=32.340, Ar1 avg excl=32.730, Sp1=32.775, Dt1=0.026
+   _Fd1229945691   class  8 member  32 #1 caption 'Sp1.Temperature'        var 32.8 cached [32.8] row 'Spot Temp.1 (Sp 1)' computed Sp1=32.775
+   _Fd1603701097   class  8 member  32 #2 caption 'Sp2.Temperature'        var 32.8 cached [32.8] row 'Spot Temp. 2 (Sp 2)' computed Sp2=32.801
+   _Fd1807228622   class 10 member 104 #1 caption 'Dt1'                    var 0.0 cached [0.0] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.026
+   _Fd316616349    class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 32.7 cached [32.7] row 'Average Temp. (Ar1)' computed Ar1 avg=32.730
+
+== activeX9.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Dt1:delta, Sp2:spot, Sp1:spot, Ar1:polygon
+   computed: Sp2=32.947, Sp1=32.903, Ar1 avg=32.891, Ar1 max=33.106, Ar1 min=32.052, Dt1=0.045
+   _Fd1138066438   class  8 member  32 #2 caption 'Sp2.Temperature'        var 32.9 cached [32.9] row 'Spot Temp. 2 (Sp 2)' computed Sp2=32.947
+   _Fd181838646    class  8 member  32 #1 caption 'Sp1.Temperature'        var 32.9 cached [32.9] row 'Spot Temp.1 (Sp 1)' computed Sp1=32.903
+   _Fd2072950825   class 10 member 104 #1 caption 'Dt1'                    var 0.0 cached [0.0] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.045
+   _Fd553495716    class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 32.9 cached [32.9] row 'Average Temp. (Ar1)' computed Ar1 avg=32.891
+
+== activeX10.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Dt1:delta, Ar1:box geometry [2, 271, 70, 388, 464], Sp2:spot, Sp1:spot
+   computed: Ar1 avg=32.482, Ar1 max=33.055, Ar1 min=31.839, Ar1 avg excl=32.483, Sp2=32.743, Sp1=32.724, Dt1=0.019
+   _Fd1413378776   class  8 member  32 #1 caption 'Sp1.Temperature'        var 32.7 cached [32.7] row 'Spot Temp.1 (Sp 1)' computed Sp1=32.724
+   _Fd269050247    class 10 member 104 #1 caption 'Dt1'                    var 0.0 cached [0.0] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.019
+   _Fd370813302    class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 32.5 cached [32.5] row 'Average Temp. (Ar1)' computed Ar1 avg=32.482
+   _Fd941263881    class  8 member  32 #2 caption 'Sp2.Temperature'        var 32.7 cached [32.7] row 'Spot Temp. 2 (Sp 2)' computed Sp2=32.743
+
+== activeX11.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:box geometry [2, 172, 148, 434, 358], Sp2:spot, Sp1:spot, Dt1:delta
+   computed: Ar1 avg=42.019, Ar1 max=45.162, Ar1 min=33.367, Ar1 avg excl=42.071, Sp2=41.252, Sp1=45.093, Dt1=3.841
+
+== activeX12.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp2:spot, Dt1:delta, Ar1:polygon, Sp1:spot
+   computed: Sp2=44.510, Ar1 avg=43.142, Ar1 max=45.047, Ar1 min=38.659, Sp1=44.597, Dt1=0.087
+   _Fd1527794006   class  8 member  32 #1 caption 'Sp1.Temperature'        var 44.6 cached [44.6] row 'Spot Temp.1 (Sp 1)' computed Sp1=44.597
+   _Fd173198185    class 10 member 104 #1 caption 'Dt1'                    var 0.1 cached [0.1] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.087
+   _Fd454581283    class  8 member  32 #2 caption 'Sp2.Temperature'        var 44.5 cached [44.5] row 'Spot Temp. 2 (Sp 2)' computed Sp2=44.510
+
+== activeX13.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:box geometry [2, 70, 29, 604, 467], Sp1:spot, Sp2:spot, Dt1:delta
+   computed: Ar1 avg=38.087, Ar1 max=44.834, Ar1 min=33.798, Ar1 avg excl=38.091, Sp1=40.872, Sp2=41.389, Dt1=0.517
+   _Fd1307007476   class 10 member 104 #1 caption 'Dt1'                    var 0.5 cached [0.5] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.517
+   _Fd1367711777   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 38.1 cached [38.1] row 'Average Temp. (Ar1)' computed Ar1 avg=38.087
+   _Fd1835633553   class  8 member  32 #2 caption 'Sp2.Temperature'        var 41.4 cached [41.4] row 'Spot Temp. 2 (Sp 2)' computed Sp2=41.389
+   _Fd1999927428   class  8 member  32 #1 caption 'Sp1.Temperature'        var 40.9 cached [40.9] row 'Spot Temp.1 (Sp 1)' computed Sp1=40.872
+
+== activeX14.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:polygon, Sp1:spot, Sp2:spot, Dt1:delta
+   computed: Ar1 avg=35.850, Ar1 max=38.665, Ar1 min=34.309, Sp1=36.967, Sp2=36.480, Dt1=0.487
+   _Fd1133600257   class  8 member  32 #2 caption 'Sp2.Temperature'        var 36.5 cached [36.5] row 'Spot Temp. 2 (Sp 2)' computed Sp2=36.480
+   _Fd1232975865   class  8 member  32 #1 caption 'Sp1.Temperature'        var 37.0 cached [37.0] row 'Spot Temp.1 (Sp 1)' computed Sp1=36.967
+   _Fd1666804391   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 35.8 cached [35.8] row 'Average Temp. (Ar1)' computed Ar1 avg=35.850
+   _Fd2029115479   class 10 member 104 #1 caption 'Dt1'                    var 0.5 cached [0.5] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.487
+
+== activeX15.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:box geometry [2, 212, 62, 427, 454], Sp1:spot, Sp2:spot, Dt1:delta
+   computed: Ar1 avg=35.497, Ar1 max=37.415, Ar1 min=33.772, Ar1 avg excl=35.501, Sp1=36.436, Sp2=36.096, Dt1=0.341
+   _Fd1227969371   class 10 member 104 #1 caption 'Dt1'                    var 0.3 cached [0.3] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.341
+   _Fd1697538177   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 35.5 cached [35.5] row 'Average Temp. (Ar1)' computed Ar1 avg=35.497
+   _Fd385445510    class  8 member  32 #1 caption 'Sp1.Temperature'        var 36.4 cached [36.4] row 'Spot Temp.1 (Sp 1)' computed Sp1=36.436
+   _Fd43218637     class  8 member  32 #2 caption 'Sp2.Temperature'        var 36.1 cached [36.1] row 'Spot Temp. 2 (Sp 2)' computed Sp2=36.096
+
+== activeX16.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp1:spot, Ar1:polygon, Sp2:spot, Dt1:delta
+   computed: Sp1=39.439, Ar1 avg=38.406, Ar1 max=44.035, Ar1 min=34.032, Sp2=39.704, Dt1=0.265
+
+== activeX17.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp1:spot, Sp2:spot, Dt1:delta, Ar1:box geometry [2, 244, 31, 472, 416]
+   computed: Sp1=36.615, Sp2=37.231, Ar1 avg=35.979, Ar1 max=37.685, Ar1 min=33.342, Ar1 avg excl=35.985, Dt1=0.616
+   _Fd1532659334   class 10 member 104 #1 caption 'Dt1'                    var 0.6 cached [0.6] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.616
+   _Fd1607841827   class  8 member  32 #2 caption 'Sp2.Temperature'        var 37.2 cached [37.2] row 'Spot Temp. 2 (Sp 2)' computed Sp2=37.231
+   _Fd270761584    class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 36.0 cached [36.0] row 'Average Temp. (Ar1)' computed Ar1 avg=35.979
+   _Fd437487577    class  8 member  32 #1 caption 'Sp1.Temperature'        var 36.6 cached [36.6] row 'Spot Temp.1 (Sp 1)' computed Sp1=36.615
+
+== activeX18.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:box geometry [2, 172, 148, 495, 421], Sp2:spot, Sp1:spot, Dt1:delta
+   computed: Ar1 avg=41.046, Ar1 max=44.863, Ar1 min=33.741, Ar1 avg excl=41.060, Sp2=40.047, Sp1=44.684, Dt1=4.637
+
+== activeX19.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp2:spot, Dt1:delta, Ar1:polygon, Sp1:spot
+   computed: Sp2=44.447, Ar1 avg=43.141, Ar1 max=44.932, Ar1 min=37.562, Sp1=44.453, Dt1=0.006
+   _Fd1639816294   class 10 member 104 #1 caption 'Dt1'                    var 0.0 cached [0.0] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.006
+   _Fd738234157    class  8 member  32 #1 caption 'Sp1.Temperature'        var 44.5 cached [44.5] row 'Spot Temp.1 (Sp 1)' computed Sp1=44.453
+   _Fd987590543    class  8 member  32 #2 caption 'Sp2.Temperature'        var 44.4 cached [44.4] row 'Spot Temp. 2 (Sp 2)' computed Sp2=44.447
+
+== activeX20.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:polygon, Sp1:spot, Sp2:spot, Dt1:delta
+   computed: Ar1 avg=37.241, Ar1 max=42.364, Ar1 min=34.214, Sp1=41.312, Sp2=41.655, Dt1=0.344
+   _Fd1410566573   class 10 member 104 #1 caption 'Dt1'                    var 0.3 cached [0.3] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.344
+   _Fd1513324402   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 37.2 cached [37.2] row 'Average Temp. (Ar1)' computed Ar1 avg=37.241
+   _Fd1630484491   class  8 member  32 #1 caption 'Sp1.Temperature'        var 41.3 cached [41.3] row 'Spot Temp.1 (Sp 1)' computed Sp1=41.312
+   _Fd1850567077   class  8 member  32 #2 caption 'Sp2.Temperature'        var 41.7 cached [41.7] row 'Spot Temp. 2 (Sp 2)' computed Sp2=41.655
+
+== activeX21.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp1:spot, Sp2:spot, Dt1:delta, Ar1:polygon
+   computed: Sp1=37.532, Sp2=37.114, Ar1 avg=36.513, Ar1 max=40.824, Ar1 min=34.410, Dt1=0.417
+   _Fd1363769464   class  8 member  32 #1 caption 'Sp1.Temperature'        var 37.5 cached [37.5] row 'Spot Temp.1 (Sp 1)' computed Sp1=37.532
+   _Fd1769689472   class 10 member 104 #1 caption 'Dt1'                    var 0.4 cached [0.4] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.417
+   _Fd337924883    class  8 member  32 #2 caption 'Sp2.Temperature'        var 37.1 cached [37.1] row 'Spot Temp. 2 (Sp 2)' computed Sp2=37.114
+   _Fd833457447    class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 36.5 cached [36.5] row 'Average Temp. (Ar1)' computed Ar1 avg=36.513
+
+== activeX22.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:box geometry [2, 246, 59, 427, 449], Sp1:spot, Sp2:spot, Dt1:delta
+   computed: Ar1 avg=35.647, Ar1 max=38.362, Ar1 min=33.798, Ar1 avg excl=35.654, Sp1=36.214, Sp2=36.387, Dt1=0.173
+   _Fd1253730138   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 35.6 cached [35.6] row 'Average Temp. (Ar1)' computed Ar1 avg=35.647
+   _Fd1507489676   class 10 member 104 #1 caption 'Dt1'                    var 0.2 cached [0.2] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.173
+   _Fd1775786892   class  8 member  32 #1 caption 'Sp1.Temperature'        var 36.2 cached [36.2] row 'Spot Temp.1 (Sp 1)' computed Sp1=36.214
+   _Fd2079895776   class  8 member  32 #2 caption 'Sp2.Temperature'        var 36.4 cached [36.4] row 'Spot Temp. 2 (Sp 2)' computed Sp2=36.387
+
+== activeX23.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp1:spot, Sp2:spot, Dt1:delta, Ar1:polygon
+   computed: Sp1=38.993, Sp2=39.355, Ar1 avg=38.697, Ar1 max=41.868, Ar1 min=34.642, Dt1=0.362
+
+== activeX24.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp1:spot, Sp2:spot, Dt1:delta, Ar1:box geometry [2, 209, 57, 393, 462]
+   computed: Sp1=35.748, Sp2=35.866, Ar1 avg=35.299, Ar1 max=37.941, Ar1 min=33.272, Ar1 avg excl=35.309, Dt1=0.118
+   _Fd1688275297   class  8 member  32 #1 caption 'Sp1.Temperature'        var 35.7 cached [35.7] row 'Spot Temp.1 (Sp 1)' computed Sp1=35.748
+   _Fd1707766124   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 35.3 cached [35.3] row 'Average Temp. (Ar1)' computed Ar1 avg=35.299
+   _Fd1964254772   class 10 member 104 #1 caption 'Dt1'                    var 0.1 cached [0.1] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.temp] - [ana.Sp2.temp])=0.118
+   _Fd2136786175   class  8 member  32 #2 caption 'Sp2.Temperature'        var 35.9 cached [35.9] row 'Spot Temp. 2 (Sp 2)' computed Sp2=35.866
+
+== activeX25.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Ar1:box geometry [2, 14, 95, 609, 417]
+   computed: Ar1 avg=42.311, Ar1 max=59.215, Ar1 min=36.850, Ar1 avg excl=42.317
+   _Fd703628520    class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 42.3 cached [42.3] row 'Average Temp. (Ar1)' computed Ar1 avg=42.311
+
+== activeX26.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp2:spot, Ar1:box geometry [2, 88, 55, 488, 389], Dt1:delta, Sp1:box geometry [2, 219, 228, 355, 341]
+   computed: Sp2=52.938, Ar1 avg=47.097, Ar1 max=64.935, Ar1 min=39.903, Ar1 avg excl=47.110, Sp1 avg=49.342, Sp1 max=64.935, Sp1 min=41.904, Sp1 avg excl=49.325, Dt1=11.997
+   _Fd1720080055   class 10 member 104 #1 caption 'Dt1'                    var 12.0 cached [12.0] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.max] - [ana.Sp2.temp])=11.997
+   _Fd496096926    class  8 member  32 #1 caption 'Sp2.Temperature'        var 52.9 cached [52.9] row 'Spot Temp. 2 (Sp 2)' computed Sp2=52.938
+   _Fd546724564    class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 47.1 cached [47.1] row 'Average Temp. (Ar1)' computed Ar1 avg=47.097
+   _Fd820875086    class  7 member  61 #2 caption 'Sp1.Max. Temperature'   var 64.9 cached [64.9] row 'Spot Temp.1 (Sp 1)' computed Sp1 max=64.935
+
+== activeX27.bin FLIR T640 raw 640x480 E=0.95 OD=1 tools Sp2:spot, Ar1:box geometry [2, 101, 92, 484, 459], Dt1:delta, Sp1:box geometry [2, 228, 130, 364, 243]
+   computed: Sp2=43.779, Ar1 avg=43.691, Ar1 max=64.850, Ar1 min=40.197, Ar1 avg excl=43.701, Sp1 avg=48.997, Sp1 max=64.850, Sp1 min=40.651, Sp1 avg excl=49.021, Dt1=21.071
+   _Fd1064219773   class  7 member  61 #2 caption 'Sp1.Max. Temperature'   var 64.9 cached [64.9] row 'Spot Temp.1 (Sp 1)' computed Sp1 max=64.850
+   _Fd1067021722   class  7 member  64 #1 caption 'Ar1.Max. Temperature'   var 43.7 cached [43.7] row 'Average Temp. (Ar1)' computed Ar1 avg=43.691
+   _Fd1280274198   class 10 member 104 #1 caption 'Dt1'                    var 21.1 cached [21.1] row 'Delta T  ( ∆ T)' computed Dt1 = abs([ana.Sp1.max] - [ana.Sp2.temp])=21.071
+   _Fd1764377785   class  8 member  32 #1 caption 'Sp2.Temperature'        var 43.8 cached [43.8] row 'Spot Temp. 2 (Sp 2)' computed Sp2=43.779
+
+79 viewer fields: cached result equals the w:docVar in 79, computed value equals the cached result in 79
+mismatches: none
+body DOCVARIABLE names held by no viewer: 11
+   _Fd1155285986   var 3.9 cached 3.9 row '( ∆ T)'
+   _Fd1155285986   var 3.9 cached 3.9 row '( ∆ T)'
+   _Fd1206794782   var 37.6 cached 37.6 row 'Average Temp. (Ar1)'
+   _Fd1206794782   var 37.6 cached 37.6 row 'Average Temp. (Ar1)'
+   _Fd1701545612   var 25.8 cached 25.8 row 'Average Temp. (Ar1)'
+   _Fd1762046236   var 40.5 cached 40.5 row 'Average Temp. (Ar1)'
+   _Fd1762046236   var 40.5 cached 40.5 row 'Average Temp. (Ar1)'
+   _Fd1861462833   var 0.0 cached 0.0 row '( ∆ T)'
+   _Fd1861462833   var 0.0 cached 0.0 row '( ∆ T)'
+   _Fd1961634598   var 38.6 cached 38.6 row 'Spot Temp.1 (Sp 1)'
+   _Fd1961634598   var 38.6 cached 38.6 row 'Spot Temp.1 (Sp 1)'
+   _Fd2013445779   var 31.3 cached 31.3 row 'Average Temp. (Ar1)'
+   _Fd632321712    var 39.3 cached 39.3 row 'Spot Temp. 2 (Sp 2)'
+   _Fd632321712    var 39.3 cached 39.3 row 'Spot Temp. 2 (Sp 2)'
+   _Fd715416184    var 43.2 cached 43.2 row 'Spot Temp.1 (Sp 1)'
+   _Fd715416184    var 43.2 cached 43.2 row 'Spot Temp.1 (Sp 1)'
+   _Fd912557116    var 34.4 cached 34.4 row 'Average Temp. (Ar1)'
+   _Fd912557116    var 34.4 cached 34.4 row 'Average Temp. (Ar1)'
+   _Fd926064389    var 38.6 cached 38.6 row 'Spot Temp. 2 (Sp 2)'
+   _Fd926064389    var 38.6 cached 38.6 row 'Spot Temp. 2 (Sp 2)'
+file unchanged by the read: True
