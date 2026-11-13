@@ -1,7 +1,7 @@
 """Compare the reader's unrounded values with FLIR's Atlas SDK, tool by tool.
 
 Usage: python -I compare_to_atlas.py <samples dir> <atlas-values log>
-The log is the output of atlas/atlas_values.ps1 on the same samples dir
+The log is the output of ../atlas-sdk/atlas_values.ps1 on the same samples dir
 (the folder holding one sub-folder per camera).
 """
 import re

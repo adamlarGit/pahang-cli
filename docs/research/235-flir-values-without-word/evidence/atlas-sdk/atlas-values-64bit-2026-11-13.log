@@ -1,0 +1,21 @@
+Exception calling "LoadFrom" with "1" argument(s): "Could not load file or assembly 'file:///C:\Program Files 
+(x86)\FLIR Systems\FLIR Tools\bin\Flir.Atlas.Image.dll' or one of its dependencies. An attempt was made to load a 
+program with an incorrect format."
+At <worktree>\docs\research\235-flir-values-without-word\evidence\atlas-sdk\atla
+s_values.ps1:9 char:1
++ [void][Reflection.Assembly]::LoadFrom("$bin\Flir.Atlas.Image.dll")
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], MethodInvocationException
+    + FullyQualifiedErrorId : BadImageFormatException
+ 
+== FLIR0011.jpg
+   ERROR: Cannot find type [Flir.Atlas.Image.ThermalImageFile]: verify that the assembly containing this type is loaded.
+== FLIR0012.jpg
+   ERROR: Cannot find type [Flir.Atlas.Image.ThermalImageFile]: verify that the assembly containing this type is loaded.
+== FLIR0013.jpg
+   ERROR: Cannot find type [Flir.Atlas.Image.ThermalImageFile]: verify that the assembly containing this type is loaded.
+== FLIR0014.jpg
+   ERROR: Cannot find type [Flir.Atlas.Image.ThermalImageFile]: verify that the assembly containing this type is loaded.
+
+# PE header of the assembly (Machine field at the PE offset + 4):
+C:/Program Files (x86)/FLIR Systems/FLIR Tools/bin/Flir.Atlas.Image.dll: PE machine 0x014c = IMAGE_FILE_MACHINE_I386 (x86)

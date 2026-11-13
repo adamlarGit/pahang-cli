@@ -1,0 +1,98 @@
+== Flir.Atlas.DocXEngine.dll
+== Flir.Atlas.DocXEngine.ProxyObjects.dll
+  type Flir.Atlas.DocXEngine.ProxyObjects.Alarm
+  type Flir.Atlas.DocXEngine.ProxyObjects.BaseProxyObject
+      System.String GetLabel(System.String)
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.CachedLabelsProxyObject
+  type Flir.Atlas.DocXEngine.ProxyObjects.DecimalPointsAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.Delta
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.DistanceAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.Ellipse
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.Exif.ExifLibException
+  type Flir.Atlas.DocXEngine.ProxyObjects.Exif.ExifReader
+      Boolean GetTagValue[T](Flir.Atlas.DocXEngine.ProxyObjects.Exif.ExifTags, T ByRef)
+      Boolean GetTagValue[T](UInt16, T ByRef)
+      Boolean GetTagValue[T](UInt16, Flir.Atlas.DocXEngine.ProxyObjects.Exif.IFD, T ByRef)
+      Byte[] GetJpegThumbnailBytes()
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.Exif.ExifTags
+  type Flir.Atlas.DocXEngine.ProxyObjects.Exif.IFD
+  type Flir.Atlas.DocXEngine.ProxyObjects.Extensions.IImageFileInfoExtensions
+      Void CopyFileInfoTo(Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IImageFileInfo, Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IImageFileInfo)
+      Void ApplyFileInfoFromFile(Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IImageFileInfo, System.String)
+  type Flir.Atlas.DocXEngine.ProxyObjects.FormatAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.FwrAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.GpsCoordinate
+      Void SetDegrees(System.Decimal)
+      Void SetMinutes(System.Decimal)
+      Void SetSeconds(System.Decimal)
+      Flir.Atlas.DocXEngine.ProxyObjects.GpsCoordinate FromDecimal(System.Decimal)
+      Flir.Atlas.DocXEngine.ProxyObjects.GpsCoordinate FromDecimal(System.Decimal, System.Decimal, System.Decimal)
+      Flir.Atlas.DocXEngine.ProxyObjects.GpsCoordinate FromURational(Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[System.UInt32], Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[System.UInt32], Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[System.UInt32])
+      Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[System.UInt32][] ToURational()
+      Flir.Atlas.DocXEngine.ProxyObjects.GpsCoordinate Parse(System.String)
+      Boolean TryParse(System.String, Flir.Atlas.DocXEngine.ProxyObjects.GpsCoordinate ByRef)
+      System.String ToString()
+      System.String ToString(System.String)
+  type Flir.Atlas.DocXEngine.ProxyObjects.HideInEditorAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IImageFileInfo
+  type Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.INameAsLabel
+  type Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IProxyWithGps
+  type Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IProxyWithPixelSize
+  type Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IWithImageNumber
+  type Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IWithTextIndex
+  type Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.IWithUnits
+  type Flir.Atlas.DocXEngine.ProxyObjects.Interfaces.WithImageNumberUtils
+      Void CopyTo(System.Object, System.Object)
+  type Flir.Atlas.DocXEngine.ProxyObjects.IR
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.Isotherm
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.LabelAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.Line
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.Measurement
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.MeasurementAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.Photo
+      Flir.Atlas.DocXEngine.ProxyObjects.Photo CopyFromIR(Flir.Atlas.Image.ThermalImageFile)
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.Rational`1
+      Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[T] Approximate(System.Decimal)
+      Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[T] Approximate(System.Decimal, System.Decimal)
+      Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[T] Parse(System.String)
+      Boolean TryParse(System.String, Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[T] ByRef)
+      Flir.Atlas.DocXEngine.ProxyObjects.Rational`1[T] Reduce()
+      System.String ToString(System.IFormatProvider)
+      System.Decimal ToDecimal(System.IFormatProvider)
+      Double ToDouble(System.IFormatProvider)
+      Single ToSingle(System.IFormatProvider)
+      Int32 CompareTo(System.Object)
+      Int32 CompareTo(T)
+      System.String ToString()
+      Boolean Equals(System.Object)
+      Int32 GetHashCode()
+  type Flir.Atlas.DocXEngine.ProxyObjects.Rectangle
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.SensorFormatAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.SensorReading
+      System.Collections.Generic.List`1[Flir.Atlas.DocXEngine.ProxyObjects.SensorReading] CreateAll(Flir.Atlas.DocXEngine.ProxyObjects.BaseProxyObject, Flir.Atlas.Image.ThermalImageFile)
+  type Flir.Atlas.DocXEngine.ProxyObjects.Spot
+      Void Dispose()
+  type Flir.Atlas.DocXEngine.ProxyObjects.TemperatureAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.TextAnnotation
+  type Flir.Atlas.DocXEngine.ProxyObjects.TextAnnotationAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.TextIndexedAttribute
+  type Flir.Atlas.DocXEngine.ProxyObjects.Utils.AltMetaInfo
+      Flir.Atlas.DocXEngine.ProxyObjects.Utils.AltMetaInfo Create(System.Drawing.Image)
+  type Flir.Atlas.DocXEngine.ProxyObjects.Utils.Dummy
+      Flir.Atlas.DocXEngine.ProxyObjects.Photo CreatePhoto()
+      Flir.Atlas.DocXEngine.ProxyObjects.IR CreateThermal()
+  type Flir.Atlas.DocXEngine.ProxyObjects.Utils.ProxyFileHelpers
+      System.String GetTitleFromFilePath(System.String, Boolean)
+  type Flir.Atlas.DocXEngine.ProxyObjects.Utils.TextIndexHelpers
+      System.String GetTextIndex(System.String)
+      System.String GetTitleIndex(System.String)

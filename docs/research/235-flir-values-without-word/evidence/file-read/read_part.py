@@ -30,7 +30,7 @@ import olefile
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE.parents[1] / "223-flir-xml-join" / "evidence" / "static-cfb"))
+sys.path.insert(0, str(HERE.parents[2] / "223-flir-xml-join" / "evidence" / "static-cfb"))
 import decode_flir_contents as D  # noqa: E402
 import flir_fff as F  # noqa: E402
 

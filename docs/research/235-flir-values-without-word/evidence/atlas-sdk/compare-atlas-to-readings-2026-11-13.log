@@ -1,0 +1,107 @@
+
+== Flir T640/original/FLIR0011.jpg | original
+   Sp1        Atlas   40.4021  shown   40.4
+   Sp2        Atlas   38.4442  shown   38.4
+   Ar1 (avg)  Atlas   39.8775  shown   39.9
+   Dt         Atlas    1.9578  shown    1.9  *
+
+== Flir T640/editted/FLIR0011.jpg | FLIR Tools+ edit
+   Sp1        Atlas   42.5174  shown   42.5
+   Sp2        Atlas   38.4442  shown   38.4
+   Ar1 (avg)  Atlas   39.3339  shown   39.3
+   Dt         Atlas    4.0732  shown    4.1
+
+== Flir T640/original/FLIR0012.jpg | original
+   Sp1        Atlas   38.0476  shown   38.0
+   Sp2        Atlas   34.9196  shown   34.9
+   Ar1 (avg)  Atlas   36.7478  shown   36.7
+   Dt         Atlas    3.1280  shown    3.1
+
+== Flir T640/editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg | FLIR Tools+ edit
+   Sp1        Atlas   37.7722  shown   37.8
+   Sp2        Atlas   37.8579  shown   37.9
+   Ar1 (avg)  Atlas   36.6661  shown   36.7
+   Dt         Atlas    0.0857  shown    0.1
+
+== Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg | Word CIRViewer edit
+   Sp1        Atlas   37.8457  shown   37.8
+   Sp2        Atlas   38.2308  shown   38.2
+   Ar1 (avg)  Atlas   36.3859  shown   36.4
+   Dt         Atlas    0.3851  shown    0.4
+
+== Flir T640/original/FLIR0013.jpg | original
+   Sp1        Atlas   34.0183  shown   34.0
+   Sp2        Atlas   33.9677  shown   34.0
+   Ar1 (avg)  Atlas   33.9460  shown   33.9
+   Dt         Atlas    0.0506  shown    0.0  *
+
+== Flir T640/editted/FLIR0013.jpg | FLIR Tools+ edit
+   Sp1        Atlas   33.9551  shown   34.0
+   Sp2        Atlas   34.2775  shown   34.3
+   Ar1 (avg)  Atlas   34.0858  shown   34.1
+   Dt         Atlas   -0.3224  shown   -0.3
+
+== Flir T640/original/FLIR0014.jpg | original
+   Sp1        Atlas   36.9730  shown   37.0
+   Sp2        Atlas   38.9367  shown   38.9
+   Ar1 (avg)  Atlas   36.2992  shown   36.4  *
+   Dt         Atlas   -1.9637  shown   -2.0
+
+== Flir T640/editted/FLIR0014.jpg | FLIR Tools+ edit
+   Sp1        Atlas   40.0960  shown   40.1
+   Sp2        Atlas   39.4332  shown   39.4
+   Ar1 (avg)  Atlas   36.4287  shown   36.4
+   Dt         Atlas    0.6628  shown    0.7
+
+== Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer-elips.jpg | Word CIRViewer edit
+   Sp1        Atlas   40.9014  shown   40.9
+   Sp2        Atlas   41.3471  shown   41.3
+   Ar1 (avg)  Atlas   36.1911  shown   36.2
+   Dt         Atlas    0.4458  shown    0.4
+
+== Flir T440/original/IR_0001.jpg | original
+   Sp1        Atlas   31.7614  shown   31.8
+   Ar1 (avg)  Atlas   31.0411  shown   31.0
+   Dt         Atlas    7.9038  shown    9.5  *
+
+== Flir T440/editted/IR_0001.jpg | FLIR Tools+ edit
+   Sp1        Atlas   29.4806  shown   29.5
+   Sp2        Atlas   30.7410  shown   30.7
+   Ar1 (avg)  Atlas   31.4776  shown   31.5
+   Dt         Atlas   -1.2604  shown   -1.3
+
+== Flir T440/original/IR_0011.jpg | original
+   Sp1        Atlas   34.5522  shown   34.6
+   Ar1 (avg)  Atlas   33.9366  shown   33.9
+   Dt         Atlas    3.2589  shown    6.8  *
+
+== Flir T440/editted/IR_0011.jpg | FLIR Tools+ edit
+   Sp1        Atlas   32.4829  shown   32.5
+   Sp2        Atlas   33.4167  shown   33.4
+   Ar1 (avg)  Atlas   35.9209  shown   35.9
+   Dt         Atlas   -0.9338  shown   -0.9
+
+== Flir T440/original/IR_0017.jpg | original
+   Sp1        Atlas   40.0444  shown   40.0
+   Ar1 (avg)  Atlas   34.7599  shown   34.8
+   Dt         Atlas    0.9132  shown    0.9
+
+== Flir T440/editted/IR_0017.jpg | FLIR Tools+ edit
+   Sp1        Atlas   34.8007  shown   34.8
+   Sp2        Atlas   33.5039  shown   33.5
+   Ar1 (avg)  Atlas   34.8651  shown   34.9
+   Dt         Atlas    1.2967  shown    1.3
+
+== Flir T440/original/IR_0023.jpg | original
+   Sp1        Atlas   31.9918  shown   32.0
+   Ar1 (avg)  Atlas   32.2146  shown   32.2
+   Dt         Atlas    5.0448  shown    5.4  *
+
+== Flir T440/editted/IR_0023.jpg | FLIR Tools+ edit
+   Sp1        Atlas   31.9918  shown   32.0
+   Sp2        Atlas   33.0493  shown   33.0
+   Ar1 (avg)  Atlas   32.2250  shown   32.2
+   Dt         Atlas   -1.0574  shown   -1.1
+
+68 values: 62 equal after rounding; after an edit 40 of 40
+misses: Flir T640 FLIR0011 original Dt; Flir T640 FLIR0013 original Dt; Flir T640 FLIR0014 original Ar1 (avg); Flir T440 IR_0001 original Dt; Flir T440 IR_0011 original Dt; Flir T440 IR_0023 original Dt

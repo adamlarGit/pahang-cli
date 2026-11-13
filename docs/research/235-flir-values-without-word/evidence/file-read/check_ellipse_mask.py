@@ -1,7 +1,7 @@
 """Check the reader's ellipse pixels against Atlas's own, pixel by pixel.
 
 Usage: python -I check_ellipse_mask.py <samples dir> <values dir>
-<values dir> is the output of atlas/atlas_ellipse_pixels.ps1. Atlas lists an
+<values dir> is the output of ../atlas-sdk/atlas_ellipse_pixels.ps1. Atlas lists an
 ellipse's pixels row by row from the outside in: top row, bottom row, second
 row, second-from-bottom, ..., each row left to right. This script lists the
 reader's mask (flir_fff.ellipse_mask) in that order and compares the two

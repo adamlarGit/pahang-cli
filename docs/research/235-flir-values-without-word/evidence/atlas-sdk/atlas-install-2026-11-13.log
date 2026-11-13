@@ -1,0 +1,27 @@
+Atlas assemblies in FLIR Tools\bin:
+  Flir.Atlas.DocXEngine.dll  assembly 2.0.14266.1000  file 4.1.17018.1001  arch X86
+  Flir.Atlas.DocXEngine.ProxyObjects.dll  assembly 2.0.14266.1000  file 4.1.17018.1001  arch X86
+  Flir.Atlas.Image.dll  assembly 2.0.14266.1000  file 4.1.17018.1001  arch X86
+Licence-related files under FLIR Systems (depth 3):
+  FLIR Tools\bin\Flir.LicenseCheck.exe
+  FLIR Tools\bin\Flir.LicenseManager.dll
+  FLIR Tools\bin\licenses.html
+  FLIR Word Reporting\bin\Flir.Cronos.LicenseManager.dll
+  FLIR Word Reporting\bin\LicenseMgr.exe
+licenses.html section headings:
+  boost
+  Loki
+  zlib
+  GDI+
+  WTL
+  NSpring
+  32feet.NET
+  FFmpeg
+  CharLS
+  DotNetZip
+  Json.NET
+  GenICam
+  Extended WPF Toolkitƒ,› Community Edition
+  GoogleAnalyticsTracker
+  Other credits
+Mentions of 'Atlas' in licenses.html: 0
