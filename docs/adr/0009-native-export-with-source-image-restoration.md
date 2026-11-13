@@ -88,6 +88,7 @@ Full Report DOCX→PDF conversion is **native Word `ExportAsFixedFormat` followe
 - Restoration is heuristic matching (aspect ratio plus pixel similarity) with a mandatory self-check per image. The safe failure mode is "Word's rendering is kept", never "the wrong picture is inserted".
 - Any picture Word flattens together with vector overlays into a single raster has no single source bitmap, so it stays at Word's resolution.
 - Implementation and robustness requirements (atomic temp files, DOCX snapshot consistency, memory bounds for large multi-part 33kV batches, idempotence) are specified in ticket #146 of the 33kV workflow map.
+- **Progressive JPEGs are re-encoded, not inserted verbatim (2026-11-13).** Acrobat raises "An internal error occurred" on a progressive JPEG image stream and stops drawing the rest of that page's pictures, so boxes show empty. PyMuPDF renders and decodes the same stream cleanly, so a PyMuPDF check does not show that Acrobat can open the PDF. A verbatim source that is a progressive JPEG therefore takes the baseline JPEG path (quality 95, no chroma subsampling) at source dimensions. Found on 40. PMU JENGKA, pages 238–240. Fixed in `013d2ff`, with regression test `test_progressive_jpeg_source_is_written_as_baseline`.
 
 ## References
 
