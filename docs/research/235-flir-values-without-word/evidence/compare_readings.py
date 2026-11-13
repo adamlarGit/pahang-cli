@@ -18,7 +18,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import flir_fff as F
 
-FILES = {"C": "original/{n}.jpg", "D": "editted/{n}.jpg"}
+# A row named after a whole file stem (the T640 ellipse save) maps to editted/<stem>.jpg.
+FILES = {"C": "original/{n}.jpg", "D": "editted/{n}.jpg", "E": "editted/{n}.jpg"}
 SPECIAL = {
     ("FLIR0012", "D"): "editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg",
     ("FLIR0012", "E"): "editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg",
@@ -27,7 +28,8 @@ COLS = {"C": "original", "D": "FLIR Tools+ edit", "E": "Word CIRViewer edit"}
 KEY = {"Sp1": "Sp1", "Sp2": "Sp2", "Ar1 (avg)": "Ar1 avg", "Dt": "Dt"}
 # Cells where the owner ticked "Show result as an absolute value" in Word
 # (comment on #235, 2026-11-13). The tick is not stored in the image.
-ABSOLUTE_DT = {("FLIR0012", "E")}
+ABSOLUTE_DT = {("FLIR0012", "E"),
+               ("FLIR0012-editted-in-word-using-FlirTools+-CIRViewer-elips", "E")}
 # Readings the owner corrected after the sheet was written. 2026-11-13, in the
 # agent session: FLIR Tools+ shows Dt as 0.1, not the sheet's -0.1, for the
 # FLIR Tools+ edit of FLIR0012, whose tool 1 is labelled Sp2.

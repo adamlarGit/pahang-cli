@@ -169,8 +169,19 @@ def measurement_tools(rec: bytes) -> list[dict]:
         params = list(struct.unpack(bo + f"{plen // 2}h", rec[p0:p0 + plen]))
         lab = rec[p0 + plen:p0 + plen + llen]
         label = lab.decode("utf-16-le") if llen > 1 and lab[1:2] == b"\x00" else lab.decode("latin-1")
+        # Header bytes 22-23: flags; low 3 bits set when the tool has its own
+        # object parameters ("local parameters", Atlas UseCustomObjectParameters),
+        # which are then float32 emissivity, distance (m) and reflected
+        # temperature (K) at header bytes 24, 28 and 32.
+        flags = struct.unpack(bo + "H", rec[pos + 22:pos + 24])[0]
+        local = None
+        if flags & 0x07:
+            e, od, refl = struct.unpack(bo + "3f", rec[pos + 24:pos + 36])
+            local = {"Emissivity": e, "ObjectDistance": od,
+                     "ReflectedApparentTemperature": refl - 273.15}
         tools.append({"type": TOOL_TYPES.get(ttype, ttype), "number": num,
                       "params": params, "label": label.split("\x00")[0],
+                      "flags": flags, "local": local,
                       "extra": rec[p0 + plen + llen:pos + size].hex() if size else ""})
         pos += size if size else tool_hdr + plen + llen
     return tools
@@ -192,19 +203,26 @@ def polygon_points(params):
 
 
 def ellipse_rect(tool):
-    """Bounding rectangle (x, y, w, h) of an ellipse tool.
+    """Bounding rectangle (x, y, w, h) of an ellipse tool, as Atlas measures it.
 
-    It sits in the tool's trailing bytes after the 24-byte common block, as
-    int16 tag 5, int16 length 12, then x, y, w, h. Atlas reports the same
-    rectangle as MeasurementEllipse.Rectangle. The int16 params
-    [cx, cy, x2, y2, x3, y3] give a centre and two axis ends that differ
-    from it by a pixel, and are not what Atlas measures.
+    The trailing bytes after the 24-byte common block may hold int16 tag 5,
+    length 12, then x, y, w, h. Atlas uses that rectangle when the common
+    block's second uint16 is 24 (the offset of the block), as in FLIR Tools+
+    saves. When it is 0, as in the Word viewer's save, Atlas ignores the block
+    and takes the int16 params [cx, cy, x2, y2, x3, y3], a centre and two
+    axis ends: (cx - rx, cy - ry, 2 rx, 2 ry). Both rules reproduce Atlas's
+    MeasurementEllipse.Rectangle on the three samples.
     """
     b = bytes.fromhex(tool["extra"])
-    tag, length, x, y, w, h = struct.unpack("<6h", b[24:36])
-    if tag != 5:
-        raise ValueError(f"unexpected ellipse trailing tag {tag}")
-    return x, y, w, h
+    use_block = len(b) >= 36 and struct.unpack("<H", b[2:4])[0] == 24
+    if use_block:
+        tag, length, x, y, w, h = struct.unpack("<6h", b[24:36])
+        if tag != 5:
+            raise ValueError(f"unexpected ellipse trailing tag {tag}")
+        return x, y, w, h
+    cx, cy, x2, y2, x3, y3 = tool["params"][:6]
+    rx, ry = abs(x2 - cx), abs(y3 - cy)
+    return cx - rx, cy - ry, 2 * rx, 2 * ry
 
 
 def ellipse_mask(shape, rect):
@@ -276,11 +294,16 @@ def readings(path: Path) -> dict:
     edit can leave tool number 1 labelled Sp2.
     """
     d = load(path)
-    t = raw2temp(d["raw"], d["camera"])
+    t_image = raw2temp(d["raw"], d["camera"])
     tools = measurement_tools(d["by"]["MeasurementInfo"])
     out = {}
     member_value, member_name = {}, {}
     for tl in tools:
+        t = t_image
+        if tl["local"]:
+            # The tool's own emissivity, distance and reflected temperature
+            # replace the image's for this tool only.
+            t = raw2temp(d["raw"], {**d["camera"], **tl["local"]})
         p = tl["params"]
         lab = tl["label"]
         key = (tl["type"], tl["number"])

@@ -1,0 +1,89 @@
+Flir T440/editted/IR_0001.jpg                                      Sp1      reader   29.48060  Atlas   29.48060  diff -0.000001
+Flir T440/editted/IR_0001.jpg                                      Sp2      reader   30.74099  Atlas   30.74099  diff -0.000000
+Flir T440/editted/IR_0001.jpg                                      Ar1 avg  reader   31.47763  Atlas   31.47763  diff -0.000001
+Flir T440/editted/IR_0001.jpg                                      Ar1 max  reader   39.66526  Atlas   39.66526  diff +0.000001
+Flir T440/editted/IR_0001.jpg                                      delta Sp1-Sp2 reader   -1.26039  Atlas   -1.26039  diff -0.000001
+Flir T440/editted/IR_0011.jpg                                      Sp1      reader   32.48289  Atlas   32.48289  diff -0.000000
+Flir T440/editted/IR_0011.jpg                                      Sp2      reader   33.41669  Atlas   33.41669  diff -0.000000
+Flir T440/editted/IR_0011.jpg                                      Ar1 avg  reader   35.92091  Atlas   35.92091  diff +0.000000
+Flir T440/editted/IR_0011.jpg                                      Ar1 max  reader   40.85332  Atlas   40.85332  diff -0.000000
+Flir T440/editted/IR_0011.jpg                                      delta Bx1Mx-Sp1 reader    8.37043  Atlas    8.37043  diff +0.000000
+Flir T440/editted/IR_0011.jpg                                      delta Sp1-Sp2 reader   -0.93380  Atlas   -0.93380  diff -0.000000
+Flir T440/editted/IR_0017.jpg                                      Sp1      reader   34.80066  Atlas   34.80066  diff +0.000002
+Flir T440/editted/IR_0017.jpg                                      Sp2      reader   33.50392  Atlas   33.50392  diff -0.000001
+Flir T440/editted/IR_0017.jpg                                      Ar1 avg  reader   34.86514  Atlas   34.86514  diff -0.000000
+Flir T440/editted/IR_0017.jpg                                      Ar1 max  reader   41.10376  Atlas   41.10376  diff +0.000001
+Flir T440/editted/IR_0017.jpg                                      delta Bx1Mx-Sp1 reader    6.30310  Atlas    6.30310  diff -0.000001
+Flir T440/editted/IR_0017.jpg                                      delta Sp1-Sp2 reader    1.29675  Atlas    1.29675  diff +0.000003
+Flir T440/editted/IR_0023.jpg                                      Sp1      reader   31.99182  Atlas   31.99182  diff -0.000001
+Flir T440/editted/IR_0023.jpg                                      Sp2      reader   33.04925  Atlas   33.04926  diff -0.000001
+Flir T440/editted/IR_0023.jpg                                      Ar1 avg  reader   32.22503  Atlas   32.22503  diff -0.000001
+Flir T440/editted/IR_0023.jpg                                      Ar1 max  reader   37.41050  Atlas   37.41050  diff +0.000000
+Flir T440/editted/IR_0023.jpg                                      delta Sp1-Sp2 reader   -1.05744  Atlas   -1.05744  diff +0.000001
+Flir T440/original/IR_0001.jpg                                     Sp1      reader   31.76144  Atlas   31.76144  diff -0.000001
+Flir T440/original/IR_0001.jpg                                     Ar1 avg  reader   31.04108  Atlas   31.04108  diff -0.000001
+Flir T440/original/IR_0001.jpg                                     Ar1 max  reader   39.66526  Atlas   39.66526  diff +0.000001
+Flir T440/original/IR_0001.jpg                                     delta Bx1Mx-Sp1 reader    7.90382  Atlas    7.90381  diff +0.000002
+Flir T440/original/IR_0011.jpg                                     Sp1      reader   34.55217  Atlas   34.55217  diff +0.000000
+Flir T440/original/IR_0011.jpg                                     Ar1 avg  reader   33.93656  Atlas   33.93656  diff -0.000000
+Flir T440/original/IR_0011.jpg                                     Ar1 max  reader   37.81106  Atlas   37.81106  diff +0.000003
+Flir T440/original/IR_0011.jpg                                     delta Bx1Mx-Sp1 reader    3.25889  Atlas    3.25889  diff +0.000002
+Flir T440/original/IR_0017.jpg                                     Sp1      reader   40.04444  Atlas   40.04444  diff +0.000001
+Flir T440/original/IR_0017.jpg                                     Ar1 avg  reader   34.75989  Atlas   34.75989  diff -0.000000
+Flir T440/original/IR_0017.jpg                                     Ar1 max  reader   40.95767  Atlas   40.95767  diff +0.000001
+Flir T440/original/IR_0017.jpg                                     delta Bx1Mx-Sp1 reader    0.91323  Atlas    0.91323  diff +0.000000
+Flir T440/original/IR_0023.jpg                                     Sp1      reader   31.99182  Atlas   31.99182  diff -0.000001
+Flir T440/original/IR_0023.jpg                                     Ar1 avg  reader   32.21460  Atlas   32.21460  diff -0.000001
+Flir T440/original/IR_0023.jpg                                     Ar1 max  reader   37.03663  Atlas   37.03663  diff +0.000002
+Flir T440/original/IR_0023.jpg                                     delta Bx1Mx-Sp1 reader    5.04482  Atlas    5.04482  diff +0.000003
+Flir T640/editted/FLIR0011.jpg                                     Sp1      reader   42.51742  Atlas   42.51742  diff -0.000000
+Flir T640/editted/FLIR0011.jpg                                     Sp2      reader   38.44422  Atlas   38.44422  diff +0.000002
+Flir T640/editted/FLIR0011.jpg                                     Ar1 avg  reader   39.33394  Atlas   39.33394  diff -0.000000
+Flir T640/editted/FLIR0011.jpg                                     Ar1 max  reader   43.79506  Atlas   43.79506  diff -0.000000
+Flir T640/editted/FLIR0011.jpg                                     delta Sp1-Sp2 reader    4.07319  Atlas    4.07320  diff -0.000002
+Flir T640/editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg Sp2      reader   37.85793  Atlas   37.85793  diff +0.000000
+Flir T640/editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg Sp1      reader   37.77218  Atlas   37.77218  diff -0.000001
+Flir T640/editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg Ar1 avg  reader   36.66608  Atlas   36.66608  diff +0.000001
+Flir T640/editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg Ar1 max  reader   43.52656  Atlas   43.52656  diff -0.000001
+Flir T640/editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg delta Sp2-Sp1 reader    0.08574  Atlas    0.08574  diff +0.000001
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg Sp1      reader   37.84568  Atlas   37.84568  diff +0.000000
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg Sp2      reader   38.23080  Atlas   38.23080  diff -0.000001
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg Ar1 avg  reader   36.38563  Atlas   36.38585  diff -0.000220
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg delta Sp1-Sp2 reader   -0.38512  Atlas   -0.38512  diff +0.000001
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer-elips.jpg Sp1      reader   40.90136  Atlas   40.90136  diff -0.000001
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer-elips.jpg Sp2      reader   41.34712  Atlas   41.34712  diff -0.000001
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer-elips.jpg Ar1 avg  reader   36.18215  Atlas   36.19110  diff -0.008953
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer-elips.jpg Ar1 max  reader   38.73022  Atlas   38.73022  diff -0.000000
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer-elips.jpg delta Sp1-Sp2 reader   -0.44576  Atlas   -0.44576  diff +0.000000
+Flir T640/editted/FLIR0013.jpg                                     Sp1      reader   33.95506  Atlas   33.95506  diff +0.000001
+Flir T640/editted/FLIR0013.jpg                                     Sp2      reader   34.27746  Atlas   34.27746  diff +0.000001
+Flir T640/editted/FLIR0013.jpg                                     Ar1 avg  reader   34.08578  Atlas   34.08578  diff +0.000001
+Flir T640/editted/FLIR0013.jpg                                     Ar1 max  reader   35.96324  Atlas   35.96324  diff +0.000003
+Flir T640/editted/FLIR0013.jpg                                     delta Sp1-Sp2 reader   -0.32240  Atlas   -0.32240  diff +0.000000
+Flir T640/editted/FLIR0014.jpg                                     Sp1      reader   40.09597  Atlas   40.09597  diff +0.000001
+Flir T640/editted/FLIR0014.jpg                                     Sp2      reader   39.43316  Atlas   39.43316  diff -0.000000
+Flir T640/editted/FLIR0014.jpg                                     Ar1 avg  reader   36.42866  Atlas   36.42866  diff +0.000001
+Flir T640/editted/FLIR0014.jpg                                     Ar1 max  reader   43.76007  Atlas   43.76007  diff -0.000001
+Flir T640/editted/FLIR0014.jpg                                     delta Sp1-Sp2 reader    0.66281  Atlas    0.66281  diff +0.000001
+Flir T640/original/FLIR0011.jpg                                    Sp1      reader   40.40205  Atlas   40.40205  diff -0.000001
+Flir T640/original/FLIR0011.jpg                                    Sp2      reader   38.44422  Atlas   38.44422  diff +0.000002
+Flir T640/original/FLIR0011.jpg                                    Ar1 avg  reader   39.87753  Atlas   39.87753  diff -0.000000
+Flir T640/original/FLIR0011.jpg                                    Ar1 max  reader   42.98781  Atlas   42.98781  diff -0.000003
+Flir T640/original/FLIR0011.jpg                                    delta Sp1-Sp2 reader    1.95783  Atlas    1.95783  diff -0.000003
+Flir T640/original/FLIR0012.jpg                                    Sp1      reader   38.04757  Atlas   38.04757  diff +0.000002
+Flir T640/original/FLIR0012.jpg                                    Sp2      reader   34.91957  Atlas   34.91957  diff +0.000002
+Flir T640/original/FLIR0012.jpg                                    Ar1 avg  reader   36.74777  Atlas   36.74777  diff +0.000001
+Flir T640/original/FLIR0012.jpg                                    Ar1 max  reader   39.29411  Atlas   39.29411  diff -0.000001
+Flir T640/original/FLIR0012.jpg                                    delta Sp1-Sp2 reader    3.12800  Atlas    3.12800  diff -0.000001
+Flir T640/original/FLIR0013.jpg                                    Sp1      reader   34.01835  Atlas   34.01835  diff +0.000002
+Flir T640/original/FLIR0013.jpg                                    Sp2      reader   33.96772  Atlas   33.96772  diff +0.000001
+Flir T640/original/FLIR0013.jpg                                    Ar1 avg  reader   33.94599  Atlas   33.94599  diff +0.000001
+Flir T640/original/FLIR0013.jpg                                    Ar1 max  reader   35.83875  Atlas   35.83875  diff +0.000000
+Flir T640/original/FLIR0013.jpg                                    delta Sp1-Sp2 reader    0.05063  Atlas    0.05062  diff +0.000002
+Flir T640/original/FLIR0014.jpg                                    Sp1      reader   36.97301  Atlas   36.97301  diff +0.000002
+Flir T640/original/FLIR0014.jpg                                    Sp2      reader   38.93668  Atlas   38.93668  diff +0.000000
+Flir T640/original/FLIR0014.jpg                                    Ar1 avg  reader   36.29923  Atlas   36.29923  diff +0.000001
+Flir T640/original/FLIR0014.jpg                                    Ar1 max  reader   40.88659  Atlas   40.88659  diff +0.000000
+Flir T640/original/FLIR0014.jpg                                    delta Sp1-Sp2 reader   -1.96367  Atlas   -1.96367  diff +0.000001
+
+87 values, largest |reader - Atlas| = 0.008953 C

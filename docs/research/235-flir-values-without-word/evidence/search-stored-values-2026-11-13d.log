@@ -1,0 +1,43 @@
+Flir T640 FLIR0011 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x80 float32 1.900 ~ Dt C
+Flir T640 FLIR0011 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0012 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0012 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0012 Word CIRViewer edit  records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x4ec float32 309.547 ~ Ar1 (avg) K
+Flir T640 FLIR0013 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0013 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0014 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x3f float32 -2.000 ~ Dt C
+Flir T640 FLIR0014 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0012-editted-in-word-using-FlirTools+-CIRViewer-elips Word CIRViewer edit  records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   no reading found
+Flir T440 IR_0001 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo']
+   no reading found
+Flir T440 IR_0001 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', '0x29']
+   no reading found
+Flir T440 IR_0011 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo']
+   no reading found
+Flir T440 IR_0011 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', '0x29']
+   HIT CameraInfo+0x508 float32 306.565 ~ Sp2 K
+Flir T440 IR_0017 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo']
+   HIT CameraInfo+0x20 float32 0.950 ~ Dt C
+   HIT CameraInfo+0x1b8 float32 0.902 ~ Dt C
+   HIT PaletteInfo+0x189 float32 0.928 ~ Dt C
+Flir T440 IR_0017 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', '0x29']
+   no reading found
+Flir T440 IR_0023 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo']
+   HIT CameraInfo+0x2 int16 320 ~ Sp1 x10
+   HIT CameraInfo+0x70f float32 32.000 ~ Sp1 C
+Flir T440 IR_0023 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', '0x29']
+   HIT CameraInfo+0x2 int16 320 ~ Sp1 x10
+   HIT CameraInfo+0x394 float32 306.165 ~ Sp2 K
+   HIT CameraInfo+0x47c float32 306.165 ~ Sp2 K
+   HIT CameraInfo+0x70f float32 32.000 ~ Sp1 C
+   HIT PaletteInfo+0x23c float32 -1.143 ~ Dt C
