@@ -1,0 +1,38 @@
+editted/FLIR0011.jpg                                               Sp1      reader   42.51742  Atlas   42.51742  diff -0.000000
+editted/FLIR0011.jpg                                               Sp2      reader   38.44422  Atlas   38.44422  diff +0.000002
+editted/FLIR0011.jpg                                               Ar1 avg  reader   39.33394  Atlas   39.33394  diff -0.000000
+editted/FLIR0011.jpg                                               Sp1-Sp2  reader    4.07319  Atlas    4.07320  diff -0.000002
+editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg     Sp2      reader   37.85793  Atlas   37.85793  diff +0.000000
+editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg     Sp1      reader   37.77218  Atlas   37.77218  diff -0.000001
+editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg     Ar1 avg  reader   36.66608  Atlas   36.66608  diff +0.000001
+editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg     Sp2-Sp1  reader    0.08574  Atlas    0.08574  diff +0.000001
+editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg    Sp1      reader   37.84568  Atlas   37.84568  diff +0.000000
+editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg    Sp2      reader   38.23080  Atlas   38.23080  diff -0.000001
+editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg    Ar1 avg  reader   36.38563  Atlas   36.38585  diff -0.000220
+editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg    Sp1-Sp2  reader   -0.38512  Atlas   -0.38512  diff +0.000001
+editted/FLIR0013.jpg                                               Sp1      reader   33.95506  Atlas   33.95506  diff +0.000001
+editted/FLIR0013.jpg                                               Sp2      reader   34.27746  Atlas   34.27746  diff +0.000001
+editted/FLIR0013.jpg                                               Ar1 avg  reader   34.08578  Atlas   34.08578  diff +0.000001
+editted/FLIR0013.jpg                                               Sp1-Sp2  reader   -0.32240  Atlas   -0.32240  diff +0.000000
+editted/FLIR0014.jpg                                               Sp1      reader   40.09597  Atlas   40.09597  diff +0.000001
+editted/FLIR0014.jpg                                               Sp2      reader   39.43316  Atlas   39.43316  diff -0.000000
+editted/FLIR0014.jpg                                               Ar1 avg  reader   36.42866  Atlas   36.42866  diff +0.000001
+editted/FLIR0014.jpg                                               Sp1-Sp2  reader    0.66281  Atlas    0.66281  diff +0.000001
+original/FLIR0011.jpg                                              Sp1      reader   40.40205  Atlas   40.40205  diff -0.000001
+original/FLIR0011.jpg                                              Sp2      reader   38.44422  Atlas   38.44422  diff +0.000002
+original/FLIR0011.jpg                                              Ar1 avg  reader   39.87753  Atlas   39.87753  diff -0.000000
+original/FLIR0011.jpg                                              Sp1-Sp2  reader    1.95783  Atlas    1.95783  diff -0.000003
+original/FLIR0012.jpg                                              Sp1      reader   38.04757  Atlas   38.04757  diff +0.000002
+original/FLIR0012.jpg                                              Sp2      reader   34.91957  Atlas   34.91957  diff +0.000002
+original/FLIR0012.jpg                                              Ar1 avg  reader   36.74777  Atlas   36.74777  diff +0.000001
+original/FLIR0012.jpg                                              Sp1-Sp2  reader    3.12800  Atlas    3.12800  diff -0.000001
+original/FLIR0013.jpg                                              Sp1      reader   34.01835  Atlas   34.01835  diff +0.000002
+original/FLIR0013.jpg                                              Sp2      reader   33.96772  Atlas   33.96772  diff +0.000001
+original/FLIR0013.jpg                                              Ar1 avg  reader   33.94599  Atlas   33.94599  diff +0.000001
+original/FLIR0013.jpg                                              Sp1-Sp2  reader    0.05063  Atlas    0.05062  diff +0.000002
+original/FLIR0014.jpg                                              Sp1      reader   36.97301  Atlas   36.97301  diff +0.000002
+original/FLIR0014.jpg                                              Sp2      reader   38.93668  Atlas   38.93668  diff +0.000000
+original/FLIR0014.jpg                                              Ar1 avg  reader   36.29923  Atlas   36.29923  diff +0.000001
+original/FLIR0014.jpg                                              Sp1-Sp2  reader   -1.96367  Atlas   -1.96367  diff +0.000001
+
+36 values, largest |reader - Atlas| = 0.000220 C

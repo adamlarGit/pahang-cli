@@ -1,0 +1,28 @@
+spot full pixel offset (0,0)                         18/18  worst 0.048
+spot full pixel offset (-1,0)                        12/18  worst 0.237
+spot full pixel offset (0,-1)                        11/18  worst 0.156
+spot full pixel offset (-1,-1)                       11/18  worst 0.474
+spot full pixel offset (1,0)                          9/18  worst 0.394
+spot full pixel offset (0,1)                         13/18  worst 0.243
+spot full pixel offset (1,1)                          9/18  worst 0.575
+spot full 3x3 mean                                   15/18  worst 0.083
+spot full 3x3 mean of raw then convert               15/18  worst 0.083
+spot full 5x5 mean                                   15/18  worst 0.141
+box full x..x+w-1                                     7/8  worst 0.101
+box full x..x+w                                       7/8  worst 0.091
+box full x+1..x+w-1                                   7/8  worst 0.100
+box full mean of raw then convert                     5/8  worst 0.084
+spot no-atmosphere pixel offset (0,0)                 9/18  worst 0.102
+spot no-atmosphere pixel offset (-1,0)                7/18  worst 0.303
+spot no-atmosphere pixel offset (0,-1)                8/18  worst 0.137
+spot no-atmosphere pixel offset (-1,-1)               5/18  worst 0.538
+spot no-atmosphere pixel offset (1,0)                 7/18  worst 0.323
+spot no-atmosphere pixel offset (0,1)                 7/18  worst 0.173
+spot no-atmosphere pixel offset (1,1)                 8/18  worst 0.503
+spot no-atmosphere 3x3 mean                           9/18  worst 0.098
+spot no-atmosphere 3x3 mean of raw then convert       9/18  worst 0.098
+spot no-atmosphere 5x5 mean                          10/18  worst 0.109
+box no-atmosphere x..x+w-1                            5/8  worst 0.148
+box no-atmosphere x..x+w                              3/8  worst 0.139
+box no-atmosphere x+1..x+w-1                          5/8  worst 0.148
+box no-atmosphere mean of raw then convert            5/8  worst 0.132

@@ -1,0 +1,25 @@
+editted/FLIR0011.jpg
+   raw plane identical: True  sha256 77734619114fb1c4
+   CameraInfo identical: True
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 241970), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 942669)]
+   records edited:   [('RawData', 241970), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 364), ('PiP', 96), ('EmbeddedImage', 879290), ('0x29', 8), ('GPSInfo', 184)]
+editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg
+   raw plane identical: True  sha256 401b334f429fdfa1
+   CameraInfo identical: True
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 290973), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 1151007)]
+   records edited:   [('RawData', 290973), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 372), ('PiP', 96), ('EmbeddedImage', 534812), ('0x29', 8), ('GPSInfo', 184)]
+editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg
+   raw plane identical: True  sha256 401b334f429fdfa1
+   CameraInfo identical: True
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 290973), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 1151007)]
+   records edited:   [('RawData', 290973), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 420), ('PiP', 96), ('EmbeddedImage', 545580), ('GPSInfo', 184)]
+editted/FLIR0013.jpg
+   raw plane identical: True  sha256 b56fbb4d78b5dde9
+   CameraInfo identical: False
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 206206), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 608308)]
+   records edited:   [('RawData', 206206), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 364), ('PiP', 96), ('EmbeddedImage', 560097), ('0x29', 8), ('GPSInfo', 184)]
+editted/FLIR0014.jpg
+   raw plane identical: True  sha256 ba011ffbd9265b21
+   CameraInfo identical: True
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 315899), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 1343624)]
+   records edited:   [('RawData', 315899), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 364), ('PiP', 96), ('EmbeddedImage', 1211484), ('0x29', 8), ('GPSInfo', 184)]

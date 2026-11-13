@@ -1,0 +1,27 @@
+   Color RGBColor
+   DeltaType DeltaType1
+   DeltaType DeltaType2
+   Flir.Atlas.Image.dll enum Flir.Atlas.Image.Filters.SubtractionModeCalculation: SubtractNoAbsValue=0, SubtractAbsValue=1
+   Flir.Cronos.Common.dll enum Flir.Cronos.IR.SubstractionModeCalculation: SubstractNoAbsValue=0, SubstractAbsValue=1
+   Flir.Cronos.Common.dll enum Flir.Cronos.Metadata.ExternalSensorQuantity: Invalid=0, Current=1, Voltage=2, Resistance=3, Reactance=4, Impedance=5, Conductance=6, Capacitance=7, Inductance=8, ElField=9, MagField=10, MagFlux=11, Charge=12, Temperature=13, Airspeed=14, Time=15, Frequency=16, Mass=17, Force=18, Pressure=19, Momentum=20, Torque=21, Speed=22, Acceleration=23, Energy=24, Power=25, Enthalpy=26, RelHumidity=27, AbsHumidity=28, RelMoisture=29, Distance=30, Angle=31, Radioactivity=32, RadExposure=33, RadAbsDose=34, RadEqDose=35, MassMassFrac=36, MassVolFrac=37, VolVolFrac=38, RadFlux=39, LumFlux=40, LumIntensity=41, Illuminance=42, PowerFactor=43
+   Flir.Modules.Common.dll Flir.Modules.Common.Controls.VerticalIntervalSliderControl.m_LastAbsolutePosition : Double
+   Flir.Modules.Common.dll Flir.Modules.Common.Researcher.Helpers.Localization.R3GUIStrings.CAUSE_ABSOLUTE_PATH : String
+   Flir.Modules.Common.dll Flir.Researcher.Helpers.SubtractionBaseSettingsViewModel.SelectedCalculationMethod : SubstractionModeCalculation
+   Flir.Modules.Common.dll Flir.Researcher.Helpers.SubtractionBaseSettingsViewModel.SelectedReferenceMode : SubstractionModeRefFrame
+   Flir.Modules.Common.dll Flir.Researcher.Helpers.SubtractionBaseSettingsViewModel._calculationMethod : SubstractionModeCalculation
+   Flir.Modules.Common.dll Flir.Researcher.Helpers.SubtractionBaseSettingsViewModel._referenceMode : SubstractionModeRefFrame
+   Flir.Modules.Common.dll enum Flir.Modules.Common.ViewModels.ZoomViewKind: Absolute=0, Fit=1, Fill=2, Center=3, Empty=4, Region=5
+   Flir.Modules.Common.dll enum Flir.Researcher.Helpers.TimeStampMode: FrameNumber=0, AbsoluteTime=1, RelativeTime=2
+   Guid UniqueIdentifier
+   IMeasurement Measurement1
+   IMeasurement Measurement2
+   IRValue Value
+   IRadiometric Radiometric
+   IRadiometricData RadiometricData
+   String Name
+   ValueMember ValueMember1
+   ValueMember ValueMember2
+   enum Flir.Cronos.IR.Formats.DeltaType: Unknown=0, Analysis=1, Image=2, Isotherm=3
+   enum Flir.Cronos.IR.Formats.ValueMember: Min=0, Max=1, Avg=2, Value=3, RefTemp=4, Unknown=5
+## Flir.Cronos.IR.Formats.DeltaT (Flir.FormatPlugin.IRSDK.dll)
+## Members named Absolute/Substraction, or typed SubstractionMode*

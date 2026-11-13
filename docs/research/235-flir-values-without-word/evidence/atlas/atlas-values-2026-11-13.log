@@ -1,0 +1,46 @@
+== editted/FLIR0011.jpg
+   MeasurementCollection props: MeasurementEllipses, MeasurementRectangles, MeasurementPolygons, MeasurementLines, MeasurementSpots, MeasurementDeltas, Count, Item
+   spot Sp1 at 318,171 value=42.5174179077148  GetValueAt=42.5174179077148
+   spot Sp2 at 321,296 value=38.444221496582  GetValueAt=38.444221496582
+   rect Bx1 ,,297,264 avg=39.3339391348253 min=32.5922737121582 max=43.7950630187988
+   delta  Sp1/Value - Sp2/Value value=4.07319641113281
+== editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg
+   spot Sp2 at 390,388 value=37.8579254150391  GetValueAt=37.8579254150391
+   spot Sp1 at 60,268 value=37.7721824645996  GetValueAt=37.7721824645996
+   rect Bx1 ,,608,422 avg=36.6660778699863 min=33.4920082092285 max=43.5265617370605
+   delta Dt1 Sp2/Value - Sp1/Value value=0.0857429504394531
+== editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg
+   spot Sp1 at 66,259 value=37.8456802368164  GetValueAt=37.8456802368164
+   spot Sp2 at 396,377 value=38.2308044433594  GetValueAt=38.2308044433594
+   polygon Ar1 avg=36.3858549218778
+   delta Dt1 Sp1/Value - Sp2/Value value=-0.385124206542969
+== editted/FLIR0013.jpg
+   spot Sp1 at 369,211 value=33.9550628662109  GetValueAt=33.9550628662109
+   spot Sp2 at 267,217 value=34.2774620056152  GetValueAt=34.2774620056152
+   rect Bx1 ,,187,310 avg=34.0857819749833 min=32.6435127258301 max=35.9632415771484
+   delta  Sp1/Value - Sp2/Value value=-0.322399139404297
+== editted/FLIR0014.jpg
+   spot Sp1 at 182,256 value=40.0959739685059  GetValueAt=40.0959739685059
+   spot Sp2 at 465,252 value=39.433162689209  GetValueAt=39.433162689209
+   rect Bx1 ,,505,374 avg=36.428658579038 min=33.007926940918 max=43.7600746154785
+   delta  Sp1/Value - Sp2/Value value=0.662811279296875
+== original/FLIR0011.jpg
+   spot Sp1 at 320,222 value=40.4020500183105  GetValueAt=40.4020500183105
+   spot Sp2 at 321,296 value=38.444221496582  GetValueAt=38.444221496582
+   rect Bx1 ,,213,160 avg=39.8775268993467 min=37.3855628967285 max=42.9878120422363
+   delta  Sp1/Value - Sp2/Value value=1.95782852172852
+== original/FLIR0012.jpg
+   spot Sp1 at 320,222 value=38.0475654602051  GetValueAt=38.0475654602051
+   spot Sp2 at 321,296 value=34.9195671081543  GetValueAt=34.9195671081543
+   rect Bx1 ,,213,160 avg=36.7477724561109 min=33.8093719482422 max=39.2941131591797
+   delta  Sp1/Value - Sp2/Value value=3.12799835205078
+== original/FLIR0013.jpg
+   spot Sp1 at 320,222 value=34.0183486938477  GetValueAt=34.0183486938477
+   spot Sp2 at 321,296 value=33.9677238464355  GetValueAt=33.9677238464355
+   rect Bx1 ,,213,160 avg=33.9459854317383 min=32.5538291931152 max=35.8387451171875
+   delta  Sp1/Value - Sp2/Value value=0.0506248474121094
+== original/FLIR0014.jpg
+   spot Sp1 at 320,222 value=36.9730072021484  GetValueAt=36.9730072021484
+   spot Sp2 at 321,296 value=38.9366798400879  GetValueAt=38.9366798400879
+   rect Bx1 ,,213,160 avg=36.299225473292 min=33.485652923584 max=40.8865852355957
+   delta  Sp1/Value - Sp2/Value value=-1.96367263793945

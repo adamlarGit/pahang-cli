@@ -3,8 +3,9 @@
 Layout follows ExifTool's FLIR.pm (https://exiftool.org/TagNames/FLIR.html):
 APP1 "FLIR\\0" segments concatenate into one FFF file whose index lists
 records: 0x01 RawData, 0x20 CameraInfo, 0x21 MeasurementInfo, ...
-Temperature conversion is the Planck and atmosphere model of the Thermimage
-R package's raw2temp, which ExifTool's FLIR notes also point to.
+Temperature conversion is the one-path Planck and atmosphere model; it
+reproduces FLIR Atlas SDK's GetValueFromSignal to 1e-6 C (see
+atlas-curve-2026-11-13.log).
 
 Usage:  python -I flir_fff.py <image.jpg> [...]   prints a dump per image.
 """
@@ -99,23 +100,31 @@ def raw_data(rec: bytes) -> np.ndarray:
     return np.frombuffer(payload[: w * h * 2], dtype=bo + "u2").reshape(h, w).astype(np.uint16)
 
 
-def raw2temp(raw, c: dict):
-    E = c["Emissivity"]; OD = c["ObjectDistance"]
-    RT = c["ReflectedApparentTemperature"]; AT = c["AtmosphericTemperature"]
-    IRWT = c["IRWindowTemperature"]; IRT = c["IRWindowTransmission"]
-    RH = c["RelativeHumidity"]
-    R1, R2, B, F, O = c["PlanckR1"], c["PlanckR2"], c["PlanckB"], c["PlanckF"], c["PlanckO"]
+def transmission(c: dict) -> float:
+    """Atmospheric transmission over the whole object distance, one path.
+
+    Matches the value FLIR's Atlas SDK reports as ThermalParameters.Transmission.
+    (Thermimage instead splits the path in two halves of OD/2 around an IR
+    window, which gives a lower total and readings up to 0.04 C high here.)
+    """
+    AT, RH, OD = c["AtmosphericTemperature"], c["RelativeHumidity"], c["ObjectDistance"]
     A1, A2 = c["AtmosphericTransAlpha1"], c["AtmosphericTransAlpha2"]
     B1, B2, X = c["AtmosphericTransBeta1"], c["AtmosphericTransBeta2"], c["AtmosphericTransX"]
     h2o = (RH / 100) * math.exp(1.5587 + 0.06939 * AT - 0.00027816 * AT ** 2 + 0.00000068455 * AT ** 3)
-    tau = X * math.exp(-math.sqrt(OD / 2) * (A1 + B1 * math.sqrt(h2o))) + \
-        (1 - X) * math.exp(-math.sqrt(OD / 2) * (A2 + B2 * math.sqrt(h2o)))
+    return X * math.exp(-math.sqrt(OD) * (A1 + B1 * math.sqrt(h2o))) +         (1 - X) * math.exp(-math.sqrt(OD) * (A2 + B2 * math.sqrt(h2o)))
+
+
+def raw2temp(raw, c: dict):
+    """Raw signal to deg C: S = E*tau*S_obj + (1-E)*tau*S_refl + (1-tau)*S_atm."""
+    if abs(c["IRWindowTransmission"] - 1) > 1e-6:
+        raise NotImplementedError("external optics / IR window not covered by the samples")
+    E = c["Emissivity"]
+    R1, R2, B, F, O = c["PlanckR1"], c["PlanckR2"], c["PlanckB"], c["PlanckF"], c["PlanckO"]
+    tau = transmission(c)
     planck = lambda t: R1 / (R2 * (math.exp(B / (t + 273.15)) - F)) - O
-    refl = (1 - E) / E * planck(RT)
-    atm1 = (1 - tau) / E / tau * planck(AT)
-    wind = (1 - IRT) / E / tau / IRT * planck(IRWT)
-    atm2 = (1 - tau) / E / tau / IRT / tau * planck(AT)
-    obj = np.asarray(raw, dtype=float) / E / tau / IRT / tau - atm1 - atm2 - wind - refl
+    raw = np.asarray(raw, dtype=float)
+    obj = (raw - (1 - E) * tau * planck(c["ReflectedApparentTemperature"])
+           - (1 - tau) * planck(c["AtmosphericTemperature"])) / (E * tau)
     return B / np.log(R1 / (R2 * (obj + O)) + F) - 273.15
 
 
