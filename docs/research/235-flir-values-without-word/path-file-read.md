@@ -3,7 +3,7 @@ ticket: 235
 type: research
 map: 221
 path: file-read
-status: open
+status: answered
 updated: 2026-11-13
 agent: Claude Code, claude-opus-5-5
 ---
