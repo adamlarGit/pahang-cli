@@ -410,6 +410,29 @@ def test_cropped_jpeg_is_reencoded_as_jpeg_not_lossless(paths):
     assert pdf_images(out)[0][:2] == (480, 320)
 
 
+def _jpeg_is_progressive(data: bytes) -> bool:
+    with Image.open(io.BytesIO(data)) as im:
+        return bool(im.info.get("progressive") or im.info.get("progression"))
+
+
+def test_progressive_jpeg_source_is_written_as_baseline(paths):
+    # Acrobat raises "An internal error occurred" and stops drawing the page's pictures when a
+    # restored stream is a progressive JPEG (40. PMU JENGKA, pages 238-240); MuPDF renders it fine.
+    native, out = paths
+    src = graph(82, size=(1280, 960))
+    b = io.BytesIO()
+    src.save(b, "JPEG", quality=90, progressive=True)
+    progressive = b.getvalue()
+    assert _jpeg_is_progressive(progressive)
+    native_pdf(native, [jpeg_bytes(src.resize((640, 480), Image.LANCZOS), q=80)])
+    report = restore_source_images(docx_with_pictures([progressive]), native, out)
+    assert report.restored == 1
+    assert pdf_images(out)[0] == (1280, 960, "/DCTDecode")
+    with fitz.open(out) as doc:
+        xref = doc[0].get_images(full=True)[0][0]
+        assert not _jpeg_is_progressive(doc.xref_stream_raw(xref))
+
+
 # ---------------------------------------------------------------- safety
 
 

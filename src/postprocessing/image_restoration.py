@@ -500,8 +500,18 @@ def _choose(
 # --------------------------------------------------------------------------- replacement
 
 
+def _is_progressive_jpeg(data: bytes) -> bool:
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            return im.format == "JPEG" and bool(im.info.get("progressive") or im.info.get("progression"))
+    except Exception:
+        return False
+
+
 def _encode_payload(source: _Source, pixels: Image.Image) -> bytes:
-    if source.verbatim:
+    # Progressive JPEGs are re-encoded: Acrobat raises "An internal error occurred" on them as
+    # PDF image streams and stops drawing the page's remaining pictures (MuPDF renders them fine).
+    if source.verbatim and not _is_progressive_jpeg(source.data):
         return source.data
     buf = io.BytesIO()
     if source.lossless:
