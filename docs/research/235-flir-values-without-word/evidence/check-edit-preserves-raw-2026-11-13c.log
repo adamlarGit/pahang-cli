@@ -1,0 +1,48 @@
+Flir T640/editted/FLIR0011.jpg
+   raw plane identical: True  sha256 77734619114fb1c4
+   CameraInfo identical: True; decoded fields changed: none
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 241970), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 942669)]
+   records edited:   [('RawData', 241970), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 364), ('PiP', 96), ('EmbeddedImage', 879290), ('0x29', 8), ('GPSInfo', 184)]
+Flir T640/editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg
+   raw plane identical: True  sha256 401b334f429fdfa1
+   CameraInfo identical: True; decoded fields changed: none
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 290973), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 1151007)]
+   records edited:   [('RawData', 290973), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 372), ('PiP', 96), ('EmbeddedImage', 534812), ('0x29', 8), ('GPSInfo', 184)]
+Flir T640/editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg
+   raw plane identical: True  sha256 401b334f429fdfa1
+   CameraInfo identical: True; decoded fields changed: none
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 290973), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 1151007)]
+   records edited:   [('RawData', 290973), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 420), ('PiP', 96), ('EmbeddedImage', 545580), ('GPSInfo', 184)]
+Flir T640/editted/FLIR0013.jpg
+   raw plane identical: True  sha256 b56fbb4d78b5dde9
+   CameraInfo identical: False; decoded fields changed: none
+   CameraInfo bytes changed at offsets: 0x338, 0x33c, 0x33d
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 206206), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 608308)]
+   records edited:   [('RawData', 206206), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 364), ('PiP', 96), ('EmbeddedImage', 560097), ('0x29', 8), ('GPSInfo', 184)]
+Flir T640/editted/FLIR0014.jpg
+   raw plane identical: True  sha256 ba011ffbd9265b21
+   CameraInfo identical: True; decoded fields changed: none
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 315899), ('PiP', 96), ('GPSInfo', 184), ('EmbeddedImage', 1343624)]
+   records edited:   [('RawData', 315899), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 364), ('PiP', 96), ('EmbeddedImage', 1211484), ('0x29', 8), ('GPSInfo', 184)]
+Flir T440/editted/IR_0001.jpg
+   raw plane identical: True  sha256 dd57aa5dd4865b66
+   CameraInfo identical: True; decoded fields changed: none
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 153632)]
+   records edited:   [('RawData', 153632), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 388), ('0x29', 8)]
+Flir T440/editted/IR_0011.jpg
+   raw plane identical: True  sha256 cbf0a2eab8fc975f
+   CameraInfo identical: False; decoded fields changed: Emissivity 0.95 -> 0.8
+   CameraInfo bytes changed at offsets: 0x20, 0x21, 0x22, 0x338, 0x339, 0x33c, 0x33d
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 153632)]
+   records edited:   [('RawData', 153632), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 456), ('0x29', 8)]
+Flir T440/editted/IR_0017.jpg
+   raw plane identical: True  sha256 b5b1663e163dc641
+   CameraInfo identical: False; decoded fields changed: ObjectDistance 1 -> 5
+   CameraInfo bytes changed at offsets: 0x26, 0x27, 0x338, 0x33c
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 153632)]
+   records edited:   [('RawData', 153632), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 456), ('0x29', 8)]
+Flir T440/editted/IR_0023.jpg
+   raw plane identical: True  sha256 f2a088a72bbae918
+   CameraInfo identical: True; decoded fields changed: none
+   records original: [('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 200), ('RawData', 153632)]
+   records edited:   [('RawData', 153632), ('CameraInfo', 2476), ('PaletteInfo', 784), ('MeasurementInfo', 388), ('0x29', 8)]

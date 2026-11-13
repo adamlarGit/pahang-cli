@@ -9,7 +9,7 @@ $env:PATH = "$bin;$env:PATH"
 [void][Reflection.Assembly]::LoadFrom("$bin\Flir.Atlas.Image.dll")
 $first = $true
 foreach ($f in Get-ChildItem $samples -Recurse -Filter *.jpg | Sort-Object FullName) {
-  "== $($f.Directory.Name)/$($f.Name)"
+  "== " + $f.FullName.Substring((Resolve-Path $samples).Path.TrimEnd('\').Length + 1).Replace('\','/')
   try {
     $img = New-Object Flir.Atlas.Image.ThermalImageFile
     $img.Open($f.FullName)
@@ -18,6 +18,7 @@ foreach ($f in Get-ChildItem $samples -Recurse -Filter *.jpg | Sort-Object FullN
     if ($first) { "   MeasurementCollection props: " + (($m.GetType().GetProperties() | % { $_.Name }) -join ', '); $first = $false }
     foreach ($s in $m.MeasurementSpots) { "   spot $($s.Name) at $($s.X),$($s.Y) value=$($s.Value.Value)  GetValueAt=$($img.GetValueAt((New-Object System.Drawing.Point $s.X,$s.Y)).Value)" }
     foreach ($r in $m.MeasurementRectangles) { "   rect $($r.Name) $($r.X),$($r.Y),$($r.Width),$($r.Height) avg=$($r.Average.Value) min=$($r.Min.Value) max=$($r.Max.Value)" }
+    foreach ($e in $m.MeasurementEllipses) { "   ellipse $($e.Name) $($e.X),$($e.Y) r=$($e.RadiusX),$($e.RadiusY) avg=$($e.Average.Value) min=$($e.Min.Value) max=$($e.Max.Value)" }
     foreach ($p in $m.MeasurementPolygons) { "   polygon $($p.Name) avg=$($p.Average.Value)" }
     foreach ($d in $m.MeasurementDeltas) { "   delta $($d.Name) $($d.Measurement1)/$($d.ValueMember1) - $($d.Measurement2)/$($d.ValueMember2) value=$($d.Value.Value)" }
     $img.Close()

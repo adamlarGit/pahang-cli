@@ -1,0 +1,69 @@
+Flir T640 FLIR0011 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x80 float32 1.900 ~ Dt C
+Flir T640 FLIR0011 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0012 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0012 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0012 Word CIRViewer edit  records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x4ec float32 309.547 ~ Ar1 (avg) K
+Flir T640 FLIR0013 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0013 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+Flir T640 FLIR0014 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', 'GPSInfo']
+   HIT CameraInfo+0x3f float32 -2.000 ~ Dt C
+Flir T640 FLIR0014 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', 'PiP', '0x29', 'GPSInfo']
+   no reading found
+Flir T440 IR_0001 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo']
+   no reading found
+Flir T440 IR_0001 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', '0x29']
+   no reading found
+Flir T440 IR_0011 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo']
+   no reading found
+Flir T440 IR_0011 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', '0x29']
+   HIT CameraInfo+0x508 float32 306.565 ~ Sp2 K
+Flir T440 IR_0017 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo']
+   HIT CameraInfo+0x20 float32 0.950 ~ Dt C
+   HIT CameraInfo+0x1b8 float32 0.902 ~ Dt C
+   HIT PaletteInfo+0x189 float32 0.928 ~ Dt C
+Flir T440 IR_0017 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', '0x29']
+   no reading found
+Flir T440 IR_0023 original             records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo']
+   HIT CameraInfo+0x2 int16 320 ~ Sp1 x10
+   HIT CameraInfo+0x70f float32 32.000 ~ Sp1 C
+Flir T440 IR_0023 FLIR Tools+ edit     records searched: ['CameraInfo', 'PaletteInfo', 'MeasurementInfo', '0x29']
+   HIT CameraInfo+0x2 int16 320 ~ Sp1 x10
+   HIT CameraInfo+0x394 float32 306.165 ~ Sp2 K
+   HIT CameraInfo+0x47c float32 306.165 ~ Sp2 K
+   HIT CameraInfo+0x70f float32 32.000 ~ Sp1 C
+   HIT PaletteInfo+0x23c float32 -1.143 ~ Dt C
+IR_0011 CameraInfo 0x508 same in original and edit: True
+IR_0023 CameraInfo 0x394 same in original and edit: True
+IR_0023 CameraInfo 0x47c same in original and edit: True
+IR_0023 PaletteInfo 0x23c same in original and edit: False
+IR_0023 CameraInfo 0x70f same in original and edit: True
+IR_0017 PaletteInfo 0x189 same in original and edit: False
+PaletteInfo identical False
+IR_0001 PaletteInfo bytes changed: 578 from 0x6 to 0x30f ; palette name orig/edit: b'\\FlashFS\\system\\rainbow.pal' b'\\\xe7\xf7\x0eshFS\x91\x14'
+IR_0011 PaletteInfo bytes changed: 524 from 0x6 to 0x30f ; palette name orig/edit: b'\\FlashFS\\system\\rainbow.pal' b'\\\xe7\xf7\x0e222\xff6\x0e'
+IR_0017 PaletteInfo bytes changed: 581 from 0x6 to 0x30f ; palette name orig/edit: b'\\FlashFS\\system\\rainbow.pal' b''
+IR_0023 PaletteInfo bytes changed: 522 from 0x6 to 0x30f ; palette name orig/edit: b'\\FlashFS\\system\\rainbow.pal' b'\\\xe7\xf7\x0e\x0e'
+Flir T440 editted IR_0001.jpg CameraInfo+0x1b8 = 0.9025
+Flir T440 editted IR_0011.jpg CameraInfo+0x1b8 = 0.9025
+Flir T440 editted IR_0017.jpg CameraInfo+0x1b8 = 0.9025
+Flir T440 editted IR_0023.jpg CameraInfo+0x1b8 = 0.9025
+Flir T440 original IR_0001.jpg CameraInfo+0x1b8 = 0.9025
+Flir T440 original IR_0011.jpg CameraInfo+0x1b8 = 0.9025
+Flir T440 original IR_0017.jpg CameraInfo+0x1b8 = 0.9025
+Flir T440 original IR_0023.jpg CameraInfo+0x1b8 = 0.9025
+Flir T640 editted FLIR0011.jpg CameraInfo+0x1b8 = 0.855
+Flir T640 editted FLIR0012-editted-from-Software-FlirTools+-directly.jpg CameraInfo+0x1b8 = 0.855
+Flir T640 editted FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg CameraInfo+0x1b8 = 0.855
+Flir T640 editted FLIR0013.jpg CameraInfo+0x1b8 = 0.855
+Flir T640 editted FLIR0014.jpg CameraInfo+0x1b8 = 0.855
+Flir T640 original FLIR0011.jpg CameraInfo+0x1b8 = 0.855
+Flir T640 original FLIR0012.jpg CameraInfo+0x1b8 = 0.855
+Flir T640 original FLIR0013.jpg CameraInfo+0x1b8 = 0.855
+Flir T640 original FLIR0014.jpg CameraInfo+0x1b8 = 0.855

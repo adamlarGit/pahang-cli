@@ -191,32 +191,140 @@ def polygon_points(params):
     return [(flat[2 * k], flat[2 * k + 1]) for k in range(n)]
 
 
-def readings(path: Path) -> dict:
-    """Sp1, Sp2, Ar1 average and Dt = Sp1 - Sp2, unrounded, in deg C.
+def ellipse_rect(tool):
+    """Bounding rectangle (x, y, w, h) of an ellipse tool.
 
-    Tools are matched by their label when it has one (Sp1, Sp2, Bx1/Ar1),
-    since a FLIR Tools+ edit can leave tool number 1 labelled Sp2.
+    It sits in the tool's trailing bytes after the 24-byte common block, as
+    int16 tag 5, int16 length 12, then x, y, w, h. Atlas reports the same
+    rectangle as MeasurementEllipse.Rectangle. The int16 params
+    [cx, cy, x2, y2, x3, y3] give a centre and two axis ends that differ
+    from it by a pixel, and are not what Atlas measures.
+    """
+    b = bytes.fromhex(tool["extra"])
+    tag, length, x, y, w, h = struct.unpack("<6h", b[24:36])
+    if tag != 5:
+        raise ValueError(f"unexpected ellipse trailing tag {tag}")
+    return x, y, w, h
+
+
+def ellipse_mask(shape, rect):
+    """Pixels Atlas averages for an ellipse: the filled integer midpoint ellipse.
+
+    Semi-axes rx = w // 2 and ry = h // 2 about pixel (x + rx, y + ry), every
+    pixel between the plotted boundary points included. Reproduces Atlas's
+    GetValues() pixel set exactly for the two T440 samples (both circles, even
+    w); odd sizes and true ellipses are untested.
+    """
+    x, y, w, h = rect
+    rx, ry = w // 2, h // 2
+    cx, cy = x + rx, y + ry
+    span: dict[int, int] = {}
+
+    def plot(px, py):
+        span[py] = max(span.get(py, -1), px)
+
+    xk, yk = 0, ry
+    rx2, ry2 = rx * rx, ry * ry
+    p1 = ry2 - rx2 * ry + 0.25 * rx2
+    dx, dy = 0, 2 * rx2 * yk
+    while dx < dy:
+        plot(xk, yk)
+        xk += 1
+        dx += 2 * ry2
+        if p1 < 0:
+            p1 += dx + ry2
+        else:
+            yk -= 1
+            dy -= 2 * rx2
+            p1 += dx - dy + ry2
+    p2 = ry2 * (xk + 0.5) ** 2 + rx2 * (yk - 1) ** 2 - rx2 * ry2
+    while yk >= 0:
+        plot(xk, yk)
+        yk -= 1
+        dy -= 2 * rx2
+        if p2 > 0:
+            p2 += rx2 - dy
+        else:
+            xk += 1
+            dx += 2 * ry2
+            p2 += dx - dy + rx2
+    m = np.zeros(shape, dtype=bool)
+    for ay, hw in span.items():
+        for row in {cy - ay, cy + ay}:
+            if 0 <= row < shape[0]:
+                m[row, max(0, cx - hw):min(shape[1], cx + hw + 1)] = True
+    return m
+
+
+# Difference tool params: [type1, number1, member1, type2, number2, member2],
+# value = member1 of tool 1 - member2 of tool 2. Members seen so far:
+# 1 on a spot (its value), 2 on a box (its maximum; Atlas "Max").
+MEMBER = {("spot", 1): "", ("box", 2): "Mx"}
+TYPE_CODE = {1: "spot", 2: "box", 3: "ellipse", 10: 10}
+
+
+def readings(path: Path) -> dict:
+    """Spot, area and difference values, unrounded, in deg C.
+
+    Keys: Sp1, Sp2; "Ar1 avg" and "Ar1 max" for the one area (box, ellipse
+    or polygon, whatever its label); "Dt" = the file's difference tool between
+    two spots, in its own order (tool number 1 minus tool number 2, whatever
+    their labels, as FLIR Tools+ and Atlas show it), or else the file's only
+    difference tool (a camera original's Bx1Mx - Sp1). Each difference tool
+    is also given as "delta <expr>", and "Sp1-Sp2 by label" is kept.
+    Tools are matched by their label when it has one, since a FLIR Tools+
+    edit can leave tool number 1 labelled Sp2.
     """
     d = load(path)
     t = raw2temp(d["raw"], d["camera"])
     tools = measurement_tools(d["by"]["MeasurementInfo"])
     out = {}
+    member_value, member_name = {}, {}
     for tl in tools:
         p = tl["params"]
         lab = tl["label"]
+        key = (tl["type"], tl["number"])
         if tl["type"] == "spot":
             name = lab if lab.startswith("Sp") else f"Sp{tl['number']}"
             out[name] = float(t[p[1], p[0]])
             out[name + " number"] = tl["number"]
-        elif tl["type"] == "box":
+            member_value[key + (1,)] = out[name]
+            member_name[key + (1,)] = name
+            continue
+        if tl["type"] == "box":
             x, y, w, h = p
-            out["Ar1 avg"] = float(t[y:y + h, x:x + w].mean())
-            out["Ar1 avg (inclusive edge)"] = float(t[y:y + h + 1, x:x + w + 1].mean())
-            out["Ar1 shape"] = "box"
+            m = np.zeros(t.shape, dtype=bool)
+            m[y:y + h, x:x + w] = True
+            shape, area = "box", "Bx"
+        elif tl["type"] == "ellipse":
+            rect = ellipse_rect(tl)
+            m = ellipse_mask(t.shape, rect)
+            shape, area = f"ellipse {rect}", "El"
         elif tl["type"] == 10:
             m = polygon_mask(t.shape, polygon_points(p))
-            out["Ar1 avg"] = float(t[m].mean())
-            out["Ar1 shape"] = f"polygon, {m.sum()} px"
+            shape, area = "polygon", "Ar"
+        else:
+            continue
+        out["Ar1 avg"] = float(t[m].mean())
+        out["Ar1 max"] = float(t[m].max())
+        out["Ar1 shape"] = f"{shape}, {int(m.sum())} px"
+        member_value[key + (2,)] = out["Ar1 max"]
+        member_name[key + (2,)] = f"{area}{tl['number']}Mx"
+    for tl in tools:
+        if tl["type"] != "difference":
+            continue
+        t1, n1, k1, t2, n2, k2 = tl["params"][:6]
+        a = (TYPE_CODE.get(t1, t1), n1, k1)
+        b = (TYPE_CODE.get(t2, t2), n2, k2)
+        if a in member_value and b in member_value:
+            expr = f"{member_name[a]}-{member_name[b]}"
+            out[f"delta {expr}"] = member_value[a] - member_value[b]
     if "Sp1" in out and "Sp2" in out:
-        out["Dt"] = out["Sp1"] - out["Sp2"]
+        out["Sp1-Sp2 by label"] = out["Sp1"] - out["Sp2"]
+    deltas = [k for k in out if k.startswith("delta ")]
+    spot_deltas = [k for k in deltas if "Mx" not in k]
+    if spot_deltas:
+        out["Dt"] = out[spot_deltas[0]]
+    elif len(deltas) == 1:
+        out["Dt"] = out[deltas[0]]
     return {"tools": tools, "values": out, "camera": d["camera"]}

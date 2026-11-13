@@ -1,7 +1,8 @@
 """Compare the reader's unrounded values with FLIR's Atlas SDK, tool by tool.
 
 Usage: python -I compare_to_atlas.py <samples dir> <atlas-values log>
-The log is the output of atlas/atlas_values.ps1 on the same samples dir.
+The log is the output of atlas/atlas_values.ps1 on the same samples dir
+(the folder holding one sub-folder per camera).
 """
 import re
 import sys
@@ -18,10 +19,14 @@ def atlas_log(path):
             cur = line[3:].strip(); out[cur] = {}
         elif m := re.match(r"\s+spot (\S+) at .*value=([-\d.E]+)", line):
             out[cur][m.group(1)] = float(m.group(2))
-        elif m := re.match(r"\s+(?:rect|polygon) (\S+) .*avg=([-\d.E]+)", line):
+        elif m := re.match(r"\s+(?:rect|polygon|ellipse) (\S+) .*avg=([-\d.E]+)(?: min=\S+ max=([-\d.E]+))?", line):
             out[cur]["Ar1 avg"] = float(m.group(2))
-        elif m := re.match(r"\s+delta .*?(\S+)/Value - (\S+)/Value value=([-\d.E]+)", line):
-            out[cur][f"{m.group(1)}-{m.group(2)}"] = float(m.group(3))
+            if m.group(3):
+                out[cur]["Ar1 max"] = float(m.group(3))
+        elif m := re.match(r"\s+delta \S* ?(\S+)/(\w+) - (\S+)/(\w+) value=([-\d.E]+)", line):
+            a = m.group(1) + ("Mx" if m.group(2) == "Max" else "")
+            b = m.group(3) + ("Mx" if m.group(4) == "Max" else "")
+            out[cur][f"delta {a}-{b}"] = float(m.group(5))
     return out
 
 
@@ -31,11 +36,7 @@ def main(s, log):
     for rel, vals in atlas_log(log).items():
         mine = F.readings(s / rel)["values"]
         for k, a in vals.items():
-            if "-" in k:
-                p, q = k.split("-")
-                c = mine[p] - mine[q]
-            else:
-                c = mine[k]
+            c = mine[k]
             n += 1
             worst = max(worst, abs(c - a))
             print(f"{rel:<66} {k:<8} reader {c:>10.5f}  Atlas {a:>10.5f}  diff {c - a:+.6f}")

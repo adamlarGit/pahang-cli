@@ -1,9 +1,13 @@
 """Compare values computed from each sample file with the owner's readings.
 
-Usage: python -I compare_readings.py <samples dir>
-<samples dir> holds original/, editted/ and IR-readings.csv (an xlsx file
-despite its name). Column C is the original image, D the image after an edit
-in FLIR Tools+, E the image after an edit in Word's CIRViewer.
+Usage: python -I compare_readings.py <camera dir> [<camera dir> ...]
+Each <camera dir> (samples/Flir T640, samples/Flir T440) holds original/,
+editted/ and IR-readings.csv (the first T640 version was an xlsx despite its
+name). Column C is the original image, D the image after an edit in FLIR
+Tools+, E the image after an edit in Word's CIRViewer. "nil" or blank: not read.
+Row labels are matched by prefix, so the T440 sheet's "Ar1 (avg)->El1(avg)"
+and "Dt (Bx1Mx-Sp1)->Sp1-Sp2" count as Ar1 (avg) and Dt. Dt is the file's spot-to-spot difference tool in
+its own order, else its only difference tool (Bx1Mx - Sp1); see readings().
 """
 import math
 import re
@@ -24,6 +28,10 @@ KEY = {"Sp1": "Sp1", "Sp2": "Sp2", "Ar1 (avg)": "Ar1 avg", "Dt": "Dt"}
 # Cells where the owner ticked "Show result as an absolute value" in Word
 # (comment on #235, 2026-11-13). The tick is not stored in the image.
 ABSOLUTE_DT = {("FLIR0012", "E")}
+# Readings the owner corrected after the sheet was written. 2026-11-13, in the
+# agent session: FLIR Tools+ shows Dt as 0.1, not the sheet's -0.1, for the
+# FLIR Tools+ edit of FLIR0012, whose tool 1 is labelled Sp2.
+CORRECTED = {("FLIR0012", "D", "Dt"): 0.1}
 
 
 def owner_table(path: Path) -> dict:
@@ -38,9 +46,9 @@ def owner_table(path: Path) -> dict:
                 continue
             cells = {"A": rec[0], "B": rec[1]}
             for col, v in zip(letters[2:], rec[2:]):
-                if v.strip():
+                if v.strip() and v.strip().lower() != "nil":
                     cells[col] = float(v)
-            rows[(cells["A"], cells["B"])] = cells
+            rows[(cells["A"], canonical(cells["B"]))] = cells
         return rows
     z = zipfile.ZipFile(path)
     ss = re.findall(r"<t[^>]*>(.*?)</t>", z.read("xl/sharedStrings.xml").decode())
@@ -55,20 +63,34 @@ def owner_table(path: Path) -> dict:
     return rows
 
 
+def canonical(label: str) -> str:
+    return next((k for k in KEY if label.startswith(k)), label)
+
+
+def cases(s: Path):
+    """(name, column, file, {KEY row: owner value}) for every image read."""
+    owner = owner_table(s / "IR-readings.csv")
+    names = list(dict.fromkeys(n for n, _ in owner))
+    for name in names:
+        for col in "CDE":
+            own = {k: owner[(name, k)][col] for k in KEY
+                   if (name, k) in owner and owner[(name, k)].get(col) is not None}
+            if not own:
+                continue
+            f = s / SPECIAL.get((name, col), FILES.get(col, "").format(n=name))
+            yield name, col, f, own
+
+
 def trunc(v):
     return math.trunc(v * 10) / 10
 
 
-def main(s: Path):
-    owner = owner_table(s / "IR-readings.csv")
-    tally = {"round": 0, "trunc": 0, "n": 0, "maxabs": 0.0}
-    for name in ["FLIR0011", "FLIR0012", "FLIR0013", "FLIR0014"]:
-        for col in "CDE":
-            if owner[(name, "Sp1")].get(col) is None:
-                continue
-            f = s / SPECIAL.get((name, col), FILES.get(col, "").format(n=name))
+def main(dirs):
+    tally = {"round": 0, "trunc": 0, "n": 0, "maxabs": 0.0, "misses": []}
+    for s in dirs:
+        for name, col, f, own in cases(s):
             r = F.readings(f)
-            print(f"\n== {name} | {COLS[col]} | {f.relative_to(s).as_posix()}")
+            print(f"\n== {s.name} | {name} | {COLS[col]} | {f.relative_to(s).as_posix()}")
             cam = r["camera"]
             print("   params: " + ", ".join(f"{k}={cam[k]:.4g}" for k in (
                 "Emissivity", "ObjectDistance", "ReflectedApparentTemperature",
@@ -76,23 +98,32 @@ def main(s: Path):
             for tl in r["tools"]:
                 print(f"   tool {tl['type']} #{tl['number']} label={tl['label']!r} params={tl['params']} extra={tl['extra'] or '-'}")
             print(f"   Ar1 shape: {r['values'].get('Ar1 shape')}")
+            deltas = {k: v for k, v in r["values"].items() if k.startswith("delta ")}
+            print("   difference tools: " + (", ".join(f"{k[6:]}={v:.3f}" for k, v in deltas.items()) or "-"))
             print(f"   {'value':<10}{'computed':>9}{'round':>7}{'trunc':>7}{'owner':>7}{'c-owner':>9}")
             for ok, ck in KEY.items():
-                ok_label = ok
+                if ok not in own:
+                    continue
                 c = r["values"][ck]
+                shown = ok
                 if ck == "Dt" and (name, col) in ABSOLUTE_DT:
-                    c, ok_label = abs(c), "|Dt|"
-                o = round(owner[(name, ok)][col], 1)
+                    c, shown = abs(c), "|Dt|"
+                o = round(CORRECTED.get((name, col, ok), own[ok]), 1)
+                if (name, col, ok) in CORRECTED:
+                    shown += " (corr.)"
                 rr, tt = round(c, 1), trunc(c)
                 tally["n"] += 1
                 tally["round"] += abs(rr - o) < 1e-9
                 tally["trunc"] += abs(tt - o) < 1e-9
                 tally["maxabs"] = max(tally["maxabs"], abs(c - o))
-                print(f"   {(ok_label if ck == 'Dt' and (name, col) in ABSOLUTE_DT else ok):<10}{c:>9.3f}{rr:>7.1f}{tt:>7.1f}{o:>7.1f}{c - o:>+9.3f}")
+                if abs(rr - o) > 1e-9:
+                    tally["misses"].append(f"{s.name} {name} {COLS[col]} {ok}")
+                print(f"   {shown:<10}{c:>9.3f}{rr:>7.1f}{tt:>7.1f}{o:>7.1f}{c - o:>+9.3f}{'' if abs(rr - o) < 1e-9 else '  *'}")
     print(f"\n{tally['n']} values: {tally['round']} equal after rounding, "
           f"{tally['trunc']} equal after truncation, "
           f"largest |computed - owner| = {tally['maxabs']:.3f} C")
+    print("misses after rounding: " + ("; ".join(tally["misses"]) or "none"))
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    main([Path(a) for a in sys.argv[1:]])

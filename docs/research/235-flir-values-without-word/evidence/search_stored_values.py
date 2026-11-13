@@ -1,6 +1,6 @@
 """Look for the readings themselves inside a file's FLIR metadata records.
 
-Usage: python -I search_stored_values.py <samples dir>
+Usage: python -I search_stored_values.py <camera dir> [<camera dir> ...]
 For every record except RawData and EmbeddedImage (the pixel data), scans
 each 4-byte alignment for float32 and float64 within 0.06 of a reading in
 deg C or kelvin, and for int16 tenths of a degree (e.g. 425 for 42.5).
@@ -16,14 +16,9 @@ import flir_fff as F
 SKIP = {"RawData", "EmbeddedImage"}
 
 
-def main(s: Path):
-    owner = C.owner_table(s / "IR-readings.csv")
-    for name in ["FLIR0011", "FLIR0012", "FLIR0013", "FLIR0014"]:
-        for col in "CDE":
-            if owner[(name, "Sp1")].get(col) is None:
-                continue
-            f = s / C.SPECIAL.get((name, col), C.FILES.get(col, "").format(n=name))
-            targets = {k: owner[(name, k)][col] for k in C.KEY}
+def main(dirs):
+    for s in dirs:
+        for name, col, f, targets in C.cases(s):
             d = F.load(f)
             hits = []
             for r in d["records"]:
@@ -41,7 +36,7 @@ def main(s: Path):
                                 hits.append(f"{r['name']}+{off:#x} float32 {v32:.3f} ~ {k} {unit}")
                         if off % 2 == 0 and i16 == round(t * 10) and abs(t) >= 5:
                             hits.append(f"{r['name']}+{off:#x} int16 {i16} ~ {k} x10")
-            print(f"{name} {C.COLS[col]:<20} records searched: "
+            print(f"{s.name} {name} {C.COLS[col]:<20} records searched: "
                   f"{[r['name'] for r in d['records'] if r['name'] not in SKIP]}")
             for h in hits:
                 print("   HIT", h)
@@ -50,4 +45,4 @@ def main(s: Path):
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    main([Path(a) for a in sys.argv[1:]])

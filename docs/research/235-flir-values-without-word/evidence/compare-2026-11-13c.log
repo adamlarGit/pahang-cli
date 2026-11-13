@@ -1,0 +1,248 @@
+
+== Flir T640 | FLIR0011 | original | original/FLIR0011.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='1' params=[320, 222] extra=-
+   tool spot #2 label='2' params=[321, 296] extra=-
+   tool box #1 label='1' params=[213, 160, 213, 160] extra=-
+   tool difference #1 label='1' params=[1, 1, 1, 1, 2, 1] extra=-
+   Ar1 shape: box, 34080 px
+   difference tools: Sp1-Sp2=1.958
+   value      computed  round  trunc  owner  c-owner
+   Sp1          40.402   40.4   40.4   40.4   +0.002
+   Sp2          38.444   38.4   38.4   38.4   +0.044
+   Ar1 (avg)    39.878   39.9   39.8   39.9   -0.022
+   Dt            1.958    2.0    1.9    1.9   +0.058  *
+
+== Flir T640 | FLIR0011 | FLIR Tools+ edit | editted/FLIR0011.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='Sp1' params=[318, 171] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool spot #2 label='Sp2' params=[321, 296] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool box #1 label='Bx1' params=[171, 125, 297, 264] extra=01000000000200000100010000ffff0000000000ffffe1000000000000000000
+   tool difference #1 label='' params=[1, 1, 1, 1, 2, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool 7 #0 label='' params=[0, 0] extra=-
+   Ar1 shape: box, 78408 px
+   difference tools: Sp1-Sp2=4.073
+   value      computed  round  trunc  owner  c-owner
+   Sp1          42.517   42.5   42.5   42.5   +0.017
+   Sp2          38.444   38.4   38.4   38.4   +0.044
+   Ar1 (avg)    39.334   39.3   39.3   39.3   +0.034
+   Dt            4.073    4.1    4.0    4.1   -0.027
+
+== Flir T640 | FLIR0012 | original | original/FLIR0012.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='1' params=[320, 222] extra=-
+   tool spot #2 label='2' params=[321, 296] extra=-
+   tool box #1 label='1' params=[213, 160, 213, 160] extra=-
+   tool difference #1 label='1' params=[1, 1, 1, 1, 2, 1] extra=-
+   Ar1 shape: box, 34080 px
+   difference tools: Sp1-Sp2=3.128
+   value      computed  round  trunc  owner  c-owner
+   Sp1          38.048   38.0   38.0   38.0   +0.048
+   Sp2          34.920   34.9   34.9   34.9   +0.020
+   Ar1 (avg)    36.748   36.7   36.7   36.7   +0.048
+   Dt            3.128    3.1    3.1    3.1   +0.028
+
+== Flir T640 | FLIR0012 | FLIR Tools+ edit | editted/FLIR0012-editted-from-Software-FlirTools+-directly.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='Sp2' params=[390, 388] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool spot #2 label='Sp1' params=[60, 268] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool box #1 label='Bx1' params=[7, 20, 608, 422] extra=01000000000200000100010000ffff0000000000ffffe1000000000000000000
+   tool difference #1 label='Dt1' params=[1, 1, 1, 1, 2, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool 7 #0 label='' params=[0, 0] extra=-
+   Ar1 shape: box, 256576 px
+   difference tools: Sp2-Sp1=0.086
+   value      computed  round  trunc  owner  c-owner
+   Sp1          37.772   37.8   37.7   37.8   -0.028
+   Sp2          37.858   37.9   37.8   37.9   -0.042
+   Ar1 (avg)    36.666   36.7   36.6   36.7   -0.034
+   Dt (corr.)    0.086    0.1    0.0    0.1   -0.014
+
+== Flir T640 | FLIR0012 | Word CIRViewer edit | editted/FLIR0012-editted-in-word-using-FlirTools+-CIRViewer.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='Sp1' params=[66, 259] extra=01000000000213000000010000ffff0000000000ffffe100
+   tool spot #2 label='Sp2' params=[396, 377] extra=01000000000213000000010000ffff0000000000ffffe100
+   tool 10 #1 label='Ar1' params=[12, 8, 4, 0, 1, 194, 192, 7, 592, 3, 627, 39, 636, 418, 590, 418, 601, 479, 463, 475, 43, 338, 3, 340, 1, 194, 1, 194] extra=0100000000021300000001007fffd40000000000ffffe1000000000000000000
+   tool difference #1 label='Dt1' params=[1, 1, 1, 1, 2, 1] extra=01001800000213000000010000ffff0000000000ffffe1000300000000010100e8003601
+   tool 7 #0 label='' params=[0, 0] extra=-
+   Ar1 shape: polygon, 241458 px
+   difference tools: Sp1-Sp2=-0.385
+   value      computed  round  trunc  owner  c-owner
+   Sp1          37.846   37.8   37.8   37.8   +0.046
+   Sp2          38.231   38.2   38.2   38.2   +0.031
+   Ar1 (avg)    36.386   36.4   36.3   36.4   -0.014
+   |Dt|          0.385    0.4    0.3    0.4   -0.015
+
+== Flir T640 | FLIR0013 | original | original/FLIR0013.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='1' params=[320, 222] extra=-
+   tool spot #2 label='2' params=[321, 296] extra=-
+   tool box #1 label='1' params=[213, 160, 213, 160] extra=-
+   tool difference #1 label='1' params=[1, 1, 1, 1, 2, 1] extra=-
+   Ar1 shape: box, 34080 px
+   difference tools: Sp1-Sp2=0.051
+   value      computed  round  trunc  owner  c-owner
+   Sp1          34.018   34.0   34.0   34.0   +0.018
+   Sp2          33.968   34.0   33.9   34.0   -0.032
+   Ar1 (avg)    33.946   33.9   33.9   33.9   +0.046
+   Dt            0.051    0.1    0.0    0.0   +0.051  *
+
+== Flir T640 | FLIR0013 | FLIR Tools+ edit | editted/FLIR0013.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='Sp1' params=[369, 211] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool spot #2 label='Sp2' params=[267, 217] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool box #1 label='Bx1' params=[211, 87, 187, 310] extra=01000000000200000100010000ffff0000000000ffffe1000000000000000000
+   tool difference #1 label='' params=[1, 1, 1, 1, 2, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool 7 #0 label='' params=[0, 0] extra=-
+   Ar1 shape: box, 57970 px
+   difference tools: Sp1-Sp2=-0.322
+   value      computed  round  trunc  owner  c-owner
+   Sp1          33.955   34.0   33.9   34.0   -0.045
+   Sp2          34.277   34.3   34.2   34.3   -0.023
+   Ar1 (avg)    34.086   34.1   34.0   34.1   -0.014
+   Dt           -0.322   -0.3   -0.3   -0.3   -0.022
+
+== Flir T640 | FLIR0014 | original | original/FLIR0014.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='1' params=[320, 222] extra=-
+   tool spot #2 label='2' params=[321, 296] extra=-
+   tool box #1 label='1' params=[213, 160, 213, 160] extra=-
+   tool difference #1 label='1' params=[1, 1, 1, 1, 2, 1] extra=-
+   Ar1 shape: box, 34080 px
+   difference tools: Sp1-Sp2=-1.964
+   value      computed  round  trunc  owner  c-owner
+   Sp1          36.973   37.0   36.9   37.0   -0.027
+   Sp2          38.937   38.9   38.9   38.9   +0.037
+   Ar1 (avg)    36.299   36.3   36.2   36.4   -0.101  *
+   Dt           -1.964   -2.0   -1.9   -2.0   +0.036
+
+== Flir T640 | FLIR0014 | FLIR Tools+ edit | editted/FLIR0014.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=30, RelativeHumidity=60, IRWindowTransmission=1
+   tool spot #1 label='Sp1' params=[182, 256] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool spot #2 label='Sp2' params=[465, 252] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool box #1 label='Bx1' params=[94, 23, 505, 374] extra=01000000000200000100010000ffff0000000000ffffe1000000000000000000
+   tool difference #1 label='' params=[1, 1, 1, 1, 2, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool 7 #0 label='' params=[0, 0] extra=-
+   Ar1 shape: box, 188870 px
+   difference tools: Sp1-Sp2=0.663
+   value      computed  round  trunc  owner  c-owner
+   Sp1          40.096   40.1   40.0   40.1   -0.004
+   Sp2          39.433   39.4   39.4   39.4   +0.033
+   Ar1 (avg)    36.429   36.4   36.4   36.4   +0.029
+   Dt            0.663    0.7    0.6    0.7   -0.037
+
+== Flir T440 | IR_0001 | original | original/IR_0001.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=20, RelativeHumidity=50, IRWindowTransmission=1
+   tool spot #1 label='1' params=[160, 120] extra=-
+   tool box #1 label='1' params=[116, 70, 92, 123] extra=-
+   tool 7 #1 label='1' params=[-27853, 17298] extra=-
+   tool difference #1 label='1' params=[2, 1, 2, 1, 1, 1] extra=-
+   Ar1 shape: box, 11316 px
+   difference tools: Bx1Mx-Sp1=7.904
+   value      computed  round  trunc  owner  c-owner
+   Sp1          31.761   31.8   31.7   31.8   -0.039
+   Ar1 (avg)    31.041   31.0   31.0   31.0   +0.041
+   Dt            7.904    7.9    7.9    9.5   -1.596  *
+
+== Flir T440 | IR_0001 | FLIR Tools+ edit | editted/IR_0001.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=20, RelativeHumidity=50, IRWindowTransmission=1
+   tool spot #1 label='Sp1' params=[59, 94] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool spot #2 label='Sp2' params=[171, 95] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool ellipse #1 label='El1' params=[131, 144, 182, 144, 131, 94] extra=01001800000200000100010000ffff0000000000ffffe10005000c0051005e00660066000000000000000000
+   tool difference #1 label='Dt1' params=[1, 1, 1, 1, 2, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool 7 #0 label='' params=[-27853, 17298] extra=-
+   Ar1 shape: ellipse (81, 94, 102, 102), 8317 px
+   difference tools: Sp1-Sp2=-1.260
+   value      computed  round  trunc  owner  c-owner
+   Sp1          29.481   29.5   29.4   29.5   -0.019
+   Sp2          30.741   30.7   30.7   30.7   +0.041
+   Ar1 (avg)    31.478   31.5   31.4   31.5   -0.022
+   Dt           -1.260   -1.3   -1.2   -1.3   +0.040
+
+== Flir T440 | IR_0011 | original | original/IR_0011.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=20, RelativeHumidity=50, IRWindowTransmission=1
+   tool spot #1 label='1' params=[160, 120] extra=-
+   tool box #1 label='1' params=[116, 70, 92, 123] extra=-
+   tool 7 #1 label='1' params=[-27853, 17298] extra=-
+   tool difference #1 label='1' params=[2, 1, 2, 1, 1, 1] extra=-
+   Ar1 shape: box, 11316 px
+   difference tools: Bx1Mx-Sp1=3.259
+   value      computed  round  trunc  owner  c-owner
+   Sp1          34.552   34.6   34.5   34.6   -0.048
+   Ar1 (avg)    33.937   33.9   33.9   33.9   +0.037
+   Dt            3.259    3.3    3.2    6.8   -3.541  *
+
+== Flir T440 | IR_0011 | FLIR Tools+ edit | editted/IR_0011.jpg
+   params: Emissivity=0.8, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=20, RelativeHumidity=50, IRWindowTransmission=1
+   tool spot #1 label='Sp1' params=[182, 123] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool spot #2 label='Sp2' params=[93, 145] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool box #1 label='Bx1' params=[79, 72, 142, 123] extra=01000000000200000100010000ffff0000000000ffffe1000000000000000000
+   tool difference #1 label='' params=[2, 1, 2, 1, 1, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool difference #2 label='Dt2' params=[1, 1, 1, 1, 2, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool 7 #0 label='' params=[-27853, 17288] extra=-
+   Ar1 shape: box, 17466 px
+   difference tools: Bx1Mx-Sp1=8.370, Sp1-Sp2=-0.934
+   value      computed  round  trunc  owner  c-owner
+   Sp1          32.483   32.5   32.4   32.5   -0.017
+   Sp2          33.417   33.4   33.4   33.4   +0.017
+   Ar1 (avg)    35.921   35.9   35.9   35.9   +0.021
+   Dt           -0.934   -0.9   -0.9   -0.9   -0.034
+
+== Flir T440 | IR_0017 | original | original/IR_0017.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=20, RelativeHumidity=50, IRWindowTransmission=1
+   tool spot #1 label='1' params=[160, 120] extra=-
+   tool box #1 label='1' params=[116, 70, 92, 123] extra=-
+   tool 7 #1 label='1' params=[-27853, 17298] extra=-
+   tool difference #1 label='1' params=[2, 1, 2, 1, 1, 1] extra=-
+   Ar1 shape: box, 11316 px
+   difference tools: Bx1Mx-Sp1=0.913
+   value      computed  round  trunc  owner  c-owner
+   Sp1          40.044   40.0   40.0   40.0   +0.044
+   Ar1 (avg)    34.760   34.8   34.7   34.8   -0.040
+   Dt            0.913    0.9    0.9    0.9   +0.013
+
+== Flir T440 | IR_0017 | FLIR Tools+ edit | editted/IR_0017.jpg
+   params: Emissivity=0.95, ObjectDistance=5, ReflectedApparentTemperature=20, AtmosphericTemperature=20, RelativeHumidity=50, IRWindowTransmission=1
+   tool spot #1 label='Sp1' params=[179, 106] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool spot #2 label='Sp2' params=[57, 110] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool box #1 label='Bx1' params=[116, 70, 92, 123] extra=01000000000200000100010000ffff0000000000ffffe1000000000000000000
+   tool difference #1 label='' params=[2, 1, 2, 1, 1, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool difference #2 label='Dt2' params=[1, 1, 1, 1, 2, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool 7 #0 label='' params=[-27853, 17288] extra=-
+   Ar1 shape: box, 11316 px
+   difference tools: Bx1Mx-Sp1=6.303, Sp1-Sp2=1.297
+   value      computed  round  trunc  owner  c-owner
+   Sp1          34.801   34.8   34.8   34.8   +0.001
+   Sp2          33.504   33.5   33.5   33.5   +0.004
+   Ar1 (avg)    34.865   34.9   34.8   34.9   -0.035
+   Dt            1.297    1.3    1.2    1.3   -0.003
+
+== Flir T440 | IR_0023 | original | original/IR_0023.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=20, RelativeHumidity=50, IRWindowTransmission=1
+   tool spot #1 label='1' params=[160, 120] extra=-
+   tool box #1 label='1' params=[116, 70, 92, 123] extra=-
+   tool 7 #1 label='1' params=[-27853, 17298] extra=-
+   tool difference #1 label='1' params=[2, 1, 2, 1, 1, 1] extra=-
+   Ar1 shape: box, 11316 px
+   difference tools: Bx1Mx-Sp1=5.045
+   value      computed  round  trunc  owner  c-owner
+   Sp1          31.992   32.0   31.9   32.0   -0.008
+   Ar1 (avg)    32.215   32.2   32.2   32.2   +0.015
+   Dt            5.045    5.0    5.0    5.4   -0.355  *
+
+== Flir T440 | IR_0023 | FLIR Tools+ edit | editted/IR_0023.jpg
+   params: Emissivity=0.95, ObjectDistance=1, ReflectedApparentTemperature=20, AtmosphericTemperature=20, RelativeHumidity=50, IRWindowTransmission=1
+   tool spot #1 label='Sp1' params=[160, 120] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool spot #2 label='Sp2' params=[63, 154] extra=01000000000200000100010000ffff0000000000ffffe100
+   tool ellipse #1 label='El1' params=[133, 117, 230, 117, 133, 21] extra=01001800000200000100010000ffff0000000000ffffe10005000c0025001500c200c2000000000000000000
+   tool difference #1 label='Dt1' params=[1, 1, 1, 1, 2, 1] extra=01001800000200000100010000ffff0000000000ffffe100030000000001000000000000
+   tool 7 #0 label='' params=[-27853, 17298] extra=-
+   Ar1 shape: ellipse (37, 21, 194, 194), 29821 px
+   difference tools: Sp1-Sp2=-1.057
+   value      computed  round  trunc  owner  c-owner
+   Sp1          31.992   32.0   31.9   32.0   -0.008
+   Sp2          33.049   33.0   33.0   33.0   +0.049
+   Ar1 (avg)    32.225   32.2   32.2   32.2   +0.025
+   Dt           -1.057   -1.1   -1.0   -1.1   +0.043
+
+64 values: 58 equal after rounding, 32 equal after truncation, largest |computed - owner| = 3.541 C
+misses after rounding: Flir T640 FLIR0011 original Dt; Flir T640 FLIR0013 original Dt; Flir T640 FLIR0014 original Ar1 (avg); Flir T440 IR_0001 original Dt; Flir T440 IR_0011 original Dt; Flir T440 IR_0023 original Dt

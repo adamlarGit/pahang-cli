@@ -1,0 +1,6 @@
+Flir T440/editted/IR_0001.jpg El1: params [131, 144, 182, 144, 131, 94], rect (81, 94, 102, 102)
+   pixels reader 8317, Atlas 8317; same pixels in the same order: True; largest value diff 3.26e-06 C
+   avg reader 31.477632, Atlas 31.477632
+Flir T440/editted/IR_0023.jpg El1: params [133, 117, 230, 117, 133, 21], rect (37, 21, 194, 194)
+   pixels reader 29821, Atlas 29821; same pixels in the same order: True; largest value diff 2.95e-06 C
+   avg reader 32.225026, Atlas 32.225027
